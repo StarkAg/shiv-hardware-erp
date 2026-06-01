@@ -4,6 +4,7 @@
 export type ProductCategory =
   | 'readymade-door'
   | 'flush-door'
+  | 'plywood-6'
   | 'block-board-12'
   | 'block-board-19'
   | 'aluminium-door'
@@ -22,7 +23,7 @@ export interface Brand {
   thicknessMm?: number
 }
 
-export type GuaranteeYears = 0 | 1 | 3 | 7 | 10 | 25
+export type GuaranteeYears = 0 | 1 | 3 | 5 | 7 | 10 | 15 | 20 | 25
 
 /** A named price set — a full copy of brands/rates (Set A, Set B, …). */
 export interface BrandSet {
@@ -97,6 +98,7 @@ export const SHOP = {
 export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'readymade-door': 'Readymade Door',
   'flush-door': 'Flush Door (Plain)',
+  'plywood-6': 'Water Proof Plywood 6mm',
   'block-board-12': 'Water Proof Block Board 12mm',
   'block-board-19': 'Water Proof Block Board 19mm',
   'aluminium-door': 'Aluminium Door',
@@ -119,6 +121,7 @@ export const CATEGORY_META: Record<
 > = {
   'readymade-door': { short: 'Readymade Door', icon: 'door', image: '/assets/products/plywood.png', group: 'Doors' },
   'flush-door': { short: 'Flush Door', icon: 'door', group: 'Plywoods' },
+  'plywood-6': { short: 'Plywood 6mm', icon: 'board', group: 'Plywoods' },
   'block-board-12': { short: 'Block Board 12mm', icon: 'board', group: 'Plywoods' },
   'block-board-19': { short: 'Block Board 19mm', icon: 'board', group: 'Plywoods' },
   'aluminium-door': { short: 'Aluminium Door', icon: 'door', image: '/assets/products/aluminium-window.png', group: 'Aluminium' },
@@ -130,6 +133,7 @@ export const CATEGORY_META: Record<
 export const CATEGORY_ORDER: ProductCategory[] = [
   'readymade-door',
   'flush-door',
+  'plywood-6',
   'block-board-12',
   'block-board-19',
   'aluminium-door',

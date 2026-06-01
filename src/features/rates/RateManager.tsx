@@ -11,12 +11,17 @@ import {
 } from '../../lib/types'
 import { Button, Card, PageHeader } from '../../components/ui'
 
-const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 7, 10, 25]
+const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 10, 15, 20, 25]
 const uid = () => Math.random().toString(36).slice(2, 10)
 
 // Brand-based categories only (aluminium is calculated, not brand-listed).
 const BRAND_CATEGORIES = CATEGORY_ORDER.filter(
-  (c) => c === 'readymade-door' || c === 'flush-door' || c === 'block-board-12' || c === 'block-board-19',
+  (c) =>
+    c === 'readymade-door' ||
+    c === 'flush-door' ||
+    c === 'plywood-6' ||
+    c === 'block-board-12' ||
+    c === 'block-board-19',
 )
 
 function clone(set: BrandSet, name: string): BrandSet {
