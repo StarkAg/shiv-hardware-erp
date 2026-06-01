@@ -182,7 +182,7 @@ export function QuotationBuilder() {
         )}
       </PageHeader>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
         {/* Optional customer details */}
         <Toggle checked={withCustomer} onChange={setWithCustomer} label="Add customer details (optional)" />
 
@@ -288,11 +288,11 @@ export function QuotationBuilder() {
         )}
 
         {/* Live preview: all-brands rate card OR aluminium breakdown */}
-        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="shrink-0 border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400">
+        <Card className="shrink-0 overflow-hidden">
+          <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400">
             {alu ? 'Aluminium Cost' : `All Brands — cost for this size${editMode ? ' (editing ' + (activeSet?.name ?? '') + ')' : ''}`}
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div>
             {!alu ? (
             <table className="w-full text-sm">
               <thead className="bg-white text-left text-xs uppercase text-slate-400 dark:bg-stone-900 dark:text-stone-500">
