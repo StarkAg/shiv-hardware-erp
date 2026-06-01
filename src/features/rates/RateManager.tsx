@@ -145,7 +145,7 @@ export function RateManager() {
           return (
             <Card key={cat} className="overflow-hidden">
               <button
-                className="flex w-full items-center justify-between bg-stone-50 px-4 py-3 text-left font-semibold"
+                className="flex w-full items-center justify-between bg-stone-50 px-4 py-3 text-left font-semibold dark:bg-white/5"
                 onClick={() => setOpenCat(isOpen ? ('' as ProductCategory) : cat)}
               >
                 <span>
@@ -156,7 +156,7 @@ export function RateManager() {
               {isOpen && (
                 <div className="p-4">
                   <table className="w-full text-sm">
-                    <thead className="text-left text-xs uppercase text-slate-400">
+                    <thead className="text-left text-xs uppercase text-slate-400 dark:text-stone-500">
                       <tr>
                         <th className="py-1">Brand</th>
                         <th className="py-1 w-32">Rate ₹/sqft</th>
@@ -166,10 +166,10 @@ export function RateManager() {
                     </thead>
                     <tbody>
                       {list.map((b) => (
-                        <tr key={b.id} className="border-t border-slate-100">
+                        <tr key={b.id} className="border-t border-slate-100 dark:border-white/10">
                           <td className="py-1 pr-2">
                             <input
-                              className="w-full rounded border border-slate-200 px-2 py-1"
+                              className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                               value={b.name}
                               onChange={(e) => updateBrand(b.id, { name: e.target.value })}
                             />
@@ -177,14 +177,14 @@ export function RateManager() {
                           <td className="py-1 pr-2">
                             <input
                               type="number"
-                              className="w-full rounded border border-slate-200 px-2 py-1"
+                              className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                               value={b.rate}
                               onChange={(e) => updateBrand(b.id, { rate: Number(e.target.value) })}
                             />
                           </td>
                           <td className="py-1 pr-2">
                             <select
-                              className="w-full rounded border border-slate-200 px-2 py-1"
+                              className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                               value={b.guaranteeYears}
                               onChange={(e) =>
                                 updateBrand(b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
@@ -199,7 +199,7 @@ export function RateManager() {
                           </td>
                           <td className="py-1 text-right">
                             <button
-                              className="rounded p-1 text-red-500 hover:bg-red-50"
+                              className="rounded p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                               onClick={() => removeBrand(b.id)}
                               title="Remove brand"
                             >

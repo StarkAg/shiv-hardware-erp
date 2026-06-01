@@ -9,6 +9,8 @@ import { Customers } from './features/customers/Customers'
 import { QuoteHistory } from './features/quotation/QuoteHistory'
 import { PrintDemo } from './features/print/PrintDemo'
 
+document.documentElement.classList.toggle('dark', localStorage.getItem('shiv-panel:theme') === 'dark')
+
 // HashRouter keeps routing working when packaged as a desktop (file://) app.
 const router = createHashRouter([
   {

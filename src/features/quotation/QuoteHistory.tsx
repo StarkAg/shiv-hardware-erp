@@ -32,7 +32,7 @@ export function QuoteHistory() {
         </div>
         <Card className="overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400 dark:bg-white/5 dark:text-stone-500">
               <tr>
                 <th className="px-4 py-2">Number</th>
                 <th className="px-4 py-2">Date</th>
@@ -44,12 +44,12 @@ export function QuoteHistory() {
             </thead>
             <tbody>
               {filtered.map((x) => (
-                <tr key={x.id} className="border-t border-slate-100">
+                <tr key={x.id} className="border-t border-slate-100 dark:border-white/10">
                   <td className="px-4 py-2 font-medium">{x.number}</td>
                   <td className="px-4 py-2">{new Date(x.date).toLocaleDateString('en-GB')}</td>
                   <td className="px-4 py-2">
                     {x.customer.name || '—'}
-                    <div className="text-xs text-slate-400">{x.customer.mobile}</div>
+                    <div className="text-xs text-slate-400 dark:text-stone-500">{x.customer.mobile}</div>
                   </td>
                   <td className="px-4 py-2">{CATEGORY_LABELS[x.category]}</td>
                   <td className="px-4 py-2">{formatSize(x.height, x.width) || '—'}</td>
@@ -92,7 +92,7 @@ export function QuoteHistory() {
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400 dark:text-stone-500">
                     No quotations yet.
                   </td>
                 </tr>

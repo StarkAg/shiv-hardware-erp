@@ -18,7 +18,7 @@ export function Customers() {
         </div>
         <Card className="overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400 dark:bg-white/5 dark:text-stone-500">
               <tr>
                 <th className="px-4 py-2">M/s</th>
                 <th className="px-4 py-2">Mobile</th>
@@ -28,16 +28,16 @@ export function Customers() {
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} className="border-t border-slate-100">
+                <tr key={c.id} className="border-t border-slate-100 dark:border-white/10">
                   <td className="px-4 py-2 font-medium">{c.name}</td>
                   <td className="px-4 py-2">{c.mobile}</td>
                   <td className="px-4 py-2">{c.uid || '—'}</td>
-                  <td className="px-4 py-2 text-slate-500">{c.address || '—'}</td>
+                  <td className="px-4 py-2 text-slate-500 dark:text-stone-400">{c.address || '—'}</td>
                 </tr>
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400 dark:text-stone-500">
                     No customers yet — they're saved automatically when you save a quotation.
                   </td>
                 </tr>
