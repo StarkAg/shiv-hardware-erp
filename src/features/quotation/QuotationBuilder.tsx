@@ -288,14 +288,14 @@ export function QuotationBuilder() {
         )}
 
         {/* Live preview: all-brands rate card OR aluminium breakdown */}
-        <Card className="shrink-0 overflow-hidden">
-          <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400">
+        <div className="shrink-0 overflow-hidden rounded-xl border border-stone-200/90 bg-white text-stone-800 shadow-sm shadow-stone-900/5">
+          <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-500">
             {alu ? 'Aluminium Cost' : `All Brands — cost for this size${editMode ? ' (editing ' + (activeSet?.name ?? '') + ')' : ''}`}
           </div>
           <div>
             {!alu ? (
             <table className="w-full text-sm">
-              <thead className="bg-white text-left text-xs uppercase text-slate-400 dark:bg-stone-900 dark:text-stone-500">
+              <thead className="bg-white text-left text-xs uppercase text-slate-400">
                 <tr>
                   <th className="px-4 py-2">Brand</th>
                   <th className="px-4 py-2 text-right">Rate (₹/sqft)</th>
@@ -307,7 +307,7 @@ export function QuotationBuilder() {
               <tbody>
                 {!editMode &&
                   rows.map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100 dark:border-white/10">
+                    <tr key={i} className="border-t border-slate-100">
                       <td className="px-4 py-2 font-medium">{r.brandName}</td>
                       <td className="px-4 py-2 text-right">{r.rate}</td>
                       <td className="px-4 py-2 text-right font-semibold">{hasSize ? formatINR(r.cost) : '—'}</td>
@@ -318,10 +318,10 @@ export function QuotationBuilder() {
                   ))}
                 {editMode &&
                   brands.map((b) => (
-                    <tr key={b.id} className="border-t border-slate-100 dark:border-white/10">
+                    <tr key={b.id} className="border-t border-slate-100">
                       <td className="px-3 py-1.5">
                         <input
-                          className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                          className="w-full rounded border border-slate-200 px-2 py-1"
                           value={b.name}
                           onChange={(e) => updateBrand(setId, b.id, { name: e.target.value })}
                         />
@@ -329,7 +329,7 @@ export function QuotationBuilder() {
                       <td className="px-3 py-1.5">
                         <input
                           type="number"
-                          className="w-24 rounded border border-slate-200 px-2 py-1 text-right dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                          className="w-24 rounded border border-slate-200 px-2 py-1 text-right"
                           value={b.rate}
                           onChange={(e) => updateBrand(setId, b.id, { rate: Number(e.target.value) })}
                         />
@@ -339,7 +339,7 @@ export function QuotationBuilder() {
                       </td>
                       <td className="px-3 py-1.5 text-center">
                         <select
-                          className="rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                          className="rounded border border-slate-200 px-2 py-1"
                           value={b.guaranteeYears}
                           onChange={(e) =>
                             updateBrand(setId, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
@@ -352,7 +352,7 @@ export function QuotationBuilder() {
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         <button
-                          className="rounded p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          className="rounded p-1 text-red-500 hover:bg-red-50"
                           onClick={() => removeBrand(setId, b.id)}
                           title="Remove brand"
                         >
@@ -362,12 +362,12 @@ export function QuotationBuilder() {
                     </tr>
                   ))}
                 {!brands.length && (
-                  <tr><td colSpan={editMode ? 5 : 4} className="px-4 py-6 text-center text-slate-400 dark:text-stone-500">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
+                  <tr><td colSpan={editMode ? 5 : 4} className="px-4 py-6 text-center text-slate-400">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
                 )}
               </tbody>
               {editMode && (
                 <tfoot>
-                  <tr className="border-t border-slate-100 dark:border-white/10">
+                  <tr className="border-t border-slate-100">
                     <td colSpan={5} className="px-4 py-2">
                       <Button variant="outline" className="flex items-center gap-1.5" onClick={() => addBrand(setId, cat)}>
                         <Plus size={16} /> Add brand
@@ -381,12 +381,12 @@ export function QuotationBuilder() {
             <table className="w-full text-sm">
               <tbody>
                 {(aluResult?.breakdown ?? []).map((b, i) => (
-                  <tr key={i} className="border-t border-slate-100 dark:border-white/10">
+                  <tr key={i} className="border-t border-slate-100">
                     <td className="px-4 py-2">{b.label}</td>
                     <td className="px-4 py-2 text-right font-semibold">{formatINR(b.amount)}</td>
                   </tr>
                 ))}
-                <tr className="border-t-2 border-slate-200 bg-slate-50 dark:border-white/15 dark:bg-white/5">
+                <tr className="border-t-2 border-slate-200 bg-slate-50">
                   <td className="px-4 py-2 text-right font-bold">Total{qty > 1 ? ` × ${qty}` : ''}</td>
                   <td className="px-4 py-2 text-right text-lg font-bold text-shiv-green">
                     {formatINR((aluResult?.total ?? 0) * (qty || 1))}
@@ -396,7 +396,7 @@ export function QuotationBuilder() {
             </table>
             )}
           </div>
-        </Card>
+        </div>
 
         <Card className="shrink-0 p-3">
           <label className="mb-1 block text-xs font-medium text-stone-500 dark:text-stone-400">Notes (printed on quotation)</label>
