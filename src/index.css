@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --shiv-green: #b9924b;
+  --shiv-gold: #b9924b;
+  --shiv-gold-dark: #7d602d;
+  --shiv-graphite: #151515;
+  --shiv-charcoal: #24211d;
+  --shiv-paper: #f5f2ea;
+  --shiv-ink: #1c1b19;
+  --shiv-red: #9f1d20;
+}
+
+body {
+  @apply text-stone-800 antialiased;
+  background:
+    radial-gradient(circle at top right, rgba(185, 146, 75, 0.12), transparent 28rem),
+    linear-gradient(180deg, #faf8f2 0%, var(--shiv-paper) 48%, #eee8dc 100%);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ----------------------------------------------------------------------
+   PRINT — pixel-accurate A4 output.
+   Screen: the .a4-page renders as a centred white sheet for preview.
+   Print:  exactly one A4 page, zero browser margin, content fills it.
+   ---------------------------------------------------------------------- */
+.a4-page {
+  width: 210mm;
+  min-height: 297mm;
+  background: #fff;
+  margin: 0 auto;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #000;
+  box-sizing: border-box;
+}
+
+/* On-screen preview gets a shadow + scaling container handles overflow */
+.a4-preview-frame {
+  @apply flex justify-center bg-slate-300 p-6 overflow-auto;
+}
+.a4-preview-frame .a4-page {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Fit-to-screen preview scaling (screen only). */
+.preview-scale {
+  transform: scale(var(--preview-scale, 1));
+  transform-origin: top center;
+}
+.preview-scale .a4-page {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  html,
+  body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* Hide everything except the active print document */
+  body * {
+    visibility: hidden;
+  }
+  .print-root,
+  .print-root * {
+    visibility: visible;
+  }
+  .print-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 210mm;
+  }
+  .no-print {
+    display: none !important;
+  }
+  /* Print at true A4 — never use the on-screen fit scaling. */
+  .preview-scale {
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+  }
+  .a4-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    page-break-after: always;
+  }
+}
