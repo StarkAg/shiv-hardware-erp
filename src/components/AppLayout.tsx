@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   AppWindow,
@@ -34,6 +34,10 @@ export function AppLayout() {
   const [open, setOpen] = useState(
     location.pathname.startsWith('/quote') || location.pathname.startsWith('/product'),
   )
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', localStorage.getItem('shiv-panel:theme') === 'dark')
+  }, [])
 
   return (
     <div className="flex min-h-screen">

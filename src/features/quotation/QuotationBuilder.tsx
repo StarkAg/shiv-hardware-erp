@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useParams } from 'react-router-dom'
-import { Minus, Plus, Printer, Save, Trash2 } from 'lucide-react'
+import { Moon, Minus, Plus, Printer, Save, Sun, Trash2 } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import {
   CATEGORY_LABELS,
@@ -57,7 +57,13 @@ export function QuotationBuilder() {
   const [setId, setSetId] = useState(sets[0]?.id)
   const activeSet = sets.find((s) => s.id === setId) ?? sets[0]
   const [editMode, setEditMode] = useState(false)
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('shiv-panel:theme') === 'dark')
   const sizeCardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode)
+    localStorage.setItem('shiv-panel:theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   // Sync category when a different product submenu item is clicked.
   useEffect(() => {
@@ -129,6 +135,15 @@ export function QuotationBuilder() {
         subtitle={number}
         actions={
           <>
+            <button
+              type="button"
+              onClick={() => setDarkMode((v) => !v)}
+              className="flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-shiv-green hover:bg-stone-50 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
+              title={darkMode ? 'Use light mode' : 'Use dark mode'}
+            >
+              {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+              {darkMode ? 'Light' : 'Dark'}
+            </button>
             <Button variant="outline" onClick={save} className="flex items-center gap-1.5" disabled={!hasSize}>
               <Save size={16} /> Save
             </Button>
@@ -140,7 +155,7 @@ export function QuotationBuilder() {
       >
         {!alu && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Price Set</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">Price Set</span>
             {sets.map((s) => (
               <button
                 key={s.id}
@@ -148,7 +163,7 @@ export function QuotationBuilder() {
                 className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                   s.id === setId
                     ? 'border-shiv-green bg-shiv-green text-stone-950 shadow-sm'
-                    : 'border-stone-300 bg-white/80 text-stone-600 hover:border-shiv-green hover:bg-white'
+                    : 'border-stone-300 bg-white/80 text-stone-600 hover:border-shiv-green hover:bg-white dark:border-white/15 dark:bg-white/5 dark:text-stone-300 dark:hover:bg-white/10'
                 }`}
               >
                 {s.name}
@@ -156,7 +171,7 @@ export function QuotationBuilder() {
             ))}
             <button
               onClick={() => setSetId(addSet(setId))}
-              className="flex items-center gap-1 rounded-lg border border-dashed border-stone-400 px-3 py-1.5 text-sm font-medium text-stone-500 hover:border-shiv-green hover:bg-white"
+              className="flex items-center gap-1 rounded-lg border border-dashed border-stone-400 px-3 py-1.5 text-sm font-medium text-stone-500 hover:border-shiv-green hover:bg-white dark:border-white/20 dark:text-stone-400 dark:hover:bg-white/10"
             >
               <Plus size={15} /> Add Set
             </button>
@@ -173,7 +188,7 @@ export function QuotationBuilder() {
 
         {withCustomer && (
           <Card className="shrink-0 p-3">
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">Customer</h2>
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Customer</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <Input label="M/s (Name)" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
               <Input label="Mobile" value={customer.mobile} onChange={(e) => setCustomer({ ...customer, mobile: e.target.value })} />
@@ -186,13 +201,13 @@ export function QuotationBuilder() {
         {/* Size */}
         <div ref={sizeCardRef} className="shrink-0">
           <Card className="p-4">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500">Size</h2>
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Size</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
               {alu && (
                 <div className="md:col-span-3">
-                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">Thickness</label>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Thickness</label>
                   <select
-                    className="h-11 w-full rounded-lg border-2 border-stone-300 bg-white px-3 text-base font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20"
+                    className="h-11 w-full rounded-lg border-2 border-stone-300 bg-white px-3 text-base font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                     value={thickness}
                     data-size-entry
                     onKeyDown={focusNextSizeEntry}
@@ -222,12 +237,12 @@ export function QuotationBuilder() {
 
             {/* Aluminium options */}
             {alu && (
-              <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm">
+              <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm dark:border-white/10 dark:bg-white/5">
                 {cat !== 'aluminium-door' && (
                   <label className="flex items-center gap-1">
                     Glass:
                     <select
-                      className="rounded border border-stone-300 px-2 py-1"
+                      className="rounded border border-stone-300 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                       value={addons.glassType}
                       onChange={(e) => setAddons((a) => ({ ...a, glassType: e.target.value as 'clear' | 'reflective' }))}
                     >
@@ -244,7 +259,7 @@ export function QuotationBuilder() {
               </div>
             )}
 
-            <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-600">
+            <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-600 dark:border-white/10 dark:bg-white/5 dark:text-stone-300">
               Size: <b>{formatSize(h, w) || '—'}</b> · <b>{sqft.toFixed(2)}</b> sqft · Qty <b>{qty}</b>
             </div>
           </Card>
@@ -254,9 +269,9 @@ export function QuotationBuilder() {
         {!alu && editMode && (
           <Card className="flex shrink-0 items-center justify-between p-3">
             <label className="flex items-center gap-2 text-sm">
-              <span className="font-medium text-stone-500">Set name</span>
+              <span className="font-medium text-stone-500 dark:text-stone-400">Set name</span>
               <input
-                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold"
+                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                 value={activeSet?.name ?? ''}
                 onChange={(e) => renameSet(setId, e.target.value)}
               />
@@ -279,13 +294,13 @@ export function QuotationBuilder() {
 
         {/* Live preview: all-brands rate card OR aluminium breakdown */}
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="shrink-0 border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-500">
+          <div className="shrink-0 border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400">
             {alu ? 'Aluminium Cost' : `All Brands — cost for this size${editMode ? ' (editing ' + (activeSet?.name ?? '') + ')' : ''}`}
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             {!alu ? (
             <table className="w-full text-sm">
-              <thead className="bg-white text-left text-xs uppercase text-slate-400">
+              <thead className="bg-white text-left text-xs uppercase text-slate-400 dark:bg-stone-900 dark:text-stone-500">
                 <tr>
                   <th className="px-4 py-2">Brand</th>
                   <th className="px-4 py-2 text-right">Rate (₹/sqft)</th>
@@ -297,7 +312,7 @@ export function QuotationBuilder() {
               <tbody>
                 {!editMode &&
                   rows.map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100">
+                    <tr key={i} className="border-t border-slate-100 dark:border-white/10">
                       <td className="px-4 py-2 font-medium">{r.brandName}</td>
                       <td className="px-4 py-2 text-right">{r.rate}</td>
                       <td className="px-4 py-2 text-right font-semibold">{hasSize ? formatINR(r.cost) : '—'}</td>
@@ -308,10 +323,10 @@ export function QuotationBuilder() {
                   ))}
                 {editMode &&
                   brands.map((b) => (
-                    <tr key={b.id} className="border-t border-slate-100">
+                    <tr key={b.id} className="border-t border-slate-100 dark:border-white/10">
                       <td className="px-3 py-1.5">
                         <input
-                          className="w-full rounded border border-slate-200 px-2 py-1"
+                          className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                           value={b.name}
                           onChange={(e) => updateBrand(setId, b.id, { name: e.target.value })}
                         />
@@ -319,7 +334,7 @@ export function QuotationBuilder() {
                       <td className="px-3 py-1.5">
                         <input
                           type="number"
-                          className="w-24 rounded border border-slate-200 px-2 py-1 text-right"
+                          className="w-24 rounded border border-slate-200 px-2 py-1 text-right dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                           value={b.rate}
                           onChange={(e) => updateBrand(setId, b.id, { rate: Number(e.target.value) })}
                         />
@@ -329,7 +344,7 @@ export function QuotationBuilder() {
                       </td>
                       <td className="px-3 py-1.5 text-center">
                         <select
-                          className="rounded border border-slate-200 px-2 py-1"
+                          className="rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                           value={b.guaranteeYears}
                           onChange={(e) =>
                             updateBrand(setId, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
@@ -342,7 +357,7 @@ export function QuotationBuilder() {
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         <button
-                          className="rounded p-1 text-red-500 hover:bg-red-50"
+                          className="rounded p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                           onClick={() => removeBrand(setId, b.id)}
                           title="Remove brand"
                         >
@@ -352,12 +367,12 @@ export function QuotationBuilder() {
                     </tr>
                   ))}
                 {!brands.length && (
-                  <tr><td colSpan={editMode ? 5 : 4} className="px-4 py-6 text-center text-slate-400">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
+                  <tr><td colSpan={editMode ? 5 : 4} className="px-4 py-6 text-center text-slate-400 dark:text-stone-500">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
                 )}
               </tbody>
               {editMode && (
                 <tfoot>
-                  <tr className="border-t border-slate-100">
+                  <tr className="border-t border-slate-100 dark:border-white/10">
                     <td colSpan={5} className="px-4 py-2">
                       <Button variant="outline" className="flex items-center gap-1.5" onClick={() => addBrand(setId, cat)}>
                         <Plus size={16} /> Add brand
@@ -371,12 +386,12 @@ export function QuotationBuilder() {
             <table className="w-full text-sm">
               <tbody>
                 {(aluResult?.breakdown ?? []).map((b, i) => (
-                  <tr key={i} className="border-t border-slate-100">
+                  <tr key={i} className="border-t border-slate-100 dark:border-white/10">
                     <td className="px-4 py-2">{b.label}</td>
                     <td className="px-4 py-2 text-right font-semibold">{formatINR(b.amount)}</td>
                   </tr>
                 ))}
-                <tr className="border-t-2 border-slate-200 bg-slate-50">
+                <tr className="border-t-2 border-slate-200 bg-slate-50 dark:border-white/15 dark:bg-white/5">
                   <td className="px-4 py-2 text-right font-bold">Total{qty > 1 ? ` × ${qty}` : ''}</td>
                   <td className="px-4 py-2 text-right text-lg font-bold text-shiv-green">
                     {formatINR((aluResult?.total ?? 0) * (qty || 1))}
@@ -389,9 +404,9 @@ export function QuotationBuilder() {
         </Card>
 
         <Card className="shrink-0 p-3">
-          <label className="mb-1 block text-xs font-medium text-stone-500">Notes (printed on quotation)</label>
+          <label className="mb-1 block text-xs font-medium text-stone-500 dark:text-stone-400">Notes (printed on quotation)</label>
           <textarea
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
             rows={1}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -443,7 +458,7 @@ function DimInput({
 }) {
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500">{label}</label>
+      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</label>
       <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
         <label className="relative block">
           <input
@@ -451,14 +466,14 @@ function DimInput({
             min={0}
             inputMode="numeric"
             data-size-entry
-            className="h-11 w-full rounded-lg border-2 border-stone-300 px-3 pr-9 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20"
+            className="h-11 w-full rounded-lg border-2 border-stone-300 px-3 pr-9 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
             placeholder="0"
             value={dim.inches || ''}
             onFocus={(e) => e.currentTarget.select()}
             onKeyDown={onKeyDown}
             onChange={(e) => onChange({ ...dim, inches: Number(e.target.value) })}
           />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400">in</span>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">in</span>
         </label>
         <label className="relative block">
           <input
@@ -467,14 +482,14 @@ function DimInput({
             max={7}
             inputMode="numeric"
             data-size-entry
-            className="h-11 w-full rounded-lg border-2 border-stone-300 px-3 pr-7 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20"
+            className="h-11 w-full rounded-lg border-2 border-stone-300 px-3 pr-7 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
             placeholder="0"
             value={dim.soot || ''}
             onFocus={(e) => e.currentTarget.select()}
             onKeyDown={onKeyDown}
             onChange={(e) => onChange({ ...dim, soot: Math.min(7, Math.max(0, Number(e.target.value))) })}
           />
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400">/8</span>
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">/8</span>
         </label>
       </div>
     </div>
