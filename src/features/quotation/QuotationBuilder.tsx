@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { Moon, Minus, Plus, Printer, Save, Sun, Trash2 } from 'lucide-react'
 import { useStore } from '../../lib/store'
@@ -27,8 +27,13 @@ import { GuaranteeCard } from '../print/GuaranteeCard'
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 10, 15, 20, 25]
+const THEME_KEY = 'shiv-panel:theme'
 const isCategory = (c?: string): c is ProductCategory =>
   !!c && CATEGORY_ORDER.includes(c as ProductCategory)
+const applyTheme = (dark: boolean) => {
+  document.documentElement.classList.toggle('dark', dark)
+  localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
+}
 
 export function QuotationBuilder() {
   const { id, category } = useParams()
@@ -57,12 +62,17 @@ export function QuotationBuilder() {
   const [setId, setSetId] = useState(sets[0]?.id)
   const activeSet = sets.find((s) => s.id === setId) ?? sets[0]
   const [editMode, setEditMode] = useState(false)
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('shiv-panel:theme') === 'dark')
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem(THEME_KEY) === 'dark')
   const sizeCardRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode)
-    localStorage.setItem('shiv-panel:theme', darkMode ? 'dark' : 'light')
+  useLayoutEffect(() => {
+    const savedDarkMode = localStorage.getItem(THEME_KEY) === 'dark'
+    applyTheme(savedDarkMode)
+    setDarkMode(savedDarkMode)
+  }, [])
+
+  useLayoutEffect(() => {
+    applyTheme(darkMode)
   }, [darkMode])
 
   // Sync category when a different product submenu item is clicked.
@@ -137,12 +147,18 @@ export function QuotationBuilder() {
           <>
             <button
               type="button"
-              onClick={() => setDarkMode((v) => !v)}
+              onClick={() =>
+                setDarkMode((current) => {
+                  const next = !current
+                  applyTheme(next)
+                  return next
+                })
+              }
               className="flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-shiv-green hover:bg-stone-50 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
-              title={darkMode ? 'Use light mode' : 'Use dark mode'}
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              {darkMode ? <Sun size={16} /> : <Moon size={16} />}
-              {darkMode ? 'Light' : 'Dark'}
+              {darkMode ? <Moon size={16} /> : <Sun size={16} />}
+              {darkMode ? 'Dark' : 'Light'}
             </button>
             <Button variant="outline" onClick={save} className="flex items-center gap-1.5" disabled={!hasSize}>
               <Save size={16} /> Save
