@@ -83,5 +83,5 @@ export const SEED_BRANDS: Brand[] = [
   // — per-thickness rates, slab area rates, chaukhat & add-ons — not brand-based.
 ]
 
-/** Default price sets — Set A holds the seed brands above. */
-export const SEED_SETS: BrandSet[] = [{ id: 'set-a', name: 'Set A', brands: SEED_BRANDS }]
+/** Default price sets — C1 holds the seed brands above. */
+export const SEED_SETS: BrandSet[] = [{ id: 'set-a', name: 'C1', brands: SEED_BRANDS }]

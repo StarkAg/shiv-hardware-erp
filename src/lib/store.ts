@@ -4,6 +4,7 @@ import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
+const codeSets = (sets: BrandSet[]): BrandSet[] => sets.map((s, i) => ({ ...s, name: `C${i + 1}` }))
 
 interface AppState {
   sets: BrandSet[]
@@ -15,7 +16,6 @@ interface AppState {
   setSets: (sets: BrandSet[]) => void
   /** Append a new set (a copy of `cloneFromId`, or the first set). Returns its id. */
   addSet: (cloneFromId?: string) => string
-  renameSet: (setId: string, name: string) => void
   removeSet: (setId: string) => void
   updateBrand: (setId: string, brandId: string, patch: Partial<Brand>) => void
   removeBrand: (setId: string, brandId: string) => void
@@ -43,13 +43,13 @@ function persist(get: () => AppState) {
 const saved = db.load()
 
 export const useStore = create<AppState>((set, get) => ({
-  sets: (saved?.sets as BrandSet[]) ?? SEED_SETS,
+  sets: codeSets((saved?.sets as BrandSet[]) ?? SEED_SETS),
   customers: (saved?.customers as Customer[]) ?? [],
   quotations: (saved?.quotations as Quotation[]) ?? [],
   quoteSeq: (saved?.quoteSeq as number) ?? 0,
 
   setSets: (sets) => {
-    set({ sets })
+    set({ sets: codeSets(sets) })
     persist(get)
   },
 
@@ -57,10 +57,9 @@ export const useStore = create<AppState>((set, get) => ({
     const id = uid()
     set((st) => {
       const src = st.sets.find((s) => s.id === cloneFromId) ?? st.sets[0]
-      const name = `Set ${String.fromCharCode(65 + st.sets.length)}`
       const cloned: BrandSet = {
         id,
-        name,
+        name: `C${st.sets.length + 1}`,
         brands: (src?.brands ?? []).map((b) => ({ ...b, id: uid() })),
       }
       return { sets: [...st.sets, cloned] }
@@ -69,13 +68,8 @@ export const useStore = create<AppState>((set, get) => ({
     return id
   },
 
-  renameSet: (setId, name) => {
-    set((st) => ({ sets: st.sets.map((s) => (s.id === setId ? { ...s, name } : s)) }))
-    persist(get)
-  },
-
   removeSet: (setId) => {
-    set((st) => (st.sets.length <= 1 ? st : { sets: st.sets.filter((s) => s.id !== setId) }))
+    set((st) => (st.sets.length <= 1 ? st : { sets: codeSets(st.sets.filter((s) => s.id !== setId)) }))
     persist(get)
   },
 

@@ -32,7 +32,7 @@ const isCategory = (c?: string): c is ProductCategory =>
 
 export function QuotationBuilder() {
   const { id, category } = useParams()
-  const { sets, quotations, nextQuoteNumber, saveQuotation, upsertCustomer, addSet, renameSet, removeSet, updateBrand, removeBrand, addBrand } = useStore()
+  const { sets, quotations, nextQuoteNumber, saveQuotation, upsertCustomer, addSet, removeSet, updateBrand, removeBrand, addBrand } = useStore()
   const existing = quotations.find((q) => q.id === id)
 
   const [number] = useState(() => existing?.number ?? nextQuoteNumber())
@@ -268,14 +268,9 @@ export function QuotationBuilder() {
         {/* Edit-set toolbar (rename / delete the active set) */}
         {!alu && editMode && (
           <Card className="flex shrink-0 items-center justify-between p-3">
-            <label className="flex items-center gap-2 text-sm">
-              <span className="font-medium text-stone-500 dark:text-stone-400">Set name</span>
-              <input
-                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-                value={activeSet?.name ?? ''}
-                onChange={(e) => renameSet(setId, e.target.value)}
-              />
-            </label>
+            <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+              Active set: <span className="text-shiv-green">{activeSet?.name ?? 'C1'}</span>
+            </div>
             <Button
               variant="ghost"
               className="flex items-center gap-1.5 text-red-500"

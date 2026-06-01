@@ -24,6 +24,8 @@ const BRAND_CATEGORIES = CATEGORY_ORDER.filter(
     c === 'block-board-19',
 )
 
+const codeSets = (sets: BrandSet[]): BrandSet[] => sets.map((s, i) => ({ ...s, name: `C${i + 1}` }))
+
 function clone(set: BrandSet, name: string): BrandSet {
   return { id: uid(), name, brands: set.brands.map((b) => ({ ...b, id: uid() })) }
 }
@@ -31,7 +33,7 @@ function clone(set: BrandSet, name: string): BrandSet {
 export function RateManager() {
   const { sets, setSets } = useStore()
   // Edits are held in a local draft until "Save" is pressed.
-  const [draft, setDraft] = useState<BrandSet[]>(() => structuredClone(sets))
+  const [draft, setDraft] = useState<BrandSet[]>(() => codeSets(structuredClone(sets)))
   const [activeIdx, setActiveIdx] = useState(0)
   const [openCat, setOpenCat] = useState<ProductCategory>('readymade-door')
 
@@ -52,25 +54,23 @@ export function RateManager() {
     }))
 
   function addSet() {
-    const name = `Set ${String.fromCharCode(65 + draft.length)}` // Set B, C, …
+    const name = `C${draft.length + 1}`
     setDraft((d) => [...d, clone(d[activeIdx] ?? d[0], name)])
     setActiveIdx(draft.length)
   }
   function removeSet(idx: number) {
     if (draft.length <= 1) return
     if (!confirm(`Delete ${draft[idx].name}?`)) return
-    setDraft((d) => d.filter((_, i) => i !== idx))
+    setDraft((d) => codeSets(d.filter((_, i) => i !== idx)))
     setActiveIdx((i) => Math.max(0, i >= idx ? i - 1 : i))
   }
-  const renameSet = (idx: number, name: string) =>
-    setDraft((d) => d.map((s, i) => (i === idx ? { ...s, name } : s)))
 
   function save() {
-    setSets(structuredClone(draft))
+    setSets(codeSets(structuredClone(draft)))
     alert('Price sets saved')
   }
   function reset() {
-    setDraft(structuredClone(sets))
+    setDraft(codeSets(structuredClone(sets)))
     setActiveIdx(0)
   }
 
@@ -120,14 +120,9 @@ export function RateManager() {
 
         {/* Active set toolbar */}
         <Card className="flex items-center justify-between p-3">
-          <label className="flex items-center gap-2 text-sm">
-            <span className="font-medium text-stone-500">Set name</span>
-            <input
-              className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold"
-              value={active?.name ?? ''}
-              onChange={(e) => renameSet(activeIdx, e.target.value)}
-            />
-          </label>
+          <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+            Active set: <span className="text-shiv-green">{active?.name ?? 'C1'}</span>
+          </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={addSet} className="flex items-center gap-1.5">
               <Copy size={15} /> Duplicate to new set

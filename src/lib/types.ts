@@ -25,7 +25,7 @@ export interface Brand {
 
 export type GuaranteeYears = 0 | 1 | 3 | 5 | 7 | 10 | 15 | 20 | 25
 
-/** A named price set — a full copy of brands/rates (Set A, Set B, …). */
+/** A coded price set — a full copy of brands/rates (C1, C2, …). */
 export interface BrandSet {
   id: string
   name: string
