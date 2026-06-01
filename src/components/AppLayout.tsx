@@ -119,12 +119,11 @@ export function AppLayout() {
         </nav>
 
         <div className="border-t border-white/10 p-4 text-[11px] text-stone-500">
-          <div className="text-stone-400">Panel</div>
           <a
             href="https://www.linkedin.com/in/harshxagarwal"
             target="_blank"
             rel="noreferrer"
-            className="mt-2 flex items-center gap-2 text-stone-300 transition hover:text-white"
+            className="flex items-center gap-2 text-stone-300 transition hover:text-white"
           >
             <Wrench size={14} />
             By Harsh
