@@ -18,6 +18,7 @@ export function PrintPreview({
 }) {
   const areaRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
+  const [printing, setPrinting] = useState(false)
 
   useLayoutEffect(() => {
     const el = areaRef.current
@@ -40,16 +41,33 @@ export function PrintPreview({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  async function print() {
+    if (!window.shivDesktop?.printCurrentPage) {
+      window.print()
+      return
+    }
+
+    setPrinting(true)
+    try {
+      await window.shivDesktop.printCurrentPage({ copies: 1 })
+    } catch (err) {
+      alert(`Print failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPrinting(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-800/95">
       <div className="no-print flex items-center justify-between bg-slate-900 px-6 py-3 text-white">
         <div className="font-semibold">Print preview — {title}</div>
         <div className="flex gap-2">
           <button
-            onClick={() => window.print()}
+            onClick={print}
+            disabled={printing}
             className="flex items-center gap-1.5 rounded-lg bg-shiv-green px-4 py-2 text-sm font-semibold text-stone-950 hover:bg-[#c6a15a]"
           >
-            <Printer size={16} /> Print
+            <Printer size={16} /> {printing ? 'Printing' : 'Print'}
           </button>
           <button
             onClick={onClose}
