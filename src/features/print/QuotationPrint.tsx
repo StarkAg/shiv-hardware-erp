@@ -39,7 +39,6 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
           <div className="mt-2 flex justify-between text-[12px] leading-snug">
             <div>
               <span className="font-bold">M/s </span>{quote.customer.name || '—'}
-              {quote.customer.address && <div>{quote.customer.address}</div>}
             </div>
             {quote.customer.mobile && (
               <div><span className="font-bold">Mobile: </span>{quote.customer.mobile}</div>
@@ -84,12 +83,6 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
             </tbody>
           </table>
         ) : null}
-
-        {quote.notes && (
-          <div className="mt-3 text-[11px] whitespace-pre-wrap">
-            <span className="font-bold">Note: </span>{quote.notes}
-          </div>
-        )}
 
         {/* Seals + signature */}
         <div className="mt-[10mm] flex items-end justify-between">

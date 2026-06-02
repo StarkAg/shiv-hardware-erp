@@ -39,7 +39,6 @@ export function QuotationBuilder() {
     existing?.customer ?? { id: uid(), name: '', mobile: '', uid: '', address: '' },
   )
   const [withCustomer, setWithCustomer] = useState(!!existing?.customer?.name)
-  const [notes, setNotes] = useState(existing?.notes ?? '')
   const [printMode, setPrintMode] = useState<null | 'quote' | 'guarantee'>(null)
 
   const [cat, setCat] = useState<ProductCategory>(
@@ -82,7 +81,7 @@ export function QuotationBuilder() {
       width: w,
       qty: qty || 1,
       sqft: areaSqft(h, w),
-      notes,
+      notes: '',
     }
     if (alu) {
       return {
@@ -169,11 +168,9 @@ export function QuotationBuilder() {
         {withCustomer && (
           <div className="shrink-0 rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Customer</h2>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Input label="M/s (Name)" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
               <Input label="Mobile" value={customer.mobile} onChange={(e) => setCustomer({ ...customer, mobile: e.target.value })} />
-              <Input label="UID" value={customer.uid} onChange={(e) => setCustomer({ ...customer, uid: e.target.value })} />
-              <Input label="Address" value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} />
             </div>
           </div>
         )}
@@ -402,16 +399,6 @@ export function QuotationBuilder() {
             </table>
             )}
           </div>
-        </div>
-
-        <div className="shrink-0 rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
-          <label className="mb-1 block text-xs font-medium text-stone-500 dark:text-stone-400">Notes (printed on quotation)</label>
-          <textarea
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-            rows={1}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
         </div>
       </div>
 
