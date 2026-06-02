@@ -186,14 +186,14 @@ export function QuotationBuilder() {
               <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} className="md:col-span-5" />
               <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} className="md:col-span-5" />
               <div className="md:col-span-2">
-                <Input
-                  label="Qty"
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Qty</label>
+                <input
                   type="number"
                   min={1}
                   inputMode="numeric"
                   data-size-entry
                   value={qty}
-                  className="h-11 border-2 text-lg font-semibold text-stone-950 focus:ring-2 focus:ring-shiv-green/20"
+                  className="h-11 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-3 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                   onFocus={(e) => e.currentTarget.select()}
                   onKeyDown={focusNextSizeEntry}
                   onChange={(e) => setQty(Number(e.target.value))}
