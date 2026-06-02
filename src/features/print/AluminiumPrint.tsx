@@ -1,5 +1,4 @@
-// Aluminium print sheet — matches the PDF layout exactly:
-// compact phone header · all 3 thicknesses side by side · add-ons · SVG diagram.
+// Aluminium print sheet: Excel-style rate table with embedded product images.
 
 import { Fragment } from 'react'
 import type { ReactNode } from 'react'
@@ -31,23 +30,23 @@ function dimStr(d: { inches: number; soot: number }) {
 // ---- shared table cell helpers ----
 function Th({ children, colSpan, className = '' }: { children?: ReactNode; colSpan?: number; className?: string }) {
   return (
-    <th colSpan={colSpan} className={`border border-black bg-[#d9d9d9] px-1.5 py-1 font-normal ${className}`}>
+    <th colSpan={colSpan} className={`border border-black bg-[#d9d9d9] px-1.5 py-1 font-semibold ${className}`}>
       {children}
     </th>
   )
 }
 function Td({ children, colSpan, className = '' }: { children?: ReactNode; colSpan?: number; className?: string }) {
   return (
-    <td colSpan={colSpan} className={`border border-black px-1.5 py-1 ${className}`}>
+    <td colSpan={colSpan} className={`border border-black px-1.5 py-0.5 ${className}`}>
       {children}
     </td>
   )
 }
 
 function ProductDiagram({ hIn, wIn, image, isDoor }: { hIn: number; wIn: number; image: string; isDoor: boolean }) {
-  const imgW = isDoor ? 112 : 198
-  const imgH = isDoor ? 240 : 154
-  const M = 34
+  const imgW = isDoor ? 112 : 152
+  const imgH = isDoor ? 240 : 152
+  const M = isDoor ? 32 : 34
   const W = imgW + M * 2
   const H = imgH + M * 2
   const wLabel = dimStr({ inches: Math.floor(wIn), soot: Math.round((wIn % 1) * 8) })
@@ -63,14 +62,14 @@ function ProductDiagram({ hIn, wIn, image, isDoor }: { hIn: number; wIn: number;
       />
       <svg width={W} height={H} className="absolute inset-0 overflow-visible">
         <defs>
-          <marker id={`arrow-end-${isDoor ? 'door' : 'window'}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <marker id={`arrow-end-${isDoor ? 'door' : 'window'}`} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
             <path d="M0,0 L8,4 L0,8 Z" fill="#000" />
           </marker>
-          <marker id={`arrow-start-${isDoor ? 'door' : 'window'}`} markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto-start-reverse">
+          <marker id={`arrow-start-${isDoor ? 'door' : 'window'}`} markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto-start-reverse">
             <path d="M0,0 L8,4 L0,8 Z" fill="#000" />
           </marker>
         </defs>
-        <text x={M + imgW / 2} y={18} textAnchor="middle" fontSize={20} fontFamily="Times New Roman, Times, serif">
+        <text x={M + imgW / 2} y={18} textAnchor="middle" fontSize={17} fontFamily="Times New Roman, Times, serif">
           {wLabel}
         </text>
         <line
@@ -79,7 +78,7 @@ function ProductDiagram({ hIn, wIn, image, isDoor }: { hIn: number; wIn: number;
           x2={M + imgW}
           y2={28}
           stroke="#000"
-          strokeWidth={2}
+          strokeWidth={1.6}
           markerStart={`url(#arrow-start-${isDoor ? 'door' : 'window'})`}
           markerEnd={`url(#arrow-end-${isDoor ? 'door' : 'window'})`}
         />
@@ -87,7 +86,7 @@ function ProductDiagram({ hIn, wIn, image, isDoor }: { hIn: number; wIn: number;
           x={18}
           y={M + imgH / 2}
           textAnchor="middle"
-          fontSize={20}
+          fontSize={17}
           fontFamily="Times New Roman, Times, serif"
           transform={`rotate(-90,18,${M + imgH / 2})`}
         >
@@ -99,7 +98,7 @@ function ProductDiagram({ hIn, wIn, image, isDoor }: { hIn: number; wIn: number;
           x2={28}
           y2={M + imgH}
           stroke="#000"
-          strokeWidth={2}
+          strokeWidth={1.6}
           markerStart={`url(#arrow-start-${isDoor ? 'door' : 'window'})`}
           markerEnd={`url(#arrow-end-${isDoor ? 'door' : 'window'})`}
         />
@@ -175,37 +174,42 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
   return (
     <A4Page>
       <div
-        className="mx-auto pt-[63mm] text-black"
-        style={{ width: '151mm', fontFamily: '"Times New Roman", Times, serif' }}
+        className="mx-auto pt-[24mm] text-black"
+        style={{ width: '160mm', fontFamily: '"Times New Roman", Times, serif' }}
       >
-        <div className="mb-[2mm] flex items-end justify-between">
-          <img src={headerImage} alt="" className="block w-[83mm]" />
-          <div className="border-2 border-black bg-[#d9d9d9] px-1.5 py-1 text-left text-[15px] leading-tight" style={{ width: '64mm' }}>
+        <div className="mb-[4mm] flex items-center justify-between gap-[6mm]">
+          <img src={headerImage} alt="" className="block w-[86mm]" />
+          <div
+            className="flex min-h-[13mm] items-center border-2 border-black bg-[#d9d9d9] px-2 py-1 text-left text-[14px] leading-tight"
+            style={{ width: '68mm' }}
+          >
+            <div>
             {productTitle.split('\n').map((line, i) => <div key={i}>{line}</div>)}
+            </div>
           </div>
         </div>
 
-      <div className="text-[16px] leading-none text-black">
+      <div className="text-[14.5px] leading-tight text-black">
         {/* Info table */}
-        <table className="mb-1 w-full border-collapse border-2 border-black">
+        <table className="mb-[2mm] w-full border-collapse border-2 border-black">
           <tbody>
             <tr>
-              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right" style={{ width: '22%' }}>Size -</td>
-              <td className="border-2 border-black px-2 py-0.5 text-center">{dimStr(height)}  X  {dimStr(width)}</td>
+              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right font-semibold" style={{ width: '22%' }}>Size -</td>
+              <td className="border-2 border-black px-2 py-0.5 text-center font-medium">{dimStr(height)}  X  {dimStr(width)}</td>
             </tr>
             <tr>
-              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right">Area -</td>
+              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right font-semibold">Area -</td>
               <td className="border-2 border-black px-2 py-0.5 text-center">{area} Sqft</td>
             </tr>
             <tr>
-              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right">Chaukhat -</td>
+              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right font-semibold">Chaukhat -</td>
               <td className="border-2 border-black px-2 py-0.5 text-center">{chaukhatRft} Rft</td>
             </tr>
           </tbody>
         </table>
 
         {/* 7-column comparison table: label + (rate+amount) × 3 thicknesses */}
-        <table className="w-full border-collapse border-2 border-black text-[16px]" style={{ tableLayout: 'fixed' }}>
+        <table className="w-full border-collapse border-2 border-black text-[14.5px]" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '22%' }} />
             {ALU_THICKNESSES.map((_, i) => (
@@ -367,7 +371,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
         </table>
 
         {/* Diagram */}
-        <div className="mt-1 flex justify-center">
+        <div className="mt-[5mm] flex justify-center">
           <ProductDiagram hIn={hIn} wIn={wIn} image={productImage} isDoor={isDoor} />
         </div>
       </div>
