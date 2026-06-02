@@ -3,6 +3,7 @@ import { CATEGORY_LABELS, SHOP } from '../../lib/types'
 import { formatSize, sealForYears } from '../../lib/pricing'
 import { Letterhead } from './Letterhead'
 import { A4Page } from './A4Page'
+import { assetPath } from '../../lib/assets'
 
 // Guarantee Card — issued for the quoted size. Lists the brands in this product
 // that carry a guarantee (with years), and stamps the highest-year wax seal.
@@ -14,7 +15,19 @@ const DEFAULT_TERMS = [
   'Polish, fittings, glass & handles are not covered under guarantee.',
 ]
 
-export function GuaranteeCard({ quote, terms = DEFAULT_TERMS }: { quote: Quotation; terms?: string[] }) {
+type GuaranteeLayout = 'a4' | 'card'
+
+export function GuaranteeCard({
+  quote,
+  terms = DEFAULT_TERMS,
+  layout = 'a4',
+}: {
+  quote: Quotation
+  terms?: string[]
+  layout?: GuaranteeLayout
+}) {
+  if (layout === 'card') return <CompactGuaranteeCard quote={quote} />
+
   const dateStr = new Date(quote.date).toLocaleDateString('en-GB')
   const guaranteedRows = (quote.rows ?? []).filter((r) => r.guaranteeYears > 0)
   const maxYears = Math.max(0, ...guaranteedRows.map((r) => r.guaranteeYears))
@@ -92,6 +105,55 @@ export function GuaranteeCard({ quote, terms = DEFAULT_TERMS }: { quote: Quotati
           <div className="text-center text-[12px]">
             <div className="mb-[14mm] font-bold">For {SHOP.name}</div>
             <div className="border-t border-black px-6 pt-1">Proprietor</div>
+          </div>
+        </div>
+      </div>
+    </A4Page>
+  )
+}
+
+function CompactGuaranteeCard({ quote }: { quote: Quotation }) {
+  const dateStr = new Date(quote.date).toLocaleDateString('en-GB')
+  const guaranteedRows = (quote.rows ?? []).filter((r) => r.guaranteeYears > 0)
+  const maxYears = Math.max(0, ...guaranteedRows.map((r) => r.guaranteeYears))
+  const seal = sealForYears(maxYears)
+  const primaryRow = guaranteedRows[0]
+
+  return (
+    <A4Page>
+      <div className="flex h-[297mm] items-start justify-center bg-white pt-[18mm] font-print text-black">
+        <div className="relative h-[54mm] w-[86mm] overflow-hidden rounded-[3mm] border-[1.5px] border-black bg-white px-[5mm] py-[4mm]">
+          <div className="flex items-center justify-between border-b border-black pb-[2mm]">
+            <div className="flex items-center gap-[2mm]">
+              <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-[10mm] w-[10mm] object-contain" />
+              <div>
+                <div className="text-[12px] font-bold leading-none">{SHOP.name}</div>
+                <div className="text-[7px] font-semibold leading-tight">{SHOP.address}</div>
+              </div>
+            </div>
+            {seal && <img src={seal} alt={`${maxYears} year guarantee`} className="h-[14mm] w-[14mm] object-contain" />}
+          </div>
+
+          <div className="mt-[2mm] text-center text-[12px] font-bold tracking-wide" style={{ color: 'var(--shiv-green)' }}>
+            GUARANTEE CARD
+          </div>
+
+          <div className="mt-[2mm] grid grid-cols-2 gap-x-[3mm] gap-y-[1mm] text-[8px] leading-tight">
+            <div><span className="font-bold">Ref:</span> {quote.number}</div>
+            <div><span className="font-bold">Date:</span> {dateStr}</div>
+            <div className="col-span-2"><span className="font-bold">M/s:</span> {quote.customer.name || '-'}</div>
+            <div><span className="font-bold">UID:</span> {quote.customer.uid || 'N/A'}</div>
+            <div><span className="font-bold">Mobile:</span> {quote.customer.mobile || 'N/A'}</div>
+            <div className="col-span-2"><span className="font-bold">Product:</span> {CATEGORY_LABELS[quote.category]}</div>
+            <div className="col-span-2"><span className="font-bold">Size:</span> {formatSize(quote.height, quote.width) || '-'} | <span className="font-bold">Qty:</span> {quote.qty}</div>
+            <div className="col-span-2"><span className="font-bold">Brand:</span> {primaryRow?.brandName ?? '-'}</div>
+          </div>
+
+          <div className="absolute bottom-[4mm] left-[5mm] right-[5mm] flex items-end justify-between">
+            <div className="text-[10px] font-bold" style={{ color: 'var(--shiv-red)' }}>
+              {maxYears ? `${maxYears} Years` : 'No Guarantee'}
+            </div>
+            <div className="w-[25mm] border-t border-black pt-[1mm] text-center text-[7px]">Proprietor</div>
           </div>
         </div>
       </div>

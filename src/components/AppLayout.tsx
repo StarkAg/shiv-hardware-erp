@@ -6,6 +6,7 @@ import {
   AppWindow,
   ChevronDown,
   ChevronRight,
+  CreditCard,
   DoorClosed,
   FileText,
   FolderOpen,
@@ -13,6 +14,7 @@ import {
   Layers,
   Moon,
   Plus,
+  ShieldCheck,
   Sun,
   Wrench,
   Users,
@@ -38,6 +40,7 @@ export function AppLayout() {
   const [open, setOpen] = useState(
     location.pathname.startsWith('/quote') || location.pathname.startsWith('/product'),
   )
+  const [guaranteeOpen, setGuaranteeOpen] = useState(location.pathname.startsWith('/guarantee'))
   // dark: just a re-render trigger — the real source of truth is the DOM class.
   const [dark, setDark] = useState(isDarkMode)
 
@@ -111,6 +114,49 @@ export function AppLayout() {
                     })}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <button
+              onClick={() => setGuaranteeOpen((o) => !o)}
+              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              <span className="flex items-center gap-3">
+                <ShieldCheck size={18} /> Guarantee Card
+              </span>
+              {guaranteeOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+
+            {guaranteeOpen && (
+              <div className="mt-1 ml-3 space-y-1 border-l border-stone-200 pl-2 py-1 dark:border-white/10">
+                <NavLink
+                  to="/guarantee/card"
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
+                      isActive
+                        ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
+                        : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
+                    }`
+                  }
+                >
+                  <CreditCard size={14} />
+                  Card
+                </NavLink>
+                <NavLink
+                  to="/guarantee/a4"
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
+                      isActive
+                        ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
+                        : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
+                    }`
+                  }
+                >
+                  <FileText size={14} />
+                  A4 Sheet
+                </NavLink>
               </div>
             )}
           </div>
