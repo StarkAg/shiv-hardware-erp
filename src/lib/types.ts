@@ -75,12 +75,22 @@ export interface Quotation {
   sqft: number
   /** brand categories: one row per brand with its cost for this size */
   rows?: BrandQuoteRow[]
-  /** aluminium categories: a single configured item with cost breakdown */
+  /** aluminium categories: ALL 3 thicknesses shown like the Excel sheet */
   alu?: {
-    thickness: string
     addons: string[]
-    breakdown: { label: string; amount: number }[]
-    total: number
+    glassType?: string
+    /** One entry per thickness (1.2MM, 1.6MM, Hindalco) */
+    thicknesses: {
+      name: string
+      doorRate: number; doorCost: number
+      chaukhatRate: number; chaukhatCost: number
+      accessories: number; total: number
+      decorFilmRate: number; decorFilm: number
+      brownCoatedRate?: number; brownCoated?: number
+      /** windows */
+      glassRate?: number; glassCost?: number
+      chaukhatRft?: number
+    }[]
   }
   notes?: string
 }

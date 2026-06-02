@@ -9,7 +9,7 @@ import {
   type GuaranteeYears,
   type ProductCategory,
 } from '../../lib/types'
-import { Button, Card, PageHeader } from '../../components/ui'
+import { Button, Card, PageHeader, Select } from '../../components/ui'
 
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 10, 15, 20, 25]
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -183,8 +183,7 @@ export function RateManager() {
                             />
                           </td>
                           <td className="py-1 pr-2">
-                            <select
-                              className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                            <Select
                               value={b.guaranteeYears}
                               onChange={(e) =>
                                 updateBrand(b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
@@ -195,7 +194,7 @@ export function RateManager() {
                                   {g === 0 ? 'None' : `${g} Years`}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                           </td>
                           <td className="py-1 text-right">
                             <button

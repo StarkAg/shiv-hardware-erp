@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { isDarkMode, toggleTheme } from '../lib/theme'
 import {
   AppWindow,
   ChevronDown,
@@ -9,7 +10,9 @@ import {
   FolderOpen,
   IndianRupee,
   Layers,
+  Moon,
   Plus,
+  Sun,
   Wrench,
   Users,
   type LucideIcon,
@@ -34,10 +37,12 @@ export function AppLayout() {
   const [open, setOpen] = useState(
     location.pathname.startsWith('/quote') || location.pathname.startsWith('/product'),
   )
+  // dark: just a re-render trigger — the real source of truth is the DOM class.
+  const [dark, setDark] = useState(isDarkMode)
 
   return (
     <div className="flex min-h-screen">
-      <aside className="no-print flex w-64 shrink-0 flex-col border-r border-stone-200/80 bg-white/95 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100">
+      <aside className="no-print flex w-64 shrink-0 flex-col border-r border-stone-200/80 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100">
         <div className="border-b border-stone-200/80 px-5 py-5 dark:border-white/10">
           <div className="flex items-center gap-2">
             <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-white shadow-inner shadow-stone-400/30">
@@ -120,14 +125,21 @@ export function AppLayout() {
           </NavLink>
         </nav>
 
-        <div className="border-t border-stone-200/80 p-4 text-[11px] text-stone-500 dark:border-white/10">
+        <div className="border-t border-stone-200/80 p-3 dark:border-white/10 space-y-2">
+          <button
+            onClick={() => setDark(toggleTheme())}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition"
+          >
+            {dark ? <Sun size={16} /> : <Moon size={16} />}
+            {dark ? 'Light mode' : 'Dark mode'}
+          </button>
           <a
             href="https://www.linkedin.com/in/harshxagarwal"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-2 text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white"
+            className="flex items-center gap-2 px-3 text-xs text-stone-500 transition hover:text-stone-950 dark:text-stone-400 dark:hover:text-white"
           >
-            <Wrench size={14} />
+            <Wrench size={13} />
             By Harsh
           </a>
         </div>

@@ -54,7 +54,6 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
           </span>
           <span className="text-[13px]">Area: <b>{quote.sqft.toFixed(2)}</b> sqft</span>
           <span className="text-[13px]">Quantity: <b>{quote.qty}</b></span>
-          {isAlu && <span className="text-[13px]">Thickness: <b>{quote.alu!.thickness}</b></span>}
         </div>
 
         {!isAlu ? (
@@ -84,35 +83,7 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
               ))}
             </tbody>
           </table>
-        ) : (
-          /* Aluminium cost breakdown */
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr style={{ background: 'var(--shiv-green)', color: '#fff' }}>
-                <th className="border border-slate-500 px-2 py-1.5 text-left">
-                  {quote.alu!.addons.length ? quote.alu!.addons.join(' · ') : 'Item'}
-                </th>
-                <th className="border border-slate-500 px-2 py-1.5 text-right w-[28%]">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quote.alu!.breakdown.map((b, i) => (
-                <tr key={i} className="border-b border-slate-400">
-                  <td className="border border-slate-400 px-2 py-1.5">{b.label}</td>
-                  <td className="border border-slate-400 px-2 py-1.5 text-right">{formatINR(b.amount)}</td>
-                </tr>
-              ))}
-              <tr className="border-t-2 border-black">
-                <td className="border border-slate-400 px-2 py-1.5 text-right font-bold text-[15px]">
-                  Total{quote.qty > 1 ? ` × ${quote.qty}` : ''}
-                </td>
-                <td className="border border-slate-400 px-2 py-1.5 text-right font-bold text-[15px]">
-                  {formatINR(quote.alu!.total)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        )}
+        ) : null}
 
         {quote.notes && (
           <div className="mt-3 text-[11px] whitespace-pre-wrap">

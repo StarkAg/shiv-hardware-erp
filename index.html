@@ -5,6 +5,16 @@
     <link rel="icon" type="image/png" href="/assets/letterhead/shiv-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shiv Hardware Panel</title>
+    <!-- Apply theme BEFORE CSS loads so there is never a flash or override fight. -->
+    <script>
+      try {
+        if (localStorage.getItem('shiv-panel:theme') === 'dark') {
+          document.documentElement.classList.add('dark')
+        } else {
+          document.documentElement.classList.remove('dark')
+        }
+      } catch (_) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

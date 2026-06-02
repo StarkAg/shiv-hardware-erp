@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useParams } from 'react-router-dom'
-import { Moon, Minus, Plus, Printer, Save, Sun, Trash2 } from 'lucide-react'
+import { Minus, Plus, Printer, Save, Trash2 } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import {
   CATEGORY_LABELS,
@@ -12,14 +12,12 @@ import {
 } from '../../lib/types'
 import { areaSqft, buildBrandRows, formatINR, formatSize, lineAmount } from '../../lib/pricing'
 import {
-  ALU_THICKNESSES,
   type AluAddons,
-  type AluThickness,
-  calcAluminium,
+  calcAllThicknesses,
   defaultAddons,
   isAluminium,
 } from '../../lib/aluminium'
-import { Button, Input, PageHeader, Toggle } from '../../components/ui'
+import { Button, Input, PageHeader, Select, Toggle } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
 import { QuotationPrint } from '../print/QuotationPrint'
 import { GuaranteeCard } from '../print/GuaranteeCard'
@@ -27,13 +25,8 @@ import { GuaranteeCard } from '../print/GuaranteeCard'
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 10, 15, 20, 25]
-const THEME_KEY = 'shiv-panel:theme'
 const isCategory = (c?: string): c is ProductCategory =>
   !!c && CATEGORY_ORDER.includes(c as ProductCategory)
-const applyTheme = (dark: boolean) => {
-  document.documentElement.classList.toggle('dark', dark)
-  localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
-}
 
 export function QuotationBuilder() {
   const { id, category } = useParams()
@@ -55,25 +48,12 @@ export function QuotationBuilder() {
   const [h, setH] = useState<Dimension>(existing?.height ?? blankDim())
   const [w, setW] = useState<Dimension>(existing?.width ?? blankDim())
   const [qty, setQty] = useState(existing?.qty ?? 1)
-  // aluminium-only
-  const [thickness, setThickness] = useState<AluThickness>('1.2 MM')
   const [addons, setAddons] = useState<AluAddons>(defaultAddons())
   // selected price set
   const [setId, setSetId] = useState(sets[0]?.id)
   const activeSet = sets.find((s) => s.id === setId) ?? sets[0]
   const [editMode, setEditMode] = useState(false)
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem(THEME_KEY) === 'dark')
   const sizeCardRef = useRef<HTMLDivElement>(null)
-
-  useLayoutEffect(() => {
-    const savedDarkMode = localStorage.getItem(THEME_KEY) === 'dark'
-    applyTheme(savedDarkMode)
-    setDarkMode(savedDarkMode)
-  }, [])
-
-  useLayoutEffect(() => {
-    applyTheme(darkMode)
-  }, [darkMode])
 
   // Sync category when a different product submenu item is clicked.
   useEffect(() => {
@@ -86,10 +66,10 @@ export function QuotationBuilder() {
   const alu = isAluminium(cat)
   const hasSize = h.inches > 0 || w.inches > 0
   const brands = (activeSet?.brands ?? []).filter((b) => b.category === cat)
-  const sqft = alu ? calcAluminium(cat, thickness, h, w, addons).area : areaSqft(h, w)
+  const sqft = alu ? (calcAllThicknesses(cat, h, w, addons)[0]?.doorCost ? areaSqft(h, w) : areaSqft(h, w)) : areaSqft(h, w)
+  const aluThicknesses = alu ? calcAllThicknesses(cat, h, w, addons) : []
 
   const rows = !alu ? buildBrandRows(brands, h, w, qty) : []
-  const aluResult = alu ? calcAluminium(cat, thickness, h, w, addons) : null
 
   function buildQuote(): Quotation {
     const base = {
@@ -101,17 +81,16 @@ export function QuotationBuilder() {
       height: h,
       width: w,
       qty: qty || 1,
-      sqft,
+      sqft: areaSqft(h, w),
       notes,
     }
-    if (alu && aluResult) {
+    if (alu) {
       return {
         ...base,
         alu: {
-          thickness,
           addons: activeAddonLabels(cat, addons),
-          breakdown: aluResult.breakdown,
-          total: aluResult.total * (qty || 1),
+          glassType: addons.glassType,
+          thicknesses: aluThicknesses,
         },
       }
     }
@@ -145,21 +124,6 @@ export function QuotationBuilder() {
         subtitle={number}
         actions={
           <>
-            <button
-              type="button"
-              onClick={() =>
-                setDarkMode((current) => {
-                  const next = !current
-                  applyTheme(next)
-                  return next
-                })
-              }
-              className="flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-shiv-green hover:bg-stone-50 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
-              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {darkMode ? <Moon size={16} /> : <Sun size={16} />}
-              {darkMode ? 'Dark' : 'Light'}
-            </button>
             <Button variant="outline" onClick={save} className="flex items-center gap-1.5" disabled={!hasSize}>
               <Save size={16} /> Save
             </Button>
@@ -179,7 +143,7 @@ export function QuotationBuilder() {
                 className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                   s.id === setId
                     ? 'border-shiv-green bg-shiv-green text-stone-950 shadow-sm'
-                    : 'border-stone-300 bg-white/80 text-stone-600 hover:border-shiv-green hover:bg-white dark:border-white/15 dark:bg-white/5 dark:text-stone-300 dark:hover:bg-white/10'
+                    : 'border-stone-300 bg-stone-100 text-stone-600 hover:border-shiv-green hover:bg-stone-50 dark:border-white/15 dark:bg-white/5 dark:text-stone-300 dark:hover:bg-white/10'
                 }`}
               >
                 {s.name}
@@ -203,7 +167,7 @@ export function QuotationBuilder() {
         <Toggle checked={withCustomer} onChange={setWithCustomer} label="Add customer details (optional)" />
 
         {withCustomer && (
-          <div className="shrink-0 rounded-xl border border-stone-200/90 bg-white p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
+          <div className="shrink-0 rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Customer</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <Input label="M/s (Name)" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
@@ -216,26 +180,12 @@ export function QuotationBuilder() {
 
         {/* Size */}
         <div ref={sizeCardRef} className="shrink-0">
-          <div className="rounded-xl border border-stone-200/90 bg-white p-4 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
+          <div className="rounded-xl border border-stone-200/90 bg-stone-50 p-4 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
             <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Size</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
-              {alu && (
-                <div className="md:col-span-3">
-                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Thickness</label>
-                  <select
-                    className="h-11 w-full rounded-lg border-2 border-stone-300 bg-white px-3 text-base font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-                    value={thickness}
-                    data-size-entry
-                    onKeyDown={focusNextSizeEntry}
-                    onChange={(e) => setThickness(e.target.value as AluThickness)}
-                  >
-                    {ALU_THICKNESSES.map((t) => (<option key={t} value={t}>{t}</option>))}
-                  </select>
-                </div>
-              )}
-              <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} className={alu ? 'md:col-span-3' : 'md:col-span-5'} />
-              <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} className={alu ? 'md:col-span-3' : 'md:col-span-5'} />
-              <div className={alu ? 'md:col-span-3' : 'md:col-span-2'}>
+              <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} className="md:col-span-5" />
+              <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} className="md:col-span-5" />
+              <div className="md:col-span-2">
                 <Input
                   label="Qty"
                   type="number"
@@ -253,25 +203,54 @@ export function QuotationBuilder() {
 
             {/* Aluminium options */}
             {alu && (
-              <div className="mt-3 flex flex-wrap items-center gap-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm dark:border-white/10 dark:bg-white/5">
+              <div className="mt-4 space-y-3">
+                {/* Glass type (windows only) */}
                 {cat !== 'aluminium-door' && (
-                  <label className="flex items-center gap-1">
-                    Glass:
-                    <select
-                      className="rounded border border-stone-300 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-                      value={addons.glassType}
-                      onChange={(e) => setAddons((a) => ({ ...a, glassType: e.target.value as 'clear' | 'reflective' }))}
-                    >
-                      <option value="clear">Clear</option>
-                      <option value="reflective">Reflective</option>
-                    </select>
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="w-14 text-xs font-semibold text-stone-500 dark:text-stone-400">Glass</span>
+                    <div className="flex rounded-lg border border-stone-300 bg-stone-100 overflow-hidden dark:border-white/15 dark:bg-stone-950">
+                      {(['clear', 'reflective'] as const).map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setAddons((a) => ({ ...a, glassType: g }))}
+                          className={`px-5 py-2 text-sm font-medium transition ${
+                            addons.glassType === g
+                              ? 'bg-shiv-green text-stone-950'
+                              : 'text-stone-600 hover:bg-stone-50 dark:text-stone-300 dark:hover:bg-white/10'
+                          }`}
+                        >
+                          {g.charAt(0).toUpperCase() + g.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                <Chk label="Chaukhat" on={addons.chaukhat} onClick={() => toggle('chaukhat')} />
-                {cat === 'aluminium-door' && <Chk label="Accessories" on={addons.accessories} onClick={() => toggle('accessories')} />}
-                {cat !== 'aluminium-door' && <Chk label="SS Net" on={addons.ssNet} onClick={() => toggle('ssNet')} />}
-                <Chk label="Decor Film" on={addons.decorFilm} onClick={() => toggle('decorFilm')} />
-                <Chk label="Brown Coated" on={addons.brownCoated} onClick={() => toggle('brownCoated')} />
+                {/* Add-on options */}
+                <div className="flex flex-wrap gap-2.5">
+                  {[
+                    { key: 'chaukhat' as const, label: 'Chaukhat', show: true },
+                    { key: 'accessories' as const, label: 'Accessories', show: cat === 'aluminium-door' },
+                    { key: 'ssNet' as const, label: 'SS Net', show: cat !== 'aluminium-door' },
+                    { key: 'decorFilm' as const, label: 'Decor Film', show: true },
+                    { key: 'brownCoated' as const, label: 'Brown Coated', show: true },
+                  ]
+                    .filter((o) => o.show)
+                    .map((o) => (
+                      <button
+                        key={o.key}
+                        type="button"
+                        onClick={() => toggle(o.key)}
+                        className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                          addons[o.key]
+                            ? 'border-shiv-green bg-shiv-green/10 text-stone-800 dark:text-stone-100'
+                            : 'border-stone-300 bg-stone-100 text-stone-500 hover:border-stone-400 dark:border-white/15 dark:bg-transparent dark:text-stone-400'
+                        }`}
+                      >
+                        {addons[o.key] ? '✓ ' : ''}{o.label}
+                      </button>
+                    ))}
+                </div>
               </div>
             )}
 
@@ -283,7 +262,7 @@ export function QuotationBuilder() {
 
         {/* Edit-set toolbar (rename / delete the active set) */}
         {!alu && editMode && (
-          <div className="flex shrink-0 items-center justify-between rounded-xl border border-stone-200/90 bg-white p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
+          <div className="flex shrink-0 items-center justify-between rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
             <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
               Active set: <span className="text-shiv-green">{activeSet?.name ?? 'C1'}</span>
             </div>
@@ -304,37 +283,39 @@ export function QuotationBuilder() {
         )}
 
         {/* Live preview: all-brands rate card OR aluminium breakdown */}
-        <div className="shrink-0 overflow-hidden rounded-xl border border-stone-200/90 bg-white text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
+        <div className="shrink-0 overflow-hidden rounded-xl border border-stone-200/90 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
           <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400">
             {alu ? 'Aluminium Cost' : `All Brands — cost for this size${editMode ? ' (editing ' + (activeSet?.name ?? '') + ')' : ''}`}
           </div>
           <div>
             {!alu ? (
             <table className="w-full text-sm">
-              <thead className="bg-white text-left text-xs uppercase text-slate-400 dark:bg-stone-900 dark:text-stone-500">
+              <thead className="bg-stone-50 text-left text-xs uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500">
                 <tr>
-                  <th className="px-4 py-2">Brand</th>
-                  <th className="px-4 py-2 text-right">Rate (₹/sqft)</th>
-                  <th className="px-4 py-2 text-right">Cost</th>
-                  <th className="px-4 py-2 text-center">Guarantee</th>
-                  {editMode && <th className="px-4 py-2 w-10"></th>}
+                  <th className="px-4 py-2.5">Brand</th>
+                  <th className="px-4 py-2.5 text-right">Rate (₹/sqft)</th>
+                  <th className="px-4 py-2.5 text-right">Cost</th>
+                  <th className="px-4 py-2.5 text-center">Guarantee</th>
+                  {editMode && <th className="px-4 py-2.5 w-10"></th>}
                 </tr>
               </thead>
               <tbody>
                 {!editMode &&
                   rows.map((r, i) => (
-                    <tr key={i} className="border-t border-slate-100 dark:border-white/10">
-                      <td className="px-4 py-2 font-medium">{r.brandName}</td>
-                      <td className="px-4 py-2 text-right">{r.rate}</td>
-                      <td className="px-4 py-2 text-right font-semibold">{hasSize ? formatINR(r.cost) : '—'}</td>
-                      <td className="px-4 py-2 text-center text-shiv-red">
-                        {r.guaranteeYears ? `${r.guaranteeYears} Years` : '—'}
+                    <tr key={i} className="border-t border-stone-100 dark:border-white/10">
+                      <td className="px-4 py-2.5 font-medium">{r.brandName}</td>
+                      <td className="px-4 py-2.5 text-right text-stone-500 dark:text-stone-400">{r.rate}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold">{hasSize ? formatINR(r.cost) : '—'}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        {r.guaranteeYears
+                          ? <span className="text-shiv-red font-medium">{r.guaranteeYears} Years</span>
+                          : <span className="text-stone-300 dark:text-stone-600">—</span>}
                       </td>
                     </tr>
                   ))}
                 {editMode &&
                   brands.map((b) => (
-                    <tr key={b.id} className="border-t border-slate-100 dark:border-white/10">
+                    <tr key={b.id} className="border-t border-stone-100 dark:border-white/10">
                       <td className="px-3 py-1.5">
                         <input
                           className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
@@ -354,8 +335,7 @@ export function QuotationBuilder() {
                         {hasSize ? formatINR(lineAmount(b.rate, h, w, qty)) : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-center">
-                        <select
-                          className="rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                        <Select
                           value={b.guaranteeYears}
                           onChange={(e) =>
                             updateBrand(setId, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
@@ -364,7 +344,7 @@ export function QuotationBuilder() {
                           {GUARANTEE_OPTIONS.map((g) => (
                             <option key={g} value={g}>{g === 0 ? 'None' : `${g}y`}</option>
                           ))}
-                        </select>
+                        </Select>
                       </td>
                       <td className="px-3 py-1.5 text-right">
                         <button
@@ -378,12 +358,12 @@ export function QuotationBuilder() {
                     </tr>
                   ))}
                 {!brands.length && (
-                  <tr><td colSpan={editMode ? 5 : 4} className="px-4 py-6 text-center text-slate-400 dark:text-stone-500">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
+                  <tr><td colSpan={editMode ? 5 : 4} className="px-4 py-6 text-center text-stone-400 dark:text-stone-500">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
                 )}
               </tbody>
               {editMode && (
                 <tfoot>
-                  <tr className="border-t border-slate-100 dark:border-white/10">
+                  <tr className="border-t border-stone-100 dark:border-white/10">
                     <td colSpan={5} className="px-4 py-2">
                       <Button variant="outline" className="flex items-center gap-1.5" onClick={() => addBrand(setId, cat)}>
                         <Plus size={16} /> Add brand
@@ -394,27 +374,54 @@ export function QuotationBuilder() {
               )}
             </table>
             ) : (
+            // Aluminium — all 3 thicknesses side by side
             <table className="w-full text-sm">
+              <thead className="bg-stone-50 text-xs uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500">
+                <tr>
+                  <th className="px-3 py-2.5 text-left">Item</th>
+                  {aluThicknesses.map((t) => (
+                    <th key={t.name} className="px-3 py-2.5 text-right">{t.name}</th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
-                {(aluResult?.breakdown ?? []).map((b, i) => (
-                  <tr key={i} className="border-t border-slate-100 dark:border-white/10">
-                    <td className="px-4 py-2">{b.label}</td>
-                    <td className="px-4 py-2 text-right font-semibold">{formatINR(b.amount)}</td>
+                {[
+                  { label: cat === 'aluminium-door' ? 'Door' : 'Glass', key: 'doorCost' as const },
+                  { label: 'Chaukhat', key: 'chaukhatCost' as const },
+                  { label: cat === 'aluminium-door' ? 'Accessories' : 'SS Net', key: 'accessories' as const },
+                ].map(({ label, key }) => (
+                  <tr key={key} className="border-t border-stone-100 dark:border-white/10">
+                    <td className="px-3 py-2 text-stone-500 dark:text-stone-400">{label}</td>
+                    {aluThicknesses.map((t) => (
+                      <td key={t.name} className="px-3 py-2 text-right">{hasSize ? formatINR(t[key]) : '—'}</td>
+                    ))}
                   </tr>
                 ))}
-                <tr className="border-t-2 border-slate-200 bg-slate-50 dark:border-white/15 dark:bg-white/5">
-                  <td className="px-4 py-2 text-right font-bold">Total{qty > 1 ? ` × ${qty}` : ''}</td>
-                  <td className="px-4 py-2 text-right text-lg font-bold text-shiv-green">
-                    {formatINR((aluResult?.total ?? 0) * (qty || 1))}
-                  </td>
+                <tr className="border-t-2 border-stone-200 bg-stone-50 dark:border-white/20 dark:bg-white/5">
+                  <td className="px-3 py-2.5 font-bold">Total</td>
+                  {aluThicknesses.map((t) => (
+                    <td key={t.name} className="px-3 py-2.5 text-right font-bold text-shiv-green">
+                      {hasSize ? formatINR(t.total) : '—'}
+                    </td>
+                  ))}
                 </tr>
+                {(addons.decorFilm || addons.brownCoated) && (
+                  <tr className="border-t border-stone-100 dark:border-white/10">
+                    <td className="px-3 py-2 text-stone-400 text-xs uppercase">Add-ons</td>
+                    {aluThicknesses.map((t) => (
+                      <td key={t.name} className="px-3 py-2 text-right text-xs text-stone-400">
+                        {hasSize ? formatINR((t.decorFilm ?? 0) + (t.brownCoated ?? 0)) : '—'}
+                      </td>
+                    ))}
+                  </tr>
+                )}
               </tbody>
             </table>
             )}
           </div>
         </div>
 
-        <div className="shrink-0 rounded-xl border border-stone-200/90 bg-white p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
+        <div className="shrink-0 rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
           <label className="mb-1 block text-xs font-medium text-stone-500 dark:text-stone-400">Notes (printed on quotation)</label>
           <textarea
             className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
@@ -445,14 +452,6 @@ function activeAddonLabels(cat: ProductCategory, a: AluAddons): string[] {
   return out
 }
 
-function Chk({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
-  return (
-    <label className="flex cursor-pointer items-center gap-1.5 select-none">
-      <input type="checkbox" checked={on} onChange={onClick} className="accent-shiv-green" />
-      {label}
-    </label>
-  )
-}
 
 function DimInput({
   label,
@@ -477,7 +476,7 @@ function DimInput({
             min={0}
             inputMode="numeric"
             data-size-entry
-            className="h-11 w-full rounded-lg border-2 border-stone-300 px-3 pr-9 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+            className="h-11 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-3 pr-9 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
             placeholder="0"
             value={dim.inches || ''}
             onFocus={(e) => e.currentTarget.select()}
@@ -493,7 +492,7 @@ function DimInput({
             max={7}
             inputMode="numeric"
             data-size-entry
-            className="h-11 w-full rounded-lg border-2 border-stone-300 px-3 pr-7 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+            className="h-11 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-3 pr-7 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
             placeholder="0"
             value={dim.soot || ''}
             onFocus={(e) => e.currentTarget.select()}

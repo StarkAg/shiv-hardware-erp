@@ -59,9 +59,9 @@ export interface AluAddons {
 export const defaultAddons = (): AluAddons => ({
   chaukhat: true,
   accessories: false,
-  decorFilm: false,
-  ssNet: false,
-  brownCoated: false,
+  decorFilm: true,
+  ssNet: true,
+  brownCoated: true,
   glassType: 'clear',
 })
 
@@ -113,6 +113,60 @@ export function calcAluminium(
   if (addons.ssNet) breakdown.push({ label: 'SS Net', amount: area * 50 })
   if (addons.brownCoated) breakdown.push({ label: 'Brown Coated', amount: area * 40 })
   return { area, baseRate: glassRate, total: sum(breakdown), breakdown }
+}
+
+/** Compute costs for ALL 3 thicknesses at once (for the all-thickness display). */
+export function calcAllThicknesses(
+  category: ProductCategory,
+  height: Dimension,
+  width: Dimension,
+  addons: AluAddons,
+) {
+  const hIn = toInches(height)
+  const wIn = toInches(width)
+  const area = round2((hIn * wIn) / 144)
+  const isDoor = category === 'aluminium-door'
+  const chaukhatRft = isDoor ? Math.max(round2((hIn * 2 + wIn) / 12), 14.5) : round2((hIn * 2 + wIn) / 12)
+  const is2Track = category === 'window-2-track'
+
+  return ALU_THICKNESSES.map((t) => {
+    if (isDoor) {
+      const r = doorRates[t]
+      const doorCost = Math.round(area * r.door)
+      const chaukhatCost = addons.chaukhat ? Math.round(chaukhatRft * r.chaukhat) : 0
+      const accessories = addons.accessories ? r.accessories : 0
+      const decorFilm = addons.decorFilm ? Math.round(area * r.decorFilm) : 0
+      const brownCoated = addons.brownCoated ? Math.round(area * r.brownCoated) : 0
+      return {
+        name: t,
+        doorRate: r.door, doorCost,
+        chaukhatRate: r.chaukhat, chaukhatCost,
+        accessories,
+        total: doorCost + chaukhatCost + accessories,
+        decorFilmRate: r.decorFilm, decorFilm,
+        brownCoatedRate: r.brownCoated, brownCoated,
+      }
+    } else {
+      const tr = windowThicknessRates[t]
+      const table = is2Track ? window2TrackAreaRates : window3TrackAreaRates
+      const base = slabRate(area, table)
+      const glassRate = base + (addons.glassType === 'reflective' ? tr.reflective : tr.clear)
+      const glassCost = Math.round(area * glassRate)
+      const chaukhatCost = addons.chaukhat ? Math.round(chaukhatRft * tr.chaukhat) : 0
+      const decorFilm = addons.decorFilm ? Math.round(area * 30) : 0
+      const ssNet = addons.ssNet ? Math.round(area * 50) : 0
+      const brownCoated = addons.brownCoated ? Math.round(area * 40) : 0
+      return {
+        name: t,
+        doorRate: glassRate, doorCost: glassCost,
+        chaukhatRate: tr.chaukhat, chaukhatCost,
+        accessories: ssNet,
+        total: glassCost + chaukhatCost,
+        decorFilmRate: 30, decorFilm,
+        brownCoatedRate: 40, brownCoated,
+      }
+    }
+  })
 }
 
 export function isAluminium(c: ProductCategory): boolean {
