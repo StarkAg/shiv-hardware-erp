@@ -1,6 +1,8 @@
 // Core domain types for Shiv Hardware panel.
 // Modelled directly on the Excel sheets (Plywood/Door, Aluminium, Guarantee Card).
 
+import { assetPath } from './assets'
+
 export type ProductCategory =
   | 'readymade-door'
   | 'flush-door'
@@ -129,14 +131,14 @@ export const CATEGORY_META: Record<
   ProductCategory,
   { short: string; icon: CategoryIcon; image?: string; group: ProductGroup }
 > = {
-  'readymade-door': { short: 'Readymade Door', icon: 'door', image: '/assets/products/plywood.png', group: 'Doors' },
+  'readymade-door': { short: 'Readymade Door', icon: 'door', image: assetPath('assets/products/plywood.png'), group: 'Doors' },
   'flush-door': { short: 'Flush Door', icon: 'door', group: 'Plywoods' },
   'plywood-6': { short: 'Plywood 6mm', icon: 'board', group: 'Plywoods' },
   'block-board-12': { short: 'Block Board 12mm', icon: 'board', group: 'Plywoods' },
   'block-board-19': { short: 'Block Board 19mm', icon: 'board', group: 'Plywoods' },
-  'aluminium-door': { short: 'Aluminium Door', icon: 'door', image: '/assets/products/aluminium-window.png', group: 'Aluminium' },
-  'window-2-track': { short: '2 Track Window', icon: 'window', image: '/assets/products/aluminium-window.png', group: 'Aluminium' },
-  'window-3-track': { short: '3 Track Window', icon: 'window', image: '/assets/products/aluminium-window.png', group: 'Aluminium' },
+  'aluminium-door': { short: 'Aluminium Door', icon: 'door', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
+  'window-2-track': { short: '2 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
+  'window-3-track': { short: '3 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
 }
 
 /** Categories priced as (H × W / 144) sqft. Aluminium windows also use sqft but with slab logic later. */

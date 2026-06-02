@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { isDarkMode, toggleTheme } from '../lib/theme'
+import { assetPath } from '../lib/assets'
 import {
   AppWindow,
   ChevronDown,
@@ -46,7 +47,7 @@ export function AppLayout() {
         <div className="border-b border-stone-200/80 px-5 py-5 dark:border-white/10">
           <div className="flex items-center gap-2">
             <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-white shadow-inner shadow-stone-400/30">
-              <img src="/assets/letterhead/shiv-logo.png" alt="" className="h-9 w-9 object-contain" />
+              <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 object-contain" />
             </div>
             <div>
               <div className="font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware</div>

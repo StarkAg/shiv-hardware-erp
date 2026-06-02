@@ -11,6 +11,7 @@ import {
   window2TrackAreaRates,
   window3TrackAreaRates,
 } from '../../lib/aluminium'
+import { assetPath } from '../../lib/assets'
 import { A4Page } from './A4Page'
 
 const r0 = (n: number) => Math.round(n)
@@ -132,12 +133,14 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
     : is2Track
     ? '2 Track Aluminium Sliding Window'
     : `3 Track Aluminium Sliding Window${hasSsNet ? '\nWith Half SS Net' : ''}`
-  const headerImage = isDoor ? '/assets/aluminium/header-door.jpeg' : '/assets/aluminium/header-window.jpg'
+  const headerImage = isDoor
+    ? assetPath('assets/aluminium/header-door.jpeg')
+    : assetPath('assets/aluminium/header-window.jpg')
   const productImage = isDoor
-    ? '/assets/aluminium/door.png'
+    ? assetPath('assets/aluminium/door.png')
     : is2Track
-    ? '/assets/aluminium/window-2-track.jpeg'
-    : '/assets/aluminium/window-3-track.jpeg'
+    ? assetPath('assets/aluminium/window-2-track.jpeg')
+    : assetPath('assets/aluminium/window-3-track.jpeg')
 
   // compute per-thickness costs for doors
   const dRows = ALU_THICKNESSES.map((t) => {
