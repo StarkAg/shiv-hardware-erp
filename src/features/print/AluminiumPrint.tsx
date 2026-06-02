@@ -4,7 +4,6 @@
 import { Fragment } from 'react'
 import type { ReactNode } from 'react'
 import type { Quotation } from '../../lib/types'
-import { SHOP } from '../../lib/types'
 import { toInches } from '../../lib/pricing'
 import {
   ALU_THICKNESSES,
@@ -32,7 +31,7 @@ function dimStr(d: { inches: number; soot: number }) {
 // ---- shared table cell helpers ----
 function Th({ children, colSpan, className = '' }: { children?: ReactNode; colSpan?: number; className?: string }) {
   return (
-    <th colSpan={colSpan} className={`border border-black px-1.5 py-1 font-semibold bg-slate-100 ${className}`}>
+    <th colSpan={colSpan} className={`border border-black bg-[#d9d9d9] px-1.5 py-1 font-normal ${className}`}>
       {children}
     </th>
   )
@@ -45,69 +44,67 @@ function Td({ children, colSpan, className = '' }: { children?: ReactNode; colSp
   )
 }
 
-// ---- Door SVG diagram (matching PDF) ----
-function DoorDiagram({ hIn, wIn }: { hIn: number; wIn: number }) {
-  const DW = 88, DH = 148, M = 30, W = DW + M * 2, H = DH + M * 2
+function ProductDiagram({ hIn, wIn, image, isDoor }: { hIn: number; wIn: number; image: string; isDoor: boolean }) {
+  const imgW = isDoor ? 112 : 198
+  const imgH = isDoor ? 240 : 154
+  const M = 34
+  const W = imgW + M * 2
+  const H = imgH + M * 2
   const wLabel = dimStr({ inches: Math.floor(wIn), soot: Math.round((wIn % 1) * 8) })
   const hLabel = dimStr({ inches: Math.floor(hIn), soot: Math.round((hIn % 1) * 8) })
-  return (
-    <svg width={W} height={H} style={{ fontFamily: 'Arial', overflow: 'visible' }}>
-      <defs>
-        <marker id="da" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <path d="M0,0 L7,3.5 L0,7 Z" fill="#000" />
-        </marker>
-        <marker id="das" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto-start-reverse">
-          <path d="M0,0 L7,3.5 L0,7 Z" fill="#000" />
-        </marker>
-      </defs>
-      {/* Width */}
-      <text x={M + DW / 2} y={13} textAnchor="middle" fontSize={10.5}>{wLabel}</text>
-      <line x1={M} y1={19} x2={M + DW} y2={19} stroke="#000" strokeWidth={1} markerStart="url(#das)" markerEnd="url(#da)" />
-      {/* Height */}
-      <text x={13} y={M + DH / 2} textAnchor="middle" fontSize={10.5} transform={`rotate(-90,13,${M + DH / 2})`}>{hLabel}</text>
-      <line x1={21} y1={M} x2={21} y2={M + DH} stroke="#000" strokeWidth={1} markerStart="url(#das)" markerEnd="url(#da)" />
-      {/* Door body */}
-      <rect x={M} y={M} width={DW} height={DH} fill="#ddd" stroke="#000" strokeWidth={1.5} />
-      {/* Horizontal split at ~42% */}
-      <line x1={M} y1={M + DH * 0.42} x2={M + DW} y2={M + DH * 0.42} stroke="#000" strokeWidth={0.8} />
-      {/* Hinges */}
-      <rect x={M + 1} y={M + 10} width={5} height={9} fill="#777" />
-      <rect x={M + 1} y={M + DH * 0.55} width={5} height={9} fill="#777" />
-      {/* Handle (lower panel, right side) */}
-      <rect x={M + DW - 8} y={M + DH * 0.62} width={5} height={14} fill="#777" />
-    </svg>
-  )
-}
 
-// ---- Window SVG diagram ----
-function WindowDiagram({ hIn, wIn, tracks }: { hIn: number; wIn: number; tracks: 2 | 3 }) {
-  const DW = 130, DH = 88, M = 30, W = DW + M * 2, H = DH + M * 2
-  const wLabel = dimStr({ inches: Math.floor(wIn), soot: Math.round((wIn % 1) * 8) })
-  const hLabel = dimStr({ inches: Math.floor(hIn), soot: Math.round((hIn % 1) * 8) })
   return (
-    <svg width={W} height={H} style={{ fontFamily: 'Arial', overflow: 'visible' }}>
-      <defs>
-        <marker id="wa" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <path d="M0,0 L7,3.5 L0,7 Z" fill="#000" />
-        </marker>
-        <marker id="was" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto-start-reverse">
-          <path d="M0,0 L7,3.5 L0,7 Z" fill="#000" />
-        </marker>
-      </defs>
-      <text x={M + DW / 2} y={13} textAnchor="middle" fontSize={10.5}>{wLabel}</text>
-      <line x1={M} y1={19} x2={M + DW} y2={19} stroke="#000" strokeWidth={1} markerStart="url(#was)" markerEnd="url(#wa)" />
-      <text x={13} y={M + DH / 2} textAnchor="middle" fontSize={10.5} transform={`rotate(-90,13,${M + DH / 2})`}>{hLabel}</text>
-      <line x1={21} y1={M} x2={21} y2={M + DH} stroke="#000" strokeWidth={1} markerStart="url(#was)" markerEnd="url(#wa)" />
-      {/* Frame */}
-      <rect x={M} y={M} width={DW} height={DH} fill="#c8dff0" stroke="#000" strokeWidth={1.5} />
-      {/* Panel dividers */}
-      {Array.from({ length: tracks - 1 }, (_, i) => (
-        <line key={i}
-          x1={M + (DW / tracks) * (i + 1)} y1={M}
-          x2={M + (DW / tracks) * (i + 1)} y2={M + DH}
-          stroke="#000" strokeWidth={0.8} />
-      ))}
-    </svg>
+    <div className="relative" style={{ width: W, height: H }}>
+      <img
+        src={image}
+        alt=""
+        className="absolute object-contain"
+        style={{ left: M, top: M, width: imgW, height: imgH }}
+      />
+      <svg width={W} height={H} className="absolute inset-0 overflow-visible">
+        <defs>
+          <marker id={`arrow-end-${isDoor ? 'door' : 'window'}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#000" />
+          </marker>
+          <marker id={`arrow-start-${isDoor ? 'door' : 'window'}`} markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto-start-reverse">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#000" />
+          </marker>
+        </defs>
+        <text x={M + imgW / 2} y={18} textAnchor="middle" fontSize={20} fontFamily="Times New Roman, Times, serif">
+          {wLabel}
+        </text>
+        <line
+          x1={M}
+          y1={28}
+          x2={M + imgW}
+          y2={28}
+          stroke="#000"
+          strokeWidth={2}
+          markerStart={`url(#arrow-start-${isDoor ? 'door' : 'window'})`}
+          markerEnd={`url(#arrow-end-${isDoor ? 'door' : 'window'})`}
+        />
+        <text
+          x={18}
+          y={M + imgH / 2}
+          textAnchor="middle"
+          fontSize={20}
+          fontFamily="Times New Roman, Times, serif"
+          transform={`rotate(-90,18,${M + imgH / 2})`}
+        >
+          {hLabel}
+        </text>
+        <line
+          x1={28}
+          y1={M}
+          x2={28}
+          y2={M + imgH}
+          stroke="#000"
+          strokeWidth={2}
+          markerStart={`url(#arrow-start-${isDoor ? 'door' : 'window'})`}
+          markerEnd={`url(#arrow-end-${isDoor ? 'door' : 'window'})`}
+        />
+      </svg>
+    </div>
   )
 }
 
@@ -129,6 +126,12 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
     : is2Track
     ? '2 Track Aluminium Sliding Window'
     : '3 Track Aluminium Sliding Window\nWith Half SS Net'
+  const headerImage = isDoor ? '/assets/aluminium/header-door.jpeg' : '/assets/aluminium/header-window.jpg'
+  const productImage = isDoor
+    ? '/assets/aluminium/door.png'
+    : is2Track
+    ? '/assets/aluminium/window-2-track.jpeg'
+    : '/assets/aluminium/window-3-track.jpeg'
 
   // compute per-thickness costs for doors
   const dRows = ALU_THICKNESSES.map((t) => {
@@ -171,50 +174,38 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
 
   return (
     <A4Page>
-      {/* Compact header — matches PDF: phones left, logo+address below, product box right */}
-      <div className="flex items-start justify-between px-[8mm] pt-[5mm] pb-[3mm] font-print">
-        <div>
-          {SHOP.phones.map((p) => (
-            <div key={p.label} className="text-[17px] font-bold leading-snug">
-              {p.number}{' '}
-              <span className="text-[13px] font-normal italic">{p.label}</span>
-            </div>
-          ))}
-          <div className="mt-2 flex items-center gap-2">
-            <img src="/assets/letterhead/shiv-logo.png" alt="" className="h-10 w-10 object-contain" />
-            <div className="text-[11px] leading-tight">
-              <div className="text-[12px] font-bold">{SHOP.name}</div>
-              <div>Shivaji Road, Near Gandhi High School</div>
-              <div>Ramgarh Cantt – 829122, Jharkhand</div>
-            </div>
+      <div
+        className="mx-auto pt-[63mm] text-black"
+        style={{ width: '151mm', fontFamily: '"Times New Roman", Times, serif' }}
+      >
+        <div className="mb-[2mm] flex items-end justify-between">
+          <img src={headerImage} alt="" className="block w-[83mm]" />
+          <div className="border-2 border-black bg-[#d9d9d9] px-1.5 py-1 text-left text-[15px] leading-tight" style={{ width: '64mm' }}>
+            {productTitle.split('\n').map((line, i) => <div key={i}>{line}</div>)}
           </div>
         </div>
-        <div className="mt-1 border border-black px-3 py-2 text-[13px] font-semibold text-center" style={{ maxWidth: '42%' }}>
-          {productTitle.split('\n').map((line, i) => <div key={i}>{line}</div>)}
-        </div>
-      </div>
 
-      <div className="px-[8mm] font-print text-[12.5px] text-black">
+      <div className="text-[16px] leading-none text-black">
         {/* Info table */}
-        <table className="w-full border-collapse border border-black mb-2">
+        <table className="mb-1 w-full border-collapse border-2 border-black">
           <tbody>
             <tr>
-              <td className="border border-black px-2 py-1 text-right font-semibold" style={{ width: '22%' }}>Size -</td>
-              <td className="border border-black px-2 py-1">{dimStr(height)}  X  {dimStr(width)}</td>
+              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right" style={{ width: '22%' }}>Size -</td>
+              <td className="border-2 border-black px-2 py-0.5 text-center">{dimStr(height)}  X  {dimStr(width)}</td>
             </tr>
             <tr>
-              <td className="border border-black px-2 py-1 text-right font-semibold">Area -</td>
-              <td className="border border-black px-2 py-1">{area} Sqft</td>
+              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right">Area -</td>
+              <td className="border-2 border-black px-2 py-0.5 text-center">{area} Sqft</td>
             </tr>
             <tr>
-              <td className="border border-black px-2 py-1 text-right font-semibold">Chaukhat -</td>
-              <td className="border border-black px-2 py-1">{chaukhatRft} Rft</td>
+              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right">Chaukhat -</td>
+              <td className="border-2 border-black px-2 py-0.5 text-center">{chaukhatRft} Rft</td>
             </tr>
           </tbody>
         </table>
 
         {/* 7-column comparison table: label + (rate+amount) × 3 thicknesses */}
-        <table className="w-full border-collapse border border-black text-[12px]" style={{ tableLayout: 'fixed' }}>
+        <table className="w-full border-collapse border-2 border-black text-[16px]" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '22%' }} />
             {ALU_THICKNESSES.map((_, i) => (
@@ -236,25 +227,25 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
             {isDoor ? (
               <>
                 <tr>
-                  <Td className="text-right">Door</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Door</Td>
                   {dRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@{d.doorRate}</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@{d.doorRate}</Td>
                       <Td className="text-right">{d.doorCost}</Td>
                     </Fragment>
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-right">Chaukhat</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Chaukhat</Td>
                   {dRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@{d.chaukhatRate}</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@{d.chaukhatRate}</Td>
                       <Td className="text-right">{d.chaukhatCost}</Td>
                     </Fragment>
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-right">Accessories</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Accessories</Td>
                   {dRows.map((d) => (
                     <Fragment key={d.t}>
                       <Td />
@@ -263,7 +254,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-center font-bold">Total</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Total</Td>
                   {dRows.map((d) => (
                     <Fragment key={d.t}>
                       <Td />
@@ -272,22 +263,22 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                   ))}
                 </tr>
                 <tr>
-                  <Td colSpan={7} className="font-semibold">Add-ons</Td>
+                  <Td colSpan={7}>Add-ons</Td>
                 </tr>
                 <tr>
-                  <Td className="text-right">Décor Film</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Décor Film</Td>
                   {dRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@{d.decorFilmRate}</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@{d.decorFilmRate}</Td>
                       <Td className="text-right">{d.decorFilm}</Td>
                     </Fragment>
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-right">Brown Coated</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Brown Coated</Td>
                   {dRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@{d.brownCoatedRate}</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@{d.brownCoatedRate}</Td>
                       <Td className="text-right">{d.brownCoated}</Td>
                     </Fragment>
                   ))}
@@ -296,34 +287,34 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
             ) : (
               <>
                 <tr>
-                  <Td className="text-right">Glass (Clear)</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Glass (Clear)</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@{d.clearRate}</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@{d.clearRate}</Td>
                       <Td className="text-right">{d.clearCost}</Td>
                     </Fragment>
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-right">Glass (Reflective)</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Glass (Reflective)</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@{d.reflectiveRate}</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@{d.reflectiveRate}</Td>
                       <Td className="text-right">{d.reflectiveCost}</Td>
                     </Fragment>
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-right">Chaukhat</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Chaukhat</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@{d.chaukhatRate}</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@{d.chaukhatRate}</Td>
                       <Td className="text-right">{d.chaukhatCost}</Td>
                     </Fragment>
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-center font-bold">Total (Clear)</Td>
+                  <Td className="bg-[#d9d9d9] text-right font-bold">Total (Clear)</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
                       <Td />
@@ -332,7 +323,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-center font-bold">Total (Refl.)</Td>
+                  <Td className="bg-[#d9d9d9] text-right font-bold">Total (Refl.)</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
                       <Td />
@@ -341,31 +332,31 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                   ))}
                 </tr>
                 <tr>
-                  <Td colSpan={7} className="font-semibold">Add-ons</Td>
+                  <Td colSpan={7}>Add-ons</Td>
                 </tr>
                 <tr>
-                  <Td className="text-right">SS Net</Td>
+                  <Td className="bg-[#d9d9d9] text-right">SS Net</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@50</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@50</Td>
                       <Td className="text-right">{d.ssNet}</Td>
                     </Fragment>
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-right">Décor Film</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Décor Film</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@30</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@30</Td>
                       <Td className="text-right">{d.decorFilm}</Td>
                     </Fragment>
                   ))}
                 </tr>
                 <tr>
-                  <Td className="text-right">Brown Coated</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Brown Coated</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td className="text-right text-slate-600">@40</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@40</Td>
                       <Td className="text-right">{d.brownCoated}</Td>
                     </Fragment>
                   ))}
@@ -376,11 +367,10 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
         </table>
 
         {/* Diagram */}
-        <div className="mt-4 flex justify-center">
-          {isDoor
-            ? <DoorDiagram hIn={hIn} wIn={wIn} />
-            : <WindowDiagram hIn={hIn} wIn={wIn} tracks={is2Track ? 2 : 3} />}
+        <div className="mt-1 flex justify-center">
+          <ProductDiagram hIn={hIn} wIn={wIn} image={productImage} isDoor={isDoor} />
         </div>
+      </div>
       </div>
     </A4Page>
   )
