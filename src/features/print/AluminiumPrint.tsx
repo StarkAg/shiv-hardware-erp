@@ -119,12 +119,19 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
   const chaukhatRft = isDoor
     ? Math.max(r2((hIn * 2 + wIn) / 12), 14.5)
     : r2((hIn * 2 + wIn) / 12)
+  const selectedAddons = new Set(quote.alu?.addons ?? [])
+  const hasChaukhat = selectedAddons.has('Chaukhat')
+  const hasAccessories = selectedAddons.has('Accessories')
+  const hasSsNet = selectedAddons.has('SS Net')
+  const hasDecorFilm = selectedAddons.has('Decor Film')
+  const hasBrownCoated = selectedAddons.has('Brown Coated')
+  const hasAnyExtraAddon = hasSsNet || hasDecorFilm || hasBrownCoated
 
   const productTitle = isDoor
-    ? 'Bathroom Aluminium Door\nWith Chaukhat'
+    ? `Bathroom Aluminium Door${hasChaukhat ? '\nWith Chaukhat' : ''}`
     : is2Track
     ? '2 Track Aluminium Sliding Window'
-    : '3 Track Aluminium Sliding Window\nWith Half SS Net'
+    : `3 Track Aluminium Sliding Window${hasSsNet ? '\nWith Half SS Net' : ''}`
   const headerImage = isDoor ? '/assets/aluminium/header-door.jpeg' : '/assets/aluminium/header-window.jpg'
   const productImage = isDoor
     ? '/assets/aluminium/door.png'
@@ -136,15 +143,16 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
   const dRows = ALU_THICKNESSES.map((t) => {
     const r = doorRates[t]
     const doorCost = r0(area * r.door)
-    const chaukhatCost = r0(chaukhatRft * r.chaukhat)
+    const chaukhatCost = hasChaukhat ? r0(chaukhatRft * r.chaukhat) : 0
+    const accessories = hasAccessories ? r.accessories : 0
     return {
       t,
       doorRate: r.door, doorCost,
       chaukhatRate: r.chaukhat, chaukhatCost,
-      accessories: r.accessories,
-      total: doorCost + chaukhatCost + r.accessories,
-      decorFilmRate: r.decorFilm, decorFilm: r0(area * r.decorFilm),
-      brownCoatedRate: r.brownCoated, brownCoated: r0(area * r.brownCoated),
+      accessories,
+      total: doorCost + chaukhatCost + accessories,
+      decorFilmRate: r.decorFilm, decorFilm: hasDecorFilm ? r0(area * r.decorFilm) : 0,
+      brownCoatedRate: r.brownCoated, brownCoated: hasBrownCoated ? r0(area * r.brownCoated) : 0,
     }
   })
 
@@ -154,20 +162,16 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
     const table = is2Track ? window2TrackAreaRates : window3TrackAreaRates
     const base = slabRate(area, table)
     const clearRate = base + tr.clear
-    const reflectiveRate = base + tr.reflective
     const clearCost = r0(area * clearRate)
-    const reflectiveCost = r0(area * reflectiveRate)
-    const chaukhatCost = r0(chaukhatRft * tr.chaukhat)
+    const chaukhatCost = hasChaukhat ? r0(chaukhatRft * tr.chaukhat) : 0
     return {
       t,
       clearRate, clearCost,
-      reflectiveRate, reflectiveCost,
       chaukhatRate: tr.chaukhat, chaukhatCost,
       clearTotal: clearCost + chaukhatCost,
-      reflectiveTotal: reflectiveCost + chaukhatCost,
-      ssNet: r0(area * 50),
-      decorFilm: r0(area * 30),
-      brownCoated: r0(area * 40),
+      ssNet: hasSsNet ? r0(area * 50) : 0,
+      decorFilm: hasDecorFilm ? r0(area * 30) : 0,
+      brownCoated: hasBrownCoated ? r0(area * 40) : 0,
     }
   })
 
@@ -201,10 +205,12 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
               <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right font-semibold">Area -</td>
               <td className="border-2 border-black px-2 py-0.5 text-center">{area} Sqft</td>
             </tr>
-            <tr>
-              <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right font-semibold">Chaukhat -</td>
-              <td className="border-2 border-black px-2 py-0.5 text-center">{chaukhatRft} Rft</td>
-            </tr>
+            {hasChaukhat && (
+              <tr>
+                <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right font-semibold">Chaukhat -</td>
+                <td className="border-2 border-black px-2 py-0.5 text-center">{chaukhatRft} Rft</td>
+              </tr>
+            )}
           </tbody>
         </table>
 
@@ -239,24 +245,28 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                     </Fragment>
                   ))}
                 </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Chaukhat</Td>
-                  {dRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td className="bg-[#d9d9d9] text-right">@{d.chaukhatRate}</Td>
-                      <Td className="text-right">{d.chaukhatCost}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Accessories</Td>
-                  {dRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td />
-                      <Td className="text-right">{d.accessories}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
+                {hasChaukhat && (
+                  <tr>
+                    <Td className="bg-[#d9d9d9] text-right">Chaukhat</Td>
+                    {dRows.map((d) => (
+                      <Fragment key={d.t}>
+                        <Td className="bg-[#d9d9d9] text-right">@{d.chaukhatRate}</Td>
+                        <Td className="text-right">{d.chaukhatCost}</Td>
+                      </Fragment>
+                    ))}
+                  </tr>
+                )}
+                {hasAccessories && (
+                  <tr>
+                    <Td className="bg-[#d9d9d9] text-right">Accessories</Td>
+                    {dRows.map((d) => (
+                      <Fragment key={d.t}>
+                        <Td />
+                        <Td className="text-right">{d.accessories}</Td>
+                      </Fragment>
+                    ))}
+                  </tr>
+                )}
                 <tr>
                   <Td className="bg-[#d9d9d9] text-right">Total</Td>
                   {dRows.map((d) => (
@@ -266,32 +276,34 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                     </Fragment>
                   ))}
                 </tr>
-                <tr>
-                  <Td colSpan={7}>Add-ons</Td>
-                </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Décor Film</Td>
-                  {dRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td className="bg-[#d9d9d9] text-right">@{d.decorFilmRate}</Td>
-                      <Td className="text-right">{d.decorFilm}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Brown Coated</Td>
-                  {dRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td className="bg-[#d9d9d9] text-right">@{d.brownCoatedRate}</Td>
-                      <Td className="text-right">{d.brownCoated}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
+                {(hasDecorFilm || hasBrownCoated) && <tr><Td colSpan={7}>Add-ons</Td></tr>}
+                {hasDecorFilm && (
+                  <tr>
+                    <Td className="bg-[#d9d9d9] text-right">Décor Film</Td>
+                    {dRows.map((d) => (
+                      <Fragment key={d.t}>
+                        <Td className="bg-[#d9d9d9] text-right">@{d.decorFilmRate}</Td>
+                        <Td className="text-right">{d.decorFilm}</Td>
+                      </Fragment>
+                    ))}
+                  </tr>
+                )}
+                {hasBrownCoated && (
+                  <tr>
+                    <Td className="bg-[#d9d9d9] text-right">Brown Coated</Td>
+                    {dRows.map((d) => (
+                      <Fragment key={d.t}>
+                        <Td className="bg-[#d9d9d9] text-right">@{d.brownCoatedRate}</Td>
+                        <Td className="text-right">{d.brownCoated}</Td>
+                      </Fragment>
+                    ))}
+                  </tr>
+                )}
               </>
             ) : (
               <>
                 <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Glass (Clear)</Td>
+                  <Td className="bg-[#d9d9d9] text-right">Glass</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
                       <Td className="bg-[#d9d9d9] text-right">@{d.clearRate}</Td>
@@ -299,26 +311,19 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                     </Fragment>
                   ))}
                 </tr>
+                {hasChaukhat && (
+                  <tr>
+                    <Td className="bg-[#d9d9d9] text-right">Chaukhat</Td>
+                    {wRows.map((d) => (
+                      <Fragment key={d.t}>
+                        <Td className="bg-[#d9d9d9] text-right">@{d.chaukhatRate}</Td>
+                        <Td className="text-right">{d.chaukhatCost}</Td>
+                      </Fragment>
+                    ))}
+                  </tr>
+                )}
                 <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Glass (Reflective)</Td>
-                  {wRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td className="bg-[#d9d9d9] text-right">@{d.reflectiveRate}</Td>
-                      <Td className="text-right">{d.reflectiveCost}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Chaukhat</Td>
-                  {wRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td className="bg-[#d9d9d9] text-right">@{d.chaukhatRate}</Td>
-                      <Td className="text-right">{d.chaukhatCost}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right font-bold">Total (Clear)</Td>
+                  <Td className="bg-[#d9d9d9] text-right font-bold">Total</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
                       <Td />
@@ -326,45 +331,40 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                     </Fragment>
                   ))}
                 </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right font-bold">Total (Refl.)</Td>
-                  {wRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td />
-                      <Td className="text-right font-bold">{d.reflectiveTotal}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
-                <tr>
-                  <Td colSpan={7}>Add-ons</Td>
-                </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right">SS Net</Td>
-                  {wRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td className="bg-[#d9d9d9] text-right">@50</Td>
-                      <Td className="text-right">{d.ssNet}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Décor Film</Td>
-                  {wRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td className="bg-[#d9d9d9] text-right">@30</Td>
-                      <Td className="text-right">{d.decorFilm}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
-                <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Brown Coated</Td>
-                  {wRows.map((d) => (
-                    <Fragment key={d.t}>
-                      <Td className="bg-[#d9d9d9] text-right">@40</Td>
-                      <Td className="text-right">{d.brownCoated}</Td>
-                    </Fragment>
-                  ))}
-                </tr>
+                {hasAnyExtraAddon && <tr><Td colSpan={7}>Add-ons</Td></tr>}
+                {hasSsNet && (
+                  <tr>
+                    <Td className="bg-[#d9d9d9] text-right">SS Net</Td>
+                    {wRows.map((d) => (
+                      <Fragment key={d.t}>
+                        <Td className="bg-[#d9d9d9] text-right">@50</Td>
+                        <Td className="text-right">{d.ssNet}</Td>
+                      </Fragment>
+                    ))}
+                  </tr>
+                )}
+                {hasDecorFilm && (
+                  <tr>
+                    <Td className="bg-[#d9d9d9] text-right">Décor Film</Td>
+                    {wRows.map((d) => (
+                      <Fragment key={d.t}>
+                        <Td className="bg-[#d9d9d9] text-right">@30</Td>
+                        <Td className="text-right">{d.decorFilm}</Td>
+                      </Fragment>
+                    ))}
+                  </tr>
+                )}
+                {hasBrownCoated && (
+                  <tr>
+                    <Td className="bg-[#d9d9d9] text-right">Brown Coated</Td>
+                    {wRows.map((d) => (
+                      <Fragment key={d.t}>
+                        <Td className="bg-[#d9d9d9] text-right">@40</Td>
+                        <Td className="text-right">{d.brownCoated}</Td>
+                      </Fragment>
+                    ))}
+                  </tr>
+                )}
               </>
             )}
           </tbody>

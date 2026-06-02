@@ -364,16 +364,22 @@ export function QuotationBuilder() {
               <tbody>
                 {[
                   { label: cat === 'aluminium-door' ? 'Door' : 'Glass', key: 'doorCost' as const },
-                  { label: 'Chaukhat', key: 'chaukhatCost' as const },
-                  { label: cat === 'aluminium-door' ? 'Accessories' : 'SS Net', key: 'accessories' as const },
-                ].map(({ label, key }) => (
-                  <tr key={key} className="border-t border-stone-100 dark:border-white/10">
-                    <td className="px-3 py-2 text-stone-500 dark:text-stone-400">{label}</td>
-                    {aluThicknesses.map((t) => (
-                      <td key={t.name} className="px-3 py-2 text-right">{hasSize ? formatINR(t[key]) : '—'}</td>
-                    ))}
-                  </tr>
-                ))}
+                  addons.chaukhat ? { label: 'Chaukhat', key: 'chaukhatCost' as const } : null,
+                  cat === 'aluminium-door' && addons.accessories
+                    ? { label: 'Accessories', key: 'accessories' as const }
+                    : null,
+                  cat !== 'aluminium-door' && addons.ssNet
+                    ? { label: 'SS Net', key: 'accessories' as const }
+                    : null,
+                ].filter((row): row is { label: string; key: 'doorCost' | 'chaukhatCost' | 'accessories' } => !!row)
+                  .map(({ label, key }) => (
+                    <tr key={key} className="border-t border-stone-100 dark:border-white/10">
+                      <td className="px-3 py-2 text-stone-500 dark:text-stone-400">{label}</td>
+                      {aluThicknesses.map((t) => (
+                        <td key={t.name} className="px-3 py-2 text-right">{hasSize ? formatINR(t[key]) : '—'}</td>
+                      ))}
+                    </tr>
+                  ))}
                 <tr className="border-t-2 border-stone-200 bg-stone-50 dark:border-white/20 dark:bg-white/5">
                   <td className="px-3 py-2.5 font-bold">Total</td>
                   {aluThicknesses.map((t) => (
@@ -420,7 +426,6 @@ export function QuotationBuilder() {
 
 function activeAddonLabels(cat: ProductCategory, a: AluAddons): string[] {
   const out: string[] = []
-  if (cat !== 'aluminium-door') out.push(a.glassType === 'clear' ? 'Clear glass' : 'Reflective glass')
   if (a.chaukhat) out.push('Chaukhat')
   if (cat === 'aluminium-door' && a.accessories) out.push('Accessories')
   if (cat !== 'aluminium-door' && a.ssNet) out.push('SS Net')
