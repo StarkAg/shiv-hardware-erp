@@ -203,30 +203,7 @@ export function QuotationBuilder() {
 
             {/* Aluminium options */}
             {alu && (
-              <div className="mt-4 space-y-3">
-                {/* Glass type (windows only) */}
-                {cat !== 'aluminium-door' && (
-                  <div className="flex items-center gap-2">
-                    <span className="w-14 text-xs font-semibold text-stone-500 dark:text-stone-400">Glass</span>
-                    <div className="flex rounded-lg border border-stone-300 bg-stone-100 overflow-hidden dark:border-white/15 dark:bg-stone-950">
-                      {(['clear', 'reflective'] as const).map((g) => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setAddons((a) => ({ ...a, glassType: g }))}
-                          className={`px-5 py-2 text-sm font-medium transition ${
-                            addons.glassType === g
-                              ? 'bg-shiv-green text-stone-950'
-                              : 'text-stone-600 hover:bg-stone-50 dark:text-stone-300 dark:hover:bg-white/10'
-                          }`}
-                        >
-                          {g.charAt(0).toUpperCase() + g.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {/* Add-on options */}
+              <div className="mt-4">
                 <div className="flex flex-wrap gap-2.5">
                   {[
                     { key: 'chaukhat' as const, label: 'Chaukhat', show: true },
