@@ -13,13 +13,13 @@ export function PageHeader({
   children?: ReactNode
 }) {
   return (
-    <div className="no-print border-b border-stone-200/80 bg-stone-50/95 px-6 py-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-stone-950/90">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-stone-950 dark:text-stone-50">{title}</h1>
+    <div className="no-print border-b border-stone-200/80 bg-stone-50/95 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-stone-950/90 sm:px-4 md:px-6 md:py-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold leading-tight text-stone-950 dark:text-stone-50 md:text-xl">{title}</h1>
           {subtitle && <p className="text-sm font-medium text-stone-500 dark:text-stone-400">{subtitle}</p>}
         </div>
-        {actions && <div className="flex gap-2">{actions}</div>}
+        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
       {children && <div className="mt-3">{children}</div>}
     </div>

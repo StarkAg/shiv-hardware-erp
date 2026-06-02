@@ -84,7 +84,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const doc = buildGuaranteeDoc()
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-[calc(100dvh-57px)] flex-col overflow-hidden md:h-screen">
       <PageHeader
         title={title}
         subtitle={number}
@@ -95,7 +95,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         }
       />
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
         <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Customer</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

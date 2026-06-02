@@ -26,12 +26,12 @@ export function QuoteHistory() {
   return (
     <div>
       <PageHeader title="Quote History" subtitle={`${quotations.length} quotations`} />
-      <div className="p-6 space-y-4">
+      <div className="space-y-4 p-3 sm:p-4 md:p-6">
         <div className="max-w-sm">
           <Input placeholder="Search number, name, mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <Card className="overflow-hidden">
-          <table className="w-full text-sm">
+        <Card className="overflow-x-auto">
+          <table className="min-w-[760px] w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400 dark:bg-white/5 dark:text-stone-500">
               <tr>
                 <th className="px-4 py-2">Number</th>

@@ -91,14 +91,14 @@ export function PrintPreview({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-800/95">
-      <div className="no-print flex items-center justify-between bg-slate-900 px-6 py-3 text-white">
-        <div className="font-semibold">Print preview — {title}</div>
-        <div className="flex gap-2">
+      <div className="no-print flex flex-col gap-2 bg-slate-900 px-3 py-2 text-white sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-3">
+        <div className="font-semibold leading-tight">Print preview - {title}</div>
+        <div className="flex flex-wrap gap-2">
           {isDesktop && (
             <button
               onClick={printHp}
               disabled={hpPrinting || printing}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60 sm:px-4"
               title="Silent print to HP Ink Tank Wireless 410 series [83E60C]"
             >
               <Printer size={16} /> {hpPrinting ? 'Printing HP' : 'Print HP'}
@@ -107,13 +107,13 @@ export function PrintPreview({
           <button
             onClick={print}
             disabled={printing || hpPrinting}
-            className="flex items-center gap-1.5 rounded-lg bg-shiv-green px-4 py-2 text-sm font-semibold text-stone-950 hover:bg-[#c6a15a]"
+            className="flex items-center gap-1.5 rounded-lg bg-shiv-green px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-[#c6a15a] sm:px-4"
           >
             <Printer size={16} /> {printing ? 'Printing' : 'Print'}
           </button>
           <button
             onClick={onClose}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-700 px-4 py-2 text-sm hover:bg-slate-600"
+            className="flex items-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600 sm:px-4"
           >
             <X size={16} /> Close
           </button>
@@ -121,7 +121,7 @@ export function PrintPreview({
       </div>
 
       {/* Fit-to-screen preview: scaled, no scrollbars */}
-      <div ref={areaRef} className="flex flex-1 items-start justify-center overflow-hidden p-4">
+      <div ref={areaRef} className="flex flex-1 items-start justify-center overflow-hidden p-2 sm:p-4">
         <div
           className="preview-scale"
           style={{ ['--preview-scale' as string]: scale, width: A4_W, height: A4_H }}

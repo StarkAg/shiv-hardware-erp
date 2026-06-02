@@ -117,7 +117,7 @@ export function QuotationBuilder() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-[calc(100dvh-57px)] flex-col overflow-hidden md:h-screen">
       <PageHeader
         title={`New Quotation — ${CATEGORY_LABELS[cat]}`}
         subtitle={number}
@@ -161,7 +161,7 @@ export function QuotationBuilder() {
         )}
       </PageHeader>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
         {/* Optional customer details */}
         <Toggle checked={withCustomer} onChange={setWithCustomer} label="Add customer details (optional)" />
 
@@ -261,9 +261,9 @@ export function QuotationBuilder() {
           <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400">
             {alu ? 'Aluminium Cost' : `All Brands — cost for this size${editMode ? ' (editing ' + (activeSet?.name ?? '') + ')' : ''}`}
           </div>
-          <div>
+          <div className="overflow-x-auto">
             {!alu ? (
-            <table className="w-full text-sm">
+            <table className="min-w-[680px] w-full text-sm">
               <thead className="bg-stone-50 text-left text-xs uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500">
                 <tr>
                   <th className="px-4 py-2.5">Brand</th>
@@ -349,7 +349,7 @@ export function QuotationBuilder() {
             </table>
             ) : (
             // Aluminium — all 3 thicknesses side by side
-            <table className="w-full text-sm">
+            <table className="min-w-[520px] w-full text-sm">
               <thead className="bg-stone-50 text-xs uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500">
                 <tr>
                   <th className="px-3 py-2.5 text-left">Item</th>

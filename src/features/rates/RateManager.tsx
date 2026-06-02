@@ -93,7 +93,7 @@ export function RateManager() {
         }
       />
 
-      <div className="p-6 space-y-4">
+      <div className="space-y-4 p-3 sm:p-4 md:p-6">
         {/* Set tabs */}
         <div className="flex flex-wrap items-center gap-2">
           {draft.map((s, i) => (
@@ -119,11 +119,11 @@ export function RateManager() {
         </div>
 
         {/* Active set toolbar */}
-        <Card className="flex items-center justify-between p-3">
+        <Card className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
             Active set: <span className="text-shiv-green">{active?.name ?? 'C1'}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={addSet} className="flex items-center gap-1.5">
               <Copy size={15} /> Duplicate to new set
             </Button>
@@ -154,8 +154,8 @@ export function RateManager() {
                 {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               </button>
               {isOpen && (
-                <div className="p-4">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto p-4">
+                  <table className="min-w-[640px] w-full text-sm">
                     <thead className="text-left text-xs uppercase text-slate-400 dark:text-stone-500">
                       <tr>
                         <th className="py-1">Brand</th>
