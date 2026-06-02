@@ -59,6 +59,23 @@ export interface BrandQuoteRow {
   cost: number
 }
 
+export interface GuaranteeCardItem {
+  brandName: string
+  guaranteeYears: GuaranteeYears
+}
+
+export interface GuaranteeDocument {
+  id: string
+  number: string
+  date: string
+  customer: Customer
+  category: ProductCategory
+  height: Dimension
+  width: Dimension
+  qty: number
+  items: GuaranteeCardItem[]
+}
+
 /**
  * A quotation is for ONE size of ONE product category, listing the cost of
  * every available brand (exactly like the Excel ReadyMade / Plain / Block-Board

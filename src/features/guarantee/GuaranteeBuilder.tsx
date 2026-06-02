@@ -6,11 +6,11 @@ import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
   type Dimension,
+  type GuaranteeDocument,
   type GuaranteeYears,
   type ProductCategory,
-  type Quotation,
 } from '../../lib/types'
-import { areaSqft, formatSize } from '../../lib/pricing'
+import { formatSize } from '../../lib/pricing'
 import { PrintPreview } from '../print/PrintPreview'
 import { GuaranteeCard } from '../print/GuaranteeCard'
 
@@ -43,7 +43,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     setBrandName('')
   }, [category])
 
-  function buildGuaranteeDoc(): Quotation {
+  function buildGuaranteeDoc(): GuaranteeDocument {
     return {
       id: number,
       number,
@@ -53,16 +53,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       height: h,
       width: w,
       qty: qty || 1,
-      sqft: areaSqft(h, w),
-      rows: [
+      items: [
         {
           brandName: displayBrand,
-          rate: selectedBrand?.rate ?? 0,
           guaranteeYears: years,
-          cost: 0,
         },
       ],
-      notes: '',
     }
   }
 
@@ -158,7 +154,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
       {preview && (
         <PrintPreview title={title} onClose={() => setPreview(false)}>
-          <GuaranteeCard quote={doc} layout={layout} />
+          <GuaranteeCard document={doc} layout={layout} />
         </PrintPreview>
       )}
     </div>

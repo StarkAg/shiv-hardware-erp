@@ -1,20 +1,18 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../../lib/store'
-import { Award, Pencil, Printer, Trash2 } from 'lucide-react'
+import { Pencil, Printer, Trash2 } from 'lucide-react'
 import { CATEGORY_LABELS } from '../../lib/types'
-import { isAluminium } from '../../lib/aluminium'
 import { formatSize } from '../../lib/pricing'
 import { Button, Card, Input, PageHeader } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
 import { QuotationPrint } from '../print/QuotationPrint'
-import { GuaranteeCard } from '../print/GuaranteeCard'
 import type { Quotation } from '../../lib/types'
 
 export function QuoteHistory() {
   const { quotations, deleteQuotation } = useStore()
   const [q, setQ] = useState('')
-  const [preview, setPreview] = useState<{ quote: Quotation; mode: 'quote' | 'guarantee' } | null>(null)
+  const [preview, setPreview] = useState<Quotation | null>(null)
 
   const filtered = quotations.filter(
     (x) =>
@@ -64,20 +62,10 @@ export function QuoteHistory() {
                         variant="ghost"
                         className="px-2 py-1"
                         title="Print quotation"
-                        onClick={() => setPreview({ quote: x, mode: 'quote' })}
+                        onClick={() => setPreview(x)}
                       >
                         <Printer size={16} />
                       </Button>
-                      {!isAluminium(x.category) && (
-                        <Button
-                          variant="ghost"
-                          className="px-2 py-1"
-                          title="Guarantee card"
-                          onClick={() => setPreview({ quote: x, mode: 'guarantee' })}
-                        >
-                          <Award size={16} />
-                        </Button>
-                      )}
                       <Button
                         variant="ghost"
                         className="px-2 py-1 text-red-500"
@@ -103,15 +91,8 @@ export function QuoteHistory() {
       </div>
 
       {preview && (
-        <PrintPreview
-          title={preview.mode === 'quote' ? 'Quotation' : 'Guarantee Card'}
-          onClose={() => setPreview(null)}
-        >
-          {preview.mode === 'quote' ? (
-            <QuotationPrint quote={preview.quote} />
-          ) : (
-            <GuaranteeCard quote={preview.quote} />
-          )}
+        <PrintPreview title="Quotation" onClose={() => setPreview(null)}>
+          <QuotationPrint quote={preview} />
         </PrintPreview>
       )}
     </div>

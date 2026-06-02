@@ -20,7 +20,6 @@ import {
 import { Button, Input, PageHeader, Select, Toggle } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
 import { QuotationPrint } from '../print/QuotationPrint'
-import { GuaranteeCard } from '../print/GuaranteeCard'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -39,7 +38,7 @@ export function QuotationBuilder() {
     existing?.customer ?? { id: uid(), name: '', mobile: '', uid: '', address: '' },
   )
   const [withCustomer, setWithCustomer] = useState(!!existing?.customer?.name)
-  const [printMode, setPrintMode] = useState<null | 'quote' | 'guarantee'>(null)
+  const [printMode, setPrintMode] = useState<null | 'quote'>(null)
 
   const [cat, setCat] = useState<ProductCategory>(
     isCategory(category) ? category : existing?.category ?? 'readymade-door',
@@ -403,8 +402,8 @@ export function QuotationBuilder() {
       </div>
 
       {printMode && (
-        <PrintPreview title={printMode === 'quote' ? 'Quotation' : 'Guarantee Card'} onClose={() => setPrintMode(null)}>
-          {printMode === 'quote' ? <QuotationPrint quote={doc} /> : <GuaranteeCard quote={doc} />}
+        <PrintPreview title="Quotation" onClose={() => setPrintMode(null)}>
+          <QuotationPrint quote={doc} />
         </PrintPreview>
       )}
     </div>

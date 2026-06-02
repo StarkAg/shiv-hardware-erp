@@ -1,5 +1,5 @@
 // Visual demo — shows the readymade-door rate card AND the aluminium door sheet.
-import type { Quotation } from '../../lib/types'
+import type { GuaranteeDocument, Quotation } from '../../lib/types'
 import { buildBrandRows, areaSqft } from '../../lib/pricing'
 import { SEED_BRANDS } from '../../lib/data/brands'
 import { QuotationPrint } from './QuotationPrint'
@@ -19,12 +19,26 @@ function aluQuote(): Quotation {
   return { id: uid(), number: 'SH-2026-0002', date: '2026-06-02T10:00:00.000Z', customer, category: 'aluminium-door', height: h, width: w, qty: 1, sqft: 0 }
 }
 
+function guaranteeDoc(): GuaranteeDocument {
+  return {
+    id: uid(),
+    number: 'GC-2026-0001',
+    date: '2026-06-02T10:00:00.000Z',
+    customer,
+    category: 'readymade-door',
+    height: { inches: 78, soot: 0 },
+    width: { inches: 36, soot: 0 },
+    qty: 1,
+    items: [{ brandName: 'DDoor Sunmica', guaranteeYears: 10 }],
+  }
+}
+
 export function PrintDemo() {
-  const door = doorQuote(), alu = aluQuote()
+  const door = doorQuote(), alu = aluQuote(), guarantee = guaranteeDoc()
   return (
     <div className="a4-preview-frame min-h-screen flex-col gap-8 py-8">
       <div data-doc="door"><QuotationPrint quote={door} /></div>
-      <div data-doc="guarantee"><GuaranteeCard quote={door} /></div>
+      <div data-doc="guarantee"><GuaranteeCard document={guarantee} /></div>
       <div data-doc="aluminium"><QuotationPrint quote={alu} /></div>
     </div>
   )

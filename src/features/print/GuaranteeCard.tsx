@@ -1,12 +1,11 @@
-import type { Quotation } from '../../lib/types'
+import type { GuaranteeDocument } from '../../lib/types'
 import { CATEGORY_LABELS, SHOP } from '../../lib/types'
 import { formatSize, sealForYears } from '../../lib/pricing'
 import { Letterhead } from './Letterhead'
 import { A4Page } from './A4Page'
 import { assetPath } from '../../lib/assets'
 
-// Guarantee Card — issued for the quoted size. Lists the brands in this product
-// that carry a guarantee (with years), and stamps the highest-year wax seal.
+// Standalone guarantee document. It is not tied to a quotation.
 
 const DEFAULT_TERMS = [
   'Guarantee is against borer/termite only, subject to proper installation & maintenance.',
@@ -18,18 +17,18 @@ const DEFAULT_TERMS = [
 type GuaranteeLayout = 'a4' | 'card'
 
 export function GuaranteeCard({
-  quote,
+  document,
   terms = DEFAULT_TERMS,
   layout = 'a4',
 }: {
-  quote: Quotation
+  document: GuaranteeDocument
   terms?: string[]
   layout?: GuaranteeLayout
 }) {
-  if (layout === 'card') return <CompactGuaranteeCard quote={quote} />
+  if (layout === 'card') return <CompactGuaranteeCard document={document} />
 
-  const dateStr = new Date(quote.date).toLocaleDateString('en-GB')
-  const guaranteedRows = (quote.rows ?? []).filter((r) => r.guaranteeYears > 0)
+  const dateStr = new Date(document.date).toLocaleDateString('en-GB')
+  const guaranteedRows = document.items.filter((r) => r.guaranteeYears > 0)
   const maxYears = Math.max(0, ...guaranteedRows.map((r) => r.guaranteeYears))
   const seal = sealForYears(maxYears)
 
@@ -45,22 +44,22 @@ export function GuaranteeCard({
         </div>
 
         <div className="flex justify-between border-b border-black pb-1 text-[12px]">
-          <span><span className="font-bold">Ref No: </span>{quote.number}</span>
+          <span><span className="font-bold">Ref No: </span>{document.number}</span>
           <span><span className="font-bold">Date: </span>{dateStr}</span>
         </div>
 
         <div className="mt-2 leading-snug">
-          <div><span className="font-bold">M/s </span>{quote.customer.name || '—'}</div>
+          <div><span className="font-bold">M/s </span>{document.customer.name || '—'}</div>
           <div className="flex gap-8 text-[12px]">
-            <span><span className="font-bold">UID - </span>{quote.customer.uid || 'N/A'}</span>
-            <span><span className="font-bold">Mobile - </span>{quote.customer.mobile || 'N/A'}</span>
+            <span><span className="font-bold">UID - </span>{document.customer.uid || 'N/A'}</span>
+            <span><span className="font-bold">Mobile - </span>{document.customer.mobile || 'N/A'}</span>
           </div>
         </div>
 
         <div className="my-3 flex items-center gap-6 rounded border border-slate-400 bg-slate-50 px-4 py-2">
-          <span className="text-[14px] font-bold">{CATEGORY_LABELS[quote.category]}</span>
-          <span className="text-[13px]">Size: <b>{formatSize(quote.height, quote.width) || '—'}</b></span>
-          <span className="text-[13px]">Qty: <b>{quote.qty}</b></span>
+          <span className="text-[14px] font-bold">{CATEGORY_LABELS[document.category]}</span>
+          <span className="text-[13px]">Size: <b>{formatSize(document.height, document.width) || '—'}</b></span>
+          <span className="text-[13px]">Qty: <b>{document.qty}</b></span>
         </div>
 
         {/* Guaranteed brands */}
@@ -112,9 +111,9 @@ export function GuaranteeCard({
   )
 }
 
-function CompactGuaranteeCard({ quote }: { quote: Quotation }) {
-  const dateStr = new Date(quote.date).toLocaleDateString('en-GB')
-  const guaranteedRows = (quote.rows ?? []).filter((r) => r.guaranteeYears > 0)
+function CompactGuaranteeCard({ document }: { document: GuaranteeDocument }) {
+  const dateStr = new Date(document.date).toLocaleDateString('en-GB')
+  const guaranteedRows = document.items.filter((r) => r.guaranteeYears > 0)
   const maxYears = Math.max(0, ...guaranteedRows.map((r) => r.guaranteeYears))
   const seal = sealForYears(maxYears)
   const primaryRow = guaranteedRows[0]
@@ -139,13 +138,13 @@ function CompactGuaranteeCard({ quote }: { quote: Quotation }) {
           </div>
 
           <div className="mt-[2mm] grid grid-cols-2 gap-x-[3mm] gap-y-[1mm] text-[8px] leading-tight">
-            <div><span className="font-bold">Ref:</span> {quote.number}</div>
+            <div><span className="font-bold">Ref:</span> {document.number}</div>
             <div><span className="font-bold">Date:</span> {dateStr}</div>
-            <div className="col-span-2"><span className="font-bold">M/s:</span> {quote.customer.name || '-'}</div>
-            <div><span className="font-bold">UID:</span> {quote.customer.uid || 'N/A'}</div>
-            <div><span className="font-bold">Mobile:</span> {quote.customer.mobile || 'N/A'}</div>
-            <div className="col-span-2"><span className="font-bold">Product:</span> {CATEGORY_LABELS[quote.category]}</div>
-            <div className="col-span-2"><span className="font-bold">Size:</span> {formatSize(quote.height, quote.width) || '-'} | <span className="font-bold">Qty:</span> {quote.qty}</div>
+            <div className="col-span-2"><span className="font-bold">M/s:</span> {document.customer.name || '-'}</div>
+            <div><span className="font-bold">UID:</span> {document.customer.uid || 'N/A'}</div>
+            <div><span className="font-bold">Mobile:</span> {document.customer.mobile || 'N/A'}</div>
+            <div className="col-span-2"><span className="font-bold">Product:</span> {CATEGORY_LABELS[document.category]}</div>
+            <div className="col-span-2"><span className="font-bold">Size:</span> {formatSize(document.height, document.width) || '-'} | <span className="font-bold">Qty:</span> {document.qty}</div>
             <div className="col-span-2"><span className="font-bold">Brand:</span> {primaryRow?.brandName ?? '-'}</div>
           </div>
 
