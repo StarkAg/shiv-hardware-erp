@@ -62,6 +62,8 @@ export interface BrandQuoteRow {
 export interface GuaranteeCardItem {
   brandName: string
   guaranteeYears: GuaranteeYears
+  sizeLabel?: string | null
+  amount?: number | null
 }
 
 export interface GuaranteeDocument {

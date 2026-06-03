@@ -9,6 +9,7 @@ import { Customers } from './features/customers/Customers'
 import { QuoteHistory } from './features/quotation/QuoteHistory'
 import { PrintDemo } from './features/print/PrintDemo'
 import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
+import { BillScanner } from './features/scan/BillScanner'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
@@ -25,6 +26,7 @@ const router = createHashRouter([
       { path: 'history', element: <QuoteHistory /> },
       { path: 'guarantee/card', element: <GuaranteeBuilder layout="card" /> },
       { path: 'guarantee/a4', element: <GuaranteeBuilder layout="a4" /> },
+      { path: 'scan', element: <BillScanner /> },
       { path: 'rates', element: <RateManager /> },
       { path: 'customers', element: <Customers /> },
     ],

@@ -15,6 +15,7 @@ import {
   Menu,
   Moon,
   Plus,
+  ScanLine,
   ShieldCheck,
   Sun,
   Wrench,
@@ -169,6 +170,9 @@ export function AppLayout() {
           )}
         </div>
 
+        <NavLink to="/scan" className={linkClass}>
+          <ScanLine size={18} /> Scan Bill
+        </NavLink>
         <NavLink to="/history" className={linkClass}>
           <FolderOpen size={18} /> Quote History
         </NavLink>

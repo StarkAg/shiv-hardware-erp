@@ -1,0 +1,16 @@
+{
+  "preferredNames": [
+    "Prakash",
+    "Sahay",
+    "Lalan",
+    "Singh"
+  ],
+  "ocrCorrections": {
+    "sahai": "Sahay",
+    "sahy": "Sahay",
+    "sahya": "Sahay",
+    "sahay": "Sahay",
+    "satay": "Sahay",
+    "sathay": "Sahay"
+  }
+}

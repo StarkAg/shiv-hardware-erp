@@ -8,5 +8,5 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },
-  server: { port: 5180, open: true },
+  server: { port: 5180, host: '0.0.0.0', open: false },
 })

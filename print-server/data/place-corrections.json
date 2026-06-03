@@ -1,0 +1,29 @@
+{
+  "preferredPlaces": [
+    "Bagicha",
+    "Bank Colony",
+    "Bhurkunda",
+    "Bhurkunda Bazar",
+    "Huhua",
+    "New Colony",
+    "Ranchi Road",
+    "Ramgarh",
+    "Ramgarh Cantt"
+  ],
+  "ocrCorrections": {
+    "bagdaha": "Bagicha",
+    "bagicha": "Bagicha",
+    "bhankunda": "Bhurkunda",
+    "bhankuda": "Bhurkunda",
+    "bhurkunda": "Bhurkunda",
+    "bank colony": "Bank Colony",
+    "hec colony": "New Colony",
+    "het colony": "New Colony",
+    "hubug": "Huhua",
+    "huhua": "Huhua",
+    "hurua": "Huhua",
+    "new colony": "New Colony",
+    "ranchi road": "Ranchi Road",
+    "rmg": "Ramgarh"
+  }
+}
