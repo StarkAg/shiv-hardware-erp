@@ -6,7 +6,7 @@ import { CLOUD_API_URL, createCloudPrintJob } from '../../lib/cloudApi'
 // A4 in CSS px at 96dpi.
 const A4_W = 794
 const A4_H = 1123
-const HP_TEST_PRINTER = 'HP_Ink_Tank_Wireless_410_series__83E60C_'
+const HP_TEST_PRINTER = 'NPI33F31D (HP LaserJet Tank MFP 2606sdw)'
 
 // Full-screen preview overlay. The A4 sheet is scaled to fit the screen (no
 // scrolling); printing still uses the true A4 size via @media print rules.
@@ -114,8 +114,8 @@ export function PrintPreview({
           .filter(Boolean)
           .some((value) =>
             value === HP_TEST_PRINTER ||
-            value?.includes('HP Ink Tank Wireless 410') ||
-            value?.includes('83E60C'),
+            value?.includes('HP LaserJet Tank MFP 2606sdw') ||
+            value?.includes('HP LaserJet Tank MFP 260x'),
           ),
       )
 
@@ -145,7 +145,7 @@ export function PrintPreview({
               onClick={printHp}
               disabled={hpPrinting || printing}
               className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60 sm:px-4"
-              title="Silent print to HP Ink Tank Wireless 410 series [83E60C]"
+              title="Silent print to HP LaserJet Tank MFP 2606sdw"
             >
               <Printer size={16} /> {hpPrinting ? 'Printing HP' : 'Print HP'}
             </button>

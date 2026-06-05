@@ -64,10 +64,10 @@ const PRODUCT_CATEGORIES: ProductCategory[] = [
   'window-2-track',
   'window-3-track',
 ]
-const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 10, 15, 20, 25]
+const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 
 function guaranteeYears(value: unknown): GuaranteeYears {
-  return [0, 1, 3, 5, 7, 10, 15, 20, 25].includes(Number(value)) ? Number(value) as GuaranteeYears : 0
+  return [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30].includes(Number(value)) ? Number(value) as GuaranteeYears : 0
 }
 
 function toNullableNumber(value: unknown): number | null {

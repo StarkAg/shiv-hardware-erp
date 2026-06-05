@@ -24,7 +24,7 @@ import { renderPngOnServer } from '../../lib/printServer'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
-const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 10, 15, 20, 25]
+const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 const isCategory = (c?: string): c is ProductCategory =>
   !!c && CATEGORY_ORDER.includes(c as ProductCategory)
 

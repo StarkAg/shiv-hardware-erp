@@ -25,7 +25,7 @@ export interface Brand {
   thicknessMm?: number
 }
 
-export type GuaranteeYears = 0 | 1 | 3 | 5 | 7 | 10 | 15 | 20 | 25
+export type GuaranteeYears = 0 | 1 | 3 | 5 | 7 | 8 | 10 | 15 | 20 | 21 | 25 | 30
 
 /** A coded price set — a full copy of brands/rates (C1, C2, …). */
 export interface BrandSet {
