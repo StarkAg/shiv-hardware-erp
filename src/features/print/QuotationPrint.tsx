@@ -52,7 +52,6 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
             Size: <span style={{ color: 'var(--shiv-green)' }}>{formatSize(quote.height, quote.width) || '—'}</span>
           </span>
           <span className="text-[13px]">Area: <b>{quote.sqft.toFixed(2)}</b> sqft</span>
-          <span className="text-[13px]">Quantity: <b>{quote.qty}</b></span>
         </div>
 
         {!isAlu ? (

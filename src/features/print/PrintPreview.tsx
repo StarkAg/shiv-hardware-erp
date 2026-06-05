@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Printer, X } from 'lucide-react'
+import { printOnServer, type ServerPrintPayload } from '../../lib/printServer'
+import { CLOUD_API_URL, createCloudPrintJob } from '../../lib/cloudApi'
 
 // A4 in CSS px at 96dpi.
 const A4_W = 794
@@ -11,17 +13,21 @@ const HP_TEST_PRINTER = 'HP_Ink_Tank_Wireless_410_series__83E60C_'
 export function PrintPreview({
   title,
   onClose,
+  serverPrint,
   children,
 }: {
   title: string
   onClose: () => void
+  serverPrint?: ServerPrintPayload
   children: ReactNode
 }) {
   const areaRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [printing, setPrinting] = useState(false)
   const [hpPrinting, setHpPrinting] = useState(false)
+  const [printStatus, setPrintStatus] = useState('')
   const isDesktop = !!window.shivDesktop?.printCurrentPage
+  const canCloudPrint = Boolean(CLOUD_API_URL && serverPrint)
 
   useLayoutEffect(() => {
     const el = areaRef.current
@@ -44,16 +50,53 @@ export function PrintPreview({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [])
+
   async function print() {
-    if (!window.shivDesktop?.printCurrentPage) {
+    if (!window.shivDesktop?.printCurrentPage && !serverPrint) {
       window.print()
       return
     }
 
     setPrinting(true)
+    setPrintStatus('')
     try {
-      await window.shivDesktop.printCurrentPage({ copies: 1 })
+      if (window.shivDesktop?.printCurrentPage) {
+        await window.shivDesktop.printCurrentPage({ copies: 1 })
+      } else if (serverPrint) {
+        const result = await printOnServer(serverPrint)
+        setPrintStatus(`Sent to ${result.printer}${result.jobId ? ` (${result.jobId})` : ''}.`)
+      }
     } catch (err) {
+      if (serverPrint && canCloudPrint) {
+        try {
+          const result = serverPrint.kind === 'quotation'
+            ? await createCloudPrintJob({ kind: 'quotation', quote: serverPrint.quote, source: 'web' })
+            : await createCloudPrintJob({
+                kind: 'guarantee',
+                document: serverPrint.document,
+                layout: serverPrint.layout,
+                source: 'web',
+              })
+          setPrintStatus(`Shop print queued (${result.id}).`)
+          return
+        } catch (cloudErr) {
+          alert(`Print failed locally and cloud queue failed: ${cloudErr instanceof Error ? cloudErr.message : String(cloudErr)}`)
+          return
+        }
+      }
+
       alert(`Print failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setPrinting(false)
@@ -90,9 +133,12 @@ export function PrintPreview({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-800/95">
-      <div className="no-print flex flex-col gap-2 bg-slate-900 px-3 py-2 text-white sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-3">
-        <div className="font-semibold leading-tight">Print preview - {title}</div>
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden overscroll-none bg-slate-800/95">
+      <div className="no-print flex shrink-0 flex-col gap-2 bg-slate-900 px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 text-white sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-3">
+        <div>
+          <div className="font-semibold leading-tight">Print preview - {title}</div>
+          {printStatus && <div className="mt-0.5 text-xs font-medium text-green-300">{printStatus}</div>}
+        </div>
         <div className="flex flex-wrap gap-2">
           {isDesktop && (
             <button
@@ -109,7 +155,7 @@ export function PrintPreview({
             disabled={printing || hpPrinting}
             className="flex items-center gap-1.5 rounded-lg bg-shiv-green px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-[#c6a15a] sm:px-4"
           >
-            <Printer size={16} /> {printing ? 'Printing' : 'Print'}
+            <Printer size={16} /> {printing ? 'Sending' : 'Print'}
           </button>
           <button
             onClick={onClose}

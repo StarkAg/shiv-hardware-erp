@@ -9,18 +9,14 @@ import {
   CreditCard,
   DoorClosed,
   FileText,
-  FolderOpen,
   IndianRupee,
   Layers,
-  Menu,
   Moon,
   Plus,
-  ScanLine,
   ShieldCheck,
   Sun,
+  Truck,
   Wrench,
-  X,
-  Users,
   type LucideIcon,
 } from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
@@ -38,20 +34,25 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
   }`
 
+const MOBILE_NAV_ITEMS = [
+  { to: '/quote-options', label: 'New Quotation', icon: FileText, match: ['/quote', '/product'] },
+  { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck, match: ['/guarantee'] },
+  { to: '/rates', label: 'Rate Manager', icon: IndianRupee, match: ['/rates'] },
+  { to: '/transport', label: 'Transport', icon: Truck, match: ['/transport'] },
+] as const
+
 export function AppLayout() {
   const location = useLocation()
   const [open, setOpen] = useState(
     location.pathname.startsWith('/quote') || location.pathname.startsWith('/product'),
   )
   const [guaranteeOpen, setGuaranteeOpen] = useState(location.pathname.startsWith('/guarantee'))
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   // dark: just a re-render trigger — the real source of truth is the DOM class.
   const [dark, setDark] = useState(isDarkMode)
 
   useEffect(() => {
     if (location.pathname.startsWith('/quote') || location.pathname.startsWith('/product')) setOpen(true)
     if (location.pathname.startsWith('/guarantee')) setGuaranteeOpen(true)
-    setMobileNavOpen(false)
   }, [location.pathname])
 
   const sidebar = (
@@ -62,7 +63,7 @@ export function AppLayout() {
             <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 object-contain" />
           </div>
           <div>
-            <div className="font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware</div>
+            <div className="font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware Store</div>
             <div className="text-xs font-medium text-shiv-green">Panel</div>
           </div>
         </div>
@@ -170,17 +171,11 @@ export function AppLayout() {
           )}
         </div>
 
-        <NavLink to="/scan" className={linkClass}>
-          <ScanLine size={18} /> Scan Bill
-        </NavLink>
-        <NavLink to="/history" className={linkClass}>
-          <FolderOpen size={18} /> Quote History
-        </NavLink>
         <NavLink to="/rates" className={linkClass}>
           <IndianRupee size={18} /> Rate Manager
         </NavLink>
-        <NavLink to="/customers" className={linkClass}>
-          <Users size={18} /> Customers
+        <NavLink to="/transport" className={linkClass}>
+          <Truck size={18} /> Transport
         </NavLink>
       </nav>
 
@@ -207,50 +202,48 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen md:flex">
-      <div className="no-print sticky top-0 z-40 flex items-center justify-between border-b border-stone-200/80 bg-stone-50/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-stone-950/95 md:hidden">
+      <div className="no-print fixed inset-x-0 top-0 z-50 flex items-center border-b border-stone-200/80 bg-stone-50/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-stone-950/95 md:hidden">
         <div className="flex items-center gap-2">
           <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 rounded-lg bg-white object-contain p-1" />
           <div>
-            <div className="text-sm font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware</div>
+            <div className="text-sm font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware Store</div>
             <div className="text-xs font-medium text-shiv-green">Panel</div>
           </div>
         </div>
-        <button
-          onClick={() => setMobileNavOpen(true)}
-          className="rounded-lg border border-stone-300 bg-white p-2 text-stone-700 shadow-sm dark:border-white/15 dark:bg-white/5 dark:text-stone-100"
-          aria-label="Open menu"
-        >
-          <Menu size={20} />
-        </button>
       </div>
 
-      {mobileNavOpen && (
-        <div className="no-print fixed inset-0 z-50 md:hidden">
-          <button
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setMobileNavOpen(false)}
-            aria-label="Close menu"
-          />
-          <aside className="relative flex h-full w-[19rem] max-w-[86vw] flex-col border-r border-stone-200/80 bg-stone-50 text-stone-800 shadow-xl dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100">
-            <button
-              onClick={() => setMobileNavOpen(false)}
-              className="absolute right-3 top-3 rounded-lg p-2 text-stone-500 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white"
-              aria-label="Close menu"
-            >
-              <X size={18} />
-            </button>
-            {sidebar}
-          </aside>
-        </div>
-      )}
-
-      <aside className="no-print hidden w-64 shrink-0 flex-col border-r border-stone-200/80 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100 md:flex">
+      <aside className="no-print sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-stone-200/80 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100 md:flex">
         {sidebar}
       </aside>
 
-      <main className="min-w-0 flex-1 bg-transparent">
+      <main className="mobile-main min-w-0 flex-1 bg-transparent">
         <Outlet />
       </main>
+
+      <nav
+        className="mobile-bottom-nav no-print fixed inset-x-0 z-40 grid grid-cols-4 gap-1 border-t border-stone-200/90 bg-stone-50/95 px-2 pt-1.5 shadow-[0_-4px_18px_rgba(28,25,23,0.12)] backdrop-blur-lg dark:border-white/10 dark:bg-stone-950/95 md:hidden"
+        aria-label="Primary navigation"
+      >
+        {MOBILE_NAV_ITEMS.map(({ to, label, icon: Icon, match }) => {
+          const active = match.some((prefix) => location.pathname.startsWith(prefix))
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              aria-label={label}
+              title={label}
+              className={`flex min-h-[3.75rem] min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-1 text-[8px] font-semibold leading-tight transition ${
+                active
+                  ? 'bg-shiv-green/20 text-stone-950 dark:bg-shiv-green/20 dark:text-shiv-green'
+                  : 'text-stone-500 active:bg-stone-200 dark:text-stone-400 dark:active:bg-white/10'
+              }`}
+            >
+              <Icon size={19} strokeWidth={active ? 2.5 : 2} />
+              <span className="w-full whitespace-normal text-center">{label}</span>
+            </NavLink>
+          )
+        })}
+      </nav>
     </div>
   )
 }

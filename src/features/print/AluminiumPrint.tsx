@@ -110,7 +110,7 @@ function ProductDiagram({ hIn, wIn, image, isDoor }: { hIn: number; wIn: number;
 
 // ---- Main component ----
 export function AluminiumPrint({ quote }: { quote: Quotation }) {
-  const { height, width, category, qty } = quote
+  const { height, width, category } = quote
   const hIn = toInches(height)
   const wIn = toInches(width)
   const area = r2((hIn * wIn) / 144)
@@ -275,7 +275,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                   {dRows.map((d) => (
                     <Fragment key={d.t}>
                       <Td />
-                      <Td className="text-right font-bold">{d.total}{qty > 1 ? ` ×${qty}` : ''}</Td>
+                      <Td className="text-right font-bold">{d.total}</Td>
                     </Fragment>
                   ))}
                 </tr>

@@ -10,6 +10,20 @@ npm run dev      # http://localhost:5180
 npm run build    # production build to dist/
 ```
 
+## Print server
+
+```bash
+cd print-server
+npm install
+PRINT_SERVER_HOST=192.168.29.174 npm start
+```
+
+- Main printer endpoints run on `http://<shop-computer-ip>:3333`.
+- WhatsApp upload print page: `http://<shop-computer-ip>:3333/whatsapp-print`
+- Share helper: `http://<shop-computer-ip>:3333/whatsapp-print/share`
+
+Open the WhatsApp print link on a phone, select received images or PDFs, and the shop computer prints them on `PRINT_PRINTER`.
+
 ## What's inside
 
 - **New Quotation** — pick category + brand, enter Height/Width (inches + soot), qty → live sqft & amount. Save, then print Quotation or Guarantee Card.

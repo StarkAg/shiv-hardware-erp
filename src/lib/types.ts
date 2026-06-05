@@ -92,7 +92,6 @@ export interface Quotation {
   category: ProductCategory
   height: Dimension
   width: Dimension
-  qty: number
   sqft: number
   /** brand categories: one row per brand with its cost for this size */
   rows?: BrandQuoteRow[]

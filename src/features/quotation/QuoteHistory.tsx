@@ -91,7 +91,11 @@ export function QuoteHistory() {
       </div>
 
       {preview && (
-        <PrintPreview title="Quotation" onClose={() => setPreview(null)}>
+        <PrintPreview
+          title="Quotation"
+          onClose={() => setPreview(null)}
+          serverPrint={{ kind: 'quotation', quote: preview }}
+        >
           <QuotationPrint quote={preview} />
         </PrintPreview>
       )}

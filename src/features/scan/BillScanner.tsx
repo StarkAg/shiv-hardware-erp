@@ -1,7 +1,7 @@
 // BillScanner — point phone camera at a bill, Claude reads the handwriting,
 // guarantee card gets auto-filled and sent to the printer.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Camera, CheckCircle, Loader, Plus, Printer, Trash2, X, XCircle } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import type { Customer, GuaranteeDocument, GuaranteeYears, ProductCategory } from '../../lib/types'
@@ -345,7 +345,11 @@ export function BillScanner() {
       </div>
 
       {showPrint && doc && (
-        <PrintPreview title="Guarantee Card" onClose={() => setShowPrint(false)}>
+        <PrintPreview
+          title="Guarantee Card"
+          onClose={() => setShowPrint(false)}
+          serverPrint={{ kind: 'guarantee', document: doc, layout: 'a4' }}
+        >
           <GuaranteeCard document={doc} />
         </PrintPreview>
       )}
@@ -382,6 +386,19 @@ function ScanReviewModal({
   onClose: () => void
   onSave: () => void
 }) {
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [])
+
   function updateItem(index: number, patch: Partial<ScannedItem>) {
     onChange({
       ...data,
@@ -394,12 +411,12 @@ function ScanReviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4">
-      <div className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-stone-200 bg-stone-50 shadow-2xl dark:border-white/10 dark:bg-stone-950 sm:rounded-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-stone-200 px-4 py-3 dark:border-white/10">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden overscroll-none bg-black/45 p-0 sm:items-center sm:p-4">
+      <div className="flex h-[96dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-stone-200 bg-stone-50 shadow-2xl dark:border-white/10 dark:bg-stone-950 sm:h-auto sm:max-h-[94vh] sm:rounded-xl">
+        <div className="shrink-0 flex items-start justify-between gap-3 border-b border-stone-200 px-3 py-2 dark:border-white/10 sm:px-4 sm:py-3">
           <div>
-            <h2 className="text-base font-bold text-stone-950 dark:text-stone-50">Review scanned bill</h2>
-            <p className="text-xs font-medium text-stone-500 dark:text-stone-400">Edits saved here are learned for future scans.</p>
+            <h2 className="text-base font-bold leading-tight text-stone-950 dark:text-stone-50">Review scanned bill</h2>
+            <p className="text-[11px] font-medium leading-tight text-stone-500 dark:text-stone-400">Edits are learned for future scans.</p>
           </div>
           {canClose && (
             <button
@@ -413,8 +430,8 @@ function ScanReviewModal({
           )}
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          <div className="grid gap-3 md:grid-cols-4">
+        <div className="min-h-0 flex-1 overscroll-contain space-y-2 overflow-y-auto px-3 py-2 sm:space-y-3 sm:px-4 sm:py-3">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Field label="M/s">
               <input
                 value={data.customerName}
@@ -445,7 +462,7 @@ function ScanReviewModal({
             </Field>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-bold uppercase text-stone-500 dark:text-stone-400">Items</h3>
               <Button
@@ -459,28 +476,28 @@ function ScanReviewModal({
             </div>
 
             {data.items.map((item, index) => (
-              <div key={index} className="rounded-lg border border-stone-200 bg-white p-3 dark:border-white/10 dark:bg-white/5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">Item {index + 1}</div>
+              <div key={index} className="rounded-lg border border-stone-200 bg-white p-2 dark:border-white/10 dark:bg-white/5 sm:p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Item {index + 1}</div>
                   <button
                     type="button"
                     onClick={() => removeItem(index)}
-                    className="rounded-lg p-1.5 text-stone-400 hover:bg-red-50 hover:text-shiv-red dark:hover:bg-red-950/30"
+                    className="rounded-lg p-1 text-stone-400 hover:bg-red-50 hover:text-shiv-red dark:hover:bg-red-950/30"
                     aria-label={`Remove item ${index + 1}`}
                   >
                     <Trash2 size={16} />
                   </button>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-12">
-                  <Field label="Brand / Design" className="md:col-span-5">
+                <div className="grid grid-cols-6 gap-2 md:grid-cols-12">
+                  <Field label="Brand / Design" className="col-span-3 md:col-span-5">
                     <input
                       value={item.brandName}
                       onChange={(e) => updateItem(index, { brandName: e.target.value })}
                       className={inputClass}
                     />
                   </Field>
-                  <Field label="Category" className="md:col-span-3">
+                  <Field label="Category" className="col-span-3 md:col-span-3">
                     <select
                       value={item.category ?? 'readymade-door'}
                       onChange={(e) => updateItem(index, { category: e.target.value as ProductCategory })}
@@ -491,7 +508,7 @@ function ScanReviewModal({
                       ))}
                     </select>
                   </Field>
-                  <Field label="Qty" className="md:col-span-1">
+                  <Field label="Qty" className="col-span-2 md:col-span-1">
                     <input
                       type="number"
                       min="0"
@@ -500,7 +517,7 @@ function ScanReviewModal({
                       className={inputClass}
                     />
                   </Field>
-                  <Field label="Amount" className="md:col-span-2">
+                  <Field label="Amount" className="col-span-2 md:col-span-2">
                     <input
                       type="number"
                       min="0"
@@ -509,7 +526,7 @@ function ScanReviewModal({
                       className={inputClass}
                     />
                   </Field>
-                  <Field label="Guarantee" className="md:col-span-1">
+                  <Field label="Guarantee" className="col-span-2 md:col-span-1">
                     <select
                       value={guaranteeYears(item.guaranteeYears)}
                       onChange={(e) => updateItem(index, { guaranteeYears: guaranteeYears(e.target.value) })}
@@ -521,7 +538,7 @@ function ScanReviewModal({
                     </select>
                   </Field>
 
-                  <Field label="Size Label" className="md:col-span-2">
+                  <Field label="Size Label" className="col-span-2 md:col-span-2">
                     <input
                       placeholder="8x4"
                       value={item.sizeLabel ?? ''}
@@ -529,44 +546,52 @@ function ScanReviewModal({
                       className={inputClass}
                     />
                   </Field>
-                  <Field label="H inches" className="md:col-span-2">
-                    <input
-                      type="number"
-                      min="0"
-                      value={item.heightInches ?? ''}
-                      onChange={(e) => updateItem(index, { heightInches: toNullableNumber(e.target.value) })}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="H soot" className="md:col-span-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="7"
-                      value={item.heightSoot ?? 0}
-                      onChange={(e) => updateItem(index, { heightSoot: toNullableNumber(e.target.value) ?? 0 })}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="W inches" className="md:col-span-2">
-                    <input
-                      type="number"
-                      min="0"
-                      value={item.widthInches ?? ''}
-                      onChange={(e) => updateItem(index, { widthInches: toNullableNumber(e.target.value) })}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="W soot" className="md:col-span-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="7"
-                      value={item.widthSoot ?? 0}
-                      onChange={(e) => updateItem(index, { widthSoot: toNullableNumber(e.target.value) ?? 0 })}
-                      className={inputClass}
-                    />
-                  </Field>
+                  {item.heightInches != null && (
+                    <>
+                      <Field label="H inches" className="col-span-2 md:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.heightInches}
+                          onChange={(e) => updateItem(index, { heightInches: toNullableNumber(e.target.value) })}
+                          className={inputClass}
+                        />
+                      </Field>
+                      <Field label="H soot" className="col-span-2 md:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          value={item.heightSoot ?? 0}
+                          onChange={(e) => updateItem(index, { heightSoot: toNullableNumber(e.target.value) ?? 0 })}
+                          className={inputClass}
+                        />
+                      </Field>
+                    </>
+                  )}
+                  {item.widthInches != null && (
+                    <>
+                      <Field label="W inches" className="col-span-3 md:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.widthInches}
+                          onChange={(e) => updateItem(index, { widthInches: toNullableNumber(e.target.value) })}
+                          className={inputClass}
+                        />
+                      </Field>
+                      <Field label="W soot" className="col-span-3 md:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          value={item.widthSoot ?? 0}
+                          onChange={(e) => updateItem(index, { widthSoot: toNullableNumber(e.target.value) ?? 0 })}
+                          className={inputClass}
+                        />
+                      </Field>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -579,11 +604,11 @@ function ScanReviewModal({
           )}
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t border-stone-200 px-4 py-3 dark:border-white/10 sm:flex-row sm:justify-end">
+        <div className="shrink-0 flex flex-col-reverse gap-2 border-t border-stone-200 bg-stone-50 px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 dark:border-white/10 dark:bg-stone-950 sm:flex-row sm:justify-end sm:px-4 sm:py-3">
           {canClose && <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>}
           <Button type="button" onClick={onSave} disabled={saving} className="flex items-center justify-center gap-2">
             {saving ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}
-            Save &amp; Learn
+            Proceed
           </Button>
         </div>
       </div>
@@ -591,7 +616,7 @@ function ScanReviewModal({
   )
 }
 
-const inputClass = 'w-full rounded-lg border border-stone-300 bg-stone-50 px-2.5 py-2 text-sm outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100'
+const inputClass = 'w-full rounded-lg border border-stone-300 bg-stone-50 px-2.5 py-1.5 text-sm outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100'
 
 function Field({
   label,
@@ -604,7 +629,7 @@ function Field({
 }) {
   return (
     <label className={`block ${className}`}>
-      <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">{label}</span>
+      <span className="mb-0.5 block text-[11px] font-semibold leading-tight text-stone-500 dark:text-stone-400">{label}</span>
       {children}
     </label>
   )

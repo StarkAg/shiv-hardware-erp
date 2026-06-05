@@ -1,8 +1,10 @@
 // Shiv Hardware Print Server
-// POST /scan-bill  { image, mediaType }             → guarantee card data
-// POST /print      { quote, copies }                → PDF → printer
+// POST /scan-bill  { image, mediaType }             -> guarantee card data
+// POST /print      { quote, copies }                -> PDF -> printer
+// GET  /whatsapp-print                              -> mobile upload page
+// POST /whatsapp-print/jobs { files, copies }       -> uploaded PDFs/images -> printer
 
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 try {
   readFileSync(new URL('.env', import.meta.url), 'utf8').split('\n').forEach(line => {
     const [k, ...v] = line.split('=')
@@ -13,13 +15,26 @@ try {
 import express from 'express'
 import cors from 'cors'
 import Anthropic from '@anthropic-ai/sdk'
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import { appendFile, writeFile, unlink } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { buildQuotationHtml } from './template.mjs'
+import { buildGuaranteeHtml, buildQuotationHtml } from './template.mjs'
 
-const PORT = 3333
+const PORT = Number(process.env.PORT) || 3333
+const PRINT_PRINTER = process.env.PRINT_PRINTER || 'HP_Ink_Tank_Wireless_410_series__83E60C_'
+const PRINT_SERVER_HOST = process.env.PRINT_SERVER_HOST || '192.168.29.174'
+const PRINT_SERVER_PUBLIC_URL = process.env.PRINT_SERVER_PUBLIC_URL || `http://${PRINT_SERVER_HOST}:${PORT}`
+const CLOUD_API_URL = (process.env.CLOUD_API_URL || '').replace(/\/+$/, '')
+const CLOUD_API_KEY = process.env.CLOUD_API_KEY || ''
+const PRINTER_AGENT_ID = process.env.PRINTER_AGENT_ID || 'shiv-shop-printer'
+const CLOUD_POLL_INTERVAL_MS = Math.max(3000, Number(process.env.CLOUD_POLL_INTERVAL_MS) || 7000)
+const CHROME_PATH = process.env.CHROME_PATH || [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+  '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+].find(existsSync)
 const JSON_MAX_TOKENS = 2048
 const HONORIFICS = new Set(['jee', 'ji', 'sir', 'madam'])
 const NAME_WORD_RE = /^[a-z][a-z'.-]{2,}$/i
@@ -29,7 +44,17 @@ const PRODUCT_CORRECTIONS_URL = new URL('data/product-corrections.json', import.
 const SCAN_FEEDBACK_URL = new URL('data/scan-feedback.jsonl', import.meta.url)
 const app = express()
 app.use(cors())
-app.use(express.json({ limit: '20mb' }))
+app.use(express.json({ limit: process.env.PRINT_UPLOAD_LIMIT || '100mb' }))
+
+const WHATSAPP_ALLOWED_MEDIA_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+])
+const WHATSAPP_MAX_FILES = 12
+const WHATSAPP_MAX_FILE_BYTES = 30 * 1024 * 1024
 
 function normalizeNameKey(value) {
   return String(value ?? '').trim().toLowerCase()
@@ -160,10 +185,10 @@ Rules:
 - Example: "DDSM PM LU4245 76 7/8 X 46 1 pcs 8197" means brandName "DDSM PM LU4245", heightInches 76, heightSoot 7, widthInches 46, widthSoot 0, qty 1. The 8197 is amount, not quantity.
 - Example: "DDSM PM DD595 77 4/8 X 31 3/8 1 Pc 5702" means heightInches 77, heightSoot 4, widthInches 31, widthSoot 3, qty 1.
 - Example: "DDSM PM DD595 77 X 37 7/8 1 Pc 6771" means heightInches 77, heightSoot 0, widthInches 37, widthSoot 7, qty 1.
-- Board size shorthand: 7x4 means sizeLabel "7x4", heightInches 84, heightSoot 0, widthInches 48, widthSoot 0; 8x4 means sizeLabel "8x4", heightInches 96, heightSoot 0, widthInches 48, widthSoot 0.
+- Board size shorthand: 7x4 or 8x4 means set only sizeLabel ("7x4" or "8x4"). Do not convert board shorthand into inches.
 - 19mm board/sheet => category block-board-19. 12mm board/sheet => category block-board-12.
 - If a board line looks like "19mm A" but context/amount matches this shorthand, read it as "19mm PF"; do not mark 19mm PF as guaranteed unless explicitly told otherwise.
-- "6MM Panther PF" or "Panther PF" is a guaranteed 6mm plywood product: category plywood-6, 7x4 means heightInches 84 and widthInches 48, qty 1 if written 1 Pc, guaranteeYears 10.
+- "6MM Panther PF" or "Panther PF" is a guaranteed 6mm plywood product: category plywood-6, qty 1 if written 1 Pc, guaranteeYears 10. Preserve visible 7x4/8x4 only as sizeLabel.
 - guaranteeYears: 10 for Greenply/Kitply/DDoor/Durian/Panther PF, 7 for Black Touch, 0 for non-guaranteed boards/sheets/accessories/others.
 - category: infer from product name.
 - null for anything not visible`
@@ -198,17 +223,9 @@ function normalizeItem(item, productCounts = new Map()) {
 
   if (/\b7\s*x\s*4\b/i.test(brandName)) {
     normalized.sizeLabel = '7x4'
-    normalized.heightInches = 84
-    normalized.heightSoot = 0
-    normalized.widthInches = 48
-    normalized.widthSoot = 0
   }
   if (/\b8\s*x\s*4\b/i.test(brandName)) {
     normalized.sizeLabel = '8x4'
-    normalized.heightInches = 96
-    normalized.heightSoot = 0
-    normalized.widthInches = 48
-    normalized.widthSoot = 0
   }
 
   if (/(19\s*mm|12\s*mm|ply|plywood|board|block)/i.test(brandName)) {
@@ -450,6 +467,460 @@ function readJSON(url, fallback) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function sanitizeCopies(value) {
+  return Math.min(20, Math.max(1, Math.trunc(Number(value) || 1)))
+}
+
+function extensionForMediaType(mediaType) {
+  switch (mediaType) {
+    case 'application/pdf':
+      return '.pdf'
+    case 'image/jpeg':
+      return '.jpg'
+    case 'image/png':
+      return '.png'
+    case 'image/webp':
+      return '.webp'
+    case 'image/gif':
+      return '.gif'
+    default:
+      return ''
+  }
+}
+
+function decodeUploadedFile(file, index) {
+  const mediaType = String(file?.mediaType ?? '').toLowerCase()
+  const name = String(file?.name ?? `upload-${index + 1}`).trim() || `upload-${index + 1}`
+  const rawData = String(file?.data ?? '')
+  const data = rawData.includes(',') ? rawData.slice(rawData.indexOf(',') + 1) : rawData
+  const cleanData = data.replace(/\s/g, '')
+
+  if (!WHATSAPP_ALLOWED_MEDIA_TYPES.has(mediaType)) {
+    throw new Error(`${name}: unsupported file type ${mediaType || 'unknown'}. Use PDF, JPG, PNG, WEBP, or GIF.`)
+  }
+  if (!cleanData || !/^[A-Za-z0-9+/]*={0,2}$/.test(cleanData)) {
+    throw new Error(`${name}: invalid base64 file data`)
+  }
+
+  const expectedBytes = Math.floor((cleanData.replace(/=+$/, '').length * 3) / 4)
+  if (expectedBytes > WHATSAPP_MAX_FILE_BYTES) {
+    throw new Error(`${name}: file is too large. Maximum is ${Math.round(WHATSAPP_MAX_FILE_BYTES / 1024 / 1024)} MB.`)
+  }
+
+  const buffer = Buffer.from(cleanData, 'base64')
+  if (!buffer.length) throw new Error(`${name}: empty file`)
+
+  return { name, mediaType, data: cleanData, buffer }
+}
+
+async function launchPuppeteerBrowser() {
+  const { default: puppeteer } = await import('puppeteer')
+  return puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox'],
+    ...(CHROME_PATH ? { executablePath: CHROME_PATH } : {}),
+  })
+}
+
+async function printFileWithLp(filePath, copies, title) {
+  return new Promise((ok, fail) =>
+    execFile('lp', ['-d', PRINT_PRINTER, '-n', String(copies), '-t', title, filePath], (err, stdout) => {
+      if (err) {
+        fail(err)
+        return
+      }
+      const output = stdout.trim()
+      const jobId = output.match(/request id is (\S+)/)?.[1] ?? null
+      console.log(`[whatsapp-print] ${title}`, output)
+      ok({ jobId, output })
+    }),
+  )
+}
+
+async function renderUploadedImagePdf(file) {
+  let browser
+  try {
+    browser = await launchPuppeteerBrowser()
+    const page = await browser.newPage()
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page { size: A4; margin: 0; }
+    html, body {
+      width: 210mm;
+      height: 297mm;
+      margin: 0;
+      background: white;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <img src="data:${file.mediaType};base64,${file.data}" alt="${escapeHtml(file.name)}" />
+</body>
+</html>`
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    return await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+    })
+  } finally {
+    await browser?.close().catch(() => {})
+  }
+}
+
+async function printUploadedFile(file, copies) {
+  const extension = extensionForMediaType(file.mediaType)
+  const sourcePath = join(tmpdir(), `shiv-whatsapp-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`)
+  let printPath = sourcePath
+  let renderedPdfPath = null
+
+  try {
+    await writeFile(sourcePath, file.buffer)
+
+    if (file.mediaType.startsWith('image/')) {
+      const pdf = await renderUploadedImagePdf(file)
+      renderedPdfPath = join(tmpdir(), `shiv-whatsapp-${Date.now()}-${Math.random().toString(16).slice(2)}.pdf`)
+      await writeFile(renderedPdfPath, pdf)
+      printPath = renderedPdfPath
+    }
+
+    const result = await printFileWithLp(printPath, copies, `WhatsApp ${file.name}`.slice(0, 80))
+    return {
+      name: file.name,
+      mediaType: file.mediaType,
+      jobId: result.jobId,
+    }
+  } finally {
+    await unlink(sourcePath).catch(() => {})
+    if (renderedPdfPath) await unlink(renderedPdfPath).catch(() => {})
+  }
+}
+
+async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, copies) {
+  if (kind === 'guarantee' && !document) throw new Error('Missing guarantee document data')
+  if (kind !== 'guarantee' && !quote) throw new Error('Missing quotation data')
+
+  let browser
+  let tmp
+  try {
+    const html = kind === 'guarantee'
+      ? await buildGuaranteeHtml(document, layout)
+      : await buildQuotationHtml(quote)
+    browser = await launchPuppeteerBrowser()
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    const pdf = await page.pdf({ format: 'A4', printBackground: true })
+    tmp = join(tmpdir(), `shiv-print-${Date.now()}.pdf`)
+    await writeFile(tmp, pdf)
+    const printResult = await printFileWithLp(tmp, copies, `Shiv ${kind ?? 'quotation'}`)
+    return {
+      printer: PRINT_PRINTER,
+      jobId: printResult.jobId,
+    }
+  } finally {
+    await browser?.close().catch(() => {})
+    if (tmp) await unlink(tmp).catch(() => {})
+  }
+}
+
+async function cloudRequest(path, options = {}) {
+  if (!CLOUD_API_URL) throw new Error('CLOUD_API_URL is not configured')
+  const response = await fetch(`${CLOUD_API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(CLOUD_API_KEY ? { Authorization: `Bearer ${CLOUD_API_KEY}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  })
+  const json = await response.json().catch(() => null)
+  if (!response.ok || json?.ok === false) {
+    throw new Error(json?.error ?? `Cloud API returned HTTP ${response.status}`)
+  }
+  return json
+}
+
+async function markCloudJob(path, body) {
+  await cloudRequest(path, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+async function printCloudJob(job) {
+  const copies = sanitizeCopies(job.copies)
+  if (job.kind === 'quotation') {
+    const quote = job.payload?.quote ?? job.payload
+    return await printDocumentPayload({ kind: 'quotation', quote }, copies)
+  }
+
+  if (job.kind === 'guarantee') {
+    const document = job.payload?.document ?? job.payload
+    const layout = job.payload?.layout ?? 'a4'
+    return await printDocumentPayload({ kind: 'guarantee', document, layout }, copies)
+  }
+
+  if (job.kind === 'raw-file') {
+    const files = Array.isArray(job.payload?.files) ? job.payload.files : [job.payload]
+    const results = []
+    for (let i = 0; i < files.length; i += 1) {
+      results.push(await printUploadedFile(decodeUploadedFile(files[i], i), copies))
+    }
+    return { files: results }
+  }
+
+  throw new Error(`Unsupported cloud print job kind: ${job.kind}`)
+}
+
+let cloudPollRunning = false
+
+async function pollCloudPrintJobs() {
+  if (!CLOUD_API_URL || cloudPollRunning) return
+  cloudPollRunning = true
+  try {
+    const response = await cloudRequest('/api/print-jobs/claim', {
+      method: 'POST',
+      body: JSON.stringify({ printerId: PRINTER_AGENT_ID, limit: 3 }),
+    })
+    const jobs = Array.isArray(response.jobs) ? response.jobs : []
+
+    for (const job of jobs) {
+      try {
+        await markCloudJob(`/api/print-jobs/${job._id}/printing`, { printerId: PRINTER_AGENT_ID })
+        await printCloudJob(job)
+        await markCloudJob(`/api/print-jobs/${job._id}/complete`, { printerId: PRINTER_AGENT_ID })
+        console.log(`[cloud-print] completed ${job._id}`)
+      } catch (err) {
+        console.error(`[cloud-print] failed ${job._id}`, err)
+        await markCloudJob(`/api/print-jobs/${job._id}/fail`, {
+          printerId: PRINTER_AGENT_ID,
+          error: String(err.message ?? err),
+        }).catch(markErr => console.error('[cloud-print] failed to mark failure', markErr))
+      }
+    }
+  } catch (err) {
+    console.warn('[cloud-print] poll failed:', err.message ?? err)
+  } finally {
+    cloudPollRunning = false
+  }
+}
+
+function buildWhatsAppPrintPage() {
+  const uploadUrl = `${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shiv WhatsApp Print</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f7f9;
+      color: #151922;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    main {
+      width: min(560px, 100%);
+      background: white;
+      border: 1px solid #dde2ea;
+      border-radius: 8px;
+      box-shadow: 0 16px 40px rgba(21, 25, 34, 0.10);
+      padding: 22px;
+    }
+    h1 {
+      font-size: 24px;
+      line-height: 1.2;
+      margin: 0 0 8px;
+      letter-spacing: 0;
+    }
+    p {
+      margin: 0 0 18px;
+      color: #596273;
+      line-height: 1.5;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: #303747;
+      margin-bottom: 8px;
+    }
+    input[type="file"],
+    input[type="number"] {
+      width: 100%;
+      border: 1px solid #cbd3df;
+      border-radius: 6px;
+      padding: 12px;
+      font: inherit;
+      background: #fff;
+    }
+    .row {
+      display: grid;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    button,
+    a.button {
+      width: 100%;
+      border: 0;
+      border-radius: 6px;
+      background: #117a37;
+      color: white;
+      font: inherit;
+      font-weight: 800;
+      padding: 13px 16px;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+    a.button {
+      display: block;
+      margin-top: 10px;
+      background: #263244;
+    }
+    .status {
+      min-height: 24px;
+      margin-top: 14px;
+      font-size: 14px;
+      color: #303747;
+      white-space: pre-wrap;
+    }
+    .error { color: #b42318; }
+    .ok { color: #067647; }
+    small {
+      display: block;
+      margin-top: 14px;
+      color: #7a8392;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Shiv WhatsApp Print</h1>
+    <p>Select photos or PDFs from WhatsApp and print them on the shop computer.</p>
+    <form id="printForm">
+      <div class="row">
+        <div>
+          <label for="files">Images or PDFs</label>
+          <input id="files" name="files" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif" multiple required />
+        </div>
+        <div>
+          <label for="copies">Copies</label>
+          <input id="copies" name="copies" type="number" min="1" max="20" value="1" />
+        </div>
+      </div>
+      <button id="submitButton" type="submit">Print Selected Files</button>
+      <a class="button" href="/whatsapp-print/share">Share This Link on WhatsApp</a>
+      <div id="status" class="status"></div>
+    </form>
+    <small>Link: ${escapeHtml(uploadUrl)}<br />Allowed: PDF, JPG, PNG, WEBP, GIF. Max ${WHATSAPP_MAX_FILES} files, ${Math.round(WHATSAPP_MAX_FILE_BYTES / 1024 / 1024)} MB each.</small>
+  </main>
+  <script>
+    const form = document.getElementById('printForm')
+    const filesInput = document.getElementById('files')
+    const copiesInput = document.getElementById('copies')
+    const button = document.getElementById('submitButton')
+    const status = document.getElementById('status')
+
+    function readFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onerror = () => reject(new Error(file.name + ': could not read file'))
+        reader.onload = () => {
+          const result = String(reader.result || '')
+          resolve({
+            name: file.name,
+            mediaType: file.type || 'application/octet-stream',
+            data: result.includes(',') ? result.slice(result.indexOf(',') + 1) : result,
+          })
+        }
+        reader.readAsDataURL(file)
+      })
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault()
+      status.className = 'status'
+      const selected = Array.from(filesInput.files || [])
+      if (!selected.length) {
+        status.className = 'status error'
+        status.textContent = 'Select at least one file.'
+        return
+      }
+      if (selected.length > ${WHATSAPP_MAX_FILES}) {
+        status.className = 'status error'
+        status.textContent = 'Select ${WHATSAPP_MAX_FILES} files or fewer.'
+        return
+      }
+
+      button.disabled = true
+      status.textContent = 'Reading files...'
+      try {
+        const files = await Promise.all(selected.map(readFile))
+        status.textContent = 'Sending to printer...'
+        const response = await fetch('/whatsapp-print/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files, copies: copiesInput.value }),
+        })
+        const json = await response.json().catch(() => null)
+        if (!response.ok || !json || !json.ok) {
+          throw new Error((json && json.error) || 'Print failed')
+        }
+        status.className = 'status ok'
+        status.textContent = 'Printed ' + json.jobs.length + ' file(s).\\n' + json.jobs.map(job => job.name + (job.jobId ? ' - ' + job.jobId : '')).join('\\n')
+        form.reset()
+        copiesInput.value = '1'
+      } catch (error) {
+        status.className = 'status error'
+        status.textContent = error && error.message ? error.message : String(error)
+      } finally {
+        button.disabled = false
+      }
+    })
+  </script>
+</body>
+</html>`
+}
+
 async function writeJSON(url, value) {
   await writeFile(url, `${JSON.stringify(value, null, 2)}\n`)
 }
@@ -613,7 +1084,11 @@ async function scanWithClaude(image, mediaType) {
 }
 
 // ── Health check ─────────────────────────────────────────────────────────────
-app.get('/status', (_req, res) => res.json({ ok: true, server: 'Shiv Print Server' }))
+app.get('/status', (_req, res) => res.json({
+  ok: true,
+  server: 'Shiv Print Server',
+  printer: PRINT_PRINTER,
+}))
 app.get('/scan-bill', (_req, res) => res.json({ ok: true, message: 'Use POST with { image, mediaType }. Scanner uses Claude only.' }))
 
 // ── Scan Bill ─────────────────────────────────────────────────────────────────
@@ -645,38 +1120,124 @@ app.post('/scan-bill/learn', async (req, res) => {
   }
 })
 
+// -- WhatsApp Upload Print ----------------------------------------------------
+app.get('/whatsapp-print', (_req, res) => {
+  res.type('html').send(buildWhatsAppPrintPage())
+})
+
+app.get('/whatsapp-print/share', (_req, res) => {
+  const message = `Open this Shiv Hardware print link to send PDFs and images to the shop printer: ${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`
+  res.redirect(`https://wa.me/?text=${encodeURIComponent(message)}`)
+})
+
+app.get('/whatsapp-print/status', (_req, res) => {
+  res.json({
+    ok: true,
+    printer: PRINT_PRINTER,
+    link: `${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`,
+    allowedMediaTypes: [...WHATSAPP_ALLOWED_MEDIA_TYPES],
+    maxFiles: WHATSAPP_MAX_FILES,
+    maxFileMb: Math.round(WHATSAPP_MAX_FILE_BYTES / 1024 / 1024),
+  })
+})
+
+app.post('/whatsapp-print/jobs', async (req, res) => {
+  const copies = sanitizeCopies(req.body?.copies)
+  const rawFiles = Array.isArray(req.body?.files) ? req.body.files : []
+  if (!rawFiles.length) return res.status(400).json({ error: 'Missing files' })
+  if (rawFiles.length > WHATSAPP_MAX_FILES) return res.status(400).json({ error: `Maximum ${WHATSAPP_MAX_FILES} files allowed` })
+
+  try {
+    const files = rawFiles.map(decodeUploadedFile)
+    const jobs = []
+    for (const file of files) {
+      jobs.push(await printUploadedFile(file, copies))
+    }
+
+    res.json({
+      ok: true,
+      printer: PRINT_PRINTER,
+      copies,
+      jobs,
+    })
+  } catch (err) {
+    console.error('[whatsapp-print error]', err)
+    res.status(500).json({ error: String(err.message ?? err) })
+  }
+})
+
 // ── Print ─────────────────────────────────────────────────────────────────────
 app.post('/print', async (req, res) => {
-  const { quote, copies = 1 } = req.body
-  if (!quote) return res.status(400).json({ error: 'Missing quote data' })
+  const { kind, quote, document, layout = 'a4' } = req.body
+  const copies = sanitizeCopies(req.body.copies)
+  if (kind === 'guarantee' && !document) return res.status(400).json({ error: 'Missing guarantee document data' })
+  if (kind !== 'guarantee' && !quote) return res.status(400).json({ error: 'Missing quotation data' })
+
   try {
-    const html = await buildQuotationHtml(quote)
-    const { default: puppeteer } = await import('puppeteer')
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] })
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'networkidle0' })
-    const pdf = await page.pdf({ format: 'A4', printBackground: true })
-    await browser.close()
-    const tmp = join(tmpdir(), `shiv-print-${Date.now()}.pdf`)
-    await writeFile(tmp, pdf)
-    await new Promise((ok, fail) =>
-      exec(`lp -n ${copies} "${tmp}"`, (err, stdout) => {
-        if (err) fail(err); else { console.log('[print]', stdout.trim()); ok() }
-      }),
-    )
-    await unlink(tmp)
-    res.json({ ok: true })
+    const printResult = await printDocumentPayload({ kind, quote, document, layout }, copies)
+    res.json({
+      ok: true,
+      printer: printResult.printer,
+      jobId: printResult.jobId,
+    })
   } catch (err) {
     console.error('[print error]', err)
     res.status(500).json({ error: String(err) })
   }
 })
 
+// ── Render PNG ───────────────────────────────────────────────────────────────
+app.post('/render-png', async (req, res) => {
+  const { kind, quote, document, layout = 'a4' } = req.body
+  const scale = Math.min(3, Math.max(1, Number(req.body.scale) || 2))
+  if (kind === 'guarantee' && !document) return res.status(400).json({ error: 'Missing guarantee document data' })
+  if (kind !== 'guarantee' && !quote) return res.status(400).json({ error: 'Missing quotation data' })
+
+  let browser
+  try {
+    const html = kind === 'guarantee'
+      ? await buildGuaranteeHtml(document, layout)
+      : await buildQuotationHtml(quote)
+    const { default: puppeteer } = await import('puppeteer')
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox'],
+      ...(CHROME_PATH ? { executablePath: CHROME_PATH } : {}),
+    })
+    const page = await browser.newPage()
+    const width = Math.round((210 / 25.4) * 96)
+    const height = Math.round((297 / 25.4) * 96)
+    await page.setViewport({ width, height, deviceScaleFactor: scale })
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    await page.emulateMediaType('print')
+    const target = await page.$('.page')
+    const box = target ? await target.boundingBox() : null
+    if (!box) throw new Error('Failed to measure A4 page for PNG render')
+    const png = await page.screenshot({ type: 'png', clip: box })
+    res.json({ ok: true, image: png.toString('base64'), mime: 'image/png' })
+  } catch (err) {
+    console.error('[render-png error]', err)
+    res.status(500).json({ error: String(err) })
+  } finally {
+    await browser?.close().catch(() => {})
+  }
+})
+
 app.listen(PORT, '0.0.0.0', () => {
-  const ip = '192.168.29.174'
   console.log(`\n✓  Shiv Print Server running`)
   console.log(`   Local:   http://localhost:${PORT}`)
-  console.log(`   Phone:   http://${ip}:${PORT}`)
+  console.log(`   Phone:   ${PRINT_SERVER_PUBLIC_URL}`)
+  console.log(`   WhatsApp print: ${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`)
+  console.log(`   Printer: ${PRINT_PRINTER}`)
+  console.log(`   Browser: ${CHROME_PATH ?? 'Puppeteer managed Chrome'}`)
+  if (CLOUD_API_URL) {
+    console.log(`   Cloud API: ${CLOUD_API_URL}`)
+    console.log(`   Cloud printer agent: ${PRINTER_AGENT_ID}`)
+    setInterval(pollCloudPrintJobs, CLOUD_POLL_INTERVAL_MS)
+    pollCloudPrintJobs()
+  } else {
+    console.log('   Cloud polling: disabled')
+  }
   if (!process.env.ANTHROPIC_API_KEY) console.warn('⚠  ANTHROPIC_API_KEY not set')
   console.log()
 })
