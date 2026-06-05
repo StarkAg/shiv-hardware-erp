@@ -1,0 +1,85 @@
+[
+  {
+    "canonicalBrandName": "6MM Panther PF",
+    "match": [
+      "6mm panther pf",
+      "6 mm panther pf",
+      "panther pf",
+      "panther"
+    ],
+    "category": "plywood-6",
+    "qty": 1,
+    "guaranteeYears": 10
+  },
+  {
+    "canonicalBrandName": "19mm PF",
+    "match": [
+      "19mm pf",
+      "19 mm pf",
+      "19mm a",
+      "19 mm a"
+    ],
+    "category": "block-board-19",
+    "guaranteeYears": 0
+  },
+  {
+    "canonicalBrandName": "DDSM Double Door 213LUS",
+    "match": [
+      "ddsm double door",
+      "ddsm double door 213lus",
+      "ddsm double door 213lvs",
+      "ddsm double door 213 lus",
+      "ddsm double door 213 lvs"
+    ],
+    "category": "readymade-door",
+    "qty": 1,
+    "amount": null,
+    "guaranteeYears": 10
+  },
+  {
+    "canonicalBrandName": "DDSM PM LU4245",
+    "match": [
+      "ddsm pm lu4245",
+      "ddsm pm lu4915",
+      "ddsm pm 12u4915",
+      "ddsm pm 12u495",
+      "ddsm pm 12x4915",
+      "ddsm pm 12x495",
+      "ddsm pm 12×4915",
+      "ddsm pm 12×495"
+    ],
+    "category": "readymade-door",
+    "heightInches": 76,
+    "heightSoot": 7,
+    "widthInches": 46,
+    "widthSoot": 0,
+    "qty": 1,
+    "guaranteeYears": 10
+  },
+  {
+    "canonicalBrandName": "DDSM PM DD595",
+    "match": [
+      "ddsm pm dd595"
+    ],
+    "category": "readymade-door",
+    "guaranteeYears": 10,
+    "knownLines": [
+      {
+        "heightInches": 77,
+        "heightSoot": 4,
+        "widthInches": 31,
+        "widthSoot": 3,
+        "qty": 1,
+        "amount": 5702
+      },
+      {
+        "heightInches": 77,
+        "heightSoot": 0,
+        "widthInches": 37,
+        "widthSoot": 7,
+        "qty": 1,
+        "amount": 6771
+      }
+    ]
+  }
+]

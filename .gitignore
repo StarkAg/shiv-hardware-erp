@@ -1,0 +1,8 @@
+node_modules
+dist
+release
+print-server/.env
+cloud-api/.env
+.DS_Store
+*.local
+*.tsbuildinfo
