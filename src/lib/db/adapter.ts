@@ -13,10 +13,10 @@ export interface DataAdapter {
   save(state: PersistedState): void
 }
 
-// v4: latest Plywood and Door.xlsm seed rates. Old v3 customers/quotes migrate,
+// v5: latest Downloads/Formats seed rates. Old v4 customers/quotes migrate,
 // but price sets refresh from the latest seed data.
-const KEY = 'shiv-panel:v4'
-const LEGACY_KEY = 'shiv-panel:v3'
+const KEY = 'shiv-panel:v5'
+const LEGACY_KEY = 'shiv-panel:v4'
 
 export const localAdapter: DataAdapter = {
   load() {

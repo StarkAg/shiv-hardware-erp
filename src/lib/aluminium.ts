@@ -18,27 +18,29 @@ export const ALU_THICKNESSES: AluThickness[] = ['1.2 MM', '1.6 MM', '1.2 MM Hind
 
 // ---------- Aluminium Door ----------
 export const doorRates: Record<AluThickness, { door: number; chaukhat: number; accessories: number; decorFilm: number; brownCoated: number }> = {
-  '1.2 MM': { door: 130, chaukhat: 75, accessories: 160, decorFilm: 30, brownCoated: 60 },
-  '1.6 MM': { door: 180, chaukhat: 95, accessories: 160, decorFilm: 30, brownCoated: 60 },
-  '1.2 MM Hindalco': { door: 150, chaukhat: 85, accessories: 160, decorFilm: 30, brownCoated: 60 },
+  '1.2 MM': { door: 150, chaukhat: 90, accessories: 160, decorFilm: 30, brownCoated: 40 },
+  '1.6 MM': { door: 200, chaukhat: 100, accessories: 160, decorFilm: 30, brownCoated: 40 },
+  '1.2 MM Hindalco': { door: 190, chaukhat: 100, accessories: 160, decorFilm: 30, brownCoated: 40 },
 }
 const DOOR_MAX_H = 84
 const DOOR_MAX_W = 36
 
 // ---------- Window slab base rates (area >= slab.area → rate) ----------
 export const window2TrackAreaRates = [
-  { area: 6, rate: 240 }, { area: 7.5, rate: 260 }, { area: 9, rate: 230 },
-  { area: 12, rate: 210 }, { area: 16, rate: 190 }, { area: 20, rate: 180 }, { area: 24, rate: 170 },
+  { area: 6, rate: 350 }, { area: 7.5, rate: 310 }, { area: 9, rate: 290 },
+  { area: 12, rate: 270 }, { area: 14, rate: 260 }, { area: 16, rate: 250 },
+  { area: 20, rate: 240 }, { area: 24, rate: 230 },
 ]
 export const window3TrackAreaRates = [
-  { area: 6, rate: 360 }, { area: 7.5, rate: 320 }, { area: 9, rate: 300 },
-  { area: 12, rate: 280 }, { area: 16, rate: 250 }, { area: 20, rate: 240 }, { area: 24, rate: 230 },
+  { area: 6, rate: 470 }, { area: 7.5, rate: 430 }, { area: 9, rate: 390 },
+  { area: 12, rate: 360 }, { area: 14, rate: 350 }, { area: 16, rate: 330 },
+  { area: 20, rate: 320 }, { area: 24, rate: 310 },
 ]
 // Thickness add-ons for windows (added to slab base rate)
 export const windowThicknessRates: Record<AluThickness, { clear: number; reflective: number; chaukhat: number }> = {
   '1.2 MM': { clear: 0, reflective: 20, chaukhat: 75 },
-  '1.6 MM': { clear: 50, reflective: 50, chaukhat: 85 },
-  '1.2 MM Hindalco': { clear: 40, reflective: 40, chaukhat: 85 },
+  '1.6 MM': { clear: 60, reflective: 80, chaukhat: 85 },
+  '1.2 MM Hindalco': { clear: 50, reflective: 70, chaukhat: 85 },
 }
 
 function slabRate(area: number, table: { area: number; rate: number }[]): number {

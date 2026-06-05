@@ -19,16 +19,31 @@ import { execFile } from 'child_process'
 import { appendFile, writeFile, unlink } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { fileURLToPath } from 'url'
 import { buildGuaranteeHtml, buildQuotationHtml } from './template.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
-const PRINT_PRINTER = process.env.PRINT_PRINTER || 'HP_Ink_Tank_Wireless_410_series__83E60C_'
+const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
+const BW_PRINTER = process.env.BW_PRINTER || process.env.PRINT_PRINTER || 'NPI33F31D (HP LaserJet Tank MFP 2606sdw)'
+const PRINT_PRINTER = process.env.PRINT_PRINTER || BW_PRINTER
 const PRINT_SERVER_HOST = process.env.PRINT_SERVER_HOST || '192.168.29.174'
 const PRINT_SERVER_PUBLIC_URL = process.env.PRINT_SERVER_PUBLIC_URL || `http://${PRINT_SERVER_HOST}:${PORT}`
 const CLOUD_API_URL = (process.env.CLOUD_API_URL || '').replace(/\/+$/, '')
 const CLOUD_API_KEY = process.env.CLOUD_API_KEY || ''
 const PRINTER_AGENT_ID = process.env.PRINTER_AGENT_ID || 'shiv-shop-printer'
 const CLOUD_POLL_INTERVAL_MS = Math.max(3000, Number(process.env.CLOUD_POLL_INTERVAL_MS) || 7000)
+const SUMATRA_PDF_PATH = process.env.SUMATRA_PDF_PATH || findSumatraPdfPath()
+const EPSON_CARD_PRINT_SETTINGS = (process.env.EPSON_CARD_PRINT_SETTINGS || 'noscale,color,landscape,bin=Disc/ID Card Tray')
+  .split(',')
+  .map(setting => setting.trim())
+  .filter(Boolean)
+const EPSON_CARD_PRINT_ENGINE = (process.env.EPSON_CARD_PRINT_ENGINE || 'sumatra').toLowerCase()
+const EPSON_CARD_DEVMODE_PATH = process.env.EPSON_CARD_DEVMODE_PATH || fileURLToPath(new URL('data/epson-card.devmode', import.meta.url))
+const EPSON_CARD_GDI_SCRIPT = fileURLToPath(new URL('tools/print-card-gdi.ps1', import.meta.url))
+const EPSON_CARD_EXCEL_SCRIPT = fileURLToPath(new URL('tools/print-card-excel.ps1', import.meta.url))
+const EPSON_CARD_OFFSET_X_MM = Number(process.env.EPSON_CARD_OFFSET_X_MM) || 0
+const EPSON_CARD_OFFSET_Y_MM = Number(process.env.EPSON_CARD_OFFSET_Y_MM) || 0
+const EPSON_CARD_SCALE_PERCENT = Number(process.env.EPSON_CARD_SCALE_PERCENT) || 100
 const CHROME_PATH = process.env.CHROME_PATH || [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -167,7 +182,7 @@ Extract these fields and return ONLY valid JSON, no explanation:
       "sizeLabel": "visible size shorthand such as 7x4 or 8x4, else null",
       "qty": number,
       "amount": right-side line amount number or null,
-      "guaranteeYears": 0 or 1 or 3 or 7 or 10 or 25
+      "guaranteeYears": 0 or 1 or 3 or 5 or 7 or 8 or 10 or 15 or 20 or 21 or 25 or 30
     }
   ]
 }
@@ -523,17 +538,69 @@ function decodeUploadedFile(file, index) {
 }
 
 async function launchPuppeteerBrowser() {
-  const { default: puppeteer } = await import('puppeteer')
+  const { default: puppeteer } = await import('puppeteer-core')
+  if (!CHROME_PATH) {
+    throw new Error('CHROME_PATH is required for puppeteer-core rendering')
+  }
+
   return puppeteer.launch({
     headless: true,
     args: ['--no-sandbox'],
-    ...(CHROME_PATH ? { executablePath: CHROME_PATH } : {}),
+    executablePath: CHROME_PATH,
   })
 }
 
-async function printFileWithLp(filePath, copies, title) {
+function findSumatraPdfPath() {
+  const candidates = [
+    'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe',
+    'C:\\Program Files (x86)\\SumatraPDF\\SumatraPDF.exe',
+    `${process.env.LOCALAPPDATA || ''}\\SumatraPDF\\SumatraPDF.exe`,
+    `${process.env.LOCALAPPDATA || ''}\\Programs\\SumatraPDF\\SumatraPDF.exe`,
+  ].filter(Boolean)
+
+  return candidates.find(candidate => existsSync(candidate)) || 'SumatraPDF.exe'
+}
+
+function selectDocumentPrinter({ kind, layout = 'a4' } = {}) {
+  if (kind === 'guarantee' && layout === 'card') return COLOR_PRINTER
+  return BW_PRINTER
+}
+
+function selectUploadPrinter(file) {
+  if (file?.mediaType?.startsWith('image/')) return COLOR_PRINTER
+  return BW_PRINTER
+}
+
+async function printFileWithLp(filePath, copies, title, printer = PRINT_PRINTER, printSettings = []) {
+  if (process.platform === 'win32') {
+    return new Promise((ok, fail) => {
+      const settings = [`${copies}x`, ...printSettings].join(',')
+      const args = [
+        '-print-to',
+        printer,
+        '-silent',
+        '-exit-on-print',
+        '-print-settings',
+        settings,
+        filePath,
+      ]
+
+      console.log(`[windows-print] printer="${printer}" settings="${settings}" file="${filePath}"`)
+      execFile(SUMATRA_PDF_PATH, args, { windowsHide: true }, (err, stdout, stderr) => {
+        if (err) {
+          fail(err)
+          return
+        }
+
+        const output = [stdout, stderr].map(text => text?.trim()).filter(Boolean).join('\n')
+        console.log(`[windows-print] ${title}`, output || `sent to ${printer}`)
+        ok({ jobId: null, output })
+      })
+    })
+  }
+
   return new Promise((ok, fail) =>
-    execFile('lp', ['-d', PRINT_PRINTER, '-n', String(copies), '-t', title, filePath], (err, stdout) => {
+    execFile('lp', ['-d', printer, '-n', String(copies), '-t', title, filePath], (err, stdout) => {
       if (err) {
         fail(err)
         return
@@ -544,6 +611,99 @@ async function printFileWithLp(filePath, copies, title) {
       ok({ jobId, output })
     }),
   )
+}
+
+function shouldUseEpsonCardDevmode(isCard) {
+  return process.platform === 'win32' && isCard && EPSON_CARD_PRINT_ENGINE === 'devmode'
+}
+
+function shouldUseCardImageEngine(isCard) {
+  return process.platform === 'win32' && isCard && ['devmode', 'excel'].includes(EPSON_CARD_PRINT_ENGINE)
+}
+
+async function printCardImageWithDevmode(filePath, copies, title, printer = COLOR_PRINTER) {
+  if (!existsSync(EPSON_CARD_DEVMODE_PATH)) {
+    throw new Error(`Missing Epson card DEVMODE file: ${EPSON_CARD_DEVMODE_PATH}. Run print-server/tools/capture-epson-card-devmode.ps1 first.`)
+  }
+
+  return new Promise((ok, fail) => {
+    const args = [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      EPSON_CARD_GDI_SCRIPT,
+      '-ImagePath',
+      filePath,
+      '-PrinterName',
+      printer,
+      '-DevmodeFile',
+      EPSON_CARD_DEVMODE_PATH,
+      '-Copies',
+      String(copies),
+      '-JobName',
+      title,
+    ]
+
+    console.log(`[windows-card-print] printer="${printer}" devmode="${EPSON_CARD_DEVMODE_PATH}" file="${filePath}"`)
+    execFile('powershell.exe', args, { windowsHide: true, timeout: 120000 }, (err, stdout, stderr) => {
+      const output = [stdout, stderr].map(text => text?.trim()).filter(Boolean).join('\n')
+      if (err) {
+        err.message = `${err.message}${output ? `\n${output}` : ''}`
+        fail(err)
+        return
+      }
+
+      console.log(`[windows-card-print] ${title}`, output || `sent to ${printer}`)
+      ok({ jobId: null, output })
+    })
+  })
+}
+
+async function printCardImageWithExcel(filePath, copies, title, printer = COLOR_PRINTER) {
+  return new Promise((ok, fail) => {
+    const args = [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      EPSON_CARD_EXCEL_SCRIPT,
+      '-ImagePath',
+      filePath,
+      '-PrinterName',
+      printer,
+      '-Copies',
+      String(copies),
+      '-JobName',
+      title,
+      '-OffsetXmm',
+      String(EPSON_CARD_OFFSET_X_MM),
+      '-OffsetYmm',
+      String(EPSON_CARD_OFFSET_Y_MM),
+      '-ScalePercent',
+      String(EPSON_CARD_SCALE_PERCENT),
+    ]
+
+    console.log(`[windows-card-excel] printer="${printer}" offset="${EPSON_CARD_OFFSET_X_MM},${EPSON_CARD_OFFSET_Y_MM}mm" scale="${EPSON_CARD_SCALE_PERCENT}%" file="${filePath}"`)
+    execFile('powershell.exe', args, { windowsHide: true, timeout: 180000 }, (err, stdout, stderr) => {
+      const output = [stdout, stderr].map(text => text?.trim()).filter(Boolean).join('\n')
+      if (err) {
+        err.message = `${err.message}${output ? `\n${output}` : ''}`
+        fail(err)
+        return
+      }
+
+      console.log(`[windows-card-excel] ${title}`, output || `sent to ${printer}`)
+      ok({ jobId: null, output })
+    })
+  })
+}
+
+async function printCardImage(filePath, copies, title, printer = COLOR_PRINTER) {
+  if (EPSON_CARD_PRINT_ENGINE === 'excel') {
+    return await printCardImageWithExcel(filePath, copies, title, printer)
+  }
+  return await printCardImageWithDevmode(filePath, copies, title, printer)
 }
 
 async function renderUploadedImagePdf(file) {
@@ -592,6 +752,7 @@ async function renderUploadedImagePdf(file) {
 }
 
 async function printUploadedFile(file, copies) {
+  const printer = selectUploadPrinter(file)
   const extension = extensionForMediaType(file.mediaType)
   const sourcePath = join(tmpdir(), `shiv-whatsapp-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`)
   let printPath = sourcePath
@@ -607,10 +768,11 @@ async function printUploadedFile(file, copies) {
       printPath = renderedPdfPath
     }
 
-    const result = await printFileWithLp(printPath, copies, `WhatsApp ${file.name}`.slice(0, 80))
+    const result = await printFileWithLp(printPath, copies, `WhatsApp ${file.name}`.slice(0, 80), printer)
     return {
       name: file.name,
       mediaType: file.mediaType,
+      printer,
       jobId: result.jobId,
     }
   } finally {
@@ -622,6 +784,8 @@ async function printUploadedFile(file, copies) {
 async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, copies) {
   if (kind === 'guarantee' && !document) throw new Error('Missing guarantee document data')
   if (kind !== 'guarantee' && !quote) throw new Error('Missing quotation data')
+  const printer = selectDocumentPrinter({ kind, layout })
+  const isCard = kind === 'guarantee' && layout === 'card'
 
   let browser
   let tmp
@@ -631,13 +795,44 @@ async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, co
       : await buildQuotationHtml(quote)
     browser = await launchPuppeteerBrowser()
     const page = await browser.newPage()
+
+    if (shouldUseCardImageEngine(isCard)) {
+      const cardWidthPx = Math.ceil((86 / 25.4) * 96)
+      const cardHeightPx = Math.ceil((54 / 25.4) * 96)
+      await page.setViewport({
+        width: cardWidthPx,
+        height: cardHeightPx,
+        deviceScaleFactor: 4,
+      })
+      await page.setContent(html, { waitUntil: 'networkidle0' })
+      const png = await page.screenshot({
+        type: 'png',
+        clip: { x: 0, y: 0, width: cardWidthPx, height: cardHeightPx },
+      })
+      tmp = join(tmpdir(), `shiv-card-${Date.now()}.png`)
+      await writeFile(tmp, png)
+      const printResult = await printCardImage(tmp, copies, `Shiv ${kind ?? 'card'}`, printer)
+      return {
+        printer,
+        jobId: printResult.jobId,
+      }
+    }
+
     await page.setContent(html, { waitUntil: 'networkidle0' })
-    const pdf = await page.pdf({ format: 'A4', printBackground: true })
+    const pdf = await page.pdf(isCard
+      ? {
+          width: '86mm',
+          height: '54mm',
+          printBackground: true,
+          preferCSSPageSize: true,
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        }
+      : { format: 'A4', printBackground: true })
     tmp = join(tmpdir(), `shiv-print-${Date.now()}.pdf`)
     await writeFile(tmp, pdf)
-    const printResult = await printFileWithLp(tmp, copies, `Shiv ${kind ?? 'quotation'}`)
+    const printResult = await printFileWithLp(tmp, copies, `Shiv ${kind ?? 'quotation'}`, printer, isCard ? EPSON_CARD_PRINT_SETTINGS : [])
     return {
-      printer: PRINT_PRINTER,
+      printer,
       jobId: printResult.jobId,
     }
   } finally {
@@ -1088,6 +1283,10 @@ app.get('/status', (_req, res) => res.json({
   ok: true,
   server: 'Shiv Print Server',
   printer: PRINT_PRINTER,
+  printers: {
+    color: COLOR_PRINTER,
+    blackAndWhite: BW_PRINTER,
+  },
 }))
 app.get('/scan-bill', (_req, res) => res.json({ ok: true, message: 'Use POST with { image, mediaType }. Scanner uses Claude only.' }))
 
@@ -1134,6 +1333,10 @@ app.get('/whatsapp-print/status', (_req, res) => {
   res.json({
     ok: true,
     printer: PRINT_PRINTER,
+    printers: {
+      color: COLOR_PRINTER,
+      blackAndWhite: BW_PRINTER,
+    },
     link: `${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`,
     allowedMediaTypes: [...WHATSAPP_ALLOWED_MEDIA_TYPES],
     maxFiles: WHATSAPP_MAX_FILES,
@@ -1156,7 +1359,11 @@ app.post('/whatsapp-print/jobs', async (req, res) => {
 
     res.json({
       ok: true,
-      printer: PRINT_PRINTER,
+      printer: jobs[0]?.printer ?? PRINT_PRINTER,
+      printers: {
+        color: COLOR_PRINTER,
+        blackAndWhite: BW_PRINTER,
+      },
       copies,
       jobs,
     })
@@ -1198,12 +1405,7 @@ app.post('/render-png', async (req, res) => {
     const html = kind === 'guarantee'
       ? await buildGuaranteeHtml(document, layout)
       : await buildQuotationHtml(quote)
-    const { default: puppeteer } = await import('puppeteer')
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox'],
-      ...(CHROME_PATH ? { executablePath: CHROME_PATH } : {}),
-    })
+    browser = await launchPuppeteerBrowser()
     const page = await browser.newPage()
     const width = Math.round((210 / 25.4) * 96)
     const height = Math.round((297 / 25.4) * 96)
@@ -1228,7 +1430,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   Local:   http://localhost:${PORT}`)
   console.log(`   Phone:   ${PRINT_SERVER_PUBLIC_URL}`)
   console.log(`   WhatsApp print: ${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`)
-  console.log(`   Printer: ${PRINT_PRINTER}`)
+  console.log(`   Default printer: ${PRINT_PRINTER}`)
+  console.log(`   Color/ID printer: ${COLOR_PRINTER}`)
+  console.log(`   B/W laser printer: ${BW_PRINTER}`)
   console.log(`   Browser: ${CHROME_PATH ?? 'Puppeteer managed Chrome'}`)
   if (CLOUD_API_URL) {
     console.log(`   Cloud API: ${CLOUD_API_URL}`)

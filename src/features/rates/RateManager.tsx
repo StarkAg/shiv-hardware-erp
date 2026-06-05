@@ -11,7 +11,7 @@ import {
 } from '../../lib/types'
 import { Button, Card, PageHeader, Select } from '../../components/ui'
 
-const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 10, 15, 20, 25]
+const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 const uid = () => Math.random().toString(36).slice(2, 10)
 
 // Brand-based categories only (aluminium is calculated, not brand-listed).

@@ -28,7 +28,7 @@ type BilledItem = {
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
-const GUARANTEE_YEAR_OPTIONS: GuaranteeYears[] = [1, 3, 5, 7, 10, 15, 20, 25]
+const GUARANTEE_YEAR_OPTIONS: GuaranteeYears[] = [1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 const GUARANTEE_CATEGORIES = CATEGORY_ORDER.filter((c) => !['aluminium-door', 'window-2-track', 'window-3-track'].includes(c))
 
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {

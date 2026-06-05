@@ -1,104 +1,76 @@
 import type { Quotation } from '../../lib/types'
-import { CATEGORY_LABELS, SHOP } from '../../lib/types'
-import { formatINR, formatSize, sealForYears } from '../../lib/pricing'
+import { CATEGORY_LABELS } from '../../lib/types'
 import { isAluminium } from '../../lib/aluminium'
-import { Letterhead } from './Letterhead'
 import { A4Page } from './A4Page'
 import { AluminiumPrint } from './AluminiumPrint'
+import { assetPath } from '../../lib/assets'
 
-// Quotation = ONE size of ONE product, listing the cost of EVERY brand (doors/
-// plywood/boards) — mirrors the Excel ReadyMade / Plain / Block-Board sheets.
-// Aluminium shows the configured item with its cost breakdown.
+// Mirrors the old Excel Plywood and Door sheets for non-aluminium quotations.
+
+const legacyCategoryLabel = (category: Quotation['category']) => ({
+  'readymade-door': 'Readymade Door',
+  'flush-door': 'Flush Door ( Plain Door )',
+  'plywood-6': 'Water Proof Plywood',
+  'block-board-12': 'Water Proof Block Board',
+  'block-board-19': 'Water Proof Block Board',
+  'aluminium-door': CATEGORY_LABELS['aluminium-door'],
+  'window-2-track': CATEGORY_LABELS['window-2-track'],
+  'window-3-track': CATEGORY_LABELS['window-3-track'],
+}[category])
+
+const legacyThickness = (category: Quotation['category']) => ({
+  'readymade-door': '30 mm',
+  'flush-door': '30 mm',
+  'plywood-6': '6mm',
+  'block-board-12': '12mm',
+  'block-board-19': '19mm',
+  'aluminium-door': '',
+  'window-2-track': '',
+  'window-3-track': '',
+}[category])
+
+const legacyDimension = (dim: Quotation['height']) => (
+  dim.soot ? `${dim.inches} ${dim.soot}/8"` : dim.inches ? String(dim.inches) : ''
+)
 
 export function QuotationPrint({ quote }: { quote: Quotation }) {
   if (isAluminium(quote.category)) return <AluminiumPrint quote={quote} />
-  const dateStr = new Date(quote.date).toLocaleDateString('en-GB')
-  const isAlu = !!quote.alu
-  const guaranteeYears = Array.from(
-    new Set((quote.rows ?? []).map((r) => r.guaranteeYears).filter((y) => y > 0)),
-  ).sort((a, b) => a - b)
+  const quantity = (quote as Quotation & { qty?: number }).qty ?? 1
 
   return (
     <A4Page>
-      <Letterhead />
+      <div className="relative h-[297mm] w-[210mm] font-[Arial] text-black">
+        <img
+          src={assetPath('assets/letterhead/legacy-quotation-header.png')}
+          alt=""
+          className="absolute left-[27.94mm] top-[22.47mm] block h-[53.53mm] w-[88.06mm]"
+        />
 
-      <div className="px-[12mm] pt-[4mm] font-print text-[13px] text-black">
-        {/* Title + meta */}
-        <div className="flex items-end justify-between border-b-2 border-black pb-1">
-          <h1 className="text-[20px] font-bold" style={{ color: 'var(--shiv-green)' }}>
-            {CATEGORY_LABELS[quote.category]}
-          </h1>
-          <div className="text-right text-[12px] leading-tight">
-            <div><span className="font-bold">No: </span>{quote.number}</div>
-            <div><span className="font-bold">Date: </span>{dateStr}</div>
-          </div>
-        </div>
+        <div className="absolute left-[29mm] top-[81.3mm] text-[15pt] text-[#00b050]">{legacyCategoryLabel(quote.category)}</div>
+        <div className="absolute left-[29mm] top-[94.6mm] text-[15pt] leading-[1.1]">Thickness</div>
+        <div className="absolute left-[100mm] top-[94.6mm] text-[15pt] leading-[1.1]">Height</div>
+        <div className="absolute left-[127mm] top-[94.6mm] text-[15pt] leading-[1.1]">Width</div>
+        <div className="absolute left-[155mm] top-[94.6mm] text-[15pt] leading-[1.1]">Quantity</div>
+        <div className="absolute left-[29mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyThickness(quote.category)}</div>
+        <div className="absolute left-[94mm] top-[101.3mm] w-[21mm] text-right text-[15pt] leading-[1.1]">{legacyDimension(quote.height)}</div>
+        <div className="absolute left-[120mm] top-[101.3mm] w-[5mm] text-center text-[15pt] leading-[1.1]">X</div>
+        <div className="absolute left-[127mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyDimension(quote.width)}</div>
+        <div className="absolute left-[155.5mm] top-[101.3mm] text-[15pt] leading-[1.1]">{quantity}</div>
+        <div className="absolute left-[29mm] top-[107mm] w-[153mm] border-t-[1.5px] border-black" />
+        <div className="absolute left-[29mm] top-[113.5mm] text-[15pt] leading-[1.1]">Rate</div>
+        <div className="absolute left-[56.4mm] top-[113.5mm] text-[15pt] leading-[1.1]">Brand</div>
+        <div className="absolute left-[127mm] top-[113.5mm] text-[15pt] leading-[1.1]">Cost</div>
+        <div className="absolute left-[156mm] top-[113.5mm] text-[15pt] leading-[1.1]">Guarantee</div>
 
-        {/* Customer (optional) */}
-        {(quote.customer.name || quote.customer.mobile) && (
-          <div className="mt-2 flex justify-between text-[12px] leading-snug">
-            <div>
-              <span className="font-bold">M/s </span>{quote.customer.name || '—'}
+        <div className="absolute inset-0 text-[15pt] leading-[1.05]">
+          {(quote.rows ?? []).map((row, index) => (
+            <div key={`${row.brandName}-${index}`} className="absolute left-0 right-0 h-[6.45mm] whitespace-nowrap" style={{ top: `${126.75 + index * 6.39}mm` }}>
+              <span className="absolute left-[31mm]">{row.rate}</span>
+              <span className="absolute left-[56.4mm]">{row.brandName}</span>
+              <span className="absolute left-[127mm]">{Math.round(row.cost || 0)}</span>
+              <span className="absolute left-[157.65mm] text-red-600">{row.guaranteeYears ? `${row.guaranteeYears} Years` : ''}</span>
             </div>
-            {quote.customer.mobile && (
-              <div><span className="font-bold">Mobile: </span>{quote.customer.mobile}</div>
-            )}
-          </div>
-        )}
-
-        {/* Size banner */}
-        <div className="my-3 flex items-center gap-6 rounded border border-slate-400 bg-slate-50 px-4 py-2">
-          <span className="text-[15px] font-bold">
-            Size: <span style={{ color: 'var(--shiv-green)' }}>{formatSize(quote.height, quote.width) || '—'}</span>
-          </span>
-          <span className="text-[13px]">Area: <b>{quote.sqft.toFixed(2)}</b> sqft</span>
-        </div>
-
-        {!isAlu ? (
-          /* All-brands rate card */
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr style={{ background: 'var(--shiv-green)', color: '#fff' }}>
-                <th className="border border-slate-500 px-2 py-1.5 text-left w-[44%]">Brand</th>
-                <th className="border border-slate-500 px-2 py-1.5 text-right w-[18%]">Rate ₹/sqft</th>
-                <th className="border border-slate-500 px-2 py-1.5 text-right w-[20%]">Cost</th>
-                <th className="border border-slate-500 px-2 py-1.5 text-center w-[18%]">Guarantee</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(quote.rows ?? []).map((r, i) => (
-                <tr key={i} className="border-b border-slate-400">
-                  <td className="border border-slate-400 px-2 py-1.5 font-semibold">{r.brandName}</td>
-                  <td className="border border-slate-400 px-2 py-1.5 text-right">{r.rate}</td>
-                  <td className="border border-slate-400 px-2 py-1.5 text-right font-bold">{formatINR(r.cost)}</td>
-                  <td
-                    className="border border-slate-400 px-2 py-1.5 text-center font-semibold"
-                    style={{ color: r.guaranteeYears ? 'var(--shiv-red)' : '#94a3b8' }}
-                  >
-                    {r.guaranteeYears ? `${r.guaranteeYears} Years` : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : null}
-
-        {/* Seals + signature */}
-        <div className="mt-[10mm] flex items-end justify-between">
-          <div className="flex items-end gap-2">
-            {guaranteeYears.map((y) => {
-              const s = sealForYears(y)
-              return s ? <img key={y} src={s} alt={`${y} year`} className="h-[22mm]" /> : null
-            })}
-          </div>
-          <div className="text-center text-[12px]">
-            <div className="mb-[14mm] font-bold">For {SHOP.name}</div>
-            <div className="border-t border-black px-6 pt-1">Proprietor</div>
-          </div>
-        </div>
-
-        <div className="mt-4 text-center text-[9px] text-slate-500">
-          This is a computer-generated quotation. Rates valid for 7 days. E. &amp; O. E.
+          ))}
         </div>
       </div>
     </A4Page>

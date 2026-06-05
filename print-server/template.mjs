@@ -41,6 +41,21 @@ const esc = value => String(value ?? '')
 
 const formatDimension = dim => dim?.soot ? `${dim.inches} ${dim.soot}/8"` : dim?.inches ? `${dim.inches}"` : ''
 const formatSize = (height, width) => [formatDimension(height), formatDimension(width)].filter(Boolean).join(' X ')
+const legacyDimension = dim => dim?.soot ? `${dim.inches} ${dim.soot}/8"` : dim?.inches ? String(dim.inches) : ''
+const legacyThickness = category => ({
+  'readymade-door': '30 mm',
+  'flush-door': '30 mm',
+  'plywood-6': '6mm',
+  'block-board-12': '12mm',
+  'block-board-19': '19mm',
+})[category] ?? ''
+const legacyCategoryLabel = category => ({
+  'readymade-door': 'Readymade Door',
+  'flush-door': 'Flush Door ( Plain Door )',
+  'plywood-6': 'Water Proof Plywood',
+  'block-board-12': 'Water Proof Block Board',
+  'block-board-19': 'Water Proof Block Board',
+})[category] ?? CATEGORY_LABELS[category] ?? category
 
 function page(body) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -61,7 +76,65 @@ function page(body) {
 </head><body><div class="page">${body}</div></body></html>`
 }
 
+function cardPage(body) {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: 86mm 54mm; margin: 0; }
+  html, body { width: 86mm; height: 54mm; margin: 0; background: #fff; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; overflow: hidden; }
+</style>
+</head><body>${body}</body></html>`
+}
+
 export async function buildQuotationHtml(quote) {
+  if (quote.alu) return buildAluminiumHtml(quote)
+
+  const header = await b64('letterhead/legacy-quotation-header.png')
+  const { category, height, width, qty, rows } = quote
+  const quantity = qty ?? quote.qty ?? 1
+  const rowsHtml = (rows ?? []).map((r, index) => `
+    <div class="legacy-row" style="top:${126.75 + index * 6.39}mm">
+      <span class="rate">${esc(r.rate)}</span>
+      <span class="brand">${esc(r.brandName)}</span>
+      <span class="cost">${esc(Math.round(Number(r.cost) || 0))}</span>
+      <span class="guarantee">${Number(r.guaranteeYears) ? `${esc(r.guaranteeYears)} Years` : ''}</span>
+    </div>`).join('')
+
+  return page(`
+    <style>
+      .page { position: relative; font-family: Arial, Helvetica, sans-serif; }
+      .legacy-head { position:absolute; left:27.94mm; top:22.47mm; width:88.06mm; height:53.53mm; display:block; }
+      .legacy-title { position:absolute; left:29mm; top:81.3mm; font-size:15pt; color:#00b050; }
+      .legacy-info { position:absolute; font-size:15pt; line-height:1.1; }
+      .legacy-line { position:absolute; left:29mm; top:107mm; width:153mm; border-top:1.5px solid #000; }
+      .legacy-row { position:absolute; left:0; right:0; height:6.45mm; font-size:15pt; line-height:1.05; }
+      .legacy-row span { position:absolute; white-space:nowrap; }
+      .rate { left:31mm; }
+      .brand { left:56.4mm; }
+      .cost { left:127mm; }
+      .guarantee { left:157.65mm; color:red; }
+    </style>
+    <img class="legacy-head" src="${header}" />
+    <div class="legacy-title">${esc(legacyCategoryLabel(category))}</div>
+    <div class="legacy-info" style="left:29mm;top:94.6mm">Thickness</div>
+    <div class="legacy-info" style="left:100mm;top:94.6mm">Height</div>
+    <div class="legacy-info" style="left:127mm;top:94.6mm">Width</div>
+    <div class="legacy-info" style="left:155mm;top:94.6mm">Quantity</div>
+    <div class="legacy-info" style="left:29mm;top:101.3mm">${esc(legacyThickness(category))}</div>
+    <div class="legacy-info" style="left:94mm;top:101.3mm;width:21mm;text-align:right">${esc(legacyDimension(height))}</div>
+    <div class="legacy-info" style="left:120mm;top:101.3mm;width:5mm;text-align:center">X</div>
+    <div class="legacy-info" style="left:127mm;top:101.3mm">${esc(legacyDimension(width))}</div>
+    <div class="legacy-info" style="left:155.5mm;top:101.3mm">${esc(quantity)}</div>
+    <div class="legacy-line"></div>
+    <div class="legacy-info" style="left:29mm;top:113.5mm">Rate</div>
+    <div class="legacy-info" style="left:56.4mm;top:113.5mm">Brand</div>
+    <div class="legacy-info" style="left:127mm;top:113.5mm">Cost</div>
+    <div class="legacy-info" style="left:156mm;top:113.5mm">Guarantee</div>
+    ${rowsHtml}`)
+}
+
+async function buildQuotationHtmlOld(quote) {
   if (quote.alu) return buildAluminiumHtml(quote)
 
   const lh = await b64('letterhead/shiv-letterhead.png')
@@ -146,8 +219,7 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
   if (layout === 'card') {
     const logo = await b64('letterhead/shiv-logo.png')
     const primary = guaranteedRows[0]
-    return page(`
-      <div style="height:297mm;display:flex;align-items:flex-start;justify-content:center;padding-top:18mm">
+    return cardPage(`
         <div style="position:relative;width:86mm;height:54mm;overflow:hidden;border:1.5px solid #000;border-radius:3mm;padding:4mm 5mm;font-family:Arial,sans-serif">
           <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #000;padding-bottom:2mm">
             <div style="display:flex;align-items:center;gap:2mm">
@@ -175,7 +247,7 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
             <div style="width:25mm;border-top:1px solid #000;padding-top:1mm;text-align:center;font-size:7px">Proprietor</div>
           </div>
         </div>
-      </div>`)
+      `)
   }
 
   const letterhead = await b64('letterhead/shiv-letterhead.png')
