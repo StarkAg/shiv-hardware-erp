@@ -12,6 +12,7 @@ import { PrintDemo } from './features/print/PrintDemo'
 import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
 import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
+import { startOfflineSync } from './lib/offlineSync'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
@@ -43,6 +44,7 @@ function disableMobileZoom() {
 }
 
 disableMobileZoom()
+startOfflineSync()
 
 // HashRouter keeps routing working when packaged as a desktop (file://) app.
 const router = createHashRouter([

@@ -17,7 +17,7 @@ import cors from 'cors'
 import Anthropic from '@anthropic-ai/sdk'
 import { execFile } from 'child_process'
 import { appendFile, writeFile, unlink } from 'fs/promises'
-import { tmpdir } from 'os'
+import { networkInterfaces, tmpdir } from 'os'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
 import { buildGuaranteeHtml, buildQuotationHtml } from './template.mjs'
@@ -26,8 +26,7 @@ const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
 const BW_PRINTER = process.env.BW_PRINTER || process.env.PRINT_PRINTER || 'NPI33F31D (HP LaserJet Tank MFP 2606sdw)'
 const PRINT_PRINTER = process.env.PRINT_PRINTER || BW_PRINTER
-const PRINT_SERVER_HOST = process.env.PRINT_SERVER_HOST || '192.168.29.174'
-const PRINT_SERVER_PUBLIC_URL = process.env.PRINT_SERVER_PUBLIC_URL || `http://${PRINT_SERVER_HOST}:${PORT}`
+const PRINT_SERVER_PUBLIC_URL = (process.env.PRINT_SERVER_PUBLIC_URL || '').replace(/\/+$/, '')
 const CLOUD_API_URL = (process.env.CLOUD_API_URL || '').replace(/\/+$/, '')
 const CLOUD_API_KEY = process.env.CLOUD_API_KEY || ''
 const PRINTER_AGENT_ID = process.env.PRINTER_AGENT_ID || 'shiv-shop-printer'
@@ -44,12 +43,7 @@ const EPSON_CARD_EXCEL_SCRIPT = fileURLToPath(new URL('tools/print-card-excel.ps
 const EPSON_CARD_OFFSET_X_MM = Number(process.env.EPSON_CARD_OFFSET_X_MM) || 0
 const EPSON_CARD_OFFSET_Y_MM = Number(process.env.EPSON_CARD_OFFSET_Y_MM) || 0
 const EPSON_CARD_SCALE_PERCENT = Number(process.env.EPSON_CARD_SCALE_PERCENT) || 100
-const CHROME_PATH = process.env.CHROME_PATH || [
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-].find(existsSync)
+const CHROME_PATH = findChromePath()
 const JSON_MAX_TOKENS = 2048
 const HONORIFICS = new Set(['jee', 'ji', 'sir', 'madam'])
 const NAME_WORD_RE = /^[a-z][a-z'.-]{2,}$/i
@@ -58,8 +52,26 @@ const PLACE_CORRECTIONS_URL = new URL('data/place-corrections.json', import.meta
 const PRODUCT_CORRECTIONS_URL = new URL('data/product-corrections.json', import.meta.url)
 const SCAN_FEEDBACK_URL = new URL('data/scan-feedback.jsonl', import.meta.url)
 const app = express()
+app.set('trust proxy', true)
 app.use(cors())
 app.use(express.json({ limit: process.env.PRINT_UPLOAD_LIMIT || '100mb' }))
+
+function findChromePath() {
+  const configured = process.env.CHROME_PATH?.trim()
+  if (configured && existsSync(configured)) return configured
+  if (configured) {
+    console.warn(`[browser] configured CHROME_PATH does not exist, falling back: ${configured}`)
+  }
+
+  return [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ].find(existsSync)
+}
 
 const WHATSAPP_ALLOWED_MEDIA_TYPES = new Set([
   'application/pdf',
@@ -70,6 +82,25 @@ const WHATSAPP_ALLOWED_MEDIA_TYPES = new Set([
 ])
 const WHATSAPP_MAX_FILES = 12
 const WHATSAPP_MAX_FILE_BYTES = 30 * 1024 * 1024
+
+function publicUrlFromRequest(req) {
+  if (PRINT_SERVER_PUBLIC_URL) return PRINT_SERVER_PUBLIC_URL
+
+  const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0]?.trim()
+  const protocol = forwardedProto || req.protocol || 'http'
+  const host = req.get('host') || `localhost:${PORT}`
+  return `${protocol}://${host}`
+}
+
+function localNetworkUrls(port) {
+  const urls = []
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.family === 'IPv4' && !entry.internal) urls.push(`http://${entry.address}:${port}`)
+    }
+  }
+  return urls
+}
 
 function normalizeNameKey(value) {
   return String(value ?? '').trim().toLowerCase()
@@ -923,8 +954,8 @@ async function pollCloudPrintJobs() {
   }
 }
 
-function buildWhatsAppPrintPage() {
-  const uploadUrl = `${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`
+function buildWhatsAppPrintPage(publicUrl) {
+  const uploadUrl = `${publicUrl}/whatsapp-print`
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1320,16 +1351,16 @@ app.post('/scan-bill/learn', async (req, res) => {
 })
 
 // -- WhatsApp Upload Print ----------------------------------------------------
-app.get('/whatsapp-print', (_req, res) => {
-  res.type('html').send(buildWhatsAppPrintPage())
+app.get('/whatsapp-print', (req, res) => {
+  res.type('html').send(buildWhatsAppPrintPage(publicUrlFromRequest(req)))
 })
 
-app.get('/whatsapp-print/share', (_req, res) => {
-  const message = `Open this Shiv Hardware print link to send PDFs and images to the shop printer: ${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`
+app.get('/whatsapp-print/share', (req, res) => {
+  const message = `Open this Shiv Hardware print link to send PDFs and images to the shop printer: ${publicUrlFromRequest(req)}/whatsapp-print`
   res.redirect(`https://wa.me/?text=${encodeURIComponent(message)}`)
 })
 
-app.get('/whatsapp-print/status', (_req, res) => {
+app.get('/whatsapp-print/status', (req, res) => {
   res.json({
     ok: true,
     printer: PRINT_PRINTER,
@@ -1337,7 +1368,7 @@ app.get('/whatsapp-print/status', (_req, res) => {
       color: COLOR_PRINTER,
       blackAndWhite: BW_PRINTER,
     },
-    link: `${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`,
+    link: `${publicUrlFromRequest(req)}/whatsapp-print`,
     allowedMediaTypes: [...WHATSAPP_ALLOWED_MEDIA_TYPES],
     maxFiles: WHATSAPP_MAX_FILES,
     maxFileMb: Math.round(WHATSAPP_MAX_FILE_BYTES / 1024 / 1024),
@@ -1426,10 +1457,12 @@ app.post('/render-png', async (req, res) => {
 })
 
 app.listen(PORT, '0.0.0.0', () => {
+  const networkUrls = localNetworkUrls(PORT)
   console.log(`\n✓  Shiv Print Server running`)
   console.log(`   Local:   http://localhost:${PORT}`)
-  console.log(`   Phone:   ${PRINT_SERVER_PUBLIC_URL}`)
-  console.log(`   WhatsApp print: ${PRINT_SERVER_PUBLIC_URL}/whatsapp-print`)
+  for (const url of networkUrls) console.log(`   Phone:   ${url}`)
+  if (PRINT_SERVER_PUBLIC_URL) console.log(`   Public override: ${PRINT_SERVER_PUBLIC_URL}`)
+  for (const url of networkUrls) console.log(`   WhatsApp print: ${url}/whatsapp-print`)
   console.log(`   Default printer: ${PRINT_PRINTER}`)
   console.log(`   Color/ID printer: ${COLOR_PRINTER}`)
   console.log(`   B/W laser printer: ${BW_PRINTER}`)

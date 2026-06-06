@@ -5,6 +5,7 @@ const CLOUD_API_KEY = import.meta.env.VITE_CLOUD_API_KEY ?? ''
 
 export type CloudPrintJobKind = 'quotation' | 'guarantee' | 'raw-file'
 export type CloudPrintJobSource = 'android' | 'web' | 'whatsapp' | 'server'
+export type CloudPrintJobStatus = 'pending' | 'claimed' | 'printing' | 'printed' | 'failed' | 'cancelled'
 
 export type CreateCloudPrintJobPayload =
   | {
@@ -28,6 +29,23 @@ export type CreateCloudPrintJobPayload =
 export type CreateCloudPrintJobResult = {
   ok: true
   id: string
+}
+
+export type CloudPrintJob = {
+  _id: string
+  status: CloudPrintJobStatus
+  kind: CloudPrintJobKind
+  source: CloudPrintJobSource
+  copies: number
+  requestedBy?: string
+  assignedPrinterId?: string
+  claimedBy?: string
+  claimedAt?: number
+  printedAt?: number
+  failedAt?: number
+  error?: string
+  createdAt: number
+  updatedAt: number
 }
 
 function cloudHeaders() {
@@ -78,7 +96,55 @@ export async function createCloudPrintJob(payload: CreateCloudPrintJobPayload): 
   })
 }
 
+export async function getCloudPrintJob(id: string): Promise<{ ok: true; job: CloudPrintJob }> {
+  return await cloudFetch(`/api/print-jobs/${encodeURIComponent(id)}`)
+}
+
+export async function upsertCloudCustomer(customer: {
+  id: string
+  name: string
+  mobile?: string
+  altMobile?: string
+  uid?: string
+  address?: string
+}): Promise<{ ok: true; id: string }> {
+  return await cloudFetch('/api/customers', {
+    method: 'POST',
+    body: JSON.stringify({
+      localId: customer.id,
+      name: customer.name,
+      mobile: customer.mobile || undefined,
+      altMobile: customer.altMobile || undefined,
+      uid: customer.uid || undefined,
+      address: customer.address || undefined,
+    }),
+  })
+}
+
+export async function saveCloudQuotation(quote: Quotation): Promise<{ ok: true; id: string }> {
+  return await cloudFetch('/api/quotations', {
+    method: 'POST',
+    body: JSON.stringify({
+      localId: quote.id,
+      number: quote.number,
+      customer: quote.customer,
+      document: quote,
+    }),
+  })
+}
+
+export async function saveCloudGuarantee(document: GuaranteeDocument): Promise<{ ok: true; id: string }> {
+  return await cloudFetch('/api/guarantees', {
+    method: 'POST',
+    body: JSON.stringify({
+      localId: document.id,
+      number: document.number,
+      customer: document.customer,
+      document,
+    }),
+  })
+}
+
 export async function checkCloudApi(): Promise<{ ok: true; service: string; convexConfigured: boolean; authEnabled: boolean }> {
   return await cloudFetch('/health')
 }
-

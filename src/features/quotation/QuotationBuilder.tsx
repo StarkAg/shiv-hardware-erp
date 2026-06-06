@@ -10,14 +10,14 @@ import {
   type ProductCategory,
   type Quotation,
 } from '../../lib/types'
-import { areaSqft, buildBrandRows, formatINR, formatSize, lineAmount } from '../../lib/pricing'
+import { areaSqft, buildBrandRows, formatINR, formatSize } from '../../lib/pricing'
 import {
   type AluAddons,
   calcAllThicknesses,
   defaultAddons,
   isAluminium,
 } from '../../lib/aluminium'
-import { Button, Input, Select, Toggle } from '../../components/ui'
+import { Button, Input, Toggle } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
 import { QuotationPrint } from '../print/QuotationPrint'
 import { renderPngOnServer } from '../../lib/printServer'
@@ -234,8 +234,8 @@ export function QuotationBuilder() {
 
             {/* Aluminium options */}
             {alu && (
-              <div className="mt-4">
-                <div className="flex flex-wrap gap-2.5">
+              <div className="mt-3 md:mt-4">
+                <div className="grid grid-cols-2 gap-1.5 md:flex md:flex-wrap md:gap-2.5">
                   {[
                     { key: 'chaukhat' as const, label: 'Chaukhat', show: true },
                     { key: 'accessories' as const, label: 'Accessories', show: cat === 'aluminium-door' },
@@ -249,13 +249,25 @@ export function QuotationBuilder() {
                         key={o.key}
                         type="button"
                         onClick={() => toggle(o.key)}
-                        className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                        className={`flex h-9 min-w-0 items-center justify-between gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition md:h-auto md:min-w-[132px] md:px-4 md:py-2 md:text-sm ${
                           addons[o.key]
-                            ? 'border-shiv-green bg-shiv-green/10 text-stone-800 dark:text-stone-100'
+                            ? 'border-shiv-green bg-shiv-green/10 text-stone-900 dark:text-stone-100'
                             : 'border-stone-300 bg-stone-100 text-stone-500 hover:border-stone-400 dark:border-white/15 dark:bg-transparent dark:text-stone-400'
                         }`}
                       >
-                        {addons[o.key] ? '✓ ' : ''}{o.label}
+                        <span className="min-w-0 truncate">{o.label}</span>
+                        <span
+                          aria-hidden="true"
+                          className={`relative inline-flex h-4 w-7 shrink-0 rounded-full transition ${
+                            addons[o.key] ? 'bg-shiv-green' : 'bg-stone-300 dark:bg-stone-700'
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition ${
+                              addons[o.key] ? 'left-3.5' : 'left-0.5'
+                            }`}
+                          />
+                        </span>
                       </button>
                     ))}
                 </div>
@@ -302,10 +314,10 @@ export function QuotationBuilder() {
             <table className="w-full table-fixed text-[11px] leading-tight md:text-sm">
               <thead className="bg-stone-50 text-left text-[10px] uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500 md:text-xs">
                 <tr>
-                  <th className="w-[44%] px-2 py-1.5 md:px-4 md:py-2">Brand</th>
-                  <th className="w-[17%] px-1.5 py-1.5 text-right md:px-4 md:py-2">Rate</th>
-                  <th className="w-[21%] px-1.5 py-1.5 text-right md:px-4 md:py-2">Cost</th>
-                  <th className="w-[18%] px-1.5 py-1.5 text-center md:px-4 md:py-2">Gty</th>
+                  <th className={`${editMode ? 'w-[52%]' : 'w-[44%]'} px-2 py-1.5 md:px-4 md:py-2`}>Brand</th>
+                  <th className={`${editMode ? 'w-[20%]' : 'w-[17%]'} px-1.5 py-1.5 text-right md:px-4 md:py-2`}>Rate</th>
+                  {!editMode && <th className="w-[21%] px-1.5 py-1.5 text-right md:px-4 md:py-2">Cost</th>}
+                  <th className={`${editMode ? 'w-[18%]' : 'w-[18%]'} px-1.5 py-1.5 text-center md:px-4 md:py-2`}>Gty</th>
                   {editMode && <th className="w-10 px-2 py-1.5 md:px-4 md:py-2"></th>}
                 </tr>
               </thead>
@@ -326,37 +338,41 @@ export function QuotationBuilder() {
                 {editMode &&
                   brands.map((b) => (
                     <tr key={b.id} className="border-t border-stone-100 dark:border-white/10">
-                      <td className="px-3 py-1.5">
+                      <td className="px-1.5 py-1.5 md:px-3">
                         <input
-                          className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                          className="h-8 w-full min-w-0 rounded border border-slate-200 px-1.5 text-[11px] dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
                           value={b.name}
                           onChange={(e) => updateBrand(setId, b.id, { name: e.target.value })}
                         />
                       </td>
-                      <td className="px-3 py-1.5">
+                      <td className="px-1 py-1.5 md:px-3">
                         <input
                           type="number"
-                          className="w-24 rounded border border-slate-200 px-2 py-1 text-right dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                          className="h-8 w-full min-w-0 rounded border border-slate-200 px-1 text-right text-[11px] dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:w-24 md:px-2 md:py-1 md:text-sm"
                           value={b.rate}
                           onChange={(e) => updateBrand(setId, b.id, { rate: Number(e.target.value) })}
                         />
                       </td>
-                      <td className="px-4 py-1.5 text-right font-semibold">
-                        {hasSize ? formatINR(lineAmount(b.rate, h, w, 1)) : '—'}
+                      <td className="px-1 py-1.5 text-center md:px-3">
+                        <div className="relative">
+                          <div className="flex h-8 w-full min-w-0 items-center justify-center rounded-lg border border-stone-300 bg-stone-50 px-1 text-[11px] font-medium text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-3 md:py-2 md:text-sm">
+                            {b.guaranteeYears === 0 ? '-' : `${b.guaranteeYears}y`}
+                          </div>
+                          <select
+                            aria-label="Guarantee"
+                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            value={b.guaranteeYears}
+                            onChange={(e) =>
+                              updateBrand(setId, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
+                            }
+                          >
+                            {GUARANTEE_OPTIONS.map((g) => (
+                              <option key={g} value={g}>{g === 0 ? '-' : `${g}y`}</option>
+                            ))}
+                          </select>
+                        </div>
                       </td>
-                      <td className="px-3 py-1.5 text-center">
-                        <Select
-                          value={b.guaranteeYears}
-                          onChange={(e) =>
-                            updateBrand(setId, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
-                          }
-                        >
-                          {GUARANTEE_OPTIONS.map((g) => (
-                            <option key={g} value={g}>{g === 0 ? 'None' : `${g}y`}</option>
-                          ))}
-                        </Select>
-                      </td>
-                      <td className="px-3 py-1.5 text-right">
+                      <td className="px-1 py-1.5 text-right md:px-3">
                         <button
                           className="rounded p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                           onClick={() => removeBrand(setId, b.id)}
@@ -368,13 +384,13 @@ export function QuotationBuilder() {
                     </tr>
                   ))}
                 {!brands.length && (
-                  <tr><td colSpan={editMode ? 5 : 4} className="px-4 py-6 text-center text-stone-400 dark:text-stone-500">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-stone-400 dark:text-stone-500">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
                 )}
               </tbody>
               {editMode && (
                 <tfoot>
                   <tr className="border-t border-stone-100 dark:border-white/10">
-                    <td colSpan={5} className="px-4 py-2">
+                    <td colSpan={4} className="px-4 py-2">
                       <Button variant="outline" className="flex items-center gap-1.5" onClick={() => addBrand(setId, cat)}>
                         <Plus size={16} /> Add brand
                       </Button>
@@ -385,12 +401,18 @@ export function QuotationBuilder() {
             </table>
             ) : (
             // Aluminium — all 3 thicknesses side by side
-            <table className="min-w-[520px] w-full text-sm">
-              <thead className="bg-stone-50 text-xs uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500">
+            <table className="w-full table-fixed text-[11px] leading-tight md:text-sm">
+              <colgroup>
+                <col className="w-[28%]" />
+                <col className="w-[24%]" />
+                <col className="w-[24%]" />
+                <col className="w-[24%]" />
+              </colgroup>
+              <thead className="bg-stone-50 text-left text-[10px] uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500 md:text-xs">
                 <tr>
-                  <th className="px-3 py-2.5 text-left">Item</th>
+                  <th className="px-2 py-1.5 md:px-4 md:py-2">Item</th>
                   {aluThicknesses.map((t) => (
-                    <th key={t.name} className="px-3 py-2.5 text-right">{t.name}</th>
+                    <th key={t.name} className="break-words px-1.5 py-1.5 text-right md:px-4 md:py-2">{t.name}</th>
                   ))}
                 </tr>
               </thead>
@@ -407,30 +429,34 @@ export function QuotationBuilder() {
                 ].filter((row): row is { label: string; key: 'doorCost' | 'chaukhatCost' | 'accessories' } => !!row)
                   .map(({ label, key }) => (
                     <tr key={key} className="border-t border-stone-100 dark:border-white/10">
-                      <td className="px-3 py-2 text-stone-500 dark:text-stone-400">{label}</td>
+                      <td className="break-words px-2 py-1.5 text-stone-500 dark:text-stone-400 md:px-4 md:py-2">{label}</td>
                       {aluThicknesses.map((t) => (
-                        <td key={t.name} className="px-3 py-2 text-right">{hasSize ? formatINR(t[key]) : '—'}</td>
+                        <td key={t.name} className="px-1.5 py-1.5 text-right md:px-4 md:py-2">{hasSize ? formatINR(t[key]) : '—'}</td>
                       ))}
                     </tr>
                   ))}
                 <tr className="border-t-2 border-stone-200 bg-stone-50 dark:border-white/20 dark:bg-white/5">
-                  <td className="px-3 py-2.5 font-bold">Total</td>
+                  <td className="break-words px-2 py-1.5 font-bold md:px-4 md:py-2.5">Total</td>
                   {aluThicknesses.map((t) => (
-                    <td key={t.name} className="px-3 py-2.5 text-right font-bold text-shiv-green">
+                    <td key={t.name} className="px-1.5 py-1.5 text-right font-bold text-shiv-green md:px-4 md:py-2.5">
                       {hasSize ? formatINR(t.total) : '—'}
                     </td>
                   ))}
                 </tr>
-                {(addons.decorFilm || addons.brownCoated) && (
-                  <tr className="border-t border-stone-100 dark:border-white/10">
-                    <td className="px-3 py-2 text-stone-400 text-xs uppercase">Add-ons</td>
-                    {aluThicknesses.map((t) => (
-                      <td key={t.name} className="px-3 py-2 text-right text-xs text-stone-400">
-                        {hasSize ? formatINR((t.decorFilm ?? 0) + (t.brownCoated ?? 0)) : '—'}
-                      </td>
-                    ))}
-                  </tr>
-                )}
+                {[
+                  addons.decorFilm ? { label: 'Decor Film', key: 'decorFilm' as const } : null,
+                  addons.brownCoated ? { label: 'Brown Coated', key: 'brownCoated' as const } : null,
+                ].filter((row): row is { label: string; key: 'decorFilm' | 'brownCoated' } => !!row)
+                  .map(({ label, key }) => (
+                    <tr key={key} className="border-t border-stone-100 dark:border-white/10">
+                      <td className="break-words px-2 py-1.5 text-[10px] uppercase text-stone-400 md:px-4 md:py-2 md:text-xs">{label}</td>
+                      {aluThicknesses.map((t) => (
+                        <td key={t.name} className="px-1.5 py-1.5 text-right text-[10px] text-stone-400 md:px-4 md:py-2 md:text-xs">
+                          {hasSize ? formatINR(t[key] ?? 0) : '—'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
               </tbody>
             </table>
             )}

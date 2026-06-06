@@ -6,6 +6,41 @@ const jobSource = v.union(v.literal('android'), v.literal('web'), v.literal('wha
 
 const ACTIVE_LEASE_MS = 2 * 60 * 1000
 
+function publicJob(job: {
+  _id: unknown
+  status: string
+  kind: string
+  source: string
+  copies: number
+  requestedBy?: string
+  assignedPrinterId?: string
+  claimedBy?: string
+  claimedAt?: number
+  printedAt?: number
+  failedAt?: number
+  error?: string
+  createdAt: number
+  updatedAt: number
+} | null) {
+  if (!job) return null
+  return {
+    _id: job._id,
+    status: job.status,
+    kind: job.kind,
+    source: job.source,
+    copies: job.copies,
+    requestedBy: job.requestedBy,
+    assignedPrinterId: job.assignedPrinterId,
+    claimedBy: job.claimedBy,
+    claimedAt: job.claimedAt,
+    printedAt: job.printedAt,
+    failedAt: job.failedAt,
+    error: job.error,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  }
+}
+
 export const create = mutation({
   args: {
     kind: jobKind,
@@ -55,6 +90,15 @@ export const listPending = query({
         .take(limit)
 
     return jobs
+  },
+})
+
+export const getById = query({
+  args: {
+    id: v.id('printJobs'),
+  },
+  handler: async (ctx, args) => {
+    return publicJob(await ctx.db.get(args.id))
   },
 })
 
@@ -165,4 +209,3 @@ export const fail = mutation({
     })
   },
 })
-
