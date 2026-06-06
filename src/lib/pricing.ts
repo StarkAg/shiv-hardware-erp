@@ -5,8 +5,9 @@
 //   cost  = ROUND( rate * (Height_in * Width_in / 144) * qty , 0 )
 // Sizes are entered as inches + "soot" (eighths of an inch), shown as e.g. 78 4/8".
 
-import type { Brand, BrandQuoteRow, Dimension } from './types'
+import type { Brand, BrandQuoteRow, Dimension, ProductCategory, Quotation } from './types'
 import { assetPath } from './assets'
+import { SEED_BRANDS } from './data/brands'
 
 /** Total inches for a dimension (inches + soot/8). */
 export function toInches(d: Dimension): number {
@@ -48,12 +49,53 @@ export function round(value: number, digits = 0): number {
 
 /** Build the all-brands rate-card rows for a given size (the quotation body). */
 export function buildBrandRows(brands: Brand[], height: Dimension, width: Dimension, qty: number): BrandQuoteRow[] {
-  return brands.map((b) => ({
-    brandName: b.name,
-    rate: b.rate,
-    guaranteeYears: b.guaranteeYears,
-    cost: lineAmount(b.rate, height, width, qty),
-  }))
+  return brands.map((b) => {
+    const meta = seedBrandMeta(b.category, b.name)
+    return {
+      brandName: b.name,
+      rate: b.rate,
+      guaranteeYears: b.guaranteeYears,
+      coverage: b.coverage ?? meta.coverage,
+      accentColor: b.accentColor ?? meta.accentColor,
+      cost: lineAmount(b.rate, height, width, qty),
+    }
+  })
+}
+
+function brandKey(category: ProductCategory, name: string) {
+  return `${category}|${name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`
+}
+
+const SEED_META = new Map(
+  SEED_BRANDS.map((brand) => [
+    brandKey(brand.category, brand.name),
+    {
+      coverage: brand.coverage,
+      accentColor: brand.accentColor,
+    },
+  ]),
+)
+
+export function seedBrandMeta(category: ProductCategory, name: string): Partial<Pick<Brand, 'coverage' | 'accentColor'>> {
+  return SEED_META.get(brandKey(category, name)) ?? {}
+}
+
+export function enrichBrandRows(rows: BrandQuoteRow[] | undefined, category: ProductCategory): BrandQuoteRow[] | undefined {
+  return rows?.map((row) => {
+    const meta = seedBrandMeta(category, row.brandName)
+    return {
+      ...row,
+      coverage: row.coverage ?? meta.coverage,
+      accentColor: row.accentColor ?? meta.accentColor,
+    }
+  })
+}
+
+export function enrichQuotation(quote: Quotation): Quotation {
+  return {
+    ...quote,
+    rows: enrichBrandRows(quote.rows, quote.category),
+  }
 }
 
 /** Indian-format currency, e.g. ₹1,23,456. */

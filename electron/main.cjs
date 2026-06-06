@@ -7,6 +7,12 @@ function appPath(...parts) {
   return path.join(app.getAppPath(), ...parts)
 }
 
+function appIconPath() {
+  return app.isPackaged
+    ? appPath('dist', 'favicon.ico')
+    : appPath('public', 'favicon.ico')
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1366,
@@ -15,7 +21,7 @@ function createWindow() {
     minHeight: 720,
     show: false,
     backgroundColor: '#f5f2ea',
-    icon: appPath('public', 'assets', 'letterhead', 'shiv-logo.png'),
+    icon: appIconPath(),
     webPreferences: {
       preload: appPath('electron', 'preload.cjs'),
       contextIsolation: true,

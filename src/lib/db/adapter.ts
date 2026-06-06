@@ -13,10 +13,12 @@ export interface DataAdapter {
   save(state: PersistedState): void
 }
 
-// v5: latest Downloads/Formats seed rates. Old v4 customers/quotes migrate,
-// but price sets refresh from the latest seed data.
-const KEY = 'shiv-panel:v5'
-const LEGACY_KEY = 'shiv-panel:v4'
+// v7: latest Plywood/Door seed rates with Excel row colors and quotation-only warranty labels.
+// Old v6/v5 customers/quotes migrate, but price sets refresh from the latest seed data.
+const KEY = 'shiv-panel:v7'
+const LEGACY_KEY = 'shiv-panel:v6'
+
+const OLDER_LEGACY_KEYS = ['shiv-panel:v5', 'shiv-panel:v4']
 
 export const localAdapter: DataAdapter = {
   load() {
@@ -24,7 +26,7 @@ export const localAdapter: DataAdapter = {
       const raw = localStorage.getItem(KEY)
       if (raw) return JSON.parse(raw) as Partial<PersistedState>
 
-      const legacy = localStorage.getItem(LEGACY_KEY)
+      const legacy = localStorage.getItem(LEGACY_KEY) ?? OLDER_LEGACY_KEYS.map((key) => localStorage.getItem(key)).find(Boolean)
       if (!legacy) return null
 
       const parsed = JSON.parse(legacy) as Partial<PersistedState>

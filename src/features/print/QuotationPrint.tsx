@@ -4,6 +4,7 @@ import { isAluminium } from '../../lib/aluminium'
 import { A4Page } from './A4Page'
 import { AluminiumPrint } from './AluminiumPrint'
 import { assetPath } from '../../lib/assets'
+import { enrichQuotation } from '../../lib/pricing'
 
 // Mirrors the old Excel Plywood and Door sheets for non-aluminium quotations.
 
@@ -33,8 +34,11 @@ const legacyDimension = (dim: Quotation['height']) => (
   dim.soot ? `${dim.inches} ${dim.soot}/8"` : dim.inches ? String(dim.inches) : ''
 )
 
+const coverageLabel = (coverage: string | undefined) => coverage === 'warranty' ? 'Warranty' : 'Guarantee'
+
 export function QuotationPrint({ quote }: { quote: Quotation }) {
   if (isAluminium(quote.category)) return <AluminiumPrint quote={quote} />
+  const enrichedQuote = enrichQuotation(quote)
 
   return (
     <A4Page>
@@ -57,15 +61,19 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
         <div className="absolute left-[29mm] top-[113.5mm] text-[15pt] leading-[1.1]">Rate</div>
         <div className="absolute left-[56.4mm] top-[113.5mm] text-[15pt] leading-[1.1]">Brand</div>
         <div className="absolute left-[127mm] top-[113.5mm] text-[15pt] leading-[1.1]">Cost</div>
-        <div className="absolute left-[156mm] top-[113.5mm] text-[15pt] leading-[1.1]">Guarantee</div>
+        <div className="absolute left-[156mm] top-[113.5mm] text-[15pt] leading-[1.1]">Gty/Wty</div>
 
         <div className="absolute inset-0 text-[15pt] leading-[1.05]">
-          {(quote.rows ?? []).map((row, index) => (
-            <div key={`${row.brandName}-${index}`} className="absolute left-0 right-0 h-[6.45mm] whitespace-nowrap" style={{ top: `${126.75 + index * 6.39}mm` }}>
+          {(enrichedQuote.rows ?? []).map((row, index) => (
+            <div
+              key={`${row.brandName}-${index}`}
+              className="absolute left-0 right-0 h-[6.45mm] whitespace-nowrap"
+              style={{ top: `${126.75 + index * 6.39}mm`, backgroundColor: row.accentColor }}
+            >
               <span className="absolute left-[31mm]">{row.rate}</span>
               <span className="absolute left-[56.4mm]">{row.brandName}</span>
               <span className="absolute left-[127mm]">{Math.round(row.cost || 0)}</span>
-              <span className="absolute left-[157.65mm] text-red-600">{row.guaranteeYears ? `${row.guaranteeYears} Years` : ''}</span>
+              <span className="absolute left-[157.65mm] text-red-600">{row.guaranteeYears ? `${coverageLabel(row.coverage)} ${row.guaranteeYears} Years` : ''}</span>
             </div>
           ))}
         </div>

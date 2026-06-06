@@ -25,6 +25,8 @@ import { buildGuaranteeHtml, buildQuotationHtml } from './template.mjs'
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
 const BW_PRINTER = process.env.BW_PRINTER || process.env.PRINT_PRINTER || 'NPI33F31D (HP LaserJet Tank MFP 2606sdw)'
+const BW_FALLBACK_PRINTER = process.env.BW_FALLBACK_PRINTER || COLOR_PRINTER
+const BW_FALLBACK_ON_ERROR = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_ON_ERROR ?? 'true').trim().toLowerCase())
 const PRINT_PRINTER = process.env.PRINT_PRINTER || BW_PRINTER
 const PRINT_SERVER_PUBLIC_URL = (process.env.PRINT_SERVER_PUBLIC_URL || '').replace(/\/+$/, '')
 const CLOUD_API_URL = (process.env.CLOUD_API_URL || '').replace(/\/+$/, '')
@@ -82,6 +84,72 @@ const WHATSAPP_ALLOWED_MEDIA_TYPES = new Set([
 ])
 const WHATSAPP_MAX_FILES = 12
 const WHATSAPP_MAX_FILE_BYTES = 30 * 1024 * 1024
+const WHATSAPP_AUTO_PRINT_ENABLED = parseBoolean(process.env.WHATSAPP_AUTO_PRINT_ENABLED)
+const WHATSAPP_AUTO_PRINT_GROUP_NAME = process.env.WHATSAPP_AUTO_PRINT_GROUP_NAME || 'Shiv Hardware'
+const WHATSAPP_AUTO_PRINT_GROUP_ID = process.env.WHATSAPP_AUTO_PRINT_GROUP_ID || ''
+const WHATSAPP_AUTO_PRINT_COPIES = Math.min(20, Math.max(1, Math.trunc(Number(process.env.WHATSAPP_AUTO_PRINT_COPIES) || 1)))
+const WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS = Math.max(1000, Number(process.env.WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS) || 10 * 60 * 1000)
+const WHATSAPP_AUTO_PRINT_POLL_INTERVAL_MS = Math.max(3000, Number(process.env.WHATSAPP_AUTO_PRINT_POLL_INTERVAL_MS) || 5000)
+const WHATSAPP_AUTO_PRINT_MEDIA_TYPES = new Set(
+  (process.env.WHATSAPP_AUTO_PRINT_MEDIA_TYPES || 'image/jpeg,image/png,image/webp,image/gif,application/pdf')
+    .split(',')
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean),
+)
+const WHATSAPP_COLOR_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_COLOR_PRINT_SETTINGS || 'fit,color,portrait,paper=A4,bin=Rear Paper Feeder')
+const WHATSAPP_BW_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_BW_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4')
+const BW_FALLBACK_PRINT_SETTINGS = parsePrintSettings(process.env.BW_FALLBACK_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4,bin=Rear Paper Feeder')
+const BW_FALLBACK_RESET_PLAIN_A4 = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_RESET_PLAIN_A4 ?? 'true').trim().toLowerCase())
+const EPSON_DEFAULT_RESET_PLAIN_A4_COLOR = !['0', 'false', 'no', 'off'].includes(String(process.env.EPSON_DEFAULT_RESET_PLAIN_A4_COLOR ?? 'true').trim().toLowerCase())
+const WHATSAPP_WEB_CLIENT_ID = process.env.WHATSAPP_WEB_CLIENT_ID || 'shiv-print-server'
+const WHATSAPP_WEB_AUTH_DIR = fileURLToPath(new URL('data/wwebjs-auth', import.meta.url))
+const WHATSAPP_PROCESSED_MESSAGES_URL = new URL('data/whatsapp-processed-messages.json', import.meta.url)
+
+const whatsappWebState = {
+  enabled: WHATSAPP_AUTO_PRINT_ENABLED,
+  status: WHATSAPP_AUTO_PRINT_ENABLED ? 'starting' : 'disabled',
+  groupName: WHATSAPP_AUTO_PRINT_GROUP_NAME,
+  groupId: WHATSAPP_AUTO_PRINT_GROUP_ID,
+  copies: WHATSAPP_AUTO_PRINT_COPIES,
+  qrDataUrl: null,
+  readyAt: null,
+  lastMessageAt: null,
+  lastPrint: null,
+  lastError: null,
+}
+const whatsappProcessedMessageIds = new Set(loadWhatsAppProcessedMessageIds())
+const whatsappPrintCommands = new Map()
+let whatsappWebClient = null
+let whatsappReadyProbe = null
+let whatsappGroupPoll = null
+let whatsappGroupPollRunning = false
+const printerHealthCache = new Map()
+const preparedPlainA4Printers = new Map()
+
+function parseBoolean(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase())
+}
+
+function parsePrintSettings(value) {
+  return String(value ?? '')
+    .split(',')
+    .map(setting => setting.trim())
+    .filter(Boolean)
+}
+
+function loadWhatsAppProcessedMessageIds() {
+  try {
+    const data = JSON.parse(readFileSync(WHATSAPP_PROCESSED_MESSAGES_URL, 'utf8'))
+    return Array.isArray(data?.ids) ? data.ids.filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
+async function saveWhatsAppProcessedMessageIds() {
+  const ids = [...whatsappProcessedMessageIds].slice(-1000)
+  await writeFile(WHATSAPP_PROCESSED_MESSAGES_URL, JSON.stringify({ ids }, null, 2))
+}
 
 function publicUrlFromRequest(req) {
   if (PRINT_SERVER_PUBLIC_URL) return PRINT_SERVER_PUBLIC_URL
@@ -602,17 +670,230 @@ function selectUploadPrinter(file) {
   return BW_PRINTER
 }
 
+function parseWhatsAppPrintMode(text) {
+  const clean = String(text ?? '').trim().toLowerCase()
+  if (!clean) return null
+  if (/\bcp\b/.test(clean) || /\bcolor\b/.test(clean) || /\bcolour\b/.test(clean)) return 'color'
+  if (/\bbw\b/.test(clean) || /\bb\/w\b/.test(clean) || /\bblack\b/.test(clean)) return 'bw'
+  return null
+}
+
+function printerForWhatsAppPrintMode(mode, file) {
+  if (mode === 'color') return COLOR_PRINTER
+  if (mode === 'bw') return BW_PRINTER
+  return selectUploadPrinter(file)
+}
+
+function printSettingsForWhatsAppPrinter(printer) {
+  if (printer === COLOR_PRINTER) return WHATSAPP_COLOR_PRINT_SETTINGS
+  if (printer === BW_PRINTER) return WHATSAPP_BW_PRINT_SETTINGS
+  return []
+}
+
+function printSettingsForWhatsAppPrintMode(mode, printer) {
+  if (mode === 'color') return WHATSAPP_COLOR_PRINT_SETTINGS
+  if (mode === 'bw') return WHATSAPP_BW_PRINT_SETTINGS
+  return printSettingsForWhatsAppPrinter(printer)
+}
+
+function execFileAsync(file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, options, (err, stdout, stderr) => {
+      if (err) {
+        err.stdout = stdout
+        err.stderr = stderr
+        reject(err)
+        return
+      }
+      resolve({ stdout, stderr })
+    })
+  })
+}
+
+async function getWindowsPrinterHealth(printer) {
+  const cache = printerHealthCache.get(printer)
+  if (cache && Date.now() - cache.at < 15000) return cache.health
+
+  if (process.platform !== 'win32') {
+    return { ok: true, status: 'unknown', reason: 'non-windows' }
+  }
+
+  try {
+    const script = [
+      '$name=$env:SHIV_PRINTER_NAME',
+      '$printer=Get-Printer -Name $name -ErrorAction Stop',
+      '$cim=Get-CimInstance Win32_Printer | Where-Object { $_.Name -eq $name }',
+      '[pscustomobject]@{',
+      '  Name = $printer.Name',
+      '  PrinterStatus = [string]$printer.PrinterStatus',
+      '  JobCount = $printer.JobCount',
+      '  DetectedErrorState = $cim.DetectedErrorState',
+      '  ExtendedDetectedErrorState = $cim.ExtendedDetectedErrorState',
+      '  WorkOffline = $cim.WorkOffline',
+      '} | ConvertTo-Json -Compress',
+    ].join('\n')
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', script], {
+      env: { ...process.env, SHIV_PRINTER_NAME: printer },
+      windowsHide: true,
+    })
+    const data = JSON.parse(stdout.trim())
+    const status = String(data.PrinterStatus || 'Unknown')
+    const detectedErrorState = Number(data.DetectedErrorState || 0)
+    const workOffline = Boolean(data.WorkOffline)
+    const readyStatuses = new Set(['Normal', 'Idle', 'Printing', 'Processing', 'WarmingUp'])
+    const hasError = workOffline || !readyStatuses.has(status) || (detectedErrorState && detectedErrorState !== 2)
+    const health = {
+      ok: !hasError,
+      status,
+      jobCount: Number(data.JobCount || 0),
+      detectedErrorState,
+      extendedDetectedErrorState: Number(data.ExtendedDetectedErrorState || 0),
+      workOffline,
+      reason: hasError ? `status=${status}, detectedErrorState=${detectedErrorState || 'unknown'}` : null,
+    }
+    printerHealthCache.set(printer, { at: Date.now(), health })
+    return health
+  } catch (err) {
+    const health = { ok: false, status: 'check-failed', reason: String(err.message ?? err) }
+    printerHealthCache.set(printer, { at: Date.now(), health })
+    return health
+  }
+}
+
+function epsonPlainA4PrintTicketXml({ color = true } = {}) {
+  return `<?xml version="1.0"?>
+<psf:PrintTicket xmlns:psf="http://schemas.microsoft.com/windows/2003/08/printing/printschemaframework" xmlns:psk="http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords" xmlns:ns0000="http://schema.epson.net/printschema/business/v100" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" version="1">
+  <psf:Feature name="psk:PageInputBin"><psf:Option name="ns0000:AutoSheetFeeder"/></psf:Feature>
+  <psf:Feature name="psk:PageMediaType"><psf:Option name="psk:Plain"/></psf:Feature>
+  <psf:Feature name="psk:PageOutputColor"><psf:Option name="psk:${color ? 'Color' : 'Monochrome'}"/></psf:Feature>
+  <psf:Feature name="psk:PageOutputQuality"><psf:Option name="ns0000:Standard"/></psf:Feature>
+  <psf:Feature name="psk:PageMediaSize"><psf:Option name="psk:ISOA4"><psf:ScoredProperty name="psk:MediaSizeWidth"><psf:Value xsi:type="xsd:integer">210000</psf:Value></psf:ScoredProperty><psf:ScoredProperty name="psk:MediaSizeHeight"><psf:Value xsi:type="xsd:integer">297000</psf:Value></psf:ScoredProperty></psf:Option></psf:Feature>
+  <psf:Feature name="psk:PageBorderless"><psf:Option name="psk:None"/></psf:Feature>
+  <psf:Feature name="psk:PageOrientation"><psf:Option name="psk:Portrait"/></psf:Feature>
+  <psf:Feature name="psk:JobDuplexAllDocumentsContiguously"><psf:Option name="psk:OneSided"/></psf:Feature>
+  <psf:Feature name="psk:DocumentCollate"><psf:Option name="psk:Collated"/></psf:Feature>
+  <psf:ParameterInit name="psk:JobCopiesAllDocuments"><psf:Value xsi:type="xsd:integer">1</psf:Value></psf:ParameterInit>
+</psf:PrintTicket>`
+}
+
+async function prepareEpsonPlainA4ColorDefaults(printer, source = 'print') {
+  if (!EPSON_DEFAULT_RESET_PLAIN_A4_COLOR || process.platform !== 'win32' || printer !== COLOR_PRINTER) return
+  if (Date.now() - (preparedPlainA4Printers.get(printer) || 0) < 60000) return
+
+  try {
+    const script = [
+      '$name=$env:SHIV_PRINTER_NAME',
+      '$xml=$env:SHIV_PRINT_TICKET_XML',
+      'Set-PrintConfiguration -PrinterName $name -PrintTicketXml $xml',
+      'Set-PrintConfiguration -PrinterName $name -PaperSize A4 -Color $true -DuplexingMode OneSided',
+      '$devmodePaths=@("HKCU:\\Printers\\DevModePerUser","HKCU:\\Printers\\DevModes2")',
+      'foreach($path in $devmodePaths){$props=Get-ItemProperty -Path $path -ErrorAction SilentlyContinue;if($null -ne $props -and $null -ne $props.$name){$bytes=[byte[]]$props.$name.Clone();foreach($pair in @(@(76,1),@(78,9),@(80,2970),@(82,2100),@(86,1),@(88,261),@(102,2))){$value=[BitConverter]::GetBytes([int16]$pair[1]);$bytes[$pair[0]]=$value[0];$bytes[$pair[0]+1]=$value[1]};Set-ItemProperty -Path $path -Name $name -Value $bytes}}',
+      '$config=Get-PrintConfiguration -PrinterName $name',
+      '[pscustomobject]@{PrinterName=$config.PrinterName;PaperSize=[string]$config.PaperSize;Color=$config.Color;DuplexingMode=[string]$config.DuplexingMode} | ConvertTo-Json -Compress',
+    ].join(';')
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', script], {
+      env: {
+        ...process.env,
+        SHIV_PRINTER_NAME: printer,
+        SHIV_PRINT_TICKET_XML: epsonPlainA4PrintTicketXml({ color: true }),
+      },
+      windowsHide: true,
+    })
+    preparedPlainA4Printers.set(printer, Date.now())
+    console.log(`[${source}] prepared Epson defaults: ${stdout.trim()}`)
+  } catch (err) {
+    console.warn(`[${source}] failed to prepare Epson defaults`, err.message ?? err)
+  }
+}
+
+async function prepareBwFallbackPrinter(printer, source = 'print') {
+  if (!BW_FALLBACK_RESET_PLAIN_A4 || printer !== BW_FALLBACK_PRINTER) return
+  await prepareEpsonPlainA4ColorDefaults(printer, source)
+}
+
+async function routeWhatsAppPrintJob(mode, file) {
+  const primaryPrinter = printerForWhatsAppPrintMode(mode, file)
+  if (mode !== 'bw') {
+    return {
+      printer: primaryPrinter,
+      printSettings: printSettingsForWhatsAppPrintMode(mode, primaryPrinter),
+      fallback: null,
+    }
+  }
+
+  return await routeBwPrinterOnError(primaryPrinter, WHATSAPP_BW_PRINT_SETTINGS, 'whatsapp-web')
+}
+
+async function routeBwPrinterOnError(primaryPrinter, printSettings = [], source = 'print') {
+  const primarySettings = printSettings ?? []
+  if (!BW_FALLBACK_ON_ERROR || primaryPrinter !== BW_PRINTER || BW_FALLBACK_PRINTER === BW_PRINTER) {
+    return {
+      printer: primaryPrinter,
+      printSettings: primarySettings,
+      fallback: null,
+    }
+  }
+
+  const hpHealth = await getWindowsPrinterHealth(BW_PRINTER)
+  if (hpHealth.ok) {
+    return {
+      printer: primaryPrinter,
+      printSettings: primarySettings,
+      fallback: null,
+    }
+  }
+
+  const fallback = {
+    from: BW_PRINTER,
+    to: BW_FALLBACK_PRINTER,
+    reason: hpHealth.reason || hpHealth.status,
+  }
+  await prepareBwFallbackPrinter(BW_FALLBACK_PRINTER, source)
+  console.warn(`[${source}] BW printer unavailable; falling back to "${BW_FALLBACK_PRINTER}" with monochrome settings (${fallback.reason})`)
+  return {
+    printer: BW_FALLBACK_PRINTER,
+    printSettings: BW_FALLBACK_PRINT_SETTINGS.length ? BW_FALLBACK_PRINT_SETTINGS : primarySettings,
+    fallback,
+  }
+}
+
+function whatsappMessageSender(message) {
+  return message?.author || message?.from || 'unknown'
+}
+
+function whatsappPrintCommandKey(chat, sender = '') {
+  return `${chat?.id?._serialized || ''}|${sender}`
+}
+
+function rememberWhatsAppPrintCommand(chat, sender, mode) {
+  if (!mode) return
+  const entry = { mode, at: Date.now(), sender }
+  whatsappPrintCommands.set(whatsappPrintCommandKey(chat), entry)
+  whatsappPrintCommands.set(whatsappPrintCommandKey(chat, sender), entry)
+}
+
+function recentWhatsAppPrintCommand(chat, sender) {
+  const now = Date.now()
+  for (const key of [whatsappPrintCommandKey(chat, sender), whatsappPrintCommandKey(chat)]) {
+    const entry = whatsappPrintCommands.get(key)
+    if (!entry) continue
+    if (now - entry.at <= WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS) return entry
+    whatsappPrintCommands.delete(key)
+  }
+  return null
+}
+
 async function printFileWithLp(filePath, copies, title, printer = PRINT_PRINTER, printSettings = []) {
   if (process.platform === 'win32') {
     return new Promise((ok, fail) => {
       const settings = [`${copies}x`, ...printSettings].join(',')
       const args = [
+        '-print-settings',
+        settings,
         '-print-to',
         printer,
         '-silent',
         '-exit-on-print',
-        '-print-settings',
-        settings,
         filePath,
       ]
 
@@ -782,8 +1063,12 @@ async function renderUploadedImagePdf(file) {
   }
 }
 
-async function printUploadedFile(file, copies) {
-  const printer = selectUploadPrinter(file)
+async function printUploadedFile(file, copies, printerOverride = null, printSettingsOverride = null) {
+  const primaryPrinter = printerOverride || selectUploadPrinter(file)
+  const primaryPrintSettings = printSettingsOverride || printSettingsForWhatsAppPrinter(primaryPrinter)
+  const route = await routeBwPrinterOnError(primaryPrinter, primaryPrintSettings, 'upload-print')
+  const { printer, printSettings } = route
+  if (printer === COLOR_PRINTER) await prepareEpsonPlainA4ColorDefaults(printer, 'upload-print')
   const extension = extensionForMediaType(file.mediaType)
   const sourcePath = join(tmpdir(), `shiv-whatsapp-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`)
   let printPath = sourcePath
@@ -799,11 +1084,12 @@ async function printUploadedFile(file, copies) {
       printPath = renderedPdfPath
     }
 
-    const result = await printFileWithLp(printPath, copies, `WhatsApp ${file.name}`.slice(0, 80), printer)
+    const result = await printFileWithLp(printPath, copies, `WhatsApp ${file.name}`.slice(0, 80), printer, printSettings)
     return {
       name: file.name,
       mediaType: file.mediaType,
       printer,
+      fallback: route.fallback,
       jobId: result.jobId,
     }
   } finally {
@@ -812,11 +1098,256 @@ async function printUploadedFile(file, copies) {
   }
 }
 
+function rememberWhatsAppMessageId(id) {
+  if (!id) return false
+  if (whatsappProcessedMessageIds.has(id)) return true
+  whatsappProcessedMessageIds.add(id)
+  if (whatsappProcessedMessageIds.size > 500) {
+    const oldest = whatsappProcessedMessageIds.values().next().value
+    whatsappProcessedMessageIds.delete(oldest)
+  }
+  saveWhatsAppProcessedMessageIds().catch(err => console.warn('[whatsapp-web] failed to save processed IDs', err.message ?? err))
+  return false
+}
+
+function chatMatchesWhatsAppAutoPrintTarget(chat) {
+  const chatId = chat?.id?._serialized || ''
+  if (WHATSAPP_AUTO_PRINT_GROUP_ID) return chatId === WHATSAPP_AUTO_PRINT_GROUP_ID
+
+  const expected = normalizeNameKey(WHATSAPP_AUTO_PRINT_GROUP_NAME)
+  const actual = normalizeNameKey(chat?.name || '')
+  return Boolean(expected && actual && actual === expected)
+}
+
+function markWhatsAppWebReady(source = 'event') {
+  whatsappWebState.status = 'ready'
+  whatsappWebState.readyAt = whatsappWebState.readyAt || new Date().toISOString()
+  whatsappWebState.qrDataUrl = null
+  whatsappWebState.lastError = null
+  if (whatsappReadyProbe) {
+    clearInterval(whatsappReadyProbe)
+    whatsappReadyProbe = null
+  }
+  startWhatsAppGroupPoll()
+  console.log(`   WhatsApp Web auto-print: ready via ${source} for group "${WHATSAPP_AUTO_PRINT_GROUP_NAME}"`)
+}
+
+function startWhatsAppReadyProbe(client) {
+  if (whatsappReadyProbe) clearInterval(whatsappReadyProbe)
+  whatsappReadyProbe = setInterval(async () => {
+    if (whatsappWebState.status === 'ready') return
+    try {
+      const state = await client.getState().catch(() => null)
+      await client.getChats()
+      whatsappWebState.webState = state
+      markWhatsAppWebReady(`probe${state ? ` (${state})` : ''}`)
+    } catch (err) {
+      whatsappWebState.webState = null
+      whatsappWebState.lastError = {
+        at: new Date().toISOString(),
+        error: `ready probe: ${String(err.message ?? err)}`,
+      }
+    }
+  }, 5000)
+}
+
+async function findWhatsAppAutoPrintGroup() {
+  if (!whatsappWebClient) throw new Error('WhatsApp Web client is not started')
+  if (whatsappWebState.status !== 'ready') throw new Error(`WhatsApp Web is not ready: ${whatsappWebState.status}`)
+
+  const chats = await whatsappWebClient.getChats()
+  const groups = chats.filter(chat => chat?.isGroup)
+  const group = groups.find(chatMatchesWhatsAppAutoPrintTarget)
+  if (!group) {
+    const names = groups.map(chat => chat.name).filter(Boolean).sort()
+    throw new Error(`Group not found: ${WHATSAPP_AUTO_PRINT_GROUP_ID || WHATSAPP_AUTO_PRINT_GROUP_NAME}. Groups visible: ${names.join(', ') || 'none'}`)
+  }
+  return group
+}
+
+async function pollWhatsAppAutoPrintGroup() {
+  if (whatsappGroupPollRunning || whatsappWebState.status !== 'ready') return
+  whatsappGroupPollRunning = true
+  try {
+    const group = await findWhatsAppAutoPrintGroup()
+    const messages = await group.fetchMessages({ limit: 12 })
+    for (const message of messages) {
+      await handleWhatsAppWebMessage(message)
+    }
+  } catch (err) {
+    whatsappWebState.lastError = {
+      at: new Date().toISOString(),
+      error: `group poll: ${String(err.message ?? err)}`,
+    }
+    console.warn('[whatsapp-web] group poll failed', err.message ?? err)
+  } finally {
+    whatsappGroupPollRunning = false
+  }
+}
+
+function startWhatsAppGroupPoll() {
+  if (whatsappGroupPoll || !WHATSAPP_AUTO_PRINT_ENABLED) return
+  whatsappGroupPoll = setInterval(pollWhatsAppAutoPrintGroup, WHATSAPP_AUTO_PRINT_POLL_INTERVAL_MS)
+  pollWhatsAppAutoPrintGroup()
+}
+
+function summarizeWhatsAppMessage(message) {
+  if (!message) return null
+  return {
+    id: message.id?._serialized || null,
+    from: message.from || null,
+    author: message.author || null,
+    timestamp: message.timestamp ? new Date(message.timestamp * 1000).toISOString() : null,
+    type: message.type || null,
+    hasMedia: Boolean(message.hasMedia),
+    printMode: parseWhatsAppPrintMode(message.body) || null,
+    body: message.body || '',
+  }
+}
+
+async function handleWhatsAppWebMessage(message) {
+  const messageId = message?.id?._serialized || ''
+  if (rememberWhatsAppMessageId(messageId)) return
+
+  try {
+    const chat = await message.getChat()
+    if (!chat?.isGroup || !chatMatchesWhatsAppAutoPrintTarget(chat)) return
+
+    const sender = whatsappMessageSender(message)
+    const directPrintMode = parseWhatsAppPrintMode(message.body)
+    if (directPrintMode) {
+      rememberWhatsAppPrintCommand(chat, sender, directPrintMode)
+      console.log(`[whatsapp-web] remembered mode="${directPrintMode}" for group="${chat.name}" sender="${sender}"`)
+    }
+    if (!message?.hasMedia) return
+
+    whatsappWebState.lastMessageAt = new Date().toISOString()
+    const media = await message.downloadMedia()
+    const mediaType = String(media?.mimetype || '').toLowerCase()
+    if (!media?.data) return
+    if (!WHATSAPP_AUTO_PRINT_MEDIA_TYPES.has(mediaType)) {
+      console.log(`[whatsapp-web] skipped unsupported media type ${mediaType} from ${chat.name}`)
+      return
+    }
+
+    const extension = extensionForMediaType(mediaType)
+    const rememberedPrintMode = recentWhatsAppPrintCommand(chat, sender)
+    const printMode = directPrintMode || rememberedPrintMode?.mode || null
+    if (!printMode) {
+      console.log(`[whatsapp-web] skipped ${mediaType} from group="${chat.name}" sender="${sender}" because no cp/bw command was found`)
+      return
+    }
+    const file = decodeUploadedFile({
+      name: media.filename || `whatsapp-${Date.now()}${extension}`,
+      mediaType,
+      data: media.data,
+    }, 0)
+    const route = await routeWhatsAppPrintJob(printMode, file)
+    const result = await printUploadedFile(file, WHATSAPP_AUTO_PRINT_COPIES, route.printer, route.printSettings)
+
+    whatsappWebState.lastPrint = {
+      at: new Date().toISOString(),
+      group: chat.name,
+      sender,
+      name: file.name,
+      mediaType,
+      printMode,
+      printer: result.printer,
+      fallback: route.fallback,
+      jobId: result.jobId,
+    }
+    whatsappWebState.lastError = null
+    console.log(`[whatsapp-web] printed ${file.name} mode="${printMode}" from group="${chat.name}" sender="${sender}" printer="${result.printer}"${route.fallback ? ' fallback=true' : ''}`)
+  } catch (err) {
+    whatsappWebState.lastError = {
+      at: new Date().toISOString(),
+      error: String(err.message ?? err),
+    }
+    console.error('[whatsapp-web] auto print failed', err)
+  }
+}
+
+async function startWhatsAppWebAutoPrint() {
+  if (!WHATSAPP_AUTO_PRINT_ENABLED) {
+    console.log('   WhatsApp Web auto-print: disabled')
+    return
+  }
+
+  try {
+    const wwebjs = await import('whatsapp-web.js')
+    const qrcode = await import('qrcode')
+    const { Client, LocalAuth } = wwebjs.default ?? wwebjs
+    const client = new Client({
+      authStrategy: new LocalAuth({
+        clientId: WHATSAPP_WEB_CLIENT_ID,
+        dataPath: WHATSAPP_WEB_AUTH_DIR,
+      }),
+      puppeteer: {
+        headless: true,
+        executablePath: CHROME_PATH,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      },
+    })
+
+    client.on('qr', async qr => {
+      whatsappWebState.status = 'qr'
+      whatsappWebState.qrDataUrl = await qrcode.toDataURL(qr)
+      whatsappWebState.lastError = null
+      console.log('   WhatsApp Web auto-print: scan QR at /whatsapp-web')
+    })
+
+    client.on('authenticated', () => {
+      whatsappWebState.status = 'authenticated'
+      whatsappWebState.qrDataUrl = null
+      startWhatsAppReadyProbe(client)
+      console.log('   WhatsApp Web auto-print: authenticated')
+    })
+
+    client.on('ready', () => {
+      markWhatsAppWebReady('event')
+    })
+
+    client.on('auth_failure', message => {
+      whatsappWebState.status = 'auth_failure'
+      whatsappWebState.lastError = { at: new Date().toISOString(), error: String(message) }
+      console.error('[whatsapp-web] auth failure', message)
+    })
+
+    client.on('disconnected', reason => {
+      whatsappWebState.status = 'disconnected'
+      if (whatsappReadyProbe) {
+        clearInterval(whatsappReadyProbe)
+        whatsappReadyProbe = null
+      }
+      if (whatsappGroupPoll) {
+        clearInterval(whatsappGroupPoll)
+        whatsappGroupPoll = null
+      }
+      whatsappWebState.lastError = { at: new Date().toISOString(), error: String(reason) }
+      console.warn('[whatsapp-web] disconnected', reason)
+    })
+
+    client.on('message', handleWhatsAppWebMessage)
+    client.on('message_create', handleWhatsAppWebMessage)
+
+    whatsappWebClient = client
+    await client.initialize()
+  } catch (err) {
+    whatsappWebState.status = 'error'
+    whatsappWebState.lastError = { at: new Date().toISOString(), error: String(err.message ?? err) }
+    console.error('[whatsapp-web] failed to start', err)
+  }
+}
+
 async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, copies) {
   if (kind === 'guarantee' && !document) throw new Error('Missing guarantee document data')
   if (kind !== 'guarantee' && !quote) throw new Error('Missing quotation data')
-  const printer = selectDocumentPrinter({ kind, layout })
+  const primaryPrinter = selectDocumentPrinter({ kind, layout })
   const isCard = kind === 'guarantee' && layout === 'card'
+  const route = isCard
+    ? { printer: primaryPrinter, printSettings: EPSON_CARD_PRINT_SETTINGS, fallback: null }
+    : await routeBwPrinterOnError(primaryPrinter, [], `document-print:${kind ?? 'quotation'}`)
+  const { printer } = route
 
   let browser
   let tmp
@@ -845,6 +1376,7 @@ async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, co
       const printResult = await printCardImage(tmp, copies, `Shiv ${kind ?? 'card'}`, printer)
       return {
         printer,
+        fallback: route.fallback,
         jobId: printResult.jobId,
       }
     }
@@ -861,9 +1393,10 @@ async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, co
       : { format: 'A4', printBackground: true })
     tmp = join(tmpdir(), `shiv-print-${Date.now()}.pdf`)
     await writeFile(tmp, pdf)
-    const printResult = await printFileWithLp(tmp, copies, `Shiv ${kind ?? 'quotation'}`, printer, isCard ? EPSON_CARD_PRINT_SETTINGS : [])
+    const printResult = await printFileWithLp(tmp, copies, `Shiv ${kind ?? 'quotation'}`, printer, route.printSettings)
     return {
       printer,
+      fallback: route.fallback,
       jobId: printResult.jobId,
     }
   } finally {
@@ -1317,6 +1850,8 @@ app.get('/status', (_req, res) => res.json({
   printers: {
     color: COLOR_PRINTER,
     blackAndWhite: BW_PRINTER,
+    blackAndWhiteFallback: BW_FALLBACK_PRINTER,
+    blackAndWhiteFallbackOnError: BW_FALLBACK_ON_ERROR,
   },
 }))
 app.get('/scan-bill', (_req, res) => res.json({ ok: true, message: 'Use POST with { image, mediaType }. Scanner uses Claude only.' }))
@@ -1367,12 +1902,90 @@ app.get('/whatsapp-print/status', (req, res) => {
     printers: {
       color: COLOR_PRINTER,
       blackAndWhite: BW_PRINTER,
+      blackAndWhiteFallback: BW_FALLBACK_PRINTER,
+      blackAndWhiteFallbackOnError: BW_FALLBACK_ON_ERROR,
     },
     link: `${publicUrlFromRequest(req)}/whatsapp-print`,
     allowedMediaTypes: [...WHATSAPP_ALLOWED_MEDIA_TYPES],
     maxFiles: WHATSAPP_MAX_FILES,
     maxFileMb: Math.round(WHATSAPP_MAX_FILE_BYTES / 1024 / 1024),
   })
+})
+
+function whatsappWebStatusPayload() {
+  return {
+    ok: true,
+    ...whatsappWebState,
+    printers: {
+      color: COLOR_PRINTER,
+      blackAndWhite: BW_PRINTER,
+      blackAndWhiteFallback: BW_FALLBACK_PRINTER,
+      blackAndWhiteFallbackOnError: BW_FALLBACK_ON_ERROR,
+    },
+    allowedMediaTypes: [...WHATSAPP_AUTO_PRINT_MEDIA_TYPES],
+    authDirectory: WHATSAPP_WEB_AUTH_DIR,
+  }
+}
+
+app.get('/whatsapp-web/status', (_req, res) => {
+  res.json(whatsappWebStatusPayload())
+})
+
+app.get('/whatsapp-web/group/latest', async (req, res) => {
+  try {
+    const limit = Math.min(10, Math.max(1, Math.trunc(Number(req.query.limit) || 1)))
+    const group = await findWhatsAppAutoPrintGroup()
+    const messages = await group.fetchMessages({ limit })
+    res.json({
+      ok: true,
+      group: {
+        id: group.id?._serialized || null,
+        name: group.name,
+        unreadCount: group.unreadCount,
+        timestamp: group.timestamp ? new Date(group.timestamp * 1000).toISOString() : null,
+      },
+      messages: messages.map(summarizeWhatsAppMessage),
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err.message ?? err) })
+  }
+})
+
+app.get('/whatsapp-web', (_req, res) => {
+  const status = whatsappWebStatusPayload()
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="8" />
+  <title>Shiv WhatsApp Web Auto Print</title>
+  <style>
+    body { margin:0; min-height:100vh; display:grid; place-items:center; font-family:Inter,Segoe UI,Arial,sans-serif; background:#f6f7f9; color:#111827; }
+    main { width:min(92vw,520px); background:white; border:1px solid #e5e7eb; border-radius:8px; padding:24px; box-shadow:0 14px 40px rgba(15,23,42,.08); }
+    h1 { margin:0 0 8px; font-size:22px; }
+    dl { display:grid; grid-template-columns:140px 1fr; gap:8px 12px; margin:18px 0; }
+    dt { color:#6b7280; }
+    dd { margin:0; overflow-wrap:anywhere; }
+    img { width:min(320px,100%); display:block; margin:18px auto 4px; image-rendering:pixelated; }
+    pre { white-space:pre-wrap; background:#f3f4f6; border-radius:6px; padding:10px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>WhatsApp Web Auto Print</h1>
+    <dl>
+      <dt>Status</dt><dd>${escapeHtml(status.status)}</dd>
+      <dt>Group</dt><dd>${escapeHtml(status.groupName || status.groupId || 'not configured')}</dd>
+      <dt>Copies</dt><dd>${escapeHtml(String(status.copies))}</dd>
+      <dt>Last message</dt><dd>${escapeHtml(status.lastMessageAt || '-')}</dd>
+      <dt>Last print</dt><dd>${escapeHtml(status.lastPrint ? `${status.lastPrint.name} -> ${status.lastPrint.printer}` : '-')}</dd>
+    </dl>
+    ${status.qrDataUrl ? `<img src="${status.qrDataUrl}" alt="WhatsApp QR code" /><p>Scan this QR from WhatsApp linked devices.</p>` : ''}
+    ${status.lastError ? `<pre>${escapeHtml(JSON.stringify(status.lastError, null, 2))}</pre>` : ''}
+  </main>
+</body>
+</html>`)
 })
 
 app.post('/whatsapp-print/jobs', async (req, res) => {
@@ -1394,6 +2007,8 @@ app.post('/whatsapp-print/jobs', async (req, res) => {
       printers: {
         color: COLOR_PRINTER,
         blackAndWhite: BW_PRINTER,
+        blackAndWhiteFallback: BW_FALLBACK_PRINTER,
+        blackAndWhiteFallbackOnError: BW_FALLBACK_ON_ERROR,
       },
       copies,
       jobs,
@@ -1416,6 +2031,7 @@ app.post('/print', async (req, res) => {
     res.json({
       ok: true,
       printer: printResult.printer,
+      fallback: printResult.fallback,
       jobId: printResult.jobId,
     })
   } catch (err) {
@@ -1475,6 +2091,8 @@ app.listen(PORT, '0.0.0.0', () => {
   } else {
     console.log('   Cloud polling: disabled')
   }
+  startWhatsAppWebAutoPrint()
+  prepareEpsonPlainA4ColorDefaults(COLOR_PRINTER, 'startup')
   if (!process.env.ANTHROPIC_API_KEY) console.warn('⚠  ANTHROPIC_API_KEY not set')
   console.log()
 })
