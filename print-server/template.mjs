@@ -54,12 +54,53 @@ const legacyThickness = category => ({
   'block-board-19': '19mm',
 })[category] ?? ''
 const legacyCategoryLabel = category => ({
-  'readymade-door': 'Readymade Door',
-  'flush-door': 'Flush Door ( Plain Door )',
+  'readymade-door': 'Readymade Door Water Proof',
+  'flush-door': 'Flush Door (Plain Door) Water Proof',
   'plywood-6': 'Water Proof Plywood',
   'block-board-12': 'Water Proof Block Board',
   'block-board-19': 'Water Proof Block Board',
 })[category] ?? CATEGORY_LABELS[category] ?? category
+
+const hasTwoGtyCols = cat => cat === 'flush-door' || cat === 'block-board-12' || cat === 'block-board-19'
+
+const SECTION_CONFIG = {
+  'block-board-12': {
+    first: '1. Water Proof Ply',
+    breaks: { Amron: '2. Semi Water Proof Ply', 'Assam Gold': '3. Commercial Ply' },
+  },
+  'block-board-19': {
+    first: '1. Water Proof Block Board',
+    breaks: { Amron: '2. Semi Water Proof Block Board', 'Assam Gold': '3. Commercial Ply Block Board' },
+  },
+}
+
+const ROW_H = 6.39
+const BRAND_START = 126.75
+const SECTION_GAP = 3
+
+function buildPrintItems(category, rows) {
+  const cfg = SECTION_CONFIG[category]
+  if (!cfg) return (rows ?? []).map((row, i) => ({ kind: 'brand', row, top: BRAND_START + i * ROW_H }))
+
+  const items = []
+  let top = BRAND_START - ROW_H
+
+  items.push({ kind: 'section', label: cfg.first, top })
+  top += ROW_H
+
+  for (const row of (rows ?? [])) {
+    const secLabel = cfg.breaks[row.brandName]
+    if (secLabel) {
+      top += SECTION_GAP
+      items.push({ kind: 'section', label: secLabel, top })
+      top += ROW_H
+    }
+    items.push({ kind: 'brand', row, top })
+    top += ROW_H
+  }
+
+  return items
+}
 
 function page(body) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -94,15 +135,33 @@ function cardPage(body) {
 export async function buildQuotationHtml(quote) {
   if (quote.alu) return buildAluminiumHtml(quote)
 
-  const header = await b64('letterhead/legacy-quotation-header.png')
+  const header = await b64('aluminium/header-door.jpeg')
   const { category, height, width, rows } = quote
-  const rowsHtml = (rows ?? []).map((r, index) => `
-    <div class="legacy-row" style="top:${126.75 + index * 6.39}mm${r.accentColor ? `;background:${esc(r.accentColor)}` : ''}">
+  const twoCol = hasTwoGtyCols(category)
+  const tintRight = twoCol ? '2mm' : '32mm'
+  const printItems = buildPrintItems(category, rows)
+  const rowsHtml = printItems.map(item => {
+    if (item.kind === 'section') {
+      return `<div style="position:absolute;left:29mm;top:${item.top}mm;font-size:15pt;line-height:1.1;color:#00B0F0">${esc(item.label)}</div>`
+    }
+    const r = item.row
+    const gty = Number(r.guaranteeYears)
+    const isWarranty = r.coverage === 'warranty'
+    const gtySpan = twoCol
+      ? `<span class="guarantee">${gty && !isWarranty ? `${gty} Years` : ''}</span><span class="warranty">${gty && isWarranty ? `${gty} Years` : ''}</span>`
+      : `<span class="guarantee">${gty ? `${gty} Years` : ''}</span>`
+    const bgDiv = r.accentColor
+      ? `<div style="position:absolute;top:0;bottom:0;left:29mm;right:${tintRight};background:${esc(r.accentColor)}"></div>`
+      : ''
+    return `
+    <div class="legacy-row" style="top:${item.top}mm">
+      ${bgDiv}
       <span class="rate">${esc(r.rate)}</span>
       <span class="brand">${esc(r.brandName)}</span>
       <span class="cost">${esc(Math.round(Number(r.cost) || 0))}</span>
-      <span class="guarantee">${Number(r.guaranteeYears) ? `${coverageLabel(r.coverage)} ${esc(r.guaranteeYears)} Years` : ''}</span>
-    </div>`).join('')
+      ${gtySpan}
+    </div>`
+  }).join('')
 
   return page(`
     <style>
@@ -110,29 +169,34 @@ export async function buildQuotationHtml(quote) {
       .legacy-head { position:absolute; left:27.94mm; top:22.47mm; width:88.06mm; height:53.53mm; display:block; }
       .legacy-title { position:absolute; left:29mm; top:81.3mm; font-size:15pt; color:#00b050; }
       .legacy-info { position:absolute; font-size:15pt; line-height:1.1; }
-      .legacy-line { position:absolute; left:29mm; top:107mm; width:153mm; border-top:1.5px solid #000; }
+      .legacy-line { position:absolute; left:29mm; top:107mm; border-top:1.5px solid #000; }
       .legacy-row { position:absolute; left:0; right:0; height:6.45mm; font-size:15pt; line-height:1.05; }
       .legacy-row span { position:absolute; white-space:nowrap; }
       .rate { left:31mm; }
       .brand { left:56.4mm; }
       .cost { left:127mm; }
-      .guarantee { left:157.65mm; color:red; }
+      .guarantee { left:148mm; width:30mm; text-align:center; color:red; }
+      .warranty { left:178mm; width:30mm; text-align:center; color:red; }
     </style>
+    <div style="position:absolute;inset:0;${twoCol ? 'transform:translateX(-13mm)' : ''}">
     <img class="legacy-head" src="${header}" />
     <div class="legacy-title">${esc(legacyCategoryLabel(category))}</div>
     <div class="legacy-info" style="left:29mm;top:94.6mm">Thickness</div>
     <div class="legacy-info" style="left:108mm;top:94.6mm">Height</div>
     <div class="legacy-info" style="left:142mm;top:94.6mm">Width</div>
+    <div style="position:absolute;left:29mm;top:100mm;height:7mm;right:${twoCol ? '2mm' : '34mm'};background:#FFFF00"></div>
     <div class="legacy-info" style="left:29mm;top:101.3mm">${esc(legacyThickness(category))}</div>
     <div class="legacy-info" style="left:102mm;top:101.3mm;width:21mm;text-align:right">${esc(legacyDimension(height))}</div>
     <div class="legacy-info" style="left:130mm;top:101.3mm;width:5mm;text-align:center">X</div>
     <div class="legacy-info" style="left:142mm;top:101.3mm">${esc(legacyDimension(width))}</div>
-    <div class="legacy-line"></div>
+    <div class="legacy-line" style="right:${twoCol ? '2mm' : '34mm'}"></div>
     <div class="legacy-info" style="left:29mm;top:113.5mm">Rate</div>
     <div class="legacy-info" style="left:56.4mm;top:113.5mm">Brand</div>
     <div class="legacy-info" style="left:127mm;top:113.5mm">Cost</div>
-    <div class="legacy-info" style="left:156mm;top:113.5mm">Gty/Wty</div>
-    ${rowsHtml}`)
+    <div class="legacy-info" style="left:148mm;top:113.5mm;width:30mm;text-align:center">Guarantee</div>
+    ${twoCol ? '<div class="legacy-info" style="left:178mm;top:113.5mm;width:30mm;text-align:center">Warranty</div>' : ''}
+    ${rowsHtml}
+    </div>`)
 }
 
 async function buildQuotationHtmlOld(quote) {
