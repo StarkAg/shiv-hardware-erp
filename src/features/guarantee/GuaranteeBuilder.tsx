@@ -14,6 +14,7 @@ import {
 import { formatSize } from '../../lib/pricing'
 import { PrintPreview } from '../print/PrintPreview'
 import { GuaranteeCard } from '../print/GuaranteeCard'
+import { enqueueGuaranteeSync } from '../../lib/offlineSync'
 
 type GuaranteeLayout = 'card' | 'a4'
 type BilledItem = {
@@ -120,11 +121,16 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
   const doc = buildGuaranteeDoc()
 
+  function openPreview() {
+    enqueueGuaranteeSync(doc)
+    setPreview(true)
+  }
+
   return (
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
         <div className="no-print flex justify-center gap-3">
-          <Button onClick={() => setPreview(true)} disabled={!hasSize && !billedItems.length} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+          <Button onClick={openPreview} disabled={!hasSize && !billedItems.length} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Printer size={20} /> Print
           </Button>
           <Link

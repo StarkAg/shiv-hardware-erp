@@ -9,7 +9,7 @@ import {
   type GuaranteeYears,
   type ProductCategory,
 } from '../../lib/types'
-import { Button, Card, PageHeader, Select } from '../../components/ui'
+import { Button, Card, PageHeader } from '../../components/ui'
 
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -154,62 +154,83 @@ export function RateManager() {
                 {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               </button>
               {isOpen && (
-                <div className="overflow-x-auto p-4">
-                  <table className="min-w-[640px] w-full text-sm">
-                    <thead className="text-left text-xs uppercase text-slate-400 dark:text-stone-500">
+                <div className="p-2 md:p-4">
+                  <table className="w-full table-fixed text-[11px] leading-tight md:text-sm">
+                    <colgroup>
+                      <col className="w-[56%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[8%]" />
+                    </colgroup>
+                    <thead className="text-left text-[9px] uppercase text-slate-400 dark:text-stone-500 md:text-xs">
                       <tr>
-                        <th className="py-1">Brand</th>
-                        <th className="py-1 w-32">Rate ₹/sqft</th>
-                        <th className="py-1 w-40">Guarantee</th>
-                        <th className="py-1 w-10"></th>
+                        <th className="px-1 py-0.5 md:px-2 md:py-1">Brand</th>
+                        <th className="px-0.5 py-0.5 text-right md:px-2 md:py-1">
+                          <span className="md:hidden">Rate</span>
+                          <span className="hidden md:inline">Rate ₹/sqft</span>
+                        </th>
+                        <th className="px-0.5 py-0.5 text-center md:px-2 md:py-1">
+                          <span className="md:hidden">Gty</span>
+                          <span className="hidden md:inline">Guarantee</span>
+                        </th>
+                        <th className="px-0.5 py-0.5 md:py-1"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {list.map((b) => (
                         <tr key={b.id} className="border-t border-slate-100 dark:border-white/10">
-                          <td className="py-1 pr-2">
+                          <td className="px-1 py-0.5 md:px-2 md:py-1">
                             <input
-                              className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                              className="h-7 w-full min-w-0 rounded border border-slate-200 px-1 text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
                               value={b.name}
                               onChange={(e) => updateBrand(b.id, { name: e.target.value })}
                             />
                           </td>
-                          <td className="py-1 pr-2">
+                          <td className="px-0.5 py-0.5 md:px-2 md:py-1">
                             <input
-                              type="number"
-                              className="w-full rounded border border-slate-200 px-2 py-1 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              className="h-7 w-full min-w-0 rounded border border-slate-200 px-0.5 text-right text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
                               value={b.rate}
-                              onChange={(e) => updateBrand(b.id, { rate: Number(e.target.value) })}
+                              onChange={(e) => updateBrand(b.id, { rate: Number(e.target.value.replace(/\D/g, '')) })}
                             />
                           </td>
-                          <td className="py-1 pr-2">
-                            <Select
-                              value={b.guaranteeYears}
-                              onChange={(e) =>
-                                updateBrand(b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
-                              }
-                            >
-                              {GUARANTEE_OPTIONS.map((g) => (
-                                <option key={g} value={g}>
-                                  {g === 0 ? 'None' : `${g} Years`}
-                                </option>
-                              ))}
-                            </Select>
+                          <td className="px-0.5 py-0.5 md:px-2 md:py-1">
+                            <div className="relative">
+                              <div className="flex h-7 w-full min-w-0 items-center justify-center rounded border border-stone-300 bg-stone-50 px-0.5 text-center text-[10px] font-medium leading-none text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-3 md:py-2 md:text-sm">
+                                {b.guaranteeYears === 0 ? '-' : `${b.guaranteeYears}y`}
+                              </div>
+                              <select
+                                aria-label="Guarantee"
+                                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                value={b.guaranteeYears}
+                                onChange={(e) =>
+                                  updateBrand(b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
+                                }
+                              >
+                                {GUARANTEE_OPTIONS.map((g) => (
+                                  <option key={g} value={g}>
+                                    {g === 0 ? '-' : `${g}y`}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </td>
-                          <td className="py-1 text-right">
+                          <td className="px-0.5 py-0.5 text-right md:py-1">
                             <button
-                              className="rounded p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                              className="rounded p-0.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 md:p-1"
                               onClick={() => removeBrand(b.id)}
                               title="Remove brand"
                             >
-                              <Minus size={16} />
+                              <Minus size={14} />
                             </button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <Button variant="outline" className="mt-3 flex items-center gap-1.5" onClick={() => addBrand(cat)}>
+                  <Button variant="outline" className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-xs md:px-4 md:py-2 md:text-sm" onClick={() => addBrand(cat)}>
                     <Plus size={16} /> Add brand
                   </Button>
                 </div>

@@ -91,8 +91,7 @@ export async function buildQuotationHtml(quote) {
   if (quote.alu) return buildAluminiumHtml(quote)
 
   const header = await b64('letterhead/legacy-quotation-header.png')
-  const { category, height, width, qty, rows } = quote
-  const quantity = qty ?? quote.qty ?? 1
+  const { category, height, width, rows } = quote
   const rowsHtml = (rows ?? []).map((r, index) => `
     <div class="legacy-row" style="top:${126.75 + index * 6.39}mm">
       <span class="rate">${esc(r.rate)}</span>
@@ -118,14 +117,12 @@ export async function buildQuotationHtml(quote) {
     <img class="legacy-head" src="${header}" />
     <div class="legacy-title">${esc(legacyCategoryLabel(category))}</div>
     <div class="legacy-info" style="left:29mm;top:94.6mm">Thickness</div>
-    <div class="legacy-info" style="left:100mm;top:94.6mm">Height</div>
-    <div class="legacy-info" style="left:127mm;top:94.6mm">Width</div>
-    <div class="legacy-info" style="left:155mm;top:94.6mm">Quantity</div>
+    <div class="legacy-info" style="left:108mm;top:94.6mm">Height</div>
+    <div class="legacy-info" style="left:142mm;top:94.6mm">Width</div>
     <div class="legacy-info" style="left:29mm;top:101.3mm">${esc(legacyThickness(category))}</div>
-    <div class="legacy-info" style="left:94mm;top:101.3mm;width:21mm;text-align:right">${esc(legacyDimension(height))}</div>
-    <div class="legacy-info" style="left:120mm;top:101.3mm;width:5mm;text-align:center">X</div>
-    <div class="legacy-info" style="left:127mm;top:101.3mm">${esc(legacyDimension(width))}</div>
-    <div class="legacy-info" style="left:155.5mm;top:101.3mm">${esc(quantity)}</div>
+    <div class="legacy-info" style="left:102mm;top:101.3mm;width:21mm;text-align:right">${esc(legacyDimension(height))}</div>
+    <div class="legacy-info" style="left:130mm;top:101.3mm;width:5mm;text-align:center">X</div>
+    <div class="legacy-info" style="left:142mm;top:101.3mm">${esc(legacyDimension(width))}</div>
     <div class="legacy-line"></div>
     <div class="legacy-info" style="left:29mm;top:113.5mm">Rate</div>
     <div class="legacy-info" style="left:56.4mm;top:113.5mm">Brand</div>
@@ -138,7 +135,7 @@ async function buildQuotationHtmlOld(quote) {
   if (quote.alu) return buildAluminiumHtml(quote)
 
   const lh = await b64('letterhead/shiv-letterhead.png')
-  const { category, height, width, qty, rows } = quote
+  const { category, height, width, rows } = quote
   const date = new Date(quote.date).toLocaleDateString('en-GB')
 
   const dimStr = (d) => d.soot ? `${d.inches} ${d.soot}/8"` : `${d.inches}"`
@@ -164,7 +161,7 @@ async function buildQuotationHtmlOld(quote) {
       </div>
       ${quote.customer?.name ? `<div style="font-size:12px;margin-bottom:4px"><b>M/s </b>${quote.customer.name}${quote.customer.mobile ? ` &nbsp; <b>Mobile: </b>${quote.customer.mobile}` : ''}</div>` : ''}
       <div style="border:1px solid #ccc;background:#f9f9f9;padding:6px 10px;font-size:13px;margin-bottom:3mm">
-        <b>Size:</b> ${sizeLabel} &nbsp; <b>Area:</b> ${quote.sqft.toFixed(2)} sqft &nbsp; <b>Qty:</b> ${qty}
+        <b>Size:</b> ${sizeLabel} &nbsp; <b>Area:</b> ${quote.sqft.toFixed(2)} sqft
       </div>
     </div>`
 
@@ -294,7 +291,7 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
 }
 
 async function buildAluminiumHtml(quote) {
-  const { category, height, width, qty, alu } = quote
+  const { category, height, width, alu } = quote
   const thicknesses = alu.thicknesses ?? []
   const selected = new Set(alu.addons ?? [])
   const isDoor = category === 'aluminium-door'
@@ -333,7 +330,7 @@ async function buildAluminiumHtml(quote) {
     rows = row('Door', thicknesses.map(t => pairCells(t.doorRate, t.doorCost)).join(''))
     if (hasChaukhat) rows += row('Chaukhat', thicknesses.map(t => pairCells(t.chaukhatRate, t.chaukhatCost)).join(''))
     if (hasAccessories) rows += row('Accessories', thicknesses.map(t => pairCells('', t.accessories, false)).join(''))
-    rows += row('Total', thicknesses.map(t => pairCells('', `${t.total}${qty > 1 ? ` ×${qty}` : ''}`, false, 'bold')).join(''))
+    rows += row('Total', thicknesses.map(t => pairCells('', t.total, false, 'bold')).join(''))
     if (hasDecorFilm || hasBrownCoated) rows += addonHeader
     if (hasDecorFilm) rows += row('Décor Film', thicknesses.map(t => pairCells(t.decorFilmRate, t.decorFilm)).join(''))
     if (hasBrownCoated) rows += row('Brown Coated', thicknesses.map(t => pairCells(t.brownCoatedRate, t.brownCoated)).join(''))
@@ -347,24 +344,30 @@ async function buildAluminiumHtml(quote) {
     if (hasBrownCoated) rows += row('Brown Coated', thicknesses.map(t => pairCells(40, t.brownCoated)).join(''))
   }
 
-  const imgW = isDoor ? 112 : 152
-  const imgH = isDoor ? 240 : 152
-  const margin = isDoor ? 32 : 34
-  const diagramW = imgW + margin * 2
-  const diagramH = imgH + margin * 2
-  const marker = isDoor ? 'door' : 'window'
+  const diagramKind = isDoor ? 'door' : is2Track ? 'window2' : 'window3'
+  const excelDiagram = {
+    door: { groupW: 219, groupH: 318, imageX: 16, imageY: 12, imageW: 203, imageH: 306, hLineX: 15, hLineY: 0, hLineW: 202, vLineX: 0, vLineY: 13, vLineH: 305 },
+    window2: { groupW: 237, groupH: 250, imageX: 16, imageY: 16, imageW: 221, imageH: 234, hLineX: 14, hLineY: 0, hLineW: 223, vLineX: 0, vLineY: 19, vLineH: 230 },
+    window3: { groupW: 238, groupH: 262, imageX: 14, imageY: 15, imageW: 224, imageH: 248, hLineX: 15, hLineY: 0, hLineW: 223, vLineX: 0, vLineY: 16, vLineH: 243 },
+  }
+  const d = excelDiagram[diagramKind]
+  const groupX = 42
+  const groupY = 38
+  const diagramW = groupX + d.groupW + 6
+  const diagramH = groupY + d.groupH + 2
+  const marker = diagramKind
   const diagram = `
     <div class="diagram" style="width:${diagramW}px;height:${diagramH}px">
-      <img src="${productImage}" style="left:${margin}px;top:${margin}px;width:${imgW}px;height:${imgH}px">
+      <img src="${productImage}" style="left:${groupX + d.imageX}px;top:${groupY + d.imageY}px;width:${d.imageW}px;height:${d.imageH}px">
       <svg width="${diagramW}" height="${diagramH}">
         <defs>
           <marker id="arrow-end-${marker}" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#000"/></marker>
           <marker id="arrow-start-${marker}" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="#000"/></marker>
         </defs>
-        <text x="${margin + imgW / 2}" y="18" text-anchor="middle">${dimStr(width)}</text>
-        <line x1="${margin}" y1="28" x2="${margin + imgW}" y2="28" marker-start="url(#arrow-start-${marker})" marker-end="url(#arrow-end-${marker})"/>
-        <text x="18" y="${margin + imgH / 2}" text-anchor="middle" transform="rotate(-90,18,${margin + imgH / 2})">${dimStr(height)}</text>
-        <line x1="28" y1="${margin}" x2="28" y2="${margin + imgH}" marker-start="url(#arrow-start-${marker})" marker-end="url(#arrow-end-${marker})"/>
+        <text x="${groupX + d.hLineX + d.hLineW / 2}" y="20" text-anchor="middle">${dimStr(width)}</text>
+        <line x1="${groupX + d.hLineX}" y1="${groupY + d.hLineY}" x2="${groupX + d.hLineX + d.hLineW}" y2="${groupY + d.hLineY}" marker-start="url(#arrow-start-${marker})" marker-end="url(#arrow-end-${marker})"/>
+        <text x="12" y="${groupY + d.vLineY + d.vLineH / 2}" text-anchor="middle">${dimStr(height)}</text>
+        <line x1="${groupX + d.vLineX}" y1="${groupY + d.vLineY}" x2="${groupX + d.vLineX}" y2="${groupY + d.vLineY + d.vLineH}" marker-start="url(#arrow-start-${marker})" marker-end="url(#arrow-end-${marker})"/>
       </svg>
     </div>`
 
@@ -374,10 +377,10 @@ async function buildAluminiumHtml(quote) {
   @page { size:A4 portrait; margin:0; }
   body { color:#000; background:#fff; }
   .page { width:210mm; min-height:297mm; background:#fff; }
-  .sheet { width:160mm; margin:0 auto; padding-top:24mm; font-family:"Times New Roman",Times,serif; color:#000; }
-  .header { display:flex; align-items:center; justify-content:space-between; gap:6mm; margin-bottom:4mm; }
-  .header img { display:block; width:86mm; }
-  .title { display:flex; align-items:center; width:68mm; min-height:13mm; border:2px solid #000; background:#d9d9d9; padding:4px 8px; font-size:14px; line-height:1.25; }
+  .sheet { width:160mm; margin:0 auto; padding-top:46mm; font-family:"Times New Roman",Times,serif; color:#000; }
+  .header { display:flex; align-items:center; justify-content:space-between; gap:6mm; margin-bottom:1.5mm; }
+  .header img { display:block; width:83.4mm; height:45mm; }
+  .title { display:flex; align-items:center; width:64mm; min-height:11.5mm; border:2px solid #000; background:#d9d9d9; padding:4px 8px; font-size:14pt; line-height:1.05; }
   .content { font-size:14.5px; line-height:1.25; }
   table { width:100%; border-collapse:collapse; }
   .info { margin-bottom:2mm; border:2px solid #000; }
@@ -392,7 +395,7 @@ async function buildAluminiumHtml(quote) {
   .bold { font-weight:700; }
   .diagram-wrap { display:flex; justify-content:center; margin-top:5mm; }
   .diagram { position:relative; }
-  .diagram img { position:absolute; object-fit:contain; }
+  .diagram img { position:absolute; object-fit:fill; }
   .diagram svg { position:absolute; inset:0; overflow:visible; }
   .diagram text { font:17px "Times New Roman",Times,serif; }
   .diagram line { stroke:#000; stroke-width:1.6; }

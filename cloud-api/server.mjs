@@ -29,6 +29,7 @@ app.use(express.json({ limit: process.env.JSON_LIMIT || '30mb' }))
 
 const refs = {
   createPrintJob: makeFunctionReference('printJobs:create'),
+  getPrintJob: makeFunctionReference('printJobs:getById'),
   listPendingPrintJobs: makeFunctionReference('printJobs:listPending'),
   claimNextPrintJobs: makeFunctionReference('printJobs:claimNext'),
   markPrintJobPrinting: makeFunctionReference('printJobs:markPrinting'),
@@ -99,6 +100,19 @@ app.get('/api/print-jobs/pending', async (req, res) => {
       limit: req.query.limit ? Number(req.query.limit) : undefined,
     })
     res.json({ ok: true, jobs })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+app.get('/api/print-jobs/:id', async (req, res) => {
+  try {
+    const job = await convex.query(refs.getPrintJob, { id: req.params.id })
+    if (!job) {
+      res.status(404).json({ ok: false, error: 'Print job not found' })
+      return
+    }
+    res.json({ ok: true, job })
   } catch (err) {
     sendError(res, err)
   }

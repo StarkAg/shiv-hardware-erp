@@ -44,64 +44,85 @@ function Td({ children, colSpan, className = '' }: { children?: ReactNode; colSp
   )
 }
 
-function ProductDiagram({ hIn, wIn, image, isDoor }: { hIn: number; wIn: number; image: string; isDoor: boolean }) {
-  const imgW = isDoor ? 112 : 152
-  const imgH = isDoor ? 240 : 152
-  const M = isDoor ? 32 : 34
-  const W = imgW + M * 2
-  const H = imgH + M * 2
+type DiagramKind = 'door' | 'window2' | 'window3'
+
+const excelDiagram: Record<DiagramKind, {
+  groupW: number
+  groupH: number
+  imageX: number
+  imageY: number
+  imageW: number
+  imageH: number
+  hLineX: number
+  hLineY: number
+  hLineW: number
+  vLineX: number
+  vLineY: number
+  vLineH: number
+}> = {
+  door: { groupW: 219, groupH: 318, imageX: 16, imageY: 12, imageW: 203, imageH: 306, hLineX: 15, hLineY: 0, hLineW: 202, vLineX: 0, vLineY: 13, vLineH: 305 },
+  window2: { groupW: 237, groupH: 250, imageX: 16, imageY: 16, imageW: 221, imageH: 234, hLineX: 14, hLineY: 0, hLineW: 223, vLineX: 0, vLineY: 19, vLineH: 230 },
+  window3: { groupW: 238, groupH: 262, imageX: 14, imageY: 15, imageW: 224, imageH: 248, hLineX: 15, hLineY: 0, hLineW: 223, vLineX: 0, vLineY: 16, vLineH: 243 },
+}
+
+function ProductDiagram({ hIn, wIn, image, kind }: { hIn: number; wIn: number; image: string; kind: DiagramKind }) {
+  const d = excelDiagram[kind]
+  const groupX = 42
+  const groupY = 38
+  const W = groupX + d.groupW + 6
+  const H = groupY + d.groupH + 2
   const wLabel = dimStr({ inches: Math.floor(wIn), soot: Math.round((wIn % 1) * 8) })
   const hLabel = dimStr({ inches: Math.floor(hIn), soot: Math.round((hIn % 1) * 8) })
+  const markerId = kind
 
   return (
     <div className="relative" style={{ width: W, height: H }}>
       <img
         src={image}
         alt=""
-        className="absolute object-contain"
-        style={{ left: M, top: M, width: imgW, height: imgH }}
+        className="absolute"
+        style={{ left: groupX + d.imageX, top: groupY + d.imageY, width: d.imageW, height: d.imageH }}
       />
       <svg width={W} height={H} className="absolute inset-0 overflow-visible">
         <defs>
-          <marker id={`arrow-end-${isDoor ? 'door' : 'window'}`} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <marker id={`arrow-end-${markerId}`} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
             <path d="M0,0 L8,4 L0,8 Z" fill="#000" />
           </marker>
-          <marker id={`arrow-start-${isDoor ? 'door' : 'window'}`} markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto-start-reverse">
+          <marker id={`arrow-start-${markerId}`} markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto-start-reverse">
             <path d="M0,0 L8,4 L0,8 Z" fill="#000" />
           </marker>
         </defs>
-        <text x={M + imgW / 2} y={18} textAnchor="middle" fontSize={17} fontFamily="Times New Roman, Times, serif">
+        <text x={groupX + d.hLineX + d.hLineW / 2} y={20} textAnchor="middle" fontSize={17} fontFamily="Times New Roman, Times, serif">
           {wLabel}
         </text>
         <line
-          x1={M}
-          y1={28}
-          x2={M + imgW}
-          y2={28}
+          x1={groupX + d.hLineX}
+          y1={groupY + d.hLineY}
+          x2={groupX + d.hLineX + d.hLineW}
+          y2={groupY + d.hLineY}
           stroke="#000"
           strokeWidth={1.6}
-          markerStart={`url(#arrow-start-${isDoor ? 'door' : 'window'})`}
-          markerEnd={`url(#arrow-end-${isDoor ? 'door' : 'window'})`}
+          markerStart={`url(#arrow-start-${markerId})`}
+          markerEnd={`url(#arrow-end-${markerId})`}
         />
         <text
-          x={18}
-          y={M + imgH / 2}
+          x={12}
+          y={groupY + d.vLineY + d.vLineH / 2}
           textAnchor="middle"
           fontSize={17}
           fontFamily="Times New Roman, Times, serif"
-          transform={`rotate(-90,18,${M + imgH / 2})`}
         >
           {hLabel}
         </text>
         <line
-          x1={28}
-          y1={M}
-          x2={28}
-          y2={M + imgH}
+          x1={groupX + d.vLineX}
+          y1={groupY + d.vLineY}
+          x2={groupX + d.vLineX}
+          y2={groupY + d.vLineY + d.vLineH}
           stroke="#000"
           strokeWidth={1.6}
-          markerStart={`url(#arrow-start-${isDoor ? 'door' : 'window'})`}
-          markerEnd={`url(#arrow-end-${isDoor ? 'door' : 'window'})`}
+          markerStart={`url(#arrow-start-${markerId})`}
+          markerEnd={`url(#arrow-end-${markerId})`}
         />
       </svg>
     </div>
@@ -141,6 +162,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
     : is2Track
     ? assetPath('assets/aluminium/window-2-track.jpeg')
     : assetPath('assets/aluminium/window-3-track.jpeg')
+  const diagramKind: DiagramKind = isDoor ? 'door' : is2Track ? 'window2' : 'window3'
 
   // compute per-thickness costs for doors
   const dRows = ALU_THICKNESSES.map((t) => {
@@ -181,14 +203,14 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
   return (
     <A4Page>
       <div
-        className="mx-auto pt-[24mm] text-black"
+        className="mx-auto pt-[46mm] text-black"
         style={{ width: '160mm', fontFamily: '"Times New Roman", Times, serif' }}
       >
-        <div className="mb-[4mm] flex items-center justify-between gap-[6mm]">
-          <img src={headerImage} alt="" className="block w-[86mm]" />
+        <div className="mb-[1.5mm] flex items-center justify-between gap-[6mm]">
+          <img src={headerImage} alt="" className="block" style={{ width: '83.4mm', height: '45mm' }} />
           <div
-            className="flex min-h-[13mm] items-center border-2 border-black bg-[#d9d9d9] px-2 py-1 text-left text-[14px] leading-tight"
-            style={{ width: '68mm' }}
+            className="flex min-h-[11.5mm] items-center border-2 border-black bg-[#d9d9d9] px-2 py-1 text-left text-[14pt] leading-[1.05]"
+            style={{ width: '64mm' }}
           >
             <div>
             {productTitle.split('\n').map((line, i) => <div key={i}>{line}</div>)}
@@ -375,7 +397,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
 
         {/* Diagram */}
         <div className="mt-[5mm] flex justify-center">
-          <ProductDiagram hIn={hIn} wIn={wIn} image={productImage} isDoor={isDoor} />
+          <ProductDiagram hIn={hIn} wIn={wIn} image={productImage} kind={diagramKind} />
         </div>
       </div>
       </div>

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Brand, BrandSet, Customer, ProductCategory, Quotation } from './types'
 import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
+import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const codeSets = (sets: BrandSet[]): BrandSet[] => sets.map((s, i) => ({ ...s, name: `C${i + 1}` }))
@@ -124,6 +125,8 @@ export const useStore = create<AppState>((set, get) => ({
       return { quotations, quoteSeq }
     })
     persist(get)
+    enqueueQuotationSync(q)
+    if (q.customer.name.trim()) enqueueCustomerSync(q.customer)
   },
 
   deleteQuotation: (id) => {
@@ -140,5 +143,6 @@ export const useStore = create<AppState>((set, get) => ({
       return { customers }
     })
     persist(get)
+    enqueueCustomerSync(c)
   },
 }))

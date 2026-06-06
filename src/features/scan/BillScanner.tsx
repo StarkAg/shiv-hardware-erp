@@ -7,10 +7,11 @@ import { useStore } from '../../lib/store'
 import type { Customer, GuaranteeDocument, GuaranteeYears, ProductCategory } from '../../lib/types'
 import { CATEGORY_LABELS } from '../../lib/types'
 import { formatINR } from '../../lib/pricing'
-import { PRINT_SERVER_URL } from '../../lib/printServer'
+import { fetchPrintServer } from '../../lib/printServer'
 import { GuaranteeCard } from '../print/GuaranteeCard'
 import { PrintPreview } from '../print/PrintPreview'
 import { Button, PageHeader } from '../../components/ui'
+import { enqueueGuaranteeSync } from '../../lib/offlineSync'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 
@@ -150,7 +151,7 @@ export function BillScanner() {
       // Resize to max 1000px before sending — cuts token cost ~70%, text stays readable
       const base64 = await resizeImage(file, 1000)
 
-      const res = await fetch(`${PRINT_SERVER_URL}/scan-bill`, {
+      const res = await fetchPrintServer('/scan-bill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: base64, mediaType: file.type }),
@@ -193,7 +194,7 @@ export function BillScanner() {
     try {
       let finalScan = draftScan
       if (rawScan) {
-        const res = await fetch(`${PRINT_SERVER_URL}/scan-bill/learn`, {
+        const res = await fetchPrintServer('/scan-bill/learn', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ before: rawScan, after: draftScan }),
@@ -206,6 +207,7 @@ export function BillScanner() {
 
       const guaranteeDoc = scanToDocument(finalScan, quotations.length)
       upsertCustomer(guaranteeDoc.customer)
+      enqueueGuaranteeSync(guaranteeDoc)
       setRawScan(finalScan)
       setDraftScan(finalScan)
       setDoc(guaranteeDoc)

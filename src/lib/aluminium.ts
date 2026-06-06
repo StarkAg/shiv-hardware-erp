@@ -60,7 +60,7 @@ export interface AluAddons {
 
 export const defaultAddons = (): AluAddons => ({
   chaukhat: true,
-  accessories: false,
+  accessories: true,
   decorFilm: true,
   ssNet: true,
   brownCoated: true,

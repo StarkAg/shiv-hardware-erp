@@ -35,7 +35,6 @@ const legacyDimension = (dim: Quotation['height']) => (
 
 export function QuotationPrint({ quote }: { quote: Quotation }) {
   if (isAluminium(quote.category)) return <AluminiumPrint quote={quote} />
-  const quantity = (quote as Quotation & { qty?: number }).qty ?? 1
 
   return (
     <A4Page>
@@ -48,14 +47,12 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
 
         <div className="absolute left-[29mm] top-[81.3mm] text-[15pt] text-[#00b050]">{legacyCategoryLabel(quote.category)}</div>
         <div className="absolute left-[29mm] top-[94.6mm] text-[15pt] leading-[1.1]">Thickness</div>
-        <div className="absolute left-[100mm] top-[94.6mm] text-[15pt] leading-[1.1]">Height</div>
-        <div className="absolute left-[127mm] top-[94.6mm] text-[15pt] leading-[1.1]">Width</div>
-        <div className="absolute left-[155mm] top-[94.6mm] text-[15pt] leading-[1.1]">Quantity</div>
+        <div className="absolute left-[108mm] top-[94.6mm] text-[15pt] leading-[1.1]">Height</div>
+        <div className="absolute left-[142mm] top-[94.6mm] text-[15pt] leading-[1.1]">Width</div>
         <div className="absolute left-[29mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyThickness(quote.category)}</div>
-        <div className="absolute left-[94mm] top-[101.3mm] w-[21mm] text-right text-[15pt] leading-[1.1]">{legacyDimension(quote.height)}</div>
-        <div className="absolute left-[120mm] top-[101.3mm] w-[5mm] text-center text-[15pt] leading-[1.1]">X</div>
-        <div className="absolute left-[127mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyDimension(quote.width)}</div>
-        <div className="absolute left-[155.5mm] top-[101.3mm] text-[15pt] leading-[1.1]">{quantity}</div>
+        <div className="absolute left-[102mm] top-[101.3mm] w-[21mm] text-right text-[15pt] leading-[1.1]">{legacyDimension(quote.height)}</div>
+        <div className="absolute left-[130mm] top-[101.3mm] w-[5mm] text-center text-[15pt] leading-[1.1]">X</div>
+        <div className="absolute left-[142mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyDimension(quote.width)}</div>
         <div className="absolute left-[29mm] top-[107mm] w-[153mm] border-t-[1.5px] border-black" />
         <div className="absolute left-[29mm] top-[113.5mm] text-[15pt] leading-[1.1]">Rate</div>
         <div className="absolute left-[56.4mm] top-[113.5mm] text-[15pt] leading-[1.1]">Brand</div>
