@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { Pencil, Printer, Trash2 } from 'lucide-react'
 import { CATEGORY_LABELS } from '../../lib/types'
-import { formatSize } from '../../lib/pricing'
+import { enrichQuotation, formatSize } from '../../lib/pricing'
 import { Button, Card, Input, PageHeader } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
 import { QuotationPrint } from '../print/QuotationPrint'
@@ -62,7 +62,7 @@ export function QuoteHistory() {
                         variant="ghost"
                         className="px-2 py-1"
                         title="Print quotation"
-                        onClick={() => setPreview(x)}
+                        onClick={() => setPreview(enrichQuotation(x))}
                       >
                         <Printer size={16} />
                       </Button>

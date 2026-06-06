@@ -22,10 +22,15 @@ export interface Brand {
   rate: number
   /** Guarantee in years against borer (maps to a wax seal). 0 = none. */
   guaranteeYears: GuaranteeYears
+  /** Excel has separate Guarantee and Warranty columns; default is guarantee. */
+  coverage?: CoverageType
+  /** Optional row tint copied from the source workbook. */
+  accentColor?: string
   thicknessMm?: number
 }
 
 export type GuaranteeYears = 0 | 1 | 3 | 5 | 7 | 8 | 10 | 15 | 20 | 21 | 25 | 30
+export type CoverageType = 'guarantee' | 'warranty'
 
 /** A coded price set — a full copy of brands/rates (C1, C2, …). */
 export interface BrandSet {
@@ -56,6 +61,8 @@ export interface BrandQuoteRow {
   brandName: string
   rate: number
   guaranteeYears: GuaranteeYears
+  coverage?: CoverageType
+  accentColor?: string
   cost: number
 }
 

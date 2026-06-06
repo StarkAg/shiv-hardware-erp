@@ -1,0 +1,13 @@
+.env
+.env.*
+print-server/.env
+print-server/data/wwebjs-auth/
+*.log
+node_modules/
+print-server/node_modules/
+dist/
+release/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

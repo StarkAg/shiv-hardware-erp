@@ -2,6 +2,9 @@ node_modules
 dist
 release
 print-server/.env
+print-server/data/wwebjs-auth/
+print-server/data/whatsapp-processed-messages.json
+print-server/.wwebjs_cache/
 *.log
 cloud-api/.env
 .DS_Store

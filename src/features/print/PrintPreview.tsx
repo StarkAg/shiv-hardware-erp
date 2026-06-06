@@ -6,7 +6,6 @@ import { CLOUD_API_URL, createCloudPrintJob, getCloudPrintJob, type CloudPrintJo
 // A4 in CSS px at 96dpi.
 const A4_W = 794
 const A4_H = 1123
-const HP_TEST_PRINTER = 'NPI33F31D (HP LaserJet Tank MFP 2606sdw)'
 const CLOUD_PRINT_POLL_MS = 2_000
 const CLOUD_PRINT_WATCH_MS = 2 * 60_000
 
@@ -53,11 +52,9 @@ export function PrintPreview({
   const areaRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [printing, setPrinting] = useState(false)
-  const [hpPrinting, setHpPrinting] = useState(false)
   const [printStatus, setPrintStatus] = useState('')
   const [printStatusTone, setPrintStatusTone] = useState<'success' | 'error' | 'info'>('success')
   const cloudStatusWatchId = useRef(0)
-  const isDesktop = !!window.shivDesktop?.printCurrentPage
   const canCloudPrint = Boolean(CLOUD_API_URL && serverPrint)
 
   useLayoutEffect(() => {
@@ -172,35 +169,6 @@ export function PrintPreview({
     }
   }
 
-  async function printHp() {
-    if (!window.shivDesktop?.printCurrentPage) return
-
-    setHpPrinting(true)
-    try {
-      const printers = await window.shivDesktop.getPrinters()
-      const hpPrinter = printers.find((printer) =>
-        [printer.name, printer.displayName, printer.description]
-          .filter(Boolean)
-          .some((value) =>
-            value === HP_TEST_PRINTER ||
-            value?.includes('HP LaserJet Tank MFP 2606sdw') ||
-            value?.includes('HP LaserJet Tank MFP 260x'),
-          ),
-      )
-
-      if (!hpPrinter) {
-        const printerNames = printers.map((printer) => printer.name).join('\n')
-        throw new Error(`HP printer not found. Available printers:\n${printerNames || 'None'}`)
-      }
-
-      await window.shivDesktop.printCurrentPage({ copies: 1, deviceName: hpPrinter.name })
-    } catch (err) {
-      alert(`HP print failed: ${err instanceof Error ? err.message : String(err)}`)
-    } finally {
-      setHpPrinting(false)
-    }
-  }
-
   const printStatusClass = printStatusTone === 'error'
     ? 'text-red-300'
     : printStatusTone === 'info'
@@ -215,19 +183,9 @@ export function PrintPreview({
           {printStatus && <div className={`mt-0.5 text-xs font-medium ${printStatusClass}`}>{printStatus}</div>}
         </div>
         <div className="flex flex-wrap gap-2">
-          {isDesktop && (
-            <button
-              onClick={printHp}
-              disabled={hpPrinting || printing}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60 sm:px-4"
-              title="Silent print to HP LaserJet Tank MFP 2606sdw"
-            >
-              <Printer size={16} /> {hpPrinting ? 'Printing HP' : 'Print HP'}
-            </button>
-          )}
           <button
             onClick={print}
-            disabled={printing || hpPrinting}
+            disabled={printing}
             className="flex items-center gap-1.5 rounded-lg bg-shiv-green px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-[#c6a15a] sm:px-4"
           >
             <Printer size={16} /> {printing ? 'Sending' : 'Print'}

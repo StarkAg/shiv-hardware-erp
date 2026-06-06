@@ -5,12 +5,15 @@ import { useStore } from '../../lib/store'
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
+  type Brand,
+  type BrandQuoteRow,
+  type CoverageType,
   type Dimension,
   type GuaranteeYears,
   type ProductCategory,
   type Quotation,
 } from '../../lib/types'
-import { areaSqft, buildBrandRows, formatINR, formatSize } from '../../lib/pricing'
+import { areaSqft, buildBrandRows, enrichQuotation, formatINR, formatSize } from '../../lib/pricing'
 import {
   type AluAddons,
   calcAllThicknesses,
@@ -25,8 +28,17 @@ import { renderPngOnServer } from '../../lib/printServer'
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
+const COVERAGE_OPTIONS: CoverageType[] = ['guarantee', 'warranty']
 const isCategory = (c?: string): c is ProductCategory =>
   !!c && CATEGORY_ORDER.includes(c as ProductCategory)
+
+function coverageLabel(coverage: CoverageType | undefined) {
+  return coverage === 'warranty' ? 'Wty' : 'Gty'
+}
+
+function tintedRowStyle(item: Pick<Brand, 'accentColor'> | Pick<BrandQuoteRow, 'accentColor'>) {
+  return item.accentColor ? { backgroundColor: item.accentColor } : undefined
+}
 
 export function QuotationBuilder() {
   const { id, category } = useParams()
@@ -151,7 +163,7 @@ export function QuotationBuilder() {
     }
   }
 
-  const doc = buildQuote()
+  const doc = enrichQuotation(buildQuote())
   const toggle = (k: keyof AluAddons) => setAddons((a) => ({ ...a, [k]: !a[k] }))
   const focusNextSizeEntry = (e: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
     if (e.key !== 'Enter') return
@@ -317,27 +329,27 @@ export function QuotationBuilder() {
                   <th className={`${editMode ? 'w-[52%]' : 'w-[44%]'} px-2 py-1.5 md:px-4 md:py-2`}>Brand</th>
                   <th className={`${editMode ? 'w-[20%]' : 'w-[17%]'} px-1.5 py-1.5 text-right md:px-4 md:py-2`}>Rate</th>
                   {!editMode && <th className="w-[21%] px-1.5 py-1.5 text-right md:px-4 md:py-2">Cost</th>}
-                  <th className={`${editMode ? 'w-[18%]' : 'w-[18%]'} px-1.5 py-1.5 text-center md:px-4 md:py-2`}>Gty</th>
+                  <th className={`${editMode ? 'w-[18%]' : 'w-[18%]'} px-1.5 py-1.5 text-center md:px-4 md:py-2`}>Gty/Wty</th>
                   {editMode && <th className="w-10 px-2 py-1.5 md:px-4 md:py-2"></th>}
                 </tr>
               </thead>
               <tbody>
                 {!editMode &&
                   rows.map((r, i) => (
-                    <tr key={i} className="border-t border-stone-100 dark:border-white/10">
+                    <tr key={i} className="border-t border-stone-100 dark:border-white/10" style={tintedRowStyle(r)}>
                       <td className="break-words px-2 py-1.5 font-medium md:px-4 md:py-2">{r.brandName}</td>
                       <td className="px-1.5 py-1.5 text-right text-stone-500 dark:text-stone-400 md:px-4 md:py-2">{r.rate}</td>
                       <td className="px-1.5 py-1.5 text-right font-semibold md:px-4 md:py-2">{hasSize ? formatINR(r.cost) : '—'}</td>
                       <td className="px-1.5 py-1.5 text-center md:px-4 md:py-2">
                         {r.guaranteeYears
-                          ? <span className="text-shiv-red font-medium">{r.guaranteeYears}y</span>
+                          ? <span className="text-shiv-red font-medium">{coverageLabel(r.coverage)} {r.guaranteeYears}y</span>
                           : <span className="text-stone-300 dark:text-stone-600">—</span>}
                       </td>
                     </tr>
                   ))}
                 {editMode &&
                   brands.map((b) => (
-                    <tr key={b.id} className="border-t border-stone-100 dark:border-white/10">
+                    <tr key={b.id} className="border-t border-stone-100 dark:border-white/10" style={tintedRowStyle(b)}>
                       <td className="px-1.5 py-1.5 md:px-3">
                         <input
                           className="h-8 w-full min-w-0 rounded border border-slate-200 px-1.5 text-[11px] dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
@@ -354,22 +366,41 @@ export function QuotationBuilder() {
                         />
                       </td>
                       <td className="px-1 py-1.5 text-center md:px-3">
-                        <div className="relative">
-                          <div className="flex h-8 w-full min-w-0 items-center justify-center rounded-lg border border-stone-300 bg-stone-50 px-1 text-[11px] font-medium text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-3 md:py-2 md:text-sm">
-                            {b.guaranteeYears === 0 ? '-' : `${b.guaranteeYears}y`}
+                        <div className="grid grid-cols-2 gap-1">
+                          <div className="relative">
+                            <div className="flex h-8 w-full min-w-0 items-center justify-center rounded-lg border border-stone-300 bg-stone-50 px-1 text-[10px] font-medium text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
+                              {coverageLabel(b.coverage)}
+                            </div>
+                            <select
+                              aria-label="Coverage"
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                              value={b.coverage ?? 'guarantee'}
+                              onChange={(e) => updateBrand(setId, b.id, { coverage: e.target.value as CoverageType })}
+                            >
+                              {COVERAGE_OPTIONS.map((coverage) => (
+                                <option key={coverage} value={coverage}>
+                                  {coverageLabel(coverage)}
+                                </option>
+                              ))}
+                            </select>
                           </div>
-                          <select
-                            aria-label="Guarantee"
-                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                            value={b.guaranteeYears}
-                            onChange={(e) =>
-                              updateBrand(setId, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
-                            }
-                          >
-                            {GUARANTEE_OPTIONS.map((g) => (
-                              <option key={g} value={g}>{g === 0 ? '-' : `${g}y`}</option>
-                            ))}
-                          </select>
+                          <div className="relative">
+                            <div className="flex h-8 w-full min-w-0 items-center justify-center rounded-lg border border-stone-300 bg-stone-50 px-1 text-[10px] font-medium text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
+                              {b.guaranteeYears === 0 ? '-' : `${b.guaranteeYears}y`}
+                            </div>
+                            <select
+                              aria-label="Guarantee"
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                              value={b.guaranteeYears}
+                              onChange={(e) =>
+                                updateBrand(setId, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
+                              }
+                            >
+                              {GUARANTEE_OPTIONS.map((g) => (
+                                <option key={g} value={g}>{g === 0 ? '-' : `${g}y`}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                       </td>
                       <td className="px-1 py-1.5 text-right md:px-3">

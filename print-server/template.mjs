@@ -33,6 +33,10 @@ const GUARANTEE_TERMS = [
   'Polish, fittings, glass and handles are not covered under guarantee.',
 ]
 
+function coverageLabel(coverage) {
+  return coverage === 'warranty' ? 'Warranty' : 'Guarantee'
+}
+
 const esc = value => String(value ?? '')
   .replaceAll('&', '&amp;')
   .replaceAll('<', '&lt;')
@@ -93,11 +97,11 @@ export async function buildQuotationHtml(quote) {
   const header = await b64('letterhead/legacy-quotation-header.png')
   const { category, height, width, rows } = quote
   const rowsHtml = (rows ?? []).map((r, index) => `
-    <div class="legacy-row" style="top:${126.75 + index * 6.39}mm">
+    <div class="legacy-row" style="top:${126.75 + index * 6.39}mm${r.accentColor ? `;background:${esc(r.accentColor)}` : ''}">
       <span class="rate">${esc(r.rate)}</span>
       <span class="brand">${esc(r.brandName)}</span>
       <span class="cost">${esc(Math.round(Number(r.cost) || 0))}</span>
-      <span class="guarantee">${Number(r.guaranteeYears) ? `${esc(r.guaranteeYears)} Years` : ''}</span>
+      <span class="guarantee">${Number(r.guaranteeYears) ? `${coverageLabel(r.coverage)} ${esc(r.guaranteeYears)} Years` : ''}</span>
     </div>`).join('')
 
   return page(`
@@ -127,7 +131,7 @@ export async function buildQuotationHtml(quote) {
     <div class="legacy-info" style="left:29mm;top:113.5mm">Rate</div>
     <div class="legacy-info" style="left:56.4mm;top:113.5mm">Brand</div>
     <div class="legacy-info" style="left:127mm;top:113.5mm">Cost</div>
-    <div class="legacy-info" style="left:156mm;top:113.5mm">Guarantee</div>
+    <div class="legacy-info" style="left:156mm;top:113.5mm">Gty/Wty</div>
     ${rowsHtml}`)
 }
 
@@ -167,11 +171,11 @@ async function buildQuotationHtmlOld(quote) {
 
   // Brand rate card (doors / plywood)
   if (rows && rows.length) {
-    const rowsHtml = rows.map(r => `<tr>
-      <td class="bold">${r.brandName}</td>
-      <td class="right">${r.rate}</td>
+    const rowsHtml = rows.map(r => `<tr${r.accentColor ? ` style="background:${esc(r.accentColor)}"` : ''}>
+      <td class="bold">${esc(r.brandName)}</td>
+      <td class="right">${esc(r.rate)}</td>
       <td class="right bold">${inr(r.cost)}</td>
-      <td class="center ${r.guaranteeYears ? 'red bold' : ''}">${r.guaranteeYears ? `${r.guaranteeYears} Years` : '—'}</td>
+      <td class="center ${r.guaranteeYears ? 'red bold' : ''}">${r.guaranteeYears ? `${coverageLabel(r.coverage)} ${r.guaranteeYears} Years` : '-'}</td>
     </tr>`).join('')
     const seals = [...new Set(rows.filter(r => r.guaranteeYears).map(r => r.guaranteeYears))].sort((a,b)=>a-b)
     const sealImgs = await Promise.all(seals.map(async y => {
@@ -185,7 +189,7 @@ async function buildQuotationHtmlOld(quote) {
         <table>
           <thead><tr style="background:${GREEN};color:#fff">
             <th style="text-align:left">Brand</th><th class="right">Rate ₹/sqft</th>
-            <th class="right">Cost</th><th class="center">Guarantee</th>
+            <th class="right">Cost</th><th class="center">Gty/Wty</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>

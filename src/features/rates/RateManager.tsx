@@ -6,13 +6,23 @@ import {
   CATEGORY_ORDER,
   type Brand,
   type BrandSet,
+  type CoverageType,
   type GuaranteeYears,
   type ProductCategory,
 } from '../../lib/types'
 import { Button, Card, PageHeader } from '../../components/ui'
 
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
+const COVERAGE_OPTIONS: CoverageType[] = ['guarantee', 'warranty']
 const uid = () => Math.random().toString(36).slice(2, 10)
+
+function coverageLabel(coverage: CoverageType | undefined) {
+  return coverage === 'warranty' ? 'Wty' : 'Gty'
+}
+
+function tintedRowStyle(brand: Pick<Brand, 'accentColor'>) {
+  return brand.accentColor ? { backgroundColor: brand.accentColor } : undefined
+}
 
 // Brand-based categories only (aluminium is calculated, not brand-listed).
 const BRAND_CATEGORIES = CATEGORY_ORDER.filter(
@@ -170,15 +180,15 @@ export function RateManager() {
                           <span className="hidden md:inline">Rate ₹/sqft</span>
                         </th>
                         <th className="px-0.5 py-0.5 text-center md:px-2 md:py-1">
-                          <span className="md:hidden">Gty</span>
-                          <span className="hidden md:inline">Guarantee</span>
+                          <span className="md:hidden">G/W</span>
+                          <span className="hidden md:inline">Gty/Wty</span>
                         </th>
                         <th className="px-0.5 py-0.5 md:py-1"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {list.map((b) => (
-                        <tr key={b.id} className="border-t border-slate-100 dark:border-white/10">
+                        <tr key={b.id} className="border-t border-slate-100 dark:border-white/10" style={tintedRowStyle(b)}>
                           <td className="px-1 py-0.5 md:px-2 md:py-1">
                             <input
                               className="h-7 w-full min-w-0 rounded border border-slate-200 px-1 text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
@@ -197,24 +207,43 @@ export function RateManager() {
                             />
                           </td>
                           <td className="px-0.5 py-0.5 md:px-2 md:py-1">
-                            <div className="relative">
-                              <div className="flex h-7 w-full min-w-0 items-center justify-center rounded border border-stone-300 bg-stone-50 px-0.5 text-center text-[10px] font-medium leading-none text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-3 md:py-2 md:text-sm">
-                                {b.guaranteeYears === 0 ? '-' : `${b.guaranteeYears}y`}
+                            <div className="grid grid-cols-2 gap-1">
+                              <div className="relative">
+                                <div className="flex h-7 w-full min-w-0 items-center justify-center rounded border border-stone-300 bg-stone-50 px-0.5 text-center text-[9px] font-medium leading-none text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
+                                  {coverageLabel(b.coverage)}
+                                </div>
+                                <select
+                                  aria-label="Coverage"
+                                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                  value={b.coverage ?? 'guarantee'}
+                                  onChange={(e) => updateBrand(b.id, { coverage: e.target.value as CoverageType })}
+                                >
+                                  {COVERAGE_OPTIONS.map((coverage) => (
+                                    <option key={coverage} value={coverage}>
+                                      {coverageLabel(coverage)}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
-                              <select
-                                aria-label="Guarantee"
-                                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                                value={b.guaranteeYears}
-                                onChange={(e) =>
-                                  updateBrand(b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
-                                }
-                              >
-                                {GUARANTEE_OPTIONS.map((g) => (
-                                  <option key={g} value={g}>
-                                    {g === 0 ? '-' : `${g}y`}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="relative">
+                                <div className="flex h-7 w-full min-w-0 items-center justify-center rounded border border-stone-300 bg-stone-50 px-0.5 text-center text-[9px] font-medium leading-none text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
+                                  {b.guaranteeYears === 0 ? '-' : `${b.guaranteeYears}y`}
+                                </div>
+                                <select
+                                  aria-label="Guarantee"
+                                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                  value={b.guaranteeYears}
+                                  onChange={(e) =>
+                                    updateBrand(b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
+                                  }
+                                >
+                                  {GUARANTEE_OPTIONS.map((g) => (
+                                    <option key={g} value={g}>
+                                      {g === 0 ? '-' : `${g}y`}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             </div>
                           </td>
                           <td className="px-0.5 py-0.5 text-right md:py-1">
