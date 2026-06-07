@@ -1,8 +1,9 @@
 // Bill print template — matches the physical handwritten shop bill format:
 // notepad paper, bill# top-right, × item rows, P.T.O carry-forward, PAID stamp.
 
+import type React from 'react'
 import type { Bill } from '../../lib/types'
-import { SHOP } from '../../lib/types'
+import { SHOP, CATEGORY_LABELS } from '../../lib/types'
 
 const PAGE_ITEMS = 14
 
@@ -96,25 +97,52 @@ export function BillPrint({ bill }: { bill: Bill }) {
             {/* Item rows */}
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
               <tbody>
-                {pageItems.map((item) => (
-                  <tr key={item.id}>
-                    <td style={{ width: '6mm', verticalAlign: 'top', paddingTop: '1.2mm', color: '#333', fontWeight: 700 }}>×</td>
-                    <td style={{ verticalAlign: 'top', paddingTop: '1.2mm', paddingBottom: '1.2mm', lineHeight: 1.3 }}>
-                      {item.description || <span style={{ color: '#ccc' }}>—</span>}
-                    </td>
-                    <td style={{ width: '22mm', textAlign: 'center', verticalAlign: 'top', paddingTop: '1.2mm', color: '#555', whiteSpace: 'nowrap' }}>
-                      {item.qty} {item.unit}
-                    </td>
-                    <td style={{ width: '20mm', textAlign: 'right', verticalAlign: 'top', paddingTop: '1.2mm', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {item.amount ? item.amount.toLocaleString('en-IN') : ''}
-                    </td>
-                  </tr>
-                ))}
+                {pageItems.map((item) => {
+                  const isCatalog = !!item.category
+                  const cell: React.CSSProperties = { verticalAlign: 'top', paddingTop: '1.5mm', paddingBottom: '1.5mm' }
+                  return (
+                    <tr key={item.id}>
+                      {/* × bullet */}
+                      <td style={{ ...cell, width: '6mm', color: '#333', fontWeight: 700 }}>×</td>
+
+                      {isCatalog ? (
+                        <>
+                          {/* Product name */}
+                          <td style={{ ...cell, lineHeight: 1.3 }}>
+                            {CATEGORY_LABELS[item.category!]}
+                          </td>
+                          {/* Brand */}
+                          <td style={{ ...cell, width: '22mm', color: '#444', whiteSpace: 'nowrap', paddingLeft: '2mm' }}>
+                            {item.brandName ?? ''}
+                          </td>
+                          {/* Size */}
+                          <td style={{ ...cell, width: '14mm', textAlign: 'center', color: '#555', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                            {item.heightIn}×{item.widthIn}
+                          </td>
+                        </>
+                      ) : (
+                        /* Free-text: description spans the three middle columns */
+                        <td colSpan={3} style={{ ...cell, lineHeight: 1.3 }}>
+                          {item.description || <span style={{ color: '#ccc' }}>—</span>}
+                        </td>
+                      )}
+
+                      {/* Qty */}
+                      <td style={{ ...cell, width: '14mm', textAlign: 'center', color: '#555', whiteSpace: 'nowrap' }}>
+                        {item.qty} {item.unit}
+                      </td>
+                      {/* Amount */}
+                      <td style={{ ...cell, width: '18mm', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {item.amount ? item.amount.toLocaleString('en-IN') : ''}
+                      </td>
+                    </tr>
+                  )
+                })}
                 {/* Blank filler rows */}
                 {Array.from({ length: Math.max(0, 6 - pageItems.length) }).map((_, i) => (
                   <tr key={`blank-${i}`}>
                     <td style={{ paddingTop: '4mm' }} />
-                    <td /><td /><td />
+                    <td /><td /><td /><td /><td />
                   </tr>
                 ))}
               </tbody>
