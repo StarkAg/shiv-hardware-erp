@@ -560,7 +560,7 @@ export function BillBuilder() {
             <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UID (optional)</label>
             <input
               type="text"
-              placeholder="UPI / customer ID"
+              placeholder="Aadhaar number"
               value={draft.customerUid ?? ''}
               onChange={(e) => setDraft((d) => ({ ...d, customerUid: e.target.value }))}
               className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
