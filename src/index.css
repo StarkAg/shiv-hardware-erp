@@ -5,7 +5,7 @@
 :root {
   --shiv-green: #b9924b;
   --shiv-red: #9f1d20;
-  --mobile-topbar-height: 57px;
+  --mobile-topbar-height: calc(57px + env(safe-area-inset-top));
   --mobile-bottom-nav-height: 4.5rem;
   --mobile-bottom-nav-offset: max(0.75rem, env(safe-area-inset-bottom));
   --mobile-bottom-nav-space: calc(var(--mobile-bottom-nav-height) + var(--mobile-bottom-nav-offset));
