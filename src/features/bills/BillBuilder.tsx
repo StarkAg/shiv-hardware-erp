@@ -224,56 +224,63 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
             )}
           </div>
 
-          {/* Row 2: size + qty + rate + cost (catalog only) */}
+          {/* Row 2: size · qty · rate · cost (catalog only) */}
           {isCatalog ? (
-            <div className="flex flex-wrap items-center gap-1.5 text-sm">
-              {/* Height */}
-              <select
-                value={item.heightIn ?? ''}
-                onChange={(e) => handleDim('heightIn', Number(e.target.value))}
-                className="w-16 rounded-lg border border-stone-200 bg-stone-50 px-1.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-              >
-                {HEIGHT_OPTIONS.map(h => <option key={h} value={h}>{h}"</option>)}
-              </select>
-              <span className="text-stone-400">×</span>
-              {/* Width */}
-              <select
-                value={item.widthIn ?? ''}
-                onChange={(e) => handleDim('widthIn', Number(e.target.value))}
-                className="w-16 rounded-lg border border-stone-200 bg-stone-50 px-1.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-              >
-                {WIDTH_OPTIONS.map(w => <option key={w} value={w}>{w}"</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-2">
+
+              {/* Size: H × W */}
+              <div className="flex items-center gap-1">
+                <select
+                  value={item.heightIn ?? ''}
+                  onChange={(e) => handleDim('heightIn', Number(e.target.value))}
+                  className="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-1.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                >
+                  {HEIGHT_OPTIONS.map(h => <option key={h} value={h}>{h}"</option>)}
+                </select>
+                <span className="text-xs text-stone-400">×</span>
+                <select
+                  value={item.widthIn ?? ''}
+                  onChange={(e) => handleDim('widthIn', Number(e.target.value))}
+                  className="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-1.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                >
+                  {WIDTH_OPTIONS.map(w => <option key={w} value={w}>{w}"</option>)}
+                </select>
+              </div>
 
               {/* Qty */}
-              <input
-                type="number"
-                min={1}
-                value={item.qty || ''}
-                onChange={(e) => handleQty(Number(e.target.value))}
-                className="w-14 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                placeholder="Pcs"
-              />
-              <span className="text-xs text-stone-400">Pc</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  value={item.qty || ''}
+                  onChange={(e) => handleQty(Number(e.target.value))}
+                  className="w-16 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                  placeholder="1"
+                />
+                <span className="text-sm text-stone-500">Pc</span>
+              </div>
 
               {/* Rate per sqft */}
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-1">
                 <span className="text-xs text-stone-400">₹</span>
                 <input
                   type="number"
                   min={0}
                   value={item.rateSqft ?? ''}
                   onChange={(e) => handleRate(Number(e.target.value))}
-                  className="w-20 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                  placeholder="rate/sqft"
+                  className="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                  placeholder="rate"
                 />
-                <span className="text-xs text-stone-400">/sq</span>
+                <span className="text-xs text-stone-400">/sqft</span>
               </div>
 
-              {/* Cost (read-only) */}
-              <div className="ml-auto rounded-lg bg-shiv-green/10 px-3 py-1.5 text-sm font-bold text-stone-800 dark:text-white">
-                ₹{(item.amount || 0).toLocaleString('en-IN')}
+              {/* Cost (auto) */}
+              <div className="flex items-center justify-end">
+                <div className="rounded-lg bg-shiv-green/15 px-3 py-1.5 text-sm font-bold text-stone-800 dark:text-white">
+                  ₹{(item.amount || 0).toLocaleString('en-IN')}
+                </div>
               </div>
+
             </div>
           ) : (
             /* Free-text row: qty + unit + amount */
