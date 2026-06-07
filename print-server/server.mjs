@@ -34,7 +34,7 @@ const CLOUD_API_KEY = process.env.CLOUD_API_KEY || ''
 const PRINTER_AGENT_ID = process.env.PRINTER_AGENT_ID || 'shiv-shop-printer'
 const CLOUD_POLL_INTERVAL_MS = Math.max(3000, Number(process.env.CLOUD_POLL_INTERVAL_MS) || 7000)
 const SUMATRA_PDF_PATH = process.env.SUMATRA_PDF_PATH || findSumatraPdfPath()
-const EPSON_CARD_PRINT_SETTINGS = (process.env.EPSON_CARD_PRINT_SETTINGS || 'noscale,color,landscape,bin=Disc/ID Card Tray')
+const EPSON_CARD_PRINT_SETTINGS = (process.env.EPSON_CARD_PRINT_SETTINGS || 'noscale,color,portrait,bin=Disc/ID Card Tray')
   .split(',')
   .map(setting => setting.trim())
   .filter(Boolean)
@@ -45,6 +45,10 @@ const EPSON_CARD_EXCEL_SCRIPT = fileURLToPath(new URL('tools/print-card-excel.ps
 const EPSON_CARD_OFFSET_X_MM = Number(process.env.EPSON_CARD_OFFSET_X_MM) || 0
 const EPSON_CARD_OFFSET_Y_MM = Number(process.env.EPSON_CARD_OFFSET_Y_MM) || 0
 const EPSON_CARD_SCALE_PERCENT = Number(process.env.EPSON_CARD_SCALE_PERCENT) || 100
+const EPSON_CARD_SLOT_LEFT_MM = Number(process.env.EPSON_CARD_SLOT_LEFT_MM ?? 13)
+const EPSON_CARD_SLOT_TOP_MM = Number(process.env.EPSON_CARD_SLOT_TOP_MM ?? 25)
+const CARD_WIDTH_MM = 54
+const CARD_HEIGHT_MM = 86
 const CHROME_PATH = findChromePath()
 const JSON_MAX_TOKENS = 2048
 const HONORIFICS = new Set(['jee', 'ji', 'sir', 'madam'])
@@ -89,7 +93,6 @@ const WHATSAPP_AUTO_PRINT_GROUP_NAME = process.env.WHATSAPP_AUTO_PRINT_GROUP_NAM
 const WHATSAPP_AUTO_PRINT_GROUP_ID = process.env.WHATSAPP_AUTO_PRINT_GROUP_ID || ''
 const WHATSAPP_AUTO_PRINT_COPIES = Math.min(20, Math.max(1, Math.trunc(Number(process.env.WHATSAPP_AUTO_PRINT_COPIES) || 1)))
 const WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS = Math.max(1000, Number(process.env.WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS) || 10 * 60 * 1000)
-const WHATSAPP_AUTO_PRINT_POLL_INTERVAL_MS = Math.max(3000, Number(process.env.WHATSAPP_AUTO_PRINT_POLL_INTERVAL_MS) || 5000)
 const WHATSAPP_AUTO_PRINT_MEDIA_TYPES = new Set(
   (process.env.WHATSAPP_AUTO_PRINT_MEDIA_TYPES || 'image/jpeg,image/png,image/webp,image/gif,application/pdf')
     .split(',')
@@ -101,8 +104,7 @@ const WHATSAPP_BW_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_BW_PR
 const BW_FALLBACK_PRINT_SETTINGS = parsePrintSettings(process.env.BW_FALLBACK_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4,bin=Rear Paper Feeder')
 const BW_FALLBACK_RESET_PLAIN_A4 = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_RESET_PLAIN_A4 ?? 'true').trim().toLowerCase())
 const EPSON_DEFAULT_RESET_PLAIN_A4_COLOR = !['0', 'false', 'no', 'off'].includes(String(process.env.EPSON_DEFAULT_RESET_PLAIN_A4_COLOR ?? 'true').trim().toLowerCase())
-const WHATSAPP_WEB_CLIENT_ID = process.env.WHATSAPP_WEB_CLIENT_ID || 'shiv-print-server'
-const WHATSAPP_WEB_AUTH_DIR = fileURLToPath(new URL('data/wwebjs-auth', import.meta.url))
+const WHATSAPP_WEB_AUTH_DIR = fileURLToPath(new URL('data/baileys-auth', import.meta.url))
 const WHATSAPP_PROCESSED_MESSAGES_URL = new URL('data/whatsapp-processed-messages.json', import.meta.url)
 
 const whatsappWebState = {
@@ -119,10 +121,8 @@ const whatsappWebState = {
 }
 const whatsappProcessedMessageIds = new Set(loadWhatsAppProcessedMessageIds())
 const whatsappPrintCommands = new Map()
-let whatsappWebClient = null
-let whatsappReadyProbe = null
-let whatsappGroupPoll = null
-let whatsappGroupPollRunning = false
+const whatsappPendingMedia = new Map()
+const whatsappGroupNameCache = new Map()
 const printerHealthCache = new Map()
 const preparedPlainA4Printers = new Map()
 
@@ -857,30 +857,41 @@ async function routeBwPrinterOnError(primaryPrinter, printSettings = [], source 
   }
 }
 
-function whatsappMessageSender(message) {
-  return message?.author || message?.from || 'unknown'
+function whatsappPrintCommandKey(jid, sender = '') {
+  return `${jid}|${sender}`
 }
 
-function whatsappPrintCommandKey(chat, sender = '') {
-  return `${chat?.id?._serialized || ''}|${sender}`
-}
-
-function rememberWhatsAppPrintCommand(chat, sender, mode) {
+function rememberWhatsAppPrintCommand(jid, sender, mode) {
   if (!mode) return
   const entry = { mode, at: Date.now(), sender }
-  whatsappPrintCommands.set(whatsappPrintCommandKey(chat), entry)
-  whatsappPrintCommands.set(whatsappPrintCommandKey(chat, sender), entry)
+  whatsappPrintCommands.set(whatsappPrintCommandKey(jid), entry)
+  whatsappPrintCommands.set(whatsappPrintCommandKey(jid, sender), entry)
 }
 
-function recentWhatsAppPrintCommand(chat, sender) {
+function recentWhatsAppPrintCommand(jid, sender) {
   const now = Date.now()
-  for (const key of [whatsappPrintCommandKey(chat, sender), whatsappPrintCommandKey(chat)]) {
+  for (const key of [whatsappPrintCommandKey(jid, sender), whatsappPrintCommandKey(jid)]) {
     const entry = whatsappPrintCommands.get(key)
     if (!entry) continue
     if (now - entry.at <= WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS) return entry
     whatsappPrintCommands.delete(key)
   }
   return null
+}
+
+function rememberWhatsAppPendingMedia(jid, sender, file) {
+  const key = whatsappPrintCommandKey(jid, sender)
+  const list = whatsappPendingMedia.get(key) || []
+  list.push({ file, at: Date.now() })
+  whatsappPendingMedia.set(key, list)
+}
+
+function flushWhatsAppPendingMedia(jid, sender) {
+  const now = Date.now()
+  const key = whatsappPrintCommandKey(jid, sender)
+  const list = whatsappPendingMedia.get(key) || []
+  whatsappPendingMedia.delete(key)
+  return list.filter(e => now - e.at <= WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS).map(e => e.file)
 }
 
 async function printFileWithLp(filePath, copies, title, printer = PRINT_PRINTER, printSettings = []) {
@@ -955,6 +966,20 @@ async function printCardImageWithDevmode(filePath, copies, title, printer = COLO
       String(copies),
       '-JobName',
       title,
+      '-SlotLeftMm',
+      String(EPSON_CARD_SLOT_LEFT_MM),
+      '-SlotTopMm',
+      String(EPSON_CARD_SLOT_TOP_MM),
+      '-CardWidthMm',
+      String(CARD_WIDTH_MM),
+      '-CardHeightMm',
+      String(CARD_HEIGHT_MM),
+      '-OffsetXmm',
+      String(EPSON_CARD_OFFSET_X_MM),
+      '-OffsetYmm',
+      String(EPSON_CARD_OFFSET_Y_MM),
+      '-ScalePercent',
+      String(EPSON_CARD_SCALE_PERCENT),
     ]
 
     console.log(`[windows-card-print] printer="${printer}" devmode="${EPSON_CARD_DEVMODE_PATH}" file="${filePath}"`)
@@ -1110,159 +1135,134 @@ function rememberWhatsAppMessageId(id) {
   return false
 }
 
-function chatMatchesWhatsAppAutoPrintTarget(chat) {
-  const chatId = chat?.id?._serialized || ''
-  if (WHATSAPP_AUTO_PRINT_GROUP_ID) return chatId === WHATSAPP_AUTO_PRINT_GROUP_ID
-
+function chatMatchesWhatsAppAutoPrintTarget(jid, name) {
+  if (WHATSAPP_AUTO_PRINT_GROUP_ID) return jid === WHATSAPP_AUTO_PRINT_GROUP_ID
   const expected = normalizeNameKey(WHATSAPP_AUTO_PRINT_GROUP_NAME)
-  const actual = normalizeNameKey(chat?.name || '')
+  const actual = normalizeNameKey(name || '')
   return Boolean(expected && actual && actual === expected)
 }
 
-function markWhatsAppWebReady(source = 'event') {
-  whatsappWebState.status = 'ready'
-  whatsappWebState.readyAt = whatsappWebState.readyAt || new Date().toISOString()
-  whatsappWebState.qrDataUrl = null
-  whatsappWebState.lastError = null
-  if (whatsappReadyProbe) {
-    clearInterval(whatsappReadyProbe)
-    whatsappReadyProbe = null
-  }
-  startWhatsAppGroupPoll()
-  console.log(`   WhatsApp Web auto-print: ready via ${source} for group "${WHATSAPP_AUTO_PRINT_GROUP_NAME}"`)
+function getBaileysText(msg) {
+  const m = msg.message
+  if (!m) return ''
+  return (
+    m.conversation ||
+    m.extendedTextMessage?.text ||
+    m.imageMessage?.caption ||
+    m.videoMessage?.caption ||
+    m.documentMessage?.caption ||
+    ''
+  )
 }
 
-function startWhatsAppReadyProbe(client) {
-  if (whatsappReadyProbe) clearInterval(whatsappReadyProbe)
-  whatsappReadyProbe = setInterval(async () => {
-    if (whatsappWebState.status === 'ready') return
-    try {
-      const state = await client.getState().catch(() => null)
-      await client.getChats()
-      whatsappWebState.webState = state
-      markWhatsAppWebReady(`probe${state ? ` (${state})` : ''}`)
-    } catch (err) {
-      whatsappWebState.webState = null
-      whatsappWebState.lastError = {
-        at: new Date().toISOString(),
-        error: `ready probe: ${String(err.message ?? err)}`,
-      }
-    }
-  }, 5000)
+function getBaileysMediaMimetype(msg) {
+  const m = msg.message
+  if (!m) return null
+  if (m.imageMessage) return (m.imageMessage.mimetype || 'image/jpeg').toLowerCase()
+  if (m.documentMessage) return (m.documentMessage.mimetype || 'application/octet-stream').toLowerCase()
+  if (m.stickerMessage) return 'image/webp'
+  return null
 }
 
-async function findWhatsAppAutoPrintGroup() {
-  if (!whatsappWebClient) throw new Error('WhatsApp Web client is not started')
-  if (whatsappWebState.status !== 'ready') throw new Error(`WhatsApp Web is not ready: ${whatsappWebState.status}`)
+async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
+  if (msg.key.fromMe) return
+  const jid = msg.key.remoteJid || ''
+  if (!jid.endsWith('@g.us')) return
 
-  const chats = await whatsappWebClient.getChats()
-  const groups = chats.filter(chat => chat?.isGroup)
-  const group = groups.find(chatMatchesWhatsAppAutoPrintTarget)
-  if (!group) {
-    const names = groups.map(chat => chat.name).filter(Boolean).sort()
-    throw new Error(`Group not found: ${WHATSAPP_AUTO_PRINT_GROUP_ID || WHATSAPP_AUTO_PRINT_GROUP_NAME}. Groups visible: ${names.join(', ') || 'none'}`)
-  }
-  return group
-}
-
-async function pollWhatsAppAutoPrintGroup() {
-  if (whatsappGroupPollRunning || whatsappWebState.status !== 'ready') return
-  whatsappGroupPollRunning = true
-  try {
-    const group = await findWhatsAppAutoPrintGroup()
-    const messages = await group.fetchMessages({ limit: 12 })
-    for (const message of messages) {
-      await handleWhatsAppWebMessage(message)
-    }
-  } catch (err) {
-    whatsappWebState.lastError = {
-      at: new Date().toISOString(),
-      error: `group poll: ${String(err.message ?? err)}`,
-    }
-    console.warn('[whatsapp-web] group poll failed', err.message ?? err)
-  } finally {
-    whatsappGroupPollRunning = false
-  }
-}
-
-function startWhatsAppGroupPoll() {
-  if (whatsappGroupPoll || !WHATSAPP_AUTO_PRINT_ENABLED) return
-  whatsappGroupPoll = setInterval(pollWhatsAppAutoPrintGroup, WHATSAPP_AUTO_PRINT_POLL_INTERVAL_MS)
-  pollWhatsAppAutoPrintGroup()
-}
-
-function summarizeWhatsAppMessage(message) {
-  if (!message) return null
-  return {
-    id: message.id?._serialized || null,
-    from: message.from || null,
-    author: message.author || null,
-    timestamp: message.timestamp ? new Date(message.timestamp * 1000).toISOString() : null,
-    type: message.type || null,
-    hasMedia: Boolean(message.hasMedia),
-    printMode: parseWhatsAppPrintMode(message.body) || null,
-    body: message.body || '',
-  }
-}
-
-async function handleWhatsAppWebMessage(message) {
-  const messageId = message?.id?._serialized || ''
+  const messageId = msg.key.id || ''
   if (rememberWhatsAppMessageId(messageId)) return
 
-  try {
-    const chat = await message.getChat()
-    if (!chat?.isGroup || !chatMatchesWhatsAppAutoPrintTarget(chat)) return
+  if (!whatsappGroupNameCache.has(jid)) {
+    try {
+      const meta = await sock.groupMetadata(jid)
+      whatsappGroupNameCache.set(jid, meta.subject || '')
+    } catch {
+      whatsappGroupNameCache.set(jid, '')
+    }
+  }
+  const groupName = whatsappGroupNameCache.get(jid) || ''
+  if (!chatMatchesWhatsAppAutoPrintTarget(jid, groupName)) return
 
-    const sender = whatsappMessageSender(message)
-    const directPrintMode = parseWhatsAppPrintMode(message.body)
+  const sender = msg.key.participant || jid
+  const text = getBaileysText(msg)
+  const directPrintMode = parseWhatsAppPrintMode(text)
+  if (directPrintMode) {
+    rememberWhatsAppPrintCommand(jid, sender, directPrintMode)
+    console.log(`[whatsapp-web] remembered mode="${directPrintMode}" for group="${groupName}" sender="${sender}"`)
+  }
+
+  const mediaType = getBaileysMediaMimetype(msg)
+
+  if (!mediaType) {
     if (directPrintMode) {
-      rememberWhatsAppPrintCommand(chat, sender, directPrintMode)
-      console.log(`[whatsapp-web] remembered mode="${directPrintMode}" for group="${chat.name}" sender="${sender}"`)
+      const pending = flushWhatsAppPendingMedia(jid, sender)
+      if (pending.length > 0) {
+        console.log(`[whatsapp-web] flushing ${pending.length} buffered media for sender="${sender}" mode="${directPrintMode}"`)
+        await Promise.all(pending.map(async file => {
+          try {
+            const route = await routeWhatsAppPrintJob(directPrintMode, file)
+            const result = await printUploadedFile(file, WHATSAPP_AUTO_PRINT_COPIES, route.printer, route.printSettings)
+            whatsappWebState.lastPrint = {
+              at: new Date().toISOString(), group: groupName, sender,
+              name: file.name, mediaType: file.mediaType, printMode: directPrintMode,
+              printer: result.printer, fallback: route.fallback, jobId: result.jobId,
+            }
+            whatsappWebState.lastError = null
+            console.log(`[whatsapp-web] printed buffered ${file.name} mode="${directPrintMode}" from group="${groupName}" sender="${sender}" printer="${result.printer}"${route.fallback ? ' fallback=true' : ''}`)
+          } catch (printErr) {
+            console.error(`[whatsapp-web] failed to print buffered ${file.name}`, printErr)
+          }
+        }))
+      }
     }
-    if (!message?.hasMedia) return
+    return
+  }
 
-    whatsappWebState.lastMessageAt = new Date().toISOString()
-    const media = await message.downloadMedia()
-    const mediaType = String(media?.mimetype || '').toLowerCase()
-    if (!media?.data) return
-    if (!WHATSAPP_AUTO_PRINT_MEDIA_TYPES.has(mediaType)) {
-      console.log(`[whatsapp-web] skipped unsupported media type ${mediaType} from ${chat.name}`)
-      return
-    }
+  if (!WHATSAPP_AUTO_PRINT_MEDIA_TYPES.has(mediaType)) {
+    console.log(`[whatsapp-web] skipped unsupported media type ${mediaType} from ${groupName}`)
+    return
+  }
 
-    const extension = extensionForMediaType(mediaType)
-    const rememberedPrintMode = recentWhatsAppPrintCommand(chat, sender)
-    const printMode = directPrintMode || rememberedPrintMode?.mode || null
-    if (!printMode) {
-      console.log(`[whatsapp-web] skipped ${mediaType} from group="${chat.name}" sender="${sender}" because no cp/bw command was found`)
-      return
-    }
-    const file = decodeUploadedFile({
-      name: media.filename || `whatsapp-${Date.now()}${extension}`,
-      mediaType,
-      data: media.data,
-    }, 0)
+  whatsappWebState.lastMessageAt = new Date().toISOString()
+
+  let buffer
+  try {
+    buffer = await downloadMediaMessage(msg, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage })
+  } catch (dlErr) {
+    console.error('[whatsapp-web] failed to download media', dlErr.message ?? dlErr)
+    return
+  }
+  if (!buffer?.length) return
+
+  const extension = extensionForMediaType(mediaType)
+  const filename = msg.message?.documentMessage?.fileName || `whatsapp-${Date.now()}${extension}`
+  const rememberedPrintMode = recentWhatsAppPrintCommand(jid, sender)
+  const printMode = directPrintMode || rememberedPrintMode?.mode || null
+
+  const file = decodeUploadedFile({
+    name: filename,
+    mediaType,
+    data: buffer.toString('base64'),
+  }, 0)
+
+  if (!printMode) {
+    rememberWhatsAppPendingMedia(jid, sender, file)
+    console.log(`[whatsapp-web] buffered ${mediaType} from group="${groupName}" sender="${sender}" waiting for cp/bw command`)
+    return
+  }
+
+  try {
     const route = await routeWhatsAppPrintJob(printMode, file)
     const result = await printUploadedFile(file, WHATSAPP_AUTO_PRINT_COPIES, route.printer, route.printSettings)
-
     whatsappWebState.lastPrint = {
-      at: new Date().toISOString(),
-      group: chat.name,
-      sender,
-      name: file.name,
-      mediaType,
-      printMode,
-      printer: result.printer,
-      fallback: route.fallback,
-      jobId: result.jobId,
+      at: new Date().toISOString(), group: groupName, sender,
+      name: file.name, mediaType, printMode,
+      printer: result.printer, fallback: route.fallback, jobId: result.jobId,
     }
     whatsappWebState.lastError = null
-    console.log(`[whatsapp-web] printed ${file.name} mode="${printMode}" from group="${chat.name}" sender="${sender}" printer="${result.printer}"${route.fallback ? ' fallback=true' : ''}`)
+    console.log(`[whatsapp-web] printed ${file.name} mode="${printMode}" from group="${groupName}" sender="${sender}" printer="${result.printer}"${route.fallback ? ' fallback=true' : ''}`)
   } catch (err) {
-    whatsappWebState.lastError = {
-      at: new Date().toISOString(),
-      error: String(err.message ?? err),
-    }
+    whatsappWebState.lastError = { at: new Date().toISOString(), error: String(err.message ?? err) }
     console.error('[whatsapp-web] auto print failed', err)
   }
 }
@@ -1274,64 +1274,73 @@ async function startWhatsAppWebAutoPrint() {
   }
 
   try {
-    const wwebjs = await import('whatsapp-web.js')
+    const {
+      makeWASocket, useMultiFileAuthState, DisconnectReason,
+      downloadMediaMessage, makeCacheableSignalKeyStore,
+    } = await import('@whiskeysockets/baileys')
     const qrcode = await import('qrcode')
-    const { Client, LocalAuth } = wwebjs.default ?? wwebjs
-    const client = new Client({
-      authStrategy: new LocalAuth({
-        clientId: WHATSAPP_WEB_CLIENT_ID,
-        dataPath: WHATSAPP_WEB_AUTH_DIR,
-      }),
-      puppeteer: {
-        headless: true,
-        executablePath: CHROME_PATH,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      },
-    })
+    const { state, saveCreds } = await useMultiFileAuthState(WHATSAPP_WEB_AUTH_DIR)
 
-    client.on('qr', async qr => {
-      whatsappWebState.status = 'qr'
-      whatsappWebState.qrDataUrl = await qrcode.toDataURL(qr)
-      whatsappWebState.lastError = null
-      console.log('   WhatsApp Web auto-print: scan QR at /whatsapp-web')
-    })
+    const silentLogger = {
+      level: 'silent',
+      trace: () => {}, debug: () => {}, info: () => {},
+      warn: () => {}, error: () => {}, fatal: () => {},
+      child: () => silentLogger,
+    }
 
-    client.on('authenticated', () => {
-      whatsappWebState.status = 'authenticated'
-      whatsappWebState.qrDataUrl = null
-      startWhatsAppReadyProbe(client)
-      console.log('   WhatsApp Web auto-print: authenticated')
-    })
+    function connect() {
+      const sock = makeWASocket({
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+        },
+        printQRInTerminal: false,
+        logger: silentLogger,
+        generateHighQualityLinkPreview: false,
+        syncFullHistory: false,
+        markOnlineOnConnect: false,
+      })
 
-    client.on('ready', () => {
-      markWhatsAppWebReady('event')
-    })
+      sock.ev.on('creds.update', saveCreds)
 
-    client.on('auth_failure', message => {
-      whatsappWebState.status = 'auth_failure'
-      whatsappWebState.lastError = { at: new Date().toISOString(), error: String(message) }
-      console.error('[whatsapp-web] auth failure', message)
-    })
+      sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+        if (qr) {
+          whatsappWebState.status = 'qr'
+          whatsappWebState.qrDataUrl = await qrcode.toDataURL(qr).catch(() => null)
+          whatsappWebState.lastError = null
+          console.log('   WhatsApp Web auto-print: scan QR at /whatsapp-web')
+        }
+        if (connection === 'open') {
+          whatsappWebState.status = 'ready'
+          whatsappWebState.readyAt = whatsappWebState.readyAt || new Date().toISOString()
+          whatsappWebState.qrDataUrl = null
+          whatsappWebState.lastError = null
+          console.log(`   WhatsApp Web auto-print: ready for group "${WHATSAPP_AUTO_PRINT_GROUP_NAME}"`)
+        }
+        if (connection === 'close') {
+          const code = lastDisconnect?.error?.output?.statusCode
+          const loggedOut = code === DisconnectReason.loggedOut
+          whatsappWebState.status = loggedOut ? 'logged_out' : 'reconnecting'
+          whatsappWebState.lastError = lastDisconnect?.error
+            ? { at: new Date().toISOString(), error: String(lastDisconnect.error.message ?? lastDisconnect.error) }
+            : null
+          console.log(`[whatsapp-web] disconnected code=${code}${loggedOut ? ', logged out — re-scan QR' : ', reconnecting...'}`)
+          if (loggedOut) whatsappGroupNameCache.clear()
+          setTimeout(connect, loggedOut ? 1000 : 5000)
+        }
+      })
 
-    client.on('disconnected', reason => {
-      whatsappWebState.status = 'disconnected'
-      if (whatsappReadyProbe) {
-        clearInterval(whatsappReadyProbe)
-        whatsappReadyProbe = null
-      }
-      if (whatsappGroupPoll) {
-        clearInterval(whatsappGroupPoll)
-        whatsappGroupPoll = null
-      }
-      whatsappWebState.lastError = { at: new Date().toISOString(), error: String(reason) }
-      console.warn('[whatsapp-web] disconnected', reason)
-    })
+      sock.ev.on('messages.upsert', ({ messages, type }) => {
+        if (type !== 'notify') return
+        for (const msg of messages) {
+          handleBaileysMessage(sock, msg, downloadMediaMessage).catch(err => {
+            console.error('[whatsapp-web] message handling error', err.message ?? err)
+          })
+        }
+      })
+    }
 
-    client.on('message', handleWhatsAppWebMessage)
-    client.on('message_create', handleWhatsAppWebMessage)
-
-    whatsappWebClient = client
-    await client.initialize()
+    connect()
   } catch (err) {
     whatsappWebState.status = 'error'
     whatsappWebState.lastError = { at: new Date().toISOString(), error: String(err.message ?? err) }
@@ -1359,8 +1368,8 @@ async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, co
     const page = await browser.newPage()
 
     if (shouldUseCardImageEngine(isCard)) {
-      const cardWidthPx = Math.ceil((86 / 25.4) * 96)
-      const cardHeightPx = Math.ceil((54 / 25.4) * 96)
+      const cardWidthPx = Math.ceil((CARD_WIDTH_MM / 25.4) * 96)
+      const cardHeightPx = Math.ceil((CARD_HEIGHT_MM / 25.4) * 96)
       await page.setViewport({
         width: cardWidthPx,
         height: cardHeightPx,
@@ -1384,8 +1393,8 @@ async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, co
     await page.setContent(html, { waitUntil: 'networkidle0' })
     const pdf = await page.pdf(isCard
       ? {
-          width: '86mm',
-          height: '54mm',
+          width: `${CARD_WIDTH_MM}mm`,
+          height: `${CARD_HEIGHT_MM}mm`,
           printBackground: true,
           preferCSSPageSize: true,
           margin: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -1931,24 +1940,17 @@ app.get('/whatsapp-web/status', (_req, res) => {
   res.json(whatsappWebStatusPayload())
 })
 
-app.get('/whatsapp-web/group/latest', async (req, res) => {
-  try {
-    const limit = Math.min(10, Math.max(1, Math.trunc(Number(req.query.limit) || 1)))
-    const group = await findWhatsAppAutoPrintGroup()
-    const messages = await group.fetchMessages({ limit })
-    res.json({
-      ok: true,
-      group: {
-        id: group.id?._serialized || null,
-        name: group.name,
-        unreadCount: group.unreadCount,
-        timestamp: group.timestamp ? new Date(group.timestamp * 1000).toISOString() : null,
-      },
-      messages: messages.map(summarizeWhatsAppMessage),
-    })
-  } catch (err) {
-    res.status(500).json({ ok: false, error: String(err.message ?? err) })
-  }
+app.get('/whatsapp-web/group/latest', (_req, res) => {
+  const groups = [...whatsappGroupNameCache.entries()]
+    .filter(([jid]) => chatMatchesWhatsAppAutoPrintTarget(jid, whatsappGroupNameCache.get(jid) || ''))
+    .map(([jid, name]) => ({ jid, name }))
+  res.json({
+    ok: true,
+    status: whatsappWebState.status,
+    lastPrint: whatsappWebState.lastPrint,
+    lastMessageAt: whatsappWebState.lastMessageAt,
+    groups,
+  })
 })
 
 app.get('/whatsapp-web', (_req, res) => {

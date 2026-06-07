@@ -125,8 +125,8 @@ function cardPage(body) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: 86mm 54mm; margin: 0; }
-  html, body { width: 86mm; height: 54mm; margin: 0; background: #fff; }
+  @page { size: 54mm 86mm; margin: 0; }
+  html, body { width: 54mm; height: 86mm; margin: 0; background: #fff; }
   body { font-family: Arial, Helvetica, sans-serif; color: #000; overflow: hidden; }
 </style>
 </head><body>${body}</body></html>`
@@ -285,19 +285,19 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
     const logo = await b64('letterhead/shiv-logo.png')
     const primary = guaranteedRows[0]
     return cardPage(`
-        <div style="position:relative;width:86mm;height:54mm;overflow:hidden;border:1.5px solid #000;border-radius:3mm;padding:4mm 5mm;font-family:Arial,sans-serif">
+        <div style="position:relative;width:54mm;height:86mm;overflow:hidden;border:1.5px solid #000;border-radius:3mm;padding:4mm;font-family:Arial,sans-serif">
           <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #000;padding-bottom:2mm">
-            <div style="display:flex;align-items:center;gap:2mm">
-              <img src="${logo}" style="width:10mm;height:10mm;object-fit:contain"/>
+            <div style="display:flex;align-items:center;gap:1.5mm;min-width:0">
+              <img src="${logo}" style="width:8mm;height:8mm;object-fit:contain;flex:0 0 auto"/>
               <div>
-                <div style="font-size:12px;font-weight:700;line-height:1">Shiv Hardware Store</div>
-                <div style="font-size:7px;font-weight:600;line-height:1.2">Shivaji Road, Near Gandhi Highschool, Ramgarh Cantt - 829122</div>
+                <div style="font-size:10px;font-weight:700;line-height:1">Shiv Hardware Store</div>
+                <div style="font-size:5.8px;font-weight:600;line-height:1.2">Shivaji Road, Near Gandhi Highschool, Ramgarh Cantt - 829122</div>
               </div>
             </div>
-            ${seal ? `<img src="${seal}" style="width:14mm;height:14mm;object-fit:contain"/>` : ''}
+            ${seal ? `<img src="${seal}" style="width:10mm;height:10mm;object-fit:contain;flex:0 0 auto"/>` : ''}
           </div>
-          <div style="margin-top:2mm;text-align:center;font-size:12px;font-weight:700;letter-spacing:.08em;color:${GREEN}">GUARANTEE CARD</div>
-          <div style="margin-top:2mm;display:grid;grid-template-columns:1fr 1fr;gap:1mm 3mm;font-size:8px;line-height:1.2">
+          <div style="margin-top:3mm;text-align:center;font-size:11px;font-weight:700;letter-spacing:.08em;color:${GREEN}">GUARANTEE CARD</div>
+          <div style="margin-top:3mm;display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 2mm;font-size:7.5px;line-height:1.25">
             <div><b>Ref:</b> ${esc(document.number)}</div>
             <div><b>Date:</b> ${date}</div>
             <div style="grid-column:span 2"><b>M/s:</b> ${esc(document.customer?.name || '-')}</div>
@@ -307,9 +307,9 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
             <div style="grid-column:span 2"><b>Size:</b> ${esc(size)} | <b>Qty:</b> ${esc(document.qty)}</div>
             <div style="grid-column:span 2"><b>Brand:</b> ${esc(primary?.brandName || '-')}</div>
           </div>
-          <div style="position:absolute;bottom:4mm;left:5mm;right:5mm;display:flex;align-items:flex-end;justify-content:space-between">
+          <div style="position:absolute;bottom:4mm;left:4mm;right:4mm;display:flex;align-items:flex-end;justify-content:space-between">
             <div style="font-size:10px;font-weight:700;color:${RED}">${maxYears ? `${maxYears} Years` : 'No Guarantee'}</div>
-            <div style="width:25mm;border-top:1px solid #000;padding-top:1mm;text-align:center;font-size:7px">Proprietor</div>
+            <div style="width:21mm;border-top:1px solid #000;padding-top:1mm;text-align:center;font-size:7px">Proprietor</div>
           </div>
         </div>
       `)

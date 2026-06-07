@@ -72,8 +72,8 @@ try {
   $sheet.Name = "PVC ID Card"
   $sheet.Cells.Clear()
 
-  $cardWidth = Convert-MmToPoints 86.0
-  $cardHeight = Convert-MmToPoints 54.0
+  $cardWidth = Convert-MmToPoints 54.0
+  $cardHeight = Convert-MmToPoints 86.0
   $offsetX = Convert-MmToPoints $OffsetXmm
   $offsetY = Convert-MmToPoints $OffsetYmm
   $scale = [Math]::Max(1, $ScalePercent) / 100.0
@@ -100,7 +100,7 @@ try {
   $sheet.PageSetup.Zoom = $false
   $sheet.PageSetup.FitToPagesWide = 1
   $sheet.PageSetup.FitToPagesTall = 1
-  $sheet.PageSetup.Orientation = 2 # xlLandscape
+  $sheet.PageSetup.Orientation = 1 # xlPortrait
   $sheet.PageSetup.PrintGridlines = $false
   $sheet.PageSetup.PrintHeadings = $false
   $sheet.PageSetup.BlackAndWhite = $false

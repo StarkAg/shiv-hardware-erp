@@ -121,23 +121,23 @@ function CompactGuaranteeCard({ document }: { document: GuaranteeDocument }) {
   return (
     <A4Page>
       <div className="flex h-[297mm] items-start justify-center bg-white pt-[18mm] font-print text-black">
-        <div className="relative h-[54mm] w-[86mm] overflow-hidden rounded-[3mm] border-[1.5px] border-black bg-white px-[5mm] py-[4mm]">
+        <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-[3mm] border-[1.5px] border-black bg-white p-[4mm]">
           <div className="flex items-center justify-between border-b border-black pb-[2mm]">
-            <div className="flex items-center gap-[2mm]">
-              <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-[10mm] w-[10mm] object-contain" />
+            <div className="flex min-w-0 items-center gap-[1.5mm]">
+              <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-[8mm] w-[8mm] shrink-0 object-contain" />
               <div>
-                <div className="text-[12px] font-bold leading-none">{SHOP.name}</div>
-                <div className="text-[7px] font-semibold leading-tight">{SHOP.address}</div>
+                <div className="text-[10px] font-bold leading-none">{SHOP.name}</div>
+                <div className="text-[5.8px] font-semibold leading-tight">{SHOP.address}</div>
               </div>
             </div>
-            {seal && <img src={seal} alt={`${maxYears} year guarantee`} className="h-[14mm] w-[14mm] object-contain" />}
+            {seal && <img src={seal} alt={`${maxYears} year guarantee`} className="h-[10mm] w-[10mm] shrink-0 object-contain" />}
           </div>
 
-          <div className="mt-[2mm] text-center text-[12px] font-bold tracking-wide" style={{ color: 'var(--shiv-green)' }}>
+          <div className="mt-[3mm] text-center text-[11px] font-bold tracking-wide" style={{ color: 'var(--shiv-green)' }}>
             GUARANTEE CARD
           </div>
 
-          <div className="mt-[2mm] grid grid-cols-2 gap-x-[3mm] gap-y-[1mm] text-[8px] leading-tight">
+          <div className="mt-[3mm] grid grid-cols-2 gap-x-[2mm] gap-y-[1.5mm] text-[7.5px] leading-tight">
             <div><span className="font-bold">Ref:</span> {document.number}</div>
             <div><span className="font-bold">Date:</span> {dateStr}</div>
             <div className="col-span-2"><span className="font-bold">M/s:</span> {document.customer.name || '-'}</div>
@@ -148,11 +148,11 @@ function CompactGuaranteeCard({ document }: { document: GuaranteeDocument }) {
             <div className="col-span-2"><span className="font-bold">Brand:</span> {primaryRow?.brandName ?? '-'}</div>
           </div>
 
-          <div className="absolute bottom-[4mm] left-[5mm] right-[5mm] flex items-end justify-between">
+          <div className="absolute bottom-[4mm] left-[4mm] right-[4mm] flex items-end justify-between">
             <div className="text-[10px] font-bold" style={{ color: 'var(--shiv-red)' }}>
               {maxYears ? `${maxYears} Years` : 'No Guarantee'}
             </div>
-            <div className="w-[25mm] border-t border-black pt-[1mm] text-center text-[7px]">Proprietor</div>
+            <div className="w-[21mm] border-t border-black pt-[1mm] text-center text-[7px]">Proprietor</div>
           </div>
         </div>
       </div>
