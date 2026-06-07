@@ -102,8 +102,10 @@ export function BillPrint({ bill }: { bill: Bill }) {
                   const cell: React.CSSProperties = { verticalAlign: 'top', paddingTop: '1.5mm', paddingBottom: '1.5mm' }
                   return (
                     <tr key={item.id}>
-                      {/* α bullet */}
-                      <td style={{ ...cell, width: '6mm', color: '#333', fontWeight: 700 }}>α</td>
+                      {/* α flipped vertically as bullet */}
+                      <td style={{ ...cell, width: '6mm', color: '#333', fontWeight: 700 }}>
+                        <span style={{ display: 'inline-block', transform: 'scaleY(-1)' }}>α</span>
+                      </td>
 
                       {isCatalog ? (
                         <>
