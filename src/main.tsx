@@ -12,6 +12,7 @@ import { PrintDemo } from './features/print/PrintDemo'
 import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
 import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
+import { BillBuilder } from './features/bills/BillBuilder'
 import { startOfflineSync } from './lib/offlineSync'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
@@ -64,6 +65,8 @@ const router = createHashRouter([
       { path: 'rates', element: <RateManager /> },
       { path: 'customers', element: <Customers /> },
       { path: 'transport', element: <Transport /> },
+      { path: 'bills', element: <BillBuilder /> },
+      { path: 'bills/:id', element: <BillBuilder /> },
     ],
   },
   // Standalone (no sidebar) visual preview of the generated sheets.

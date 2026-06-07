@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Brand, BrandSet, Customer, ProductCategory, Quotation } from './types'
+import type { Bill, Brand, BrandSet, Customer, ProductCategory, Quotation } from './types'
 import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
@@ -12,6 +12,8 @@ interface AppState {
   customers: Customer[]
   quotations: Quotation[]
   quoteSeq: number
+  bills: Bill[]
+  billSeq: number
 
   // price sets
   setSets: (sets: BrandSet[]) => void
@@ -29,6 +31,11 @@ interface AppState {
 
   // customers
   upsertCustomer: (c: Customer) => void
+
+  // bills
+  nextBillNumber: () => string
+  saveBill: (b: Bill) => void
+  deleteBill: (id: string) => void
 }
 
 function persist(get: () => AppState) {
@@ -38,6 +45,8 @@ function persist(get: () => AppState) {
     customers: s.customers,
     quotations: s.quotations,
     quoteSeq: s.quoteSeq,
+    bills: s.bills,
+    billSeq: s.billSeq,
   })
 }
 
@@ -48,6 +57,8 @@ export const useStore = create<AppState>((set, get) => ({
   customers: (saved?.customers as Customer[]) ?? [],
   quotations: (saved?.quotations as Quotation[]) ?? [],
   quoteSeq: (saved?.quoteSeq as number) ?? 0,
+  bills: (saved?.bills as Bill[]) ?? [],
+  billSeq: (saved?.billSeq as number) ?? 0,
 
   setSets: (sets) => {
     set({ sets: codeSets(sets) })
@@ -144,5 +155,31 @@ export const useStore = create<AppState>((set, get) => ({
     })
     persist(get)
     enqueueCustomerSync(c)
+  },
+
+  nextBillNumber: () => {
+    const seq = get().billSeq + 1
+    return String(seq)
+  },
+
+  saveBill: (b) => {
+    set((st) => {
+      const i = st.bills.findIndex((x) => x.id === b.id)
+      const bills = [...st.bills]
+      let billSeq = st.billSeq
+      if (i >= 0) {
+        bills[i] = b
+      } else {
+        bills.unshift(b)
+        billSeq = st.billSeq + 1
+      }
+      return { bills, billSeq }
+    })
+    persist(get)
+  },
+
+  deleteBill: (id) => {
+    set((st) => ({ bills: st.bills.filter((b) => b.id !== id) }))
+    persist(get)
   },
 }))
