@@ -406,7 +406,7 @@ function BillCard({ bill, onEdit, onDelete }: { bill: Bill; onEdit: () => void; 
       {expanded && (
         <div className="border-t border-stone-100 px-4 pb-4 pt-2 dark:border-white/10">
           <div className="mb-2 flex gap-4 text-xs text-stone-500 dark:text-stone-400">
-            <span>{new Date(bill.date).toLocaleDateString('en-IN')}</span>
+            <span>{new Date(bill.date).toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' })}</span>
             {bill.customerPhone && <span>📞 {bill.customerPhone}</span>}
             {bill.paid && bill.paymentMode && <span className="capitalize">{bill.paymentMode}</span>}
           </div>
