@@ -665,18 +665,6 @@ export function BillBuilder() {
           )}
         </div>
 
-        {/* Notes — disabled for now */}
-        <div className="opacity-40 pointer-events-none select-none">
-          <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Notes (optional)</label>
-          <textarea
-            rows={2}
-            disabled
-            placeholder="e.g. Haridwar Kander, delivery note…"
-            value={draft.notes ?? ''}
-            className="w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-          />
-        </div>
-
         {/* Live print preview — scaled to fit phone width */}
         <BillPreview bill={{ ...draft, total }} />
 
