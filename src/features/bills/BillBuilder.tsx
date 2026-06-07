@@ -364,7 +364,7 @@ function BillPreview({ bill }: { bill: Bill }) {
   return (
     <div>
       <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Preview</div>
-      <div ref={wrapRef} className="overflow-hidden rounded-xl border border-stone-200 bg-stone-100 dark:border-white/10 dark:bg-stone-900"
+      <div ref={wrapRef} className="overflow-hidden border border-stone-200 bg-stone-100 dark:border-white/10 dark:bg-stone-900"
         style={{ height: `calc(${scale} * 210mm)` }}>
         <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: BILL_W_PX }}>
           <BillPrint bill={bill} />
