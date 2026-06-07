@@ -126,8 +126,14 @@ export function BillPrint({ bill }: { bill: Bill }) {
                   const cell: React.CSSProperties = { verticalAlign: 'top', paddingTop: '1.5mm', paddingBottom: '1.5mm' }
                   return (
                     <tr key={item.id}>
-                      {/* α bullet */}
-                      <td style={{ ...cell, color: '#333', fontWeight: 700 }}>α</td>
+                      {/* handdrawn × bullet — mix-blend-mode:multiply removes white bg */}
+                      <td style={{ ...cell }}>
+                        <img
+                          src="https://static.vecteezy.com/system/resources/previews/073/256/981/non_2x/handdrawn-multiplication-sign-scribble-symbol-vector.jpg"
+                          style={{ width: '4mm', height: '4mm', display: 'block', mixBlendMode: 'multiply' }}
+                          alt="x"
+                        />
+                      </td>
 
                       {isCatalog ? (
                         <>
