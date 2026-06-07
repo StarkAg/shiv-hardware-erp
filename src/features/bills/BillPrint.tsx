@@ -106,45 +106,54 @@ export function BillPrint({ bill }: { bill: Bill }) {
               </div>
             )}
 
-            {/* Item rows */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
+            {/* Item rows — fixed layout: ∀(6) | product(34) | brand(24) | size(16) | qty(16) | amount(18) mm */}
+            <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '10pt' }}>
+              <colgroup>
+                <col style={{ width: '6mm' }} />   {/* ∀ */}
+                <col style={{ width: '34mm' }} />   {/* product */}
+                <col style={{ width: '24mm' }} />   {/* brand */}
+                <col style={{ width: '16mm' }} />   {/* size */}
+                <col style={{ width: '16mm' }} />   {/* qty */}
+                <col style={{ width: '18mm' }} />   {/* amount */}
+              </colgroup>
               <tbody>
                 {pageItems.map((item) => {
                   const isCatalog = !!item.category
+                  const GAP = '4mm'
                   const cell: React.CSSProperties = { verticalAlign: 'top', paddingTop: '1.5mm', paddingBottom: '1.5mm' }
                   return (
                     <tr key={item.id}>
-                      {/* ∀ = vertically flipped Alpha (upside-down A) */}
-                      <td style={{ ...cell, width: '6mm', color: '#333', fontWeight: 700 }}>∀</td>
+                      {/* ∀ bullet */}
+                      <td style={{ ...cell, color: '#333', fontWeight: 700 }}>∀</td>
 
                       {isCatalog ? (
                         <>
                           {/* Product name */}
-                          <td style={{ ...cell, lineHeight: 1.3 }}>
+                          <td style={{ ...cell, lineHeight: 1.3, overflow: 'hidden' }}>
                             {BILL_LABEL[item.category!]}
                           </td>
                           {/* Brand */}
-                          <td style={{ ...cell, width: '22mm', color: '#444', whiteSpace: 'nowrap', paddingLeft: '2mm' }}>
+                          <td style={{ ...cell, paddingLeft: GAP, color: '#444', overflow: 'hidden' }}>
                             {item.brandName ?? ''}
                           </td>
                           {/* Size */}
-                          <td style={{ ...cell, width: '14mm', textAlign: 'center', color: '#555', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                          <td style={{ ...cell, paddingLeft: GAP, textAlign: 'center', color: '#555', whiteSpace: 'nowrap' }}>
                             {item.heightIn}×{item.widthIn}
                           </td>
                         </>
                       ) : (
-                        /* Free-text: description spans the three middle columns */
+                        /* Free-text: spans product + brand + size columns */
                         <td colSpan={3} style={{ ...cell, lineHeight: 1.3 }}>
                           {item.description || <span style={{ color: '#ccc' }}>—</span>}
                         </td>
                       )}
 
                       {/* Qty */}
-                      <td style={{ ...cell, width: '14mm', textAlign: 'center', color: '#555', whiteSpace: 'nowrap' }}>
+                      <td style={{ ...cell, paddingLeft: GAP, color: '#555', whiteSpace: 'nowrap' }}>
                         {item.qty} {item.unit}
                       </td>
                       {/* Amount */}
-                      <td style={{ ...cell, width: '18mm', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      <td style={{ ...cell, paddingLeft: GAP, textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {item.amount ? item.amount.toLocaleString('en-IN') : ''}
                       </td>
                     </tr>
