@@ -68,13 +68,13 @@ export function BillPrint({ bill }: { bill: Bill }) {
             {/* Bill number — top right, rubber-stamp style, sits in top padding above content */}
             <div style={{
               position: 'absolute',
-              top: '1mm',
-              right: '4mm',
+              top: '3mm',
+              right: '3mm',
               fontSize: '11pt',
               fontWeight: 900,
               border: '1.5px solid #555',
               borderRadius: '2px',
-              padding: '0.5mm 3mm',
+              padding: '1.5mm 3mm',
               color: '#333',
               letterSpacing: '1px',
             }}>
