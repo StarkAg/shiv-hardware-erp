@@ -52,11 +52,11 @@ export function BillPrint({ bill }: { bill: Bill }) {
               backgroundPositionY: '20mm',
             }}
           >
-            {/* Bill number — top right, rubber-stamp style */}
+            {/* Bill number — top right, rubber-stamp style, sits in top padding above content */}
             <div style={{
               position: 'absolute',
-              top: '4mm',
-              right: '7mm',
+              top: '1mm',
+              right: '4mm',
               fontSize: '11pt',
               fontWeight: 900,
               border: '1.5px solid #555',
@@ -70,7 +70,7 @@ export function BillPrint({ bill }: { bill: Bill }) {
 
             {/* Page 1: customer name */}
             {pageIdx === 0 && bill.customerName && (
-              <div style={{ marginBottom: '3mm', marginTop: '0mm' }}>
+              <div style={{ marginBottom: '3mm', marginTop: '0mm', paddingRight: '18mm' }}>
                 <div style={{ fontWeight: 700, fontSize: '10.5pt' }}>M/s &nbsp;{toProperCase(bill.customerName)}</div>
                 {bill.customerPhone && (
                   <div style={{ fontWeight: 400, fontSize: '9pt', color: '#555', marginTop: '0.5mm' }}>
