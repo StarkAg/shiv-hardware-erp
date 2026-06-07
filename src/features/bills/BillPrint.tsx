@@ -81,6 +81,9 @@ export function BillPrint({ bill }: { bill: Bill }) {
               {bill.number}{pages.length > 1 ? `  (${pageIdx + 1})` : ''}
             </div>
 
+            {/* Fixed top spacer — ensures content always starts below the stamp corner */}
+            <div style={{ height: '7mm' }} />
+
             {/* Page 1: customer name */}
             {pageIdx === 0 && bill.customerName && (
               <div style={{ marginBottom: '3mm', marginTop: '0mm', paddingRight: '18mm' }}>
