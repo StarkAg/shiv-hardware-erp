@@ -550,7 +550,7 @@ export function BillBuilder() {
             <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Phone (optional)</label>
             <input
               type="tel"
-              placeholder="8051226996"
+              placeholder="Contact"
               value={draft.customerPhone ?? ''}
               onChange={(e) => setDraft((d) => ({ ...d, customerPhone: e.target.value }))}
               className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
