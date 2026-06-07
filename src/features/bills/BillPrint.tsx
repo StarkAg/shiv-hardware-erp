@@ -109,10 +109,10 @@ export function BillPrint({ bill }: { bill: Bill }) {
               </div>
             )}
 
-            {/* Item rows — fixed layout: ∀(6) | product(34) | brand(24) | size(16) | qty(16) | amount(18) mm */}
+            {/* Item rows — fixed layout: α(6) | product(34) | brand(24) | size(16) | qty(16) | amount(18) mm */}
             <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '10pt' }}>
               <colgroup>
-                <col style={{ width: '6mm' }} />   {/* ∀ */}
+                <col style={{ width: '6mm' }} />   {/* α */}
                 <col style={{ width: '34mm' }} />   {/* product */}
                 <col style={{ width: '24mm' }} />   {/* brand */}
                 <col style={{ width: '16mm' }} />   {/* size */}
@@ -126,8 +126,8 @@ export function BillPrint({ bill }: { bill: Bill }) {
                   const cell: React.CSSProperties = { verticalAlign: 'top', paddingTop: '1.5mm', paddingBottom: '1.5mm' }
                   return (
                     <tr key={item.id}>
-                      {/* ∀ bullet */}
-                      <td style={{ ...cell, color: '#333', fontWeight: 700 }}>∀</td>
+                      {/* α bullet */}
+                      <td style={{ ...cell, color: '#333', fontWeight: 700 }}>α</td>
 
                       {isCatalog ? (
                         <>
