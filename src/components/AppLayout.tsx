@@ -13,6 +13,7 @@ import {
   Layers,
   Moon,
   Plus,
+  ReceiptText,
   ShieldCheck,
   Sun,
   Truck,
@@ -37,8 +38,9 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 const MOBILE_NAV_ITEMS = [
   { to: '/quote-options', label: 'New Quotation', icon: FileText, match: ['/quote', '/product'] },
   { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck, match: ['/guarantee'] },
-  { to: '/rates', label: 'Rate Manager', icon: IndianRupee, match: ['/rates'] },
+  { to: '/bills', label: 'Bills', icon: ReceiptText, match: ['/bills'] },
   { to: '/transport', label: 'Transport', icon: Truck, match: ['/transport'] },
+  { to: '/rates', label: 'Rate Manager', icon: IndianRupee, match: ['/rates'] },
 ] as const
 
 export function AppLayout() {
@@ -171,6 +173,9 @@ export function AppLayout() {
           )}
         </div>
 
+        <NavLink to="/bills" className={linkClass}>
+          <ReceiptText size={18} /> Bills
+        </NavLink>
         <NavLink to="/rates" className={linkClass}>
           <IndianRupee size={18} /> Rate Manager
         </NavLink>
@@ -221,7 +226,7 @@ export function AppLayout() {
       </main>
 
       <nav
-        className="mobile-bottom-nav no-print fixed inset-x-0 z-40 grid grid-cols-4 gap-1 border-t border-stone-200/90 bg-stone-50/95 px-2 pt-1.5 shadow-[0_-4px_18px_rgba(28,25,23,0.12)] backdrop-blur-lg dark:border-white/10 dark:bg-stone-950/95 md:hidden"
+        className="mobile-bottom-nav no-print fixed inset-x-0 z-40 grid grid-cols-5 gap-1 border-t border-stone-200/90 bg-stone-50/95 px-2 pt-1.5 shadow-[0_-4px_18px_rgba(28,25,23,0.12)] backdrop-blur-lg dark:border-white/10 dark:bg-stone-950/95 md:hidden"
         aria-label="Primary navigation"
       >
         {MOBILE_NAV_ITEMS.map(({ to, label, icon: Icon, match }) => {

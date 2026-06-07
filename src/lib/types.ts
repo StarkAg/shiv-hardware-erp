@@ -166,6 +166,43 @@ export const CATEGORY_META: Record<
   'window-3-track': { short: '3 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
 }
 
+// ---- Bills ----------------------------------------------------------------
+
+export type BillPaymentMode = 'cash' | 'online' | 'upi'
+
+export interface BillItem {
+  id: string
+  /** Free-text label (always set; auto-generated for catalog items) */
+  description: string
+  qty: number
+  unit: string          // Pc, kg, M, Set, Bl, L, Rft …
+  amount: number
+  // ---- catalog / smart fields (set only for board/door items) ----
+  category?: ProductCategory
+  brandName?: string
+  heightIn?: number
+  widthIn?: number
+  /** Rate per sqft (₹) — drives amount = rateSqft × (H×W/144) × qty */
+  rateSqft?: number
+}
+
+export interface Bill {
+  id: string
+  number: string        // sequential shop number e.g. "34", "35"
+  date: string          // ISO date
+  customerName: string
+  customerPhone?: string
+  customerUid?: string
+  items: BillItem[]
+  total: number
+  paid: boolean
+  paymentMode?: BillPaymentMode
+  upiRef?: string       // UPI/phone used for payment
+  notes?: string
+}
+
+// ---------------------------------------------------------------------------
+
 /** Categories priced as (H × W / 144) sqft. Aluminium windows also use sqft but with slab logic later. */
 export const CATEGORY_ORDER: ProductCategory[] = [
   'readymade-door',

@@ -6,6 +6,8 @@ export interface PersistedState {
   customers: unknown
   quotations: unknown
   quoteSeq: number
+  bills: unknown
+  billSeq: number
 }
 
 export interface DataAdapter {
