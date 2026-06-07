@@ -47,6 +47,22 @@ function Read-DevModeSummary([byte[]]$bytes) {
   }
 }
 
+function Set-DevModeInt16([byte[]]$bytes, [int]$offset, [int16]$value) {
+  $raw = [BitConverter]::GetBytes($value)
+  $bytes[$offset] = $raw[0]
+  $bytes[$offset + 1] = $raw[1]
+}
+
+function Force-CardDevmodeFields([byte[]]$bytes) {
+  # Keep Epson's private driver bytes from the dialog, but make the public
+  # Windows DEVMODE agree with the physical PVC card path.
+  Set-DevModeInt16 $bytes 76 1    # dmOrientation: portrait
+  Set-DevModeInt16 $bytes 78 256  # dmPaperSize: DMPAPER_USER
+  Set-DevModeInt16 $bytes 80 860  # dmPaperLength: 86.0 mm in tenths
+  Set-DevModeInt16 $bytes 82 540  # dmPaperWidth: 54.0 mm in tenths
+  Set-DevModeInt16 $bytes 88 4    # dmDefaultSource: manual / Disc-ID tray on Epson
+}
+
 $printerHandle = [IntPtr]::Zero
 if (-not [NativePrinter]::OpenPrinter($PrinterName, [ref]$printerHandle, [IntPtr]::Zero)) {
   throw "OpenPrinter failed for '$PrinterName'. Win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
@@ -64,7 +80,7 @@ $label = New-Object System.Windows.Forms.Label
 $label.AutoSize = $false
 $label.Dock = "Fill"
 $label.TextAlign = "MiddleCenter"
-$label.Text = "Epson settings dialog is opening.`r`nSet PVC ID Card (Borderless), then click OK."
+$label.Text = "Epson settings dialog is opening.`r`nSet Card 54 x 86 mm + PVC ID Card Borderless, then click OK."
 $owner.Controls.Add($label)
 $owner.Show()
 $owner.Activate()
@@ -98,7 +114,9 @@ try {
     Write-Host "In the Epson dialog, set exactly:"
     Write-Host "  Paper Source: Disc/ID Card Tray"
     Write-Host "  Paper Type:   PVC ID Card (Borderless)"
-    Write-Host "  Size:         86 x 54 mm / ID Card"
+    Write-Host "  Size:         Card 54 x 86 mm"
+    Write-Host "  Layout:       Borderless"
+    Write-Host "  Orientation:  Portrait"
     Write-Host "Then click OK. This will save a replayable private Epson DEVMODE."
     Write-Host ""
 
@@ -115,6 +133,7 @@ try {
 
     $bytes = New-Object byte[] $needed
     [Runtime.InteropServices.Marshal]::Copy($output, $bytes, 0, $needed)
+    Force-CardDevmodeFields $bytes
 
     $dir = Split-Path -Parent $OutFile
     if ($dir -and -not (Test-Path $dir)) {
