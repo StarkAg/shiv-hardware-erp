@@ -1,10 +1,8 @@
 import { useState, useRef, useLayoutEffect, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Circle,
   IndianRupee,
   Plus,
   ReceiptText,
@@ -12,7 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { useStore } from '../../lib/store'
-import type { Bill, BillItem, BillPaymentMode, ProductCategory } from '../../lib/types'
+import type { Bill, BillItem, ProductCategory } from '../../lib/types'
 import { CATEGORY_META } from '../../lib/types'
 import { BillPrint } from './BillPrint'
 
@@ -607,62 +605,6 @@ export function BillBuilder() {
               <span className="text-lg font-bold text-stone-900 dark:text-white">₹{total.toLocaleString('en-IN')}</span>
             </div>
           </div>
-        </div>
-
-        {/* Payment */}
-        <div className="rounded-xl border border-stone-200 bg-white p-4 dark:border-white/10 dark:bg-stone-900">
-          <h2 className="mb-3 text-sm font-bold text-stone-700 dark:text-stone-200">Payment</h2>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setDraft((d) => ({ ...d, paid: false }))}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border py-2 text-sm font-semibold transition ${
-                !draft.paid
-                  ? 'border-red-400 bg-red-50 text-red-600 dark:border-red-500 dark:bg-red-900/30 dark:text-red-400'
-                  : 'border-stone-200 text-stone-400 hover:border-stone-300 dark:border-white/10'
-              }`}
-            >
-              <Circle size={15} /> Due
-            </button>
-            <button
-              onClick={() => setDraft((d) => ({ ...d, paid: true }))}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border py-2 text-sm font-semibold transition ${
-                draft.paid
-                  ? 'border-green-400 bg-green-50 text-green-700 dark:border-green-500 dark:bg-green-900/30 dark:text-green-400'
-                  : 'border-stone-200 text-stone-400 hover:border-stone-300 dark:border-white/10'
-              }`}
-            >
-              <CheckCircle2 size={15} /> Paid
-            </button>
-          </div>
-
-          {draft.paid && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Mode</label>
-                <select
-                  value={draft.paymentMode ?? 'cash'}
-                  onChange={(e) => setDraft((d) => ({ ...d, paymentMode: e.target.value as BillPaymentMode }))}
-                  className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                >
-                  <option value="cash">Cash</option>
-                  <option value="online">Online</option>
-                  <option value="upi">UPI</option>
-                </select>
-              </div>
-              {(draft.paymentMode === 'online' || draft.paymentMode === 'upi') && (
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UPI / Ref</label>
-                  <input
-                    type="text"
-                    placeholder="UPI ID or ref"
-                    value={draft.upiRef ?? ''}
-                    onChange={(e) => setDraft((d) => ({ ...d, upiRef: e.target.value }))}
-                    className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                  />
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Live print preview — scaled to fit phone width */}
