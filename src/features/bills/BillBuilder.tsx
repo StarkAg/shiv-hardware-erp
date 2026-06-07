@@ -520,7 +520,7 @@ export function BillBuilder() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Customer Name</label>
             <input
@@ -546,27 +546,25 @@ export function BillBuilder() {
               ))}
             </datalist>
           </div>
-          <div className="space-y-2">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Phone (optional)</label>
-              <input
-                type="tel"
-                placeholder="8051226996"
-                value={draft.customerPhone ?? ''}
-                onChange={(e) => setDraft((d) => ({ ...d, customerPhone: e.target.value }))}
-                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UID (optional)</label>
-              <input
-                type="text"
-                placeholder="UPI / customer ID"
-                value={draft.customerUid ?? ''}
-                onChange={(e) => setDraft((d) => ({ ...d, customerUid: e.target.value }))}
-                className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-              />
-            </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Phone (optional)</label>
+            <input
+              type="tel"
+              placeholder="8051226996"
+              value={draft.customerPhone ?? ''}
+              onChange={(e) => setDraft((d) => ({ ...d, customerPhone: e.target.value }))}
+              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UID (optional)</label>
+            <input
+              type="text"
+              placeholder="UPI / customer ID"
+              value={draft.customerUid ?? ''}
+              onChange={(e) => setDraft((d) => ({ ...d, customerUid: e.target.value }))}
+              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+            />
           </div>
         </div>
 
