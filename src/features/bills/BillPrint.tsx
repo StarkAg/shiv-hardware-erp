@@ -2,8 +2,20 @@
 // notepad paper, bill# top-right, × item rows, P.T.O carry-forward, PAID stamp.
 
 import type React from 'react'
-import type { Bill } from '../../lib/types'
-import { SHOP, CATEGORY_LABELS } from '../../lib/types'
+import type { Bill, ProductCategory } from '../../lib/types'
+import { SHOP } from '../../lib/types'
+
+// Short labels with thickness/size prefix first (used only in bill print)
+const BILL_LABEL: Record<ProductCategory, string> = {
+  'block-board-19': '19mm Block Board',
+  'block-board-12': '12mm Block Board',
+  'plywood-6':      '6mm Plywood',
+  'flush-door':     'Flush Door',
+  'readymade-door': 'Readymade Door',
+  'aluminium-door': 'Aluminium Door',
+  'window-2-track': '2-Track Window',
+  'window-3-track': '3-Track Window',
+}
 
 const PAGE_ITEMS = 14
 
@@ -111,7 +123,7 @@ export function BillPrint({ bill }: { bill: Bill }) {
                         <>
                           {/* Product name */}
                           <td style={{ ...cell, lineHeight: 1.3 }}>
-                            {CATEGORY_LABELS[item.category!]}
+                            {BILL_LABEL[item.category!]}
                           </td>
                           {/* Brand */}
                           <td style={{ ...cell, width: '22mm', color: '#444', whiteSpace: 'nowrap', paddingLeft: '2mm' }}>
