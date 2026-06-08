@@ -17,6 +17,7 @@ const legacyCategoryLabel = (category: Quotation['category']) => ({
   'aluminium-door': CATEGORY_LABELS['aluminium-door'],
   'window-2-track': CATEGORY_LABELS['window-2-track'],
   'window-3-track': CATEGORY_LABELS['window-3-track'],
+  'hinge': '', 'screw': '', 'aldrop': '', 'handle': '', 'tb': '', 'fevicol': '', 'mica': '', 'tape': '',
 }[category])
 
 /** Categories where Excel shows separate Guarantee and Warranty columns. */
@@ -32,6 +33,7 @@ const legacyThickness = (category: Quotation['category']) => ({
   'aluminium-door': '',
   'window-2-track': '',
   'window-3-track': '',
+  'hinge': '', 'screw': '', 'aldrop': '', 'handle': '', 'tb': '', 'fevicol': '', 'mica': '', 'tape': '',
 }[category])
 
 const legacyDimension = (dim: Quotation['height']) => (

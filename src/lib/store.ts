@@ -1,11 +1,23 @@
 import { create } from 'zustand'
-import type { Bill, Brand, BrandSet, Customer, ProductCategory, Quotation } from './types'
+import type { Bill, Brand, BrandSet, CustomCatalogEntry, Customer, HardwareCatalog, ProductCategory, Quotation } from './types'
+import { DEFAULT_HARDWARE_CATALOG } from './types'
 import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
+import { pushCatalogToServer } from './printServer'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const codeSets = (sets: BrandSet[]): BrandSet[] => sets.map((s, i) => ({ ...s, name: `C${i + 1}` }))
+
+// Debounce catalog pushes so rapid changes (typing a rate) don't spam the server
+let _catalogPushTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleCatalogPush(get: () => AppState) {
+  if (_catalogPushTimer) clearTimeout(_catalogPushTimer)
+  _catalogPushTimer = setTimeout(() => {
+    const s = get()
+    pushCatalogToServer({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
+  }, 2000)
+}
 
 interface AppState {
   sets: BrandSet[]
@@ -14,6 +26,8 @@ interface AppState {
   quoteSeq: number
   bills: Bill[]
   billSeq: number
+  hardwareCatalog: HardwareCatalog
+  customCatalog: CustomCatalogEntry[]
 
   // price sets
   setSets: (sets: BrandSet[]) => void
@@ -36,6 +50,15 @@ interface AppState {
   nextBillNumber: () => string
   saveBill: (b: Bill) => void
   deleteBill: (id: string) => void
+
+  // hardware catalog
+  setHardwareCatalog: (c: HardwareCatalog) => void
+
+  // custom catalog
+  setCustomCatalog: (c: CustomCatalogEntry[]) => void
+  addCustomEntry: (name: string) => void
+  updateCustomEntry: (id: string, patch: Partial<Omit<CustomCatalogEntry, 'id'>>) => void
+  removeCustomEntry: (id: string) => void
 }
 
 function persist(get: () => AppState) {
@@ -47,7 +70,10 @@ function persist(get: () => AppState) {
     quoteSeq: s.quoteSeq,
     bills: s.bills,
     billSeq: s.billSeq,
+    hardwareCatalog: s.hardwareCatalog,
+    customCatalog: s.customCatalog,
   })
+  scheduleCatalogPush(get)
 }
 
 const saved = db.load()
@@ -59,6 +85,8 @@ export const useStore = create<AppState>((set, get) => ({
   quoteSeq: (saved?.quoteSeq as number) ?? 0,
   bills: (saved?.bills as Bill[]) ?? [],
   billSeq: (saved?.billSeq as number) ?? 0,
+  hardwareCatalog: (saved?.hardwareCatalog as HardwareCatalog) ?? DEFAULT_HARDWARE_CATALOG,
+  customCatalog: (saved?.customCatalog as CustomCatalogEntry[]) ?? [],
 
   setSets: (sets) => {
     set({ sets: codeSets(sets) })
@@ -180,6 +208,33 @@ export const useStore = create<AppState>((set, get) => ({
 
   deleteBill: (id) => {
     set((st) => ({ bills: st.bills.filter((b) => b.id !== id) }))
+    persist(get)
+  },
+
+  setHardwareCatalog: (c) => {
+    set({ hardwareCatalog: c })
+    persist(get)
+  },
+
+  setCustomCatalog: (c) => {
+    set({ customCatalog: c })
+    persist(get)
+  },
+
+  addCustomEntry: (name) => {
+    set((st) => ({ customCatalog: [...st.customCatalog, { id: uid(), name, sizes: [], brands: [] }] }))
+    persist(get)
+  },
+
+  updateCustomEntry: (id, patch) => {
+    set((st) => ({
+      customCatalog: st.customCatalog.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+    }))
+    persist(get)
+  },
+
+  removeCustomEntry: (id) => {
+    set((st) => ({ customCatalog: st.customCatalog.filter((e) => e.id !== id) }))
     persist(get)
   },
 }))

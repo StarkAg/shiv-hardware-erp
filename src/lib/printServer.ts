@@ -1,4 +1,4 @@
-import type { GuaranteeDocument, Quotation } from './types'
+import type { Bill, BrandSet, CustomCatalogEntry, GuaranteeDocument, HardwareCatalog, Quotation } from './types'
 
 const PRINT_SERVER_PORT = import.meta.env.VITE_PRINT_SERVER_PORT || '3333'
 const configuredPrintServer = (import.meta.env.VITE_PRINT_SERVER || '').trim().replace(/\/+$/, '')
@@ -23,6 +23,7 @@ export const PRINT_SERVER_URL = detectPrintServerUrl()
 export type ServerPrintPayload =
   | { kind: 'quotation'; quote: Quotation }
   | { kind: 'guarantee'; document: GuaranteeDocument; layout?: 'a4' | 'card' }
+  | { kind: 'bill'; bill: Bill }
 
 export type ServerPrintResult = {
   ok: true
@@ -44,12 +45,16 @@ function readSavedPrintServerUrl() {
   }
 }
 
-function savePrintServerUrl(url: string) {
+export function savePrintServerUrl(url: string) {
   try {
     localStorage.setItem(PRINT_SERVER_STORAGE_KEY, url.replace(/\/+$/, ''))
   } catch {
     /* ignore storage errors */
   }
+}
+
+export function getSavedPrintServerUrl() {
+  return readSavedPrintServerUrl()
 }
 
 function candidatePrintServerUrls() {
@@ -141,12 +146,66 @@ export async function fetchPrintServer(path: string, init?: RequestInit, timeout
   }
 }
 
-export async function printOnServer(payload: ServerPrintPayload, copies = 1): Promise<ServerPrintResult> {
+const SAVED_PRINTER_KEY = 'shiv-panel:print-printer'
+
+export function getSavedPrinter(): string | null {
+  try { return localStorage.getItem(SAVED_PRINTER_KEY) || null } catch { return null }
+}
+
+export function savePrinter(name: string) {
+  try { localStorage.setItem(SAVED_PRINTER_KEY, name) } catch { /* ignore */ }
+}
+
+export async function fetchPrinters(): Promise<{ printers: string[]; default: string }> {
+  const res = await fetchPrintServer('/printers', undefined, 8000)
+  const json = await res.json()
+  if (!json?.ok) throw new Error('Could not list printers')
+  return json
+}
+
+export async function printBillOnServer(bill: Bill, copies = 1, printer?: string): Promise<ServerPrintResult> {
+  return printOnServer({ kind: 'bill', bill }, copies, printer)
+}
+
+// ── Catalog sync ─────────────────────────────────────────────────────────────
+
+export interface CatalogSnapshot {
+  hardwareCatalog: HardwareCatalog
+  customCatalog: CustomCatalogEntry[]
+  sets: BrandSet[]
+}
+
+/** Push the full catalog snapshot to the print server. Fire-and-forget. */
+export async function pushCatalogToServer(snapshot: CatalogSnapshot): Promise<void> {
+  try {
+    await fetchPrintServer('/catalog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(snapshot),
+    }, 5000)
+  } catch {
+    // Server offline — silently ignore
+  }
+}
+
+/** Pull the catalog snapshot from the print server. Returns null if unreachable or no data. */
+export async function pullCatalogFromServer(): Promise<CatalogSnapshot | null> {
+  try {
+    const res = await fetchPrintServer('/catalog', undefined, 5000)
+    const json = await res.json().catch(() => null)
+    if (!json?.ok || !json.catalog) return null
+    return json.catalog as CatalogSnapshot
+  } catch {
+    return null
+  }
+}
+
+export async function printOnServer(payload: ServerPrintPayload, copies = 1, printer?: string): Promise<ServerPrintResult> {
   try {
     const res = await fetchPrintServer('/print', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, copies }),
+      body: JSON.stringify({ ...payload, copies, ...(printer ? { printer } : {}) }),
     })
     const json = await res.json().catch(() => null)
     if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Print server returned HTTP ${res.status}`)

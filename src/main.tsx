@@ -5,6 +5,7 @@ import './index.css'
 import { AppLayout } from './components/AppLayout'
 import { QuotationBuilder } from './features/quotation/QuotationBuilder'
 import { RateManager } from './features/rates/RateManager'
+import { Inventory } from './features/inventory/Inventory'
 import { Customers } from './features/customers/Customers'
 import { QuoteHistory } from './features/quotation/QuoteHistory'
 import { QuotationOptions } from './features/quotation/QuotationOptions'
@@ -14,6 +15,8 @@ import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { startOfflineSync } from './lib/offlineSync'
+import { pullCatalogFromServer } from './lib/printServer'
+import { useStore } from './lib/store'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
@@ -47,13 +50,23 @@ function disableMobileZoom() {
 disableMobileZoom()
 startOfflineSync()
 
+// On startup: try to pull catalog from print server and merge into local store.
+// Only overwrites if the server has a snapshot (acts as cross-device backup).
+pullCatalogFromServer().then((snapshot) => {
+  if (!snapshot) return
+  const { setHardwareCatalog, setCustomCatalog, setSets } = useStore.getState()
+  if (snapshot.hardwareCatalog) setHardwareCatalog(snapshot.hardwareCatalog)
+  if (snapshot.customCatalog)   setCustomCatalog(snapshot.customCatalog)
+  if (snapshot.sets?.length)    setSets(snapshot.sets)
+}).catch(() => { /* print server offline — no-op */ })
+
 // HashRouter keeps routing working when packaged as a desktop (file://) app.
 const router = createHashRouter([
   {
     path: '/',
     element: <AppLayout />,
     children: [
-      { index: true, element: <Navigate to="/quote" replace /> },
+      { index: true, element: <Navigate to="/quote-options" replace /> },
       { path: 'quote-options', element: <QuotationOptions /> },
       { path: 'quote', element: <QuotationBuilder /> },
       { path: 'quote/:id', element: <QuotationBuilder /> },
@@ -63,6 +76,7 @@ const router = createHashRouter([
       { path: 'guarantee/a4', element: <GuaranteeBuilder layout="a4" /> },
       { path: 'scan', element: <BillScanner /> },
       { path: 'rates', element: <RateManager /> },
+      { path: 'inventory', element: <Inventory /> },
       { path: 'customers', element: <Customers /> },
       { path: 'transport', element: <Transport /> },
       { path: 'bills', element: <BillBuilder /> },

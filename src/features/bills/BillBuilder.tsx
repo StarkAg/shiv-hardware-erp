@@ -1,18 +1,24 @@
 import { useState, useRef, useLayoutEffect, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
+  AlertCircle,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   IndianRupee,
+  Loader2,
   Plus,
+  Printer,
   ReceiptText,
   Trash2,
   X,
 } from 'lucide-react'
+import { printBillOnServer, savePrintServerUrl, getSavedPrintServerUrl, fetchPrinters, getSavedPrinter, savePrinter } from '../../lib/printServer'
 import { useStore } from '../../lib/store'
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
 import { CATEGORY_META } from '../../lib/types'
-import { BillPrint } from './BillPrint'
+import { buildBillHtml } from '../../lib/billHtml'
+import { DropDown } from '../../components/ui'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const today = () => new Date().toISOString().slice(0, 10)
@@ -28,12 +34,35 @@ const PRODUCT_OPTIONS: ProductOption[] = [
   { category: 'plywood-6',      label: '6mm Plywood',      keywords: ['6', 'ply', 'plywood'] },
   { category: 'flush-door',     label: 'Flush Door',        keywords: ['flush', 'door', 'plain'] },
   { category: 'readymade-door', label: 'Readymade Door',    keywords: ['ready', 'made', 'readymade', 'door'] },
-  { category: 'aluminium-door', label: 'Aluminium Door',    keywords: ['alu', 'aluminium', 'door'] },
-  { category: 'window-2-track', label: '2 Track Window',    keywords: ['window', '2', '2track', 'sliding'] },
-  { category: 'window-3-track', label: '3 Track Window',    keywords: ['window', '3', '3track', 'sliding'] },
+  { category: 'hinge',          label: 'Hinges',            keywords: ['hinge', 'hinges'] },
+  { category: 'screw',          label: 'Screw',             keywords: ['screw', 'ss'] },
+  { category: 'aldrop',         label: 'Aldrop',            keywords: ['aldrop'] },
+  { category: 'handle',         label: 'Handle',            keywords: ['handle'] },
+  { category: 'tb',             label: 'Tower Bolt',        keywords: ['tb', 'tower', 'bolt', 'tower bolt'] },
+  { category: 'fevicol',        label: 'Fevicol',           keywords: ['fev', 'fevicol', 'marine', 'heatx', 'sh', 'glue'] },
+  { category: 'mica',           label: 'Mica',              keywords: ['mica'] },
+  { category: 'tape',           label: 'Abro Tape',         keywords: ['tape', 'abro', 'abbro'] },
 ]
 
 const BOARD_CATS: ProductCategory[] = ['block-board-19', 'block-board-12', 'plywood-6']
+const HARDWARE_CATS: ProductCategory[] = ['hinge', 'screw', 'aldrop', 'handle', 'tb', 'fevicol', 'mica', 'tape']
+// HARDWARE_SIZES and HARDWARE_BRANDS are now managed via the Inventory page
+// and stored in the hardwareCatalog slice of the store.
+
+const HARDWARE_DEFAULT_UNIT: Partial<Record<ProductCategory, string>> = {
+  fevicol: 'kg',
+  mica:    'Ply',
+}
+const QUICK_QTY: Partial<Record<ProductCategory, number[]>> = {
+  hinge:    [4, 6, 8, 12, 16, 24],
+  screw:    [50, 100, 150, 200, 500],
+  aldrop:   [2, 4, 6, 8],
+  handle:   [4, 6, 8, 10, 12],
+  tb:       [4, 6, 8, 12],
+  fevicol:  [1, 2, 4, 8, 10, 20],
+  mica:     [1, 2, 4, 6, 8],
+  tape:     [1, 2, 3, 6, 12, 24],
+}
 const HEIGHT_OPTIONS = [78, 81, 84, 90, 96, 72, 74, 76, 42, 48, 36]
 const WIDTH_OPTIONS  = [36, 38, 40, 42, 48, 30, 33, 44]
 
@@ -58,31 +87,53 @@ interface SmartItemRowProps {
 }
 
 function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowProps) {
-  const { sets } = useStore()
+  const { sets, hardwareCatalog, setHardwareCatalog } = useStore()
   const activeSet = sets[0]
+  const catSizes  = (cat: ProductCategory) => hardwareCatalog[cat]?.sizes ?? []
+  const catBrands = (cat: ProductCategory) => hardwareCatalog[cat]?.brands ?? []
+  const catFields = (cat: ProductCategory) => (hardwareCatalog[cat]?.fields ?? []).filter(f => f.values.length > 0)
+  const catRate   = (cat: ProductCategory) => hardwareCatalog[cat]?.rate ?? 0
+
+  // Persist the last-used rate for a hardware category so it pre-fills next time
+  function saveRateToCatalog(cat: ProductCategory, rate: number) {
+    if (!rate) return
+    const current = hardwareCatalog[cat] ?? { sizes: [], brands: [] }
+    setHardwareCatalog({ ...hardwareCatalog, [cat]: { ...current, rate } })
+  }
+
+  function handleFieldValue(label: string, value: string) {
+    const fieldValues = { ...(item.fieldValues ?? {}), [label]: value }
+    onUpdate(item.id, { fieldValues, description: hwDescription({ fieldValues }) })
+  }
 
   // product type search state
   const [search, setSearch] = useState(() =>
     item.category ? (PRODUCT_OPTIONS.find(p => p.category === item.category)?.label ?? '') : ''
   )
   const [showDrop, setShowDrop] = useState(false)
+  const amountRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
+    // A committed category isn't a live query — show all options so the user
+    // can switch. Filtering only kicks in once they actually type a new search.
+    if (item.category) return PRODUCT_OPTIONS
     const q = search.toLowerCase().trim()
     if (!q) return PRODUCT_OPTIONS
     return PRODUCT_OPTIONS.filter(p =>
       p.label.toLowerCase().includes(q) || p.keywords.some(k => k.startsWith(q))
     )
-  }, [search])
+  }, [search, item.category])
 
   const brandsForCat = useMemo(() => {
     if (!item.category || !activeSet) return []
     return activeSet.brands.filter(b => b.category === item.category)
   }, [item.category, activeSet])
 
-  // Sync description whenever catalog fields change
+  // Sync description + cost whenever catalog fields change.
+  // Hardware items skip this — they manage amount via rate×qty directly in their handlers.
   useEffect(() => {
     if (!item.category) return
+    if (HARDWARE_CATS.includes(item.category)) return  // hardware: handlers own the amount
     const desc = buildDescription(item.category, item.brandName ?? '', item.heightIn ?? 0, item.widthIn ?? 0, item.qty)
     const cost = calcCost(item.rateSqft ?? 0, item.heightIn ?? 0, item.widthIn ?? 0, item.qty)
     if (desc !== item.description || cost !== item.amount) {
@@ -92,6 +143,29 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
   }, [item.category, item.brandName, item.heightIn, item.widthIn, item.qty, item.rateSqft])
 
   function selectCategory(opt: ProductOption) {
+    setSearch(opt.label)
+    setShowDrop(false)
+    if (HARDWARE_CATS.includes(opt.category)) {
+      const defaultSize  = catSizes(opt.category)[0]  ?? ''
+      const defaultBrand = opt.category !== 'mica' ? (catBrands(opt.category)[0] ?? '') : ''
+      const defaultFieldValues: Record<string, string> = {}
+      for (const f of catFields(opt.category)) defaultFieldValues[f.label] = f.values[0] ?? ''
+      const fieldStr = Object.values(defaultFieldValues).filter(Boolean).join(' ')
+      const savedRate = catRate(opt.category)
+      onUpdate(item.id, {
+        category: opt.category,
+        sizeIn: defaultSize,
+        brandName: defaultBrand,
+        fieldValues: defaultFieldValues,
+        heightIn: undefined,
+        widthIn: undefined,
+        rateSqft: savedRate || undefined,
+        amount: savedRate ? Math.round(savedRate * 1) : 0,
+        description: [opt.label, defaultSize, defaultBrand, fieldStr].filter(Boolean).join(' '),
+        unit: HARDWARE_DEFAULT_UNIT[opt.category] ?? 'Pc',
+      })
+      return
+    }
     const brands = activeSet?.brands.filter(b => b.category === opt.category) ?? []
     const firstBrand = brands[0]
     const isBoard = BOARD_CATS.includes(opt.category)
@@ -100,11 +174,10 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
     const rate = firstBrand?.rate ?? 0
     const cost = calcCost(rate, h, w, item.qty)
     const desc = buildDescription(opt.category, firstBrand?.name ?? '', h, w, item.qty)
-    setSearch(opt.label)
-    setShowDrop(false)
     onUpdate(item.id, {
       category: opt.category,
       brandName: firstBrand?.name ?? '',
+      sizeIn: undefined,
       heightIn: h,
       widthIn: w,
       rateSqft: rate,
@@ -141,18 +214,41 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
     onUpdate(item.id, { rateSqft: rate, amount: cost })
   }
 
+  // Compose hardware label: "Tower Bolt 8" Mona B/n Red", folding in any
+  // selected custom-field values (Color, etc). Pass overrides for the field
+  // being changed since onUpdate hasn't committed yet.
+  function hwDescription(over: { sizeIn?: string; brandName?: string; fieldValues?: Record<string, string> } = {}) {
+    const label = PRODUCT_OPTIONS.find(p => p.category === item.category)?.label ?? ''
+    const sizeIn = over.sizeIn ?? item.sizeIn ?? ''
+    const brandName = over.brandName ?? item.brandName ?? ''
+    const fv = over.fieldValues ?? item.fieldValues ?? {}
+    const fieldStr = Object.values(fv).filter(Boolean).join(' ')
+    return [label, sizeIn, brandName, fieldStr].filter(Boolean).join(' ')
+  }
+
+  function handleSizeIn(sizeIn: string) {
+    onUpdate(item.id, { sizeIn, description: hwDescription({ sizeIn }) })
+  }
+
+  function handleHardwareBrand(brandName: string) {
+    onUpdate(item.id, { brandName, description: hwDescription({ brandName }) })
+  }
+
   function clearCategory() {
     setSearch('')
     onUpdate(item.id, {
       category: undefined,
       brandName: undefined,
+      sizeIn: undefined,
       heightIn: undefined,
       widthIn: undefined,
       rateSqft: undefined,
+      description: '',
     })
   }
 
   const isCatalog = !!item.category
+  const isHardware = isCatalog && HARDWARE_CATS.includes(item.category!)
 
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-3 dark:border-white/10 dark:bg-stone-900">
@@ -160,30 +256,45 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
         <span className="mt-2 w-5 shrink-0 text-center text-xs font-bold text-stone-400">{idx + 1}</span>
         <div className="flex-1 min-w-0 space-y-2">
 
-          {/* Row 1: product type + brand */}
+          {/* Description / product search */}
           <div className="flex gap-2">
-            {/* Product type search */}
             <div className="relative flex-1 min-w-0">
               <input
                 type="text"
-                placeholder="19, 12, 6, flush, door…"
+                placeholder="Start Typing..."
                 value={isCatalog ? search : item.description}
-                onFocus={() => !isCatalog && setShowDrop(true)}
+                onFocus={(e) => {
+                  setShowDrop(true)
+                  // Keep the selected item visible but pre-select it, so the
+                  // first keystroke replaces it (starts a fresh search).
+                  if (isCatalog) e.target.select()
+                }}
+                onClick={() => setShowDrop(true)}
                 onChange={(e) => {
                   const v = e.target.value
                   if (isCatalog) {
-                    // clear catalog if they start typing again
-                    setSearch(v)
-                    if (v !== search) clearCategory()
-                    setShowDrop(true)
+                    // Typing over a committed selection → drop it, start fresh.
+                    onUpdate(item.id, {
+                      category: undefined,
+                      brandName: undefined,
+                      sizeIn: undefined,
+                      heightIn: undefined,
+                      widthIn: undefined,
+                      rateSqft: undefined,
+                      description: v,
+                    })
                   } else {
                     onUpdate(item.id, { description: v })
-                    setSearch(v)
-                    setShowDrop(true)
                   }
+                  setSearch(v)
+                  setShowDrop(true)
                 }}
                 onBlur={() => setTimeout(() => setShowDrop(false), 150)}
-                className="w-full rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                className={`w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-sm dark:border-white/10 dark:text-white ${
+                  isCatalog
+                    ? 'bg-stone-100 cursor-pointer dark:bg-stone-700'
+                    : 'bg-stone-50 dark:bg-stone-800'
+                }`}
               />
               {isCatalog && (
                 <button
@@ -208,106 +319,203 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
               )}
             </div>
 
-            {/* Brand dropdown — only for catalog items */}
-            {isCatalog && brandsForCat.length > 0 && (
-              <select
-                value={item.brandName ?? ''}
-                onChange={(e) => handleBrandChange(e.target.value)}
-                className="w-28 shrink-0 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-              >
-                {brandsForCat.map(b => (
-                  <option key={b.id} value={b.name}>{b.name}</option>
-                ))}
-              </select>
+            {/* Hardware: size dropdown — only if sizes exist for this category */}
+            {isHardware && item.category && catSizes(item.category).length > 0 && (
+              <DropDown
+                className="w-16 shrink-0"
+                value={item.sizeIn ?? catSizes(item.category)[0] ?? ''}
+                onChange={handleSizeIn}
+                options={catSizes(item.category)}
+              />
             )}
+            {/* Hardware: brand dropdown (not mica — mica uses free-text below) */}
+            {isHardware && item.category && item.category !== 'mica' && catBrands(item.category).length > 0 && (
+              <DropDown
+                className="w-24 shrink-0"
+                value={item.brandName ?? ''}
+                onChange={handleHardwareBrand}
+                options={catBrands(item.category)}
+              />
+            )}
+            {/* Board/door: brand dropdown */}
+            {isCatalog && !isHardware && brandsForCat.length > 0 && (
+              <DropDown
+                className="w-28 shrink-0"
+                value={item.brandName ?? ''}
+                onChange={handleBrandChange}
+                options={brandsForCat.map(b => ({ value: b.name, label: b.name }))}
+              />
+            )}
+
           </div>
 
-          {/* Row 2: size · qty · rate · cost (catalog only) */}
-          {isCatalog ? (
-            <div className="grid grid-cols-2 gap-2">
-
-              {/* Size: H × W */}
-              <div className="flex items-center gap-1">
-                <select
-                  value={item.heightIn ?? ''}
-                  onChange={(e) => handleDim('heightIn', Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-1.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                >
-                  {HEIGHT_OPTIONS.map(h => <option key={h} value={h}>{h}"</option>)}
-                </select>
-                <span className="text-xs text-stone-400">×</span>
-                <select
-                  value={item.widthIn ?? ''}
-                  onChange={(e) => handleDim('widthIn', Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-1.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                >
-                  {WIDTH_OPTIONS.map(w => <option key={w} value={w}>{w}"</option>)}
-                </select>
-              </div>
-
-              {/* Qty */}
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={1}
-                  value={item.qty || ''}
-                  onChange={(e) => handleQty(Number(e.target.value))}
-                  className="w-16 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                  placeholder="1"
-                />
-                <span className="text-sm text-stone-500">Pc</span>
-              </div>
-
-              {/* Rate per sqft */}
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-stone-400">₹</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={item.rateSqft ?? ''}
-                  onChange={(e) => handleRate(Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                  placeholder="rate"
-                />
-                <span className="text-xs text-stone-400">/sqft</span>
-              </div>
-
-              {/* Cost (auto) */}
-              <div className="flex items-center justify-end">
-                <div className="rounded-lg bg-shiv-green/15 px-3 py-1.5 text-sm font-bold text-stone-800 dark:text-white">
-                  ₹{(item.amount || 0).toLocaleString('en-IN')}
-                </div>
-              </div>
-
-            </div>
-          ) : (
-            /* Free-text row: qty + unit + amount */
-            <div className="flex gap-2">
+          {/* Free-text: qty · unit · amount — only show after description is entered */}
+          {!isCatalog && !!item.description.trim() && (
+            <div className="flex items-center gap-2">
               <input
                 type="number"
                 min={0}
                 placeholder="Qty"
                 value={item.qty || ''}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => onUpdate(item.id, { qty: Number(e.target.value) })}
-                className="w-20 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                className="w-14 shrink-0 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
               />
-              <select
+              <DropDown
+                className="w-16 shrink-0"
                 value={item.unit}
-                onChange={(e) => onUpdate(item.id, { unit: e.target.value })}
-                className="w-20 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-              >
-                {UNITS.map((u) => <option key={u}>{u}</option>)}
-              </select>
-              <div className="relative flex-1">
-                <IndianRupee size={12} className="absolute left-2.5 top-2.5 text-stone-400" />
+                onChange={(u) => onUpdate(item.id, { unit: u })}
+                options={UNITS}
+              />
+              <div className="relative ml-auto w-24 shrink-0">
+                <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
                 <input
                   type="number"
                   min={0}
-                  placeholder="Amount"
+                  placeholder="Amt"
                   value={item.amount || ''}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => onUpdate(item.id, { amount: Number(e.target.value) })}
-                  className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-7 pr-2.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                  className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-6 pr-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Hardware row 2: quick qty chips + qty · unit · rate → computed amount */}
+          {isHardware && (
+            <div className="space-y-1.5">
+              {/* Custom catalog fields (Color, etc) — one dropdown each */}
+              {item.category && catFields(item.category).length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {catFields(item.category).map(f => (
+                    <DropDown
+                      key={f.id}
+                      className="shrink-0 min-w-[4.5rem]"
+                      value={item.fieldValues?.[f.label] ?? ''}
+                      onChange={(v) => handleFieldValue(f.label, v)}
+                      options={[{ value: '', label: f.label }, ...f.values.map(v => ({ value: v, label: v }))]}
+                    />
+                  ))}
+                </div>
+              )}
+              {/* Mica: design number — full-width text input */}
+              {item.category === 'mica' && (
+                <input
+                  type="text"
+                  placeholder="Design no. (e.g. 8225 V0)"
+                  value={item.brandName ?? ''}
+                  onChange={(e) => handleHardwareBrand(e.target.value)}
+                  className="w-full rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                />
+              )}
+              {/* Quick qty chips */}
+              {item.category && (QUICK_QTY[item.category]?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {QUICK_QTY[item.category]!.map(q => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => {
+                        const rate = item.rateSqft ?? 0
+                        onUpdate(item.id, { qty: q, amount: Math.round(rate * q) })
+                        setTimeout(() => amountRef.current?.focus(), 50)
+                      }}
+                      className={`px-2.5 py-0.5 text-xs font-semibold rounded-lg border transition-colors ${
+                        item.qty === q
+                          ? 'bg-shiv-green border-shiv-green/50 text-stone-900'
+                          : 'border-stone-200 bg-stone-50 text-stone-500 dark:border-white/10 dark:bg-stone-800 dark:text-stone-300'
+                      }`}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* qty · unit · rate input → computed amount pill */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={1} placeholder="Qty"
+                  value={item.qty || ''}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const q = Number(e.target.value)
+                    onUpdate(item.id, { qty: q, amount: Math.round((item.rateSqft ?? 0) * q) })
+                  }}
+                  className="w-14 shrink-0 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                />
+                <DropDown
+                  className="w-16 shrink-0"
+                  value={item.unit}
+                  onChange={(u) => onUpdate(item.id, { unit: u })}
+                  options={UNITS}
+                />
+                <div className="relative shrink-0 w-20">
+                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                  <input
+                    ref={amountRef}
+                    type="number" min={0} placeholder="Rate"
+                    value={item.rateSqft || ''}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const rate = Number(e.target.value)
+                      onUpdate(item.id, { rateSqft: rate, amount: Math.round(rate * (item.qty || 1)) })
+                    }}
+                    onBlur={(e) => {
+                      const rate = Number(e.target.value)
+                      if (rate && item.category && HARDWARE_CATS.includes(item.category)) {
+                        saveRateToCatalog(item.category, rate)
+                      }
+                    }}
+                    className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-6 pr-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                  />
+                </div>
+                <div className="ml-auto rounded-lg bg-shiv-green/15 px-3 py-1.5 text-sm font-bold text-stone-800 dark:text-white whitespace-nowrap">
+                  ₹{(item.amount || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Board/door: size · qty · cost — single line */}
+          {isCatalog && !isHardware && (
+            <div className="flex items-center gap-1.5">
+              <DropDown
+                className="w-16 shrink-0"
+                value={String(item.heightIn ?? '')}
+                onChange={(v) => handleDim('heightIn', Number(v))}
+                options={HEIGHT_OPTIONS.map(h => ({ value: String(h), label: `${h}"` }))}
+              />
+              <span className="text-xs text-stone-400">×</span>
+              <DropDown
+                className="w-16 shrink-0"
+                value={String(item.widthIn ?? '')}
+                onChange={(v) => handleDim('widthIn', Number(v))}
+                options={WIDTH_OPTIONS.map(w => ({ value: String(w), label: `${w}"` }))}
+              />
+              <input
+                type="number"
+                min={1}
+                value={item.qty || ''}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => handleQty(Number(e.target.value))}
+                className="w-12 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                placeholder="1"
+              />
+              <span className="text-xs text-stone-400">Pc</span>
+              <div className="relative ml-auto shrink-0 w-[4.75rem]">
+                <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                <input
+                  type="number" min={0} placeholder="Rate"
+                  value={item.rateSqft || ''}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => handleRate(Number(e.target.value))}
+                  className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-6 pr-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                  title="Rate per sqft"
+                />
+              </div>
+              <div className="shrink-0 rounded-lg bg-shiv-green/15 px-3 py-1.5 text-sm font-bold text-stone-800 dark:text-white whitespace-nowrap">
+                ₹{(item.amount || 0).toLocaleString('en-IN')}
               </div>
             </div>
           )}
@@ -350,7 +558,9 @@ function calcTotal(items: BillItem[]) {
 }
 
 // ---- Scaled preview wrapper -----------------------------------------------
-const BILL_W_PX = 559 // 148mm at 96 dpi
+// 148mm × 210mm at 96 dpi (browser default resolution)
+const BILL_W_PX = 559
+const BILL_H_PX = 793
 
 function BillPreview({ bill }: { bill: Bill }) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -366,13 +576,38 @@ function BillPreview({ bill }: { bill: Bill }) {
     return () => ro.disconnect()
   }, [])
 
+  const numPages = Math.max(1, Math.ceil((bill.items?.length ?? 0) / 14))
+  const totalH = BILL_H_PX * numPages
+  const srcDoc = useMemo(() => buildBillHtml(bill), [bill])
+
   return (
     <div>
       <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Preview</div>
-      <div ref={wrapRef} className="overflow-hidden border border-stone-200 bg-stone-100 dark:border-white/10 dark:bg-stone-900"
-        style={{ height: `calc(${scale} * 210mm)` }}>
-        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: BILL_W_PX }}>
-          <BillPrint bill={bill} />
+      {/* Outer div measures available width; inner box is sized to the scaled
+          bill exactly and clips the iframe's unscaled layout box. */}
+      <div ref={wrapRef}>
+        <div
+          className="border border-stone-200 bg-white dark:border-white/10 mx-auto overflow-hidden"
+          style={{
+            width: `${Math.round(BILL_W_PX * scale)}px`,
+            height: `${Math.round(totalH * scale)}px`,
+          }}
+        >
+          <iframe
+            srcDoc={srcDoc}
+            scrolling="no"
+            style={{
+              width: BILL_W_PX,
+              height: totalH,
+              border: 'none',
+              display: 'block',
+              overflow: 'hidden',
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
+            title="Bill preview"
+            sandbox="allow-same-origin"
+          />
         </div>
       </div>
     </div>
@@ -469,21 +704,24 @@ export function BillBuilder() {
   const existing = id ? bills.find((b) => b.id === id) : undefined
   const [draft, setDraft] = useState<Bill>(() => existing ?? emptyBill(nextBillNumber()))
   const [view, setView] = useState<'list' | 'form'>(existing || !id ? 'list' : 'form')
+  const [printState, setPrintState] = useState<null | 'connecting' | 'printing' | 'done' | { error: string } | { pickPrinter: string[] }>(null)
+  const [serverUrlInput, setServerUrlInput] = useState('')
+  const [selectedPrinter, setSelectedPrinter] = useState<string>(() => getSavedPrinter() ?? '')
 
   // -- helpers
   const total = calcTotal(draft.items)
-
-  function startNew() {
-    setDraft(emptyBill(nextBillNumber()))
-    setView('form')
-  }
 
   function editBill(b: Bill) {
     setDraft({ ...b })
     setView('form')
   }
 
-  function updateItem(itemId: string, patch: Partial<BillItem>) {
+  function startNew() {
+    setDraft(emptyBill(nextBillNumber()))
+    setView('form')
+  }
+
+function updateItem(itemId: string, patch: Partial<BillItem>) {
     setDraft((d) => ({ ...d, items: d.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)) }))
   }
 
@@ -504,6 +742,52 @@ export function BillBuilder() {
   function cancel() {
     setView('list')
     navigate('/bills', { replace: true })
+  }
+
+  async function doPrint(bill: typeof draft & { total: number }, printerOverride?: string) {
+    setPrintState('connecting')
+    try {
+      // If no printer saved yet, fetch the list and ask user to pick
+      const printer = printerOverride ?? getSavedPrinter() ?? undefined
+      if (!printer) {
+        const info = await fetchPrinters()
+        const first = info.default || info.printers[0]
+        if (!first) throw new Error('No printers found on the server')
+        savePrinter(first)
+        setSelectedPrinter(first)
+        setPrintState('printing')
+        await printBillOnServer(bill, 1, first)
+      } else {
+        setPrintState('printing')
+        await printBillOnServer(bill, 1, printer)
+      }
+      setPrintState('done')
+      setTimeout(() => setPrintState(null), 2200)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setPrintState({ error: msg })
+      setServerUrlInput(getSavedPrintServerUrl() ?? '')
+    }
+  }
+
+  function handlePrint() {
+    const billToSave = { ...draft, total }
+    saveBill(billToSave)
+    void doPrint(billToSave)
+  }
+
+  async function handleSaveServerUrl() {
+    const raw = serverUrlInput.trim()
+    if (!raw) return
+    const url = /^https?:\/\//.test(raw) ? raw : `http://${raw}:3333`
+    savePrintServerUrl(url)
+    await doPrint({ ...draft, total })
+  }
+
+  async function handlePrinterPicked(name: string) {
+    savePrinter(name)
+    setSelectedPrinter(name)
+    await doPrint({ ...draft, total }, name)
   }
 
   // ---- FORM VIEW -----------------------------------------------------------
@@ -555,20 +839,40 @@ export function BillBuilder() {
             <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Phone (optional)</label>
             <input
               type="tel"
-              placeholder="Contact"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={10}
+              placeholder="10-digit mobile"
               value={draft.customerPhone ?? ''}
-              onChange={(e) => setDraft((d) => ({ ...d, customerPhone: e.target.value }))}
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, '').slice(0, 10)
+                setDraft((d) => ({ ...d, customerPhone: v }))
+              }}
+              className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors dark:bg-stone-800 dark:text-white ${
+                (draft.customerPhone ?? '').length === 10
+                  ? 'border-green-500 bg-green-50 dark:border-green-500'
+                  : 'border-stone-200 bg-white dark:border-white/10'
+              }`}
             />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UID (optional)</label>
             <input
-              type="text"
-              placeholder="Aadhaar number"
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={12}
+              placeholder="12-digit Aadhaar"
               value={draft.customerUid ?? ''}
-              onChange={(e) => setDraft((d) => ({ ...d, customerUid: e.target.value }))}
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, '').slice(0, 12)
+                setDraft((d) => ({ ...d, customerUid: v }))
+              }}
+              className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors dark:bg-stone-800 dark:text-white ${
+                (draft.customerUid ?? '').length === 12
+                  ? 'border-green-500 bg-green-50 dark:border-green-500'
+                  : 'border-stone-200 bg-white dark:border-white/10'
+              }`}
             />
           </div>
         </div>
@@ -585,7 +889,7 @@ export function BillBuilder() {
             </button>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1">
             {draft.items.map((item, idx) => (
               <SmartItemRow
                 key={item.id}
@@ -611,20 +915,125 @@ export function BillBuilder() {
         <BillPreview bill={{ ...draft, total }} />
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          {/* Cancel — intentionally small to avoid accidental taps */}
           <button
             onClick={cancel}
-            className="flex-1 rounded-xl border border-stone-200 py-3 text-sm font-semibold text-stone-600 hover:bg-stone-50 dark:border-white/10 dark:text-stone-300"
+            className="shrink-0 rounded-lg px-3 py-2.5 text-xs font-medium text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
           >
             Cancel
           </button>
-          <button
-            onClick={save}
-            className="flex-1 rounded-xl bg-shiv-green py-3 text-sm font-bold text-stone-950 hover:bg-[#c6a15a]"
-          >
-            Save Bill
-          </button>
+
+          {/* Save + Print */}
+          <div className="flex flex-1 gap-2">
+            <button
+              onClick={save}
+              className="flex-1 rounded-xl bg-shiv-green py-3 text-sm font-bold text-stone-950 hover:bg-[#c6a15a]"
+            >
+              Save Bill
+            </button>
+            <button
+              onClick={handlePrint}
+              disabled={printState === 'connecting' || printState === 'printing'}
+              className="flex shrink-0 items-center gap-1.5 rounded-xl bg-stone-800 px-4 py-3 text-sm font-bold text-white hover:bg-stone-700 disabled:opacity-60 dark:bg-stone-700 dark:hover:bg-stone-600"
+            >
+              <Printer size={15} /> Print
+            </button>
+          </div>
         </div>
+
+        {/* Print modal */}
+        {printState !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="flex min-w-[200px] flex-col items-center gap-3 rounded-2xl bg-white px-8 py-6 shadow-2xl dark:bg-stone-900">
+              {(printState === 'connecting' || printState === 'printing') && (
+                <>
+                  <Loader2 size={32} className="animate-spin text-stone-500" />
+                  <p className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+                    {printState === 'connecting' ? 'Connecting…' : 'Sending to printer…'}
+                  </p>
+                  {selectedPrinter && printState === 'printing' && (
+                    <p className="text-xs text-stone-400 dark:text-stone-500 max-w-[220px] truncate text-center">{selectedPrinter}</p>
+                  )}
+                </>
+              )}
+              {typeof printState === 'object' && 'pickPrinter' in printState && (
+                <div className="w-full space-y-3 text-center">
+                  <Printer size={26} className="mx-auto text-stone-500" />
+                  <p className="text-sm font-semibold text-stone-700 dark:text-stone-200">Choose printer</p>
+                  <div className="space-y-1.5">
+                    {printState.pickPrinter.map(name => (
+                      <button
+                        key={name}
+                        onClick={() => handlePrinterPicked(name)}
+                        className="w-full rounded-lg border border-stone-200 px-3 py-2.5 text-left text-xs font-medium text-stone-700 hover:bg-shiv-green/10 hover:border-shiv-green dark:border-white/10 dark:text-stone-200"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setPrintState(null)}
+                    className="text-xs text-stone-400 hover:text-stone-600 dark:text-stone-500"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {printState === 'done' && (
+                <>
+                  <CheckCircle2 size={32} className="text-green-500" />
+                  <p className="text-sm font-semibold text-stone-700 dark:text-stone-200">Printed!</p>
+                </>
+              )}
+              {typeof printState === 'object' && 'error' in printState && (
+                <>
+                  <AlertCircle size={28} className="text-red-500 shrink-0" />
+                  {/* "Cannot find server" → show URL configurator */}
+                  {printState.error.toLowerCase().includes('cannot find') || printState.error.toLowerCase().includes('cannot reach') ? (
+                    <div className="w-full space-y-3 text-center">
+                      <p className="text-sm font-semibold text-stone-700 dark:text-stone-200">Print server not found</p>
+                      <p className="text-xs text-stone-500 dark:text-stone-400">Enter the IP of the computer running the server:</p>
+                      <input
+                        type="text"
+                        placeholder="e.g. 192.168.29.174"
+                        value={serverUrlInput}
+                        onChange={e => setServerUrlInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveServerUrl()}
+                        className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setPrintState(null)}
+                          className="flex-1 rounded-lg bg-stone-100 px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-200 dark:bg-white/10 dark:text-stone-300"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveServerUrl}
+                          className="flex-1 rounded-lg bg-shiv-green px-3 py-2 text-sm font-bold text-stone-950 hover:bg-[#c6a15a]"
+                        >
+                          Save & Print
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full space-y-3 text-center">
+                      <p className="max-w-[260px] text-sm font-semibold text-stone-700 dark:text-stone-200">{printState.error}</p>
+                      <button
+                        onClick={() => setPrintState(null)}
+                        className="rounded-lg bg-stone-100 px-5 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-200 dark:bg-white/10 dark:text-stone-200"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -665,6 +1074,7 @@ export function BillBuilder() {
             <BillCard
               key={bill.id}
               bill={bill}
+
               onEdit={() => editBill(bill)}
               onDelete={() => { if (confirm(`Delete bill #${bill.number}?`)) deleteBill(bill.id) }}
             />

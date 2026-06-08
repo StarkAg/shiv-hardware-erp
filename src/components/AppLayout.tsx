@@ -9,9 +9,9 @@ import {
   CreditCard,
   DoorClosed,
   FileText,
-  IndianRupee,
   Layers,
   Moon,
+  Package,
   Plus,
   ReceiptText,
   ShieldCheck,
@@ -40,7 +40,7 @@ const MOBILE_NAV_ITEMS = [
   { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck, match: ['/guarantee'] },
   { to: '/bills', label: 'Bills', icon: ReceiptText, match: ['/bills'] },
   { to: '/transport', label: 'Transport', icon: Truck, match: ['/transport'] },
-  { to: '/rates', label: 'Rate Manager', icon: IndianRupee, match: ['/rates'] },
+  { to: '/inventory', label: 'Inventory', icon: Package, match: ['/inventory', '/rates'] },
 ] as const
 
 export function AppLayout() {
@@ -176,8 +176,8 @@ export function AppLayout() {
         <NavLink to="/bills" className={linkClass}>
           <ReceiptText size={18} /> Bills
         </NavLink>
-        <NavLink to="/rates" className={linkClass}>
-          <IndianRupee size={18} /> Rate Manager
+        <NavLink to="/inventory" className={linkClass}>
+          <Package size={18} /> Inventory
         </NavLink>
         <NavLink to="/transport" className={linkClass}>
           <Truck size={18} /> Transport
@@ -237,11 +237,13 @@ export function AppLayout() {
               to={to}
               aria-label={label}
               title={label}
-              className={`flex min-h-[3.75rem] min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-1 text-[8px] font-semibold leading-tight transition ${
-                active
+              className={`flex min-h-[3.75rem] min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-1 text-[8px] font-semibold leading-tight select-none
+                active:scale-90 active:opacity-70
+                ${active
                   ? 'bg-shiv-green/20 text-stone-950 dark:bg-shiv-green/20 dark:text-shiv-green'
-                  : 'text-stone-500 active:bg-stone-200 dark:text-stone-400 dark:active:bg-white/10'
-              }`}
+                  : 'text-stone-500 dark:text-stone-400'
+                }`}
+              style={{ transition: 'transform 80ms ease, opacity 80ms ease' }}
             >
               <Icon size={19} strokeWidth={active ? 2.5 : 2} />
               <span className="w-full whitespace-normal text-center">{label}</span>

@@ -149,12 +149,14 @@ export function PrintPreview({
         try {
           const result = serverPrint.kind === 'quotation'
             ? await createCloudPrintJob({ kind: 'quotation', quote: serverPrint.quote, source: 'web' })
-            : await createCloudPrintJob({
-                kind: 'guarantee',
-                document: serverPrint.document,
-                layout: serverPrint.layout,
-                source: 'web',
-              })
+            : serverPrint.kind === 'guarantee'
+              ? await createCloudPrintJob({
+                  kind: 'guarantee',
+                  document: serverPrint.document,
+                  layout: serverPrint.layout,
+                  source: 'web',
+                })
+              : await createCloudPrintJob({ kind: 'quotation', quote: serverPrint.bill as never, source: 'web' })
           void watchCloudPrintJob(result.id)
           return
         } catch (cloudErr) {

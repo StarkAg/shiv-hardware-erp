@@ -12,6 +12,15 @@ export type ProductCategory =
   | 'aluminium-door'
   | 'window-2-track'
   | 'window-3-track'
+  // Hardware (bill-only, no sqft rate)
+  | 'hinge'
+  | 'screw'
+  | 'aldrop'
+  | 'handle'
+  | 'tb'
+  | 'fevicol'
+  | 'mica'
+  | 'tape'
 
 /** A purchasable brand/grade within a category, with its per-sqft rate. */
 export interface Brand {
@@ -141,6 +150,14 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'aluminium-door': 'Aluminium Door',
   'window-2-track': '2 Track Sliding Window',
   'window-3-track': '3 Track Sliding Window',
+  'hinge':    'Hinges',
+  'screw':    'Screw',
+  'aldrop':   'Aldrop',
+  'handle':   'Handle',
+  'tb':       'Tower Bolt',
+  'fevicol':  'Fevicol',
+  'mica':     'Mica',
+  'tape':     'Abro Tape',
 }
 
 /** Icon key (resolved to a lucide-react component in the UI) per category. */
@@ -164,6 +181,15 @@ export const CATEGORY_META: Record<
   'aluminium-door': { short: 'Aluminium Door', icon: 'door', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
   'window-2-track': { short: '2 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
   'window-3-track': { short: '3 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
+  // Hardware — bill-only, not shown in quotation sidebar
+  'hinge':    { short: 'Hinges',   icon: 'board', group: 'Doors' },
+  'screw':    { short: 'Screw',    icon: 'board', group: 'Doors' },
+  'aldrop':   { short: 'Aldrop',   icon: 'board', group: 'Doors' },
+  'handle':   { short: 'Handle',   icon: 'board', group: 'Doors' },
+  'tb':       { short: 'Tower Bolt', icon: 'board', group: 'Doors' },
+  'fevicol':  { short: 'Fevicol',  icon: 'board', group: 'Doors' },
+  'mica':     { short: 'Mica',     icon: 'board', group: 'Doors' },
+  'tape':     { short: 'Abro Tape', icon: 'board', group: 'Doors' },
 }
 
 // ---- Bills ----------------------------------------------------------------
@@ -180,6 +206,10 @@ export interface BillItem {
   // ---- catalog / smart fields (set only for board/door items) ----
   category?: ProductCategory
   brandName?: string
+  /** Size label for hardware items (e.g. "5\"", "¾\""). Boards use heightIn×widthIn instead. */
+  sizeIn?: string
+  /** Selected values for user-defined custom catalog fields, keyed by field label. */
+  fieldValues?: Record<string, string>
   heightIn?: number
   widthIn?: number
   /** Rate per sqft (₹) — drives amount = rateSqft × (H×W/144) × qty */
@@ -199,6 +229,36 @@ export interface Bill {
   paymentMode?: BillPaymentMode
   upiRef?: string       // UPI/phone used for payment
   notes?: string
+}
+
+// ---- Hardware catalog (managed via Inventory page) ------------------------
+
+/** A user-defined labeled chip group (e.g. "Colors", "Widths") on a catalog item. */
+export interface CatalogField { id: string; label: string; values: string[] }
+
+export interface HardwareCatalogEntry { sizes: string[]; brands: string[]; fields?: CatalogField[]; rate?: number }
+export type HardwareCatalog = Partial<Record<ProductCategory, HardwareCatalogEntry>>
+
+export const DEFAULT_HARDWARE_CATALOG: HardwareCatalog = {
+  hinge:   { sizes: ['3"','4"','5"','6"'],                               brands: ['Acer Jazz','Norya Jazi','GI','SS'] },
+  screw:   { sizes: ['½"','¾"','1"','1¼"','1½"','2"','2½"','3"'],        brands: ['SS (+)','SS (-)','GI','Plain'] },
+  aldrop:  { sizes: ['6"','8"','10"','12"'],                             brands: ['Marla B/G','Mona B/n','GI'] },
+  handle:  { sizes: ['4"','6"','8"','10"','12"'],                        brands: ['Mona B/n','Norta B/n','B/n'] },
+  tb:      { sizes: ['6"','8"','10"','12"'],                             brands: ['Mona B/n','B/n'] },
+  fevicol: { sizes: [],                                                  brands: ['SH','Marine','HeatX','SR','SpeedX','Probond','Hi-per Star'] },
+  mica:    { sizes: [],                                                  brands: [] },
+  tape:    { sizes: [],                                                  brands: [] },
+}
+
+// ---- Custom hardware catalog (user-defined extra items) -------------------
+
+export interface CustomCatalogEntry {
+  id: string
+  name: string
+  sizes: string[]
+  brands: string[]
+  fields?: CatalogField[]
+  rate?: number
 }
 
 // ---------------------------------------------------------------------------
