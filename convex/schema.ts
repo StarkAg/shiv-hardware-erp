@@ -11,6 +11,21 @@ const printJobStatus = v.union(
 )
 
 export default defineSchema({
+  // ── Bills backup (single-row snapshot; all bills incl. drafts) ────────────
+  billsStore: defineTable({
+    bills:   v.array(v.any()),
+    billSeq: v.number(),
+    savedAt: v.number(),
+  }),
+
+  // ── Catalog backup (single-row snapshot) ──────────────────────────────────
+  catalogStore: defineTable({
+    hardwareCatalog: v.any(),
+    customCatalog:   v.array(v.any()),
+    sets:            v.array(v.any()),
+    savedAt:         v.number(),
+  }),
+
   customers: defineTable({
     localId: v.optional(v.string()),
     name: v.string(),
