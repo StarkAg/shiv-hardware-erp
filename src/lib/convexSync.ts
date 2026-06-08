@@ -6,8 +6,7 @@
  * uses useQuery hooks and keeps the Zustand store updated without loops.
  */
 import { ConvexHttpClient } from 'convex/browser'
-// anyApi allows any function reference — replaced by fully-typed api after `npx convex dev`
-import { anyApi as api } from 'convex/server'
+import { api } from '../../convex/_generated/api'
 import type { Bill, BrandSet, CustomCatalogEntry, HardwareCatalog } from './types'
 
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
