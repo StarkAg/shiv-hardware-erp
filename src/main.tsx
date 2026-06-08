@@ -15,7 +15,7 @@ import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { startOfflineSync } from './lib/offlineSync'
-import { pullCatalogFromServer } from './lib/printServer'
+import { pullBillsFromServer, pullCatalogFromServer } from './lib/printServer'
 import { useStore } from './lib/store'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
@@ -50,14 +50,23 @@ function disableMobileZoom() {
 disableMobileZoom()
 startOfflineSync()
 
-// On startup: try to pull catalog from print server and merge into local store.
-// Only overwrites if the server has a snapshot (acts as cross-device backup).
+// On startup: try to pull catalog + bills from print server and restore into local store.
+// Acts as cross-device backup — server wins if it has a snapshot.
 pullCatalogFromServer().then((snapshot) => {
   if (!snapshot) return
   const { setHardwareCatalog, setCustomCatalog, setSets } = useStore.getState()
   if (snapshot.hardwareCatalog) setHardwareCatalog(snapshot.hardwareCatalog)
   if (snapshot.customCatalog)   setCustomCatalog(snapshot.customCatalog)
   if (snapshot.sets?.length)    setSets(snapshot.sets)
+}).catch(() => { /* print server offline — no-op */ })
+
+pullBillsFromServer().then((serverBills) => {
+  if (!serverBills?.length) return
+  // Only restore if the server has more bills than local (avoids overwriting a newer local state)
+  const local = useStore.getState().bills
+  if (serverBills.length >= local.length) {
+    useStore.getState().saveBillsSnapshot(serverBills)
+  }
 }).catch(() => { /* print server offline — no-op */ })
 
 // HashRouter keeps routing working when packaged as a desktop (file://) app.

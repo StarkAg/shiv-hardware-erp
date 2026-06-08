@@ -200,6 +200,33 @@ export async function pullCatalogFromServer(): Promise<CatalogSnapshot | null> {
   }
 }
 
+// ── Bills snapshot sync ───────────────────────────────────────────────────────
+
+/** Push the full bills array to the print server. Fire-and-forget. */
+export async function pushBillsToServer(bills: Bill[]): Promise<void> {
+  try {
+    await fetchPrintServer('/bills-store', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bills }),
+    }, 5000)
+  } catch {
+    // Server offline — silently ignore
+  }
+}
+
+/** Pull bills snapshot from the print server. Returns null if unreachable or empty. */
+export async function pullBillsFromServer(): Promise<Bill[] | null> {
+  try {
+    const res = await fetchPrintServer('/bills-store', undefined, 5000)
+    const json = await res.json().catch(() => null)
+    if (!json?.ok || !Array.isArray(json.bills) || json.bills.length === 0) return null
+    return json.bills as Bill[]
+  } catch {
+    return null
+  }
+}
+
 export async function printOnServer(payload: ServerPrintPayload, copies = 1, printer?: string): Promise<ServerPrintResult> {
   try {
     const res = await fetchPrintServer('/print', {

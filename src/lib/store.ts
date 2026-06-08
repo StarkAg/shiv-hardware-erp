@@ -4,7 +4,7 @@ import { DEFAULT_HARDWARE_CATALOG } from './types'
 import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
-import { pushCatalogToServer } from './printServer'
+import { pushBillsToServer, pushCatalogToServer } from './printServer'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const codeSets = (sets: BrandSet[]): BrandSet[] => sets.map((s, i) => ({ ...s, name: `C${i + 1}` }))
@@ -16,6 +16,15 @@ function scheduleCatalogPush(get: () => AppState) {
   _catalogPushTimer = setTimeout(() => {
     const s = get()
     pushCatalogToServer({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
+  }, 2000)
+}
+
+// Debounce bills pushes so rapid edits (typing customer name) don't spam the server
+let _billsPushTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleBillsPush(get: () => AppState) {
+  if (_billsPushTimer) clearTimeout(_billsPushTimer)
+  _billsPushTimer = setTimeout(() => {
+    pushBillsToServer(get().bills)
   }, 2000)
 }
 
@@ -50,6 +59,8 @@ interface AppState {
   nextBillNumber: () => string
   saveBill: (b: Bill) => void
   deleteBill: (id: string) => void
+  /** Bulk-restore all bills from a server snapshot (startup only). */
+  saveBillsSnapshot: (bills: Bill[]) => void
 
   // hardware catalog
   setHardwareCatalog: (c: HardwareCatalog) => void
@@ -74,6 +85,7 @@ function persist(get: () => AppState) {
     customCatalog: s.customCatalog,
   })
   scheduleCatalogPush(get)
+  scheduleBillsPush(get)
 }
 
 const saved = db.load()
@@ -208,6 +220,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   deleteBill: (id) => {
     set((st) => ({ bills: st.bills.filter((b) => b.id !== id) }))
+    persist(get)
+  },
+
+  saveBillsSnapshot: (bills) => {
+    // Derive billSeq from the highest numeric bill number in the snapshot
+    const maxSeq = bills.reduce((m, b) => {
+      const n = Number(b.number)
+      return Number.isFinite(n) ? Math.max(m, n) : m
+    }, 0)
+    set((st) => ({ bills, billSeq: Math.max(st.billSeq, maxSeq) }))
     persist(get)
   },
 

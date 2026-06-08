@@ -5,6 +5,7 @@ print-server/.env
 print-server/data/wwebjs-auth/
 print-server/data/whatsapp-processed-messages.json
 print-server/data/bills.jsonl
+print-server/data/bills.json
 print-server/data/scan-feedback.jsonl
 print-server/.wwebjs_cache/
 *.log
