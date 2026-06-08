@@ -9,4 +9,19 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, 'src') },
   },
   server: { port: 5180, host: '0.0.0.0', open: false },
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    sourcemap: false,
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'state': ['zustand'],
+          'icons': ['lucide-react'],
+        },
+      },
+    },
+  },
 })

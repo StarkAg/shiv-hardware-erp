@@ -8,6 +8,8 @@ export interface PersistedState {
   quoteSeq: number
   bills: unknown
   billSeq: number
+  hardwareCatalog: unknown
+  customCatalog: unknown
 }
 
 export interface DataAdapter {

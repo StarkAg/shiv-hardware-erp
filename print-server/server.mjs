@@ -20,7 +20,7 @@ import { appendFile, writeFile, unlink } from 'fs/promises'
 import { networkInterfaces, tmpdir } from 'os'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
-import { buildGuaranteeHtml, buildQuotationHtml } from './template.mjs'
+import { buildGuaranteeHtml, buildQuotationHtml, buildBillHtml } from './template.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
@@ -57,6 +57,43 @@ const NAME_CORRECTIONS_URL = new URL('data/name-corrections.json', import.meta.u
 const PLACE_CORRECTIONS_URL = new URL('data/place-corrections.json', import.meta.url)
 const PRODUCT_CORRECTIONS_URL = new URL('data/product-corrections.json', import.meta.url)
 const SCAN_FEEDBACK_URL = new URL('data/scan-feedback.jsonl', import.meta.url)
+const BILLS_STORE_URL   = new URL('data/bills.jsonl', import.meta.url)
+const CATALOG_STORE_URL = new URL('data/catalog.json', import.meta.url)
+
+async function saveBillToStore(bill) {
+  try {
+    const entry = JSON.stringify({ ...bill, _printedAt: new Date().toISOString() })
+    await appendFile(BILLS_STORE_URL, entry + '\n', 'utf8')
+  } catch (err) {
+    console.warn('[bills-store] failed to save bill:', err.message ?? err)
+  }
+}
+
+function loadBillsFromStore() {
+  try {
+    const raw = readFileSync(BILLS_STORE_URL, 'utf8')
+    return raw.trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+  } catch {
+    return []
+  }
+}
+
+async function saveCatalog(data) {
+  try {
+    await writeFile(CATALOG_STORE_URL, JSON.stringify({ ...data, _savedAt: new Date().toISOString() }, null, 2), 'utf8')
+  } catch (err) {
+    console.warn('[catalog-store] failed to save:', err.message ?? err)
+  }
+}
+
+function loadCatalog() {
+  try {
+    return JSON.parse(readFileSync(CATALOG_STORE_URL, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
 const app = express()
 app.set('trust proxy', true)
 app.use(cors())
@@ -922,15 +959,20 @@ async function printFileWithLp(filePath, copies, title, printer = PRINT_PRINTER,
     })
   }
 
+  // Build lp args: each printSettings entry becomes an -o flag
+  const lpOptions = printSettings.flatMap(s => ['-o', s])
+  const lpArgs = ['-d', printer, '-n', String(copies), '-t', title, ...lpOptions, filePath]
+  console.log(`[lp-print] printer="${printer}" options="${lpOptions.join(' ')}" file="${filePath}"`)
+
   return new Promise((ok, fail) =>
-    execFile('lp', ['-d', printer, '-n', String(copies), '-t', title, filePath], (err, stdout) => {
+    execFile('lp', lpArgs, (err, stdout) => {
       if (err) {
         fail(err)
         return
       }
       const output = stdout.trim()
       const jobId = output.match(/request id is (\S+)/)?.[1] ?? null
-      console.log(`[whatsapp-print] ${title}`, output)
+      console.log(`[lp-print] ${title}`, output)
       ok({ jobId, output })
     }),
   )
@@ -1348,14 +1390,17 @@ async function startWhatsAppWebAutoPrint() {
   }
 }
 
-async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, copies) {
+async function printDocumentPayload({ kind, quote, document, bill, layout = 'a4', printerOverride }, copies) {
   if (kind === 'guarantee' && !document) throw new Error('Missing guarantee document data')
-  if (kind !== 'guarantee' && !quote) throw new Error('Missing quotation data')
-  const primaryPrinter = selectDocumentPrinter({ kind, layout })
+  if (kind === 'bill' && !bill) throw new Error('Missing bill data')
+  if (kind !== 'guarantee' && kind !== 'bill' && !quote) throw new Error('Missing quotation data')
+  const primaryPrinter = printerOverride || selectDocumentPrinter({ kind, layout })
   const isCard = kind === 'guarantee' && layout === 'card'
+  // Bills print at best quality (print-quality=5 is the IPP "best" level)
+  const billPrintSettings = parsePrintSettings(process.env.BILL_PRINT_SETTINGS || 'print-quality=5')
   const route = isCard
     ? { printer: primaryPrinter, printSettings: EPSON_CARD_PRINT_SETTINGS, fallback: null }
-    : await routeBwPrinterOnError(primaryPrinter, [], `document-print:${kind ?? 'quotation'}`)
+    : await routeBwPrinterOnError(primaryPrinter, kind === 'bill' ? billPrintSettings : [], `document-print:${kind ?? 'quotation'}`)
   const { printer } = route
 
   let browser
@@ -1363,9 +1408,17 @@ async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, co
   try {
     const html = kind === 'guarantee'
       ? await buildGuaranteeHtml(document, layout)
-      : await buildQuotationHtml(quote)
+      : kind === 'bill'
+        ? buildBillHtml(bill)
+        : await buildQuotationHtml(quote)
     browser = await launchPuppeteerBrowser()
     const page = await browser.newPage()
+
+    // For bills: pin viewport to exactly 148×210mm at 96dpi so Puppeteer renders
+    // at the same pixel dimensions as the in-app preview iframe (559×793px).
+    if (kind === 'bill') {
+      await page.setViewport({ width: 559, height: 793, deviceScaleFactor: 1 })
+    }
 
     if (shouldUseCardImageEngine(isCard)) {
       const cardWidthPx = Math.ceil((CARD_WIDTH_MM / 25.4) * 96)
@@ -1399,7 +1452,9 @@ async function printDocumentPayload({ kind, quote, document, layout = 'a4' }, co
           preferCSSPageSize: true,
           margin: { top: 0, right: 0, bottom: 0, left: 0 },
         }
-      : { format: 'A4', printBackground: true })
+      : kind === 'bill'
+        ? { width: '148mm', height: '210mm', printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } }
+        : { format: 'A4', printBackground: true })
     tmp = join(tmpdir(), `shiv-print-${Date.now()}.pdf`)
     await writeFile(tmp, pdf)
     const printResult = await printFileWithLp(tmp, copies, `Shiv ${kind ?? 'quotation'}`, printer, route.printSettings)
@@ -1851,6 +1906,21 @@ async function scanWithClaude(image, mediaType) {
   return { data: normalizeScanData(parseJSON(text)), ms: Date.now() - t0, provider: 'claude' }
 }
 
+// ── List installed printers ──────────────────────────────────────────────────
+async function listInstalledPrinters() {
+  if (process.platform === 'win32') {
+    const { stdout } = await execFileAsync('powershell.exe', [
+      '-NoProfile', '-Command',
+      'Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress',
+    ], { windowsHide: true })
+    const parsed = JSON.parse(stdout.trim())
+    return Array.isArray(parsed) ? parsed : [parsed]
+  }
+  // macOS / Linux: lpstat -a
+  const { stdout } = await execFileAsync('lpstat', ['-a']).catch(() => ({ stdout: '' }))
+  return stdout.trim().split('\n').map(l => l.split(' ')[0]).filter(Boolean)
+}
+
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/status', (_req, res) => res.json({
   ok: true,
@@ -1863,6 +1933,15 @@ app.get('/status', (_req, res) => res.json({
     blackAndWhiteFallbackOnError: BW_FALLBACK_ON_ERROR,
   },
 }))
+app.get('/printers', async (_req, res) => {
+  try {
+    const list = await listInstalledPrinters()
+    res.json({ ok: true, printers: list, default: PRINT_PRINTER })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 app.get('/scan-bill', (_req, res) => res.json({ ok: true, message: 'Use POST with { image, mediaType }. Scanner uses Claude only.' }))
 
 // ── Scan Bill ─────────────────────────────────────────────────────────────────
@@ -2023,13 +2102,15 @@ app.post('/whatsapp-print/jobs', async (req, res) => {
 
 // ── Print ─────────────────────────────────────────────────────────────────────
 app.post('/print', async (req, res) => {
-  const { kind, quote, document, layout = 'a4' } = req.body
+  const { kind, quote, document, bill, layout = 'a4', printer: printerOverride } = req.body
   const copies = sanitizeCopies(req.body.copies)
   if (kind === 'guarantee' && !document) return res.status(400).json({ error: 'Missing guarantee document data' })
-  if (kind !== 'guarantee' && !quote) return res.status(400).json({ error: 'Missing quotation data' })
+  if (kind === 'bill' && !bill) return res.status(400).json({ error: 'Missing bill data' })
+  if (kind !== 'guarantee' && kind !== 'bill' && !quote) return res.status(400).json({ error: 'Missing quotation data' })
 
   try {
-    const printResult = await printDocumentPayload({ kind, quote, document, layout }, copies)
+    const printResult = await printDocumentPayload({ kind, quote, document, bill, layout, printerOverride }, copies)
+    if (kind === 'bill' && bill) await saveBillToStore(bill)
     res.json({
       ok: true,
       printer: printResult.printer,
@@ -2040,6 +2121,40 @@ app.post('/print', async (req, res) => {
     console.error('[print error]', err)
     res.status(500).json({ error: String(err) })
   }
+})
+
+// ── Bills store ──────────────────────────────────────────────────────────────
+// GET /bills                  -> all stored bills (newest first)
+// GET /bills/:id              -> single bill by id
+app.get('/bills', (_req, res) => {
+  const bills = loadBillsFromStore().reverse()
+  res.json({ ok: true, bills })
+})
+
+app.get('/bills/:id', (req, res) => {
+  const bills = loadBillsFromStore()
+  const bill = bills.find(b => b.id === req.params.id)
+  if (!bill) return res.status(404).json({ ok: false, error: 'Bill not found' })
+  res.json({ ok: true, bill })
+})
+
+// ── Catalog store ─────────────────────────────────────────────────────────────
+// Stores hardwareCatalog + customCatalog + sets so the app survives a clear.
+// GET  /catalog            -> { ok, catalog }
+// POST /catalog            -> save full catalog snapshot
+app.get('/catalog', (_req, res) => {
+  const catalog = loadCatalog()
+  if (!catalog) return res.json({ ok: true, catalog: null })
+  res.json({ ok: true, catalog })
+})
+
+app.post('/catalog', async (req, res) => {
+  const { hardwareCatalog, customCatalog, sets } = req.body ?? {}
+  if (!hardwareCatalog && !customCatalog && !sets) {
+    return res.status(400).json({ ok: false, error: 'Nothing to save' })
+  }
+  await saveCatalog({ hardwareCatalog, customCatalog, sets })
+  res.json({ ok: true })
 })
 
 // ── Render PNG ───────────────────────────────────────────────────────────────

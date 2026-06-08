@@ -1,0 +1,15 @@
+{
+  "hardwareCatalog": {
+    "hinge":   { "sizes": ["3\"","4\"","5\"","6\""],                              "brands": ["Acer Jazz","Norya Jazi","GI","SS"] },
+    "screw":   { "sizes": ["½\"","¾\"","1\"","1¼\"","1½\"","2\"","2½\"","3\""],  "brands": ["SS (+)","SS (-)","GI","Plain"] },
+    "aldrop":  { "sizes": ["6\"","8\"","10\"","12\""],                           "brands": ["Marla B/G","Mona B/n","GI"] },
+    "handle":  { "sizes": ["4\"","6\"","8\"","10\"","12\""],                     "brands": ["Mona B/n","Norta B/n","B/n"] },
+    "tb":      { "sizes": ["6\"","8\"","10\"","12\""],                           "brands": ["Mona B/n","B/n"] },
+    "fevicol": { "sizes": [],                                                    "brands": ["SH","Marine","HeatX","SR","SpeedX","Probond","Hi-per Star"] },
+    "mica":    { "sizes": [], "brands": [] },
+    "tape":    { "sizes": [], "brands": [] }
+  },
+  "customCatalog": [],
+  "sets": [],
+  "_savedAt": "seed"
+}

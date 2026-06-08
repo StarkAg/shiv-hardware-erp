@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { Check, ChevronDown } from 'lucide-react'
 
 export function PageHeader({
   title,
@@ -120,5 +120,95 @@ export function Toggle({
       </button>
       {label}
     </label>
+  )
+}
+
+/**
+ * Custom styled dropdown — replaces native <select>.
+ * options: string[] or { value, label }[]
+ */
+export function DropDown({
+  value,
+  onChange,
+  options,
+  placeholder,
+  className = '',
+  disabled = false,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: string[] | { value: string; label: string }[]
+  placeholder?: string
+  className?: string
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const normalised = (options as Array<string | { value: string; label: string }>).map((o) =>
+    typeof o === 'string' ? { value: o, label: o } : o,
+  )
+
+  const selected = normalised.find((o) => o.value === value)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent | TouchEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    document.addEventListener('touchstart', handle)
+    return () => {
+      document.removeEventListener('mousedown', handle)
+      document.removeEventListener('touchstart', handle)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      {/* Trigger */}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className={`flex w-full items-center justify-between gap-1 rounded-lg border px-2 py-1.5 text-sm font-medium transition-colors
+          ${open
+            ? 'border-shiv-green bg-white text-stone-900 shadow-sm shadow-shiv-green/20 dark:bg-stone-800 dark:text-white'
+            : 'border-stone-200 bg-stone-50 text-stone-700 hover:border-stone-300 dark:border-white/10 dark:bg-stone-800 dark:text-stone-200'
+          } disabled:cursor-not-allowed disabled:opacity-40`}
+      >
+        <span className="truncate">{selected?.label ?? placeholder ?? '—'}</span>
+        <ChevronDown
+          size={13}
+          className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Panel */}
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 min-w-full overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg shadow-stone-900/10 dark:border-white/10 dark:bg-stone-900">
+          <div className="max-h-52 overflow-y-auto py-1">
+            {normalised.map((opt) => {
+              const active = opt.value === value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onMouseDown={() => { onChange(opt.value); setOpen(false) }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors
+                    ${active
+                      ? 'bg-shiv-green/10 font-semibold text-stone-900 dark:text-white'
+                      : 'text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-white/5'
+                    }`}
+                >
+                  <span className="flex-1 truncate">{opt.label}</span>
+                  {active && <Check size={13} className="shrink-0 text-shiv-green" />}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
