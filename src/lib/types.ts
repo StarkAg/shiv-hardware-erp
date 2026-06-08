@@ -229,6 +229,8 @@ export interface Bill {
   paymentMode?: BillPaymentMode
   upiRef?: string       // UPI/phone used for payment
   notes?: string
+  /** True while the bill is still being filled — cleared on Save or Print. */
+  isDraft?: boolean
 }
 
 // ---- Hardware catalog (managed via Inventory page) ------------------------
