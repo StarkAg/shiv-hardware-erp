@@ -553,6 +553,11 @@ function emptyBill(number: string): Bill {
   }
 }
 
+/** Returns true if the bill has at least a customer name or one item description. */
+function hasMeaningfulContent(bill: Bill): boolean {
+  return bill.customerName.trim().length > 0 || bill.items.some(i => i.description.trim().length > 0)
+}
+
 function calcTotal(items: BillItem[]) {
   return items.reduce((s, i) => s + (Number(i.amount) || 0), 0)
 }
@@ -617,8 +622,11 @@ function BillPreview({ bill }: { bill: Bill }) {
 // ---- Bill list card -------------------------------------------------------
 function BillCard({ bill, onEdit, onDelete }: { bill: Bill; onEdit: () => void; onDelete: () => void }) {
   const [expanded, setExpanded] = useState(false)
+  const isDraft = !!bill.isDraft
   return (
-    <div className="rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/10 dark:bg-stone-900">
+    <div className={`rounded-xl border shadow-sm ${isDraft
+      ? 'border-amber-200 bg-amber-50/60 dark:border-amber-500/25 dark:bg-amber-900/10'
+      : 'border-stone-200 bg-white dark:border-white/10 dark:bg-stone-900'}`}>
       <button
         onClick={() => setExpanded((e) => !e)}
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
@@ -626,14 +634,24 @@ function BillCard({ bill, onEdit, onDelete }: { bill: Bill; onEdit: () => void; 
         <div className="flex items-center gap-3 min-w-0">
           <span className="shrink-0 text-xs font-bold text-shiv-green">#{bill.number}</span>
           <span className="truncate font-semibold text-stone-800 dark:text-stone-100">
-            {bill.customerName || 'Unknown'}
+            {bill.customerName || <span className="text-stone-400 dark:text-stone-500">No name</span>}
           </span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${bill.paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-            {bill.paid ? 'PAID' : 'DUE'}
-          </span>
+          {isDraft ? (
+            <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/25 dark:text-amber-400">
+              DRAFT
+            </span>
+          ) : (
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${bill.paid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+              {bill.paid ? 'PAID' : 'DUE'}
+            </span>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <span className="font-bold text-stone-700 dark:text-stone-200">₹{bill.total.toLocaleString('en-IN')}</span>
+          {isDraft ? (
+            <span className="text-xs font-medium text-amber-600 dark:text-amber-400">in progress</span>
+          ) : (
+            <span className="font-bold text-stone-700 dark:text-stone-200">₹{bill.total.toLocaleString('en-IN')}</span>
+          )}
           {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </div>
       </button>
@@ -643,7 +661,7 @@ function BillCard({ bill, onEdit, onDelete }: { bill: Bill; onEdit: () => void; 
           <div className="mb-2 flex gap-4 text-xs text-stone-500 dark:text-stone-400">
             <span>{bill.date.split('-').reverse().join('/')}</span>
             {bill.customerPhone && <span>📞 {bill.customerPhone}</span>}
-            {bill.paid && bill.paymentMode && <span className="capitalize">{bill.paymentMode}</span>}
+            {!isDraft && bill.paid && bill.paymentMode && <span className="capitalize">{bill.paymentMode}</span>}
           </div>
 
           <table className="w-full text-sm">
@@ -657,18 +675,20 @@ function BillCard({ bill, onEdit, onDelete }: { bill: Bill; onEdit: () => void; 
             <tbody className="divide-y divide-stone-100 dark:divide-white/5">
               {bill.items.map((item) => (
                 <tr key={item.id}>
-                  <td className="py-1 pr-2 text-stone-700 dark:text-stone-200">{item.description}</td>
+                  <td className="py-1 pr-2 text-stone-700 dark:text-stone-200">{item.description || <span className="italic text-stone-300 dark:text-stone-600">—</span>}</td>
                   <td className="py-1 pr-2 text-right text-stone-500 dark:text-stone-400 whitespace-nowrap">{item.qty} {item.unit}</td>
                   <td className="py-1 text-right font-medium text-stone-800 dark:text-stone-100">₹{(item.amount || 0).toLocaleString('en-IN')}</td>
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr className="border-t border-stone-200 dark:border-white/10">
-                <td colSpan={2} className="pt-2 font-bold text-stone-700 dark:text-stone-200">Total</td>
-                <td className="pt-2 text-right font-bold text-stone-900 dark:text-white">₹{bill.total.toLocaleString('en-IN')}</td>
-              </tr>
-            </tfoot>
+            {!isDraft && (
+              <tfoot>
+                <tr className="border-t border-stone-200 dark:border-white/10">
+                  <td colSpan={2} className="pt-2 font-bold text-stone-700 dark:text-stone-200">Total</td>
+                  <td className="pt-2 text-right font-bold text-stone-900 dark:text-white">₹{bill.total.toLocaleString('en-IN')}</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
 
           {bill.notes && (
@@ -676,12 +696,21 @@ function BillCard({ bill, onEdit, onDelete }: { bill: Bill; onEdit: () => void; 
           )}
 
           <div className="mt-3 flex gap-2">
-            <button
-              onClick={onEdit}
-              className="flex-1 rounded-lg bg-shiv-green px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-[#c6a15a]"
-            >
-              Edit
-            </button>
+            {isDraft ? (
+              <button
+                onClick={onEdit}
+                className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+              >
+                Continue →
+              </button>
+            ) : (
+              <button
+                onClick={onEdit}
+                className="flex-1 rounded-lg bg-shiv-green px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-[#c6a15a]"
+              >
+                Edit
+              </button>
+            )}
             <button
               onClick={onDelete}
               className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400"
@@ -707,6 +736,32 @@ export function BillBuilder() {
   const [printState, setPrintState] = useState<null | 'connecting' | 'printing' | 'done' | { error: string } | { pickPrinter: string[] }>(null)
   const [serverUrlInput, setServerUrlInput] = useState('')
   const [selectedPrinter, setSelectedPrinter] = useState<string>(() => getSavedPrinter() ?? '')
+
+  // -- Draft auto-save refs (always point to the latest values for the unmount cleanup)
+  const draftRef = useRef(draft)
+  useEffect(() => { draftRef.current = draft }, [draft])
+  const viewRef  = useRef(view)
+  useEffect(() => { viewRef.current = view }, [view])
+  /** Set to true whenever the bill is explicitly committed (save / print / cancel) so the
+   *  unmount cleanup doesn't double-save. */
+  const committedRef = useRef(false)
+
+  // Auto-save as draft when the user navigates away mid-bill (e.g. taps the navbar)
+  useEffect(() => {
+    return () => {
+      if (committedRef.current) return
+      if (viewRef.current !== 'form') return
+      const d = draftRef.current
+      if (!d) return
+      const { bills: latestBills, saveBill: storeSaveBill } = useStore.getState()
+      const inStore = latestBills.find(b => b.id === d.id)
+      // Auto-draft: new bills that have content, or existing drafts being updated
+      const shouldDraft = (!inStore && hasMeaningfulContent(d)) || !!inStore?.isDraft
+      if (shouldDraft) {
+        storeSaveBill({ ...d, total: calcTotal(d.items), isDraft: true })
+      }
+    }
+  }, []) // empty deps — fires only on unmount
 
   // -- helpers
   const total = calcTotal(draft.items)
@@ -734,12 +789,21 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   function save() {
-    saveBill({ ...draft, total })
+    committedRef.current = true
+    saveBill({ ...draft, total, isDraft: undefined })
     setView('list')
     navigate('/bills', { replace: true })
   }
 
   function cancel() {
+    committedRef.current = true
+    // Auto-save as draft for new bills with content, or when updating an existing draft
+    const billToSave = { ...draft, total }
+    const inStore = bills.find(b => b.id === billToSave.id)
+    const shouldDraft = (!inStore && hasMeaningfulContent(billToSave)) || !!inStore?.isDraft
+    if (shouldDraft) {
+      saveBill({ ...billToSave, isDraft: true })
+    }
     setView('list')
     navigate('/bills', { replace: true })
   }
@@ -771,17 +835,21 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   function handlePrint() {
-    const billToSave = { ...draft, total }
+    committedRef.current = true
+    const billToSave = { ...draft, total, isDraft: undefined }
     saveBill(billToSave)
     void doPrint(billToSave)
   }
 
   async function handleSaveServerUrl() {
+    committedRef.current = true
     const raw = serverUrlInput.trim()
     if (!raw) return
     const url = /^https?:\/\//.test(raw) ? raw : `http://${raw}:3333`
     savePrintServerUrl(url)
-    await doPrint({ ...draft, total })
+    const billToSave = { ...draft, total, isDraft: undefined }
+    saveBill(billToSave)
+    await doPrint(billToSave)
   }
 
   async function handlePrinterPicked(name: string) {
@@ -796,10 +864,15 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       <div className="mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-4 md:pt-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <ReceiptText size={22} className="text-shiv-green" />
+            <ReceiptText size={22} className={draft.isDraft ? 'text-amber-500' : 'text-shiv-green'} />
             <h1 className="text-xl font-bold text-stone-900 dark:text-white">
-              {existing ? `Edit Bill #${draft.number}` : `Bill #${draft.number}`}
+              {draft.isDraft ? `Draft #${draft.number}` : existing ? `Edit Bill #${draft.number}` : `Bill #${draft.number}`}
             </h1>
+            {draft.isDraft && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
+                DRAFT
+              </span>
+            )}
           </div>
           <input
             type="date"
@@ -930,7 +1003,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               onClick={save}
               className="flex-1 rounded-xl bg-shiv-green py-3 text-sm font-bold text-stone-950 hover:bg-[#c6a15a]"
             >
-              Save Bill
+              {draft.isDraft ? 'Finalise Bill' : 'Save Bill'}
             </button>
             <button
               onClick={handlePrint}
@@ -1039,6 +1112,9 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   // ---- LIST VIEW -----------------------------------------------------------
+  const drafts   = bills.filter(b => b.isDraft)
+  const finished = bills.filter(b => !b.isDraft)
+
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 pb-24 pt-4 md:pt-6">
       <div className="flex items-center justify-between">
@@ -1046,7 +1122,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           <ReceiptText size={22} className="text-shiv-green" />
           <h1 className="text-xl font-bold text-stone-900 dark:text-white">Bills</h1>
           <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-500 dark:bg-white/10 dark:text-stone-400">
-            {bills.length}
+            {finished.length}
           </span>
         </div>
         <button
@@ -1057,7 +1133,26 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
         </button>
       </div>
 
-      {bills.length === 0 ? (
+      {/* Drafts section */}
+      {drafts.length > 0 && (
+        <div className="space-y-2">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+            Drafts — {drafts.length} in progress
+          </p>
+          {drafts.map((bill) => (
+            <BillCard
+              key={bill.id}
+              bill={bill}
+              onEdit={() => editBill(bill)}
+              onDelete={() => { if (confirm(`Discard draft #${bill.number}?`)) deleteBill(bill.id) }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Saved bills */}
+      {finished.length === 0 && drafts.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-stone-200 py-16 dark:border-white/10">
           <ReceiptText size={36} className="text-stone-300 dark:text-stone-600" />
           <p className="text-sm font-medium text-stone-400 dark:text-stone-500">No bills yet</p>
@@ -1068,19 +1163,21 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             <Plus size={15} /> Create first bill
           </button>
         </div>
-      ) : (
+      ) : finished.length > 0 ? (
         <div className="space-y-3">
-          {bills.map((bill) => (
+          {drafts.length > 0 && (
+            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Saved Bills</p>
+          )}
+          {finished.map((bill) => (
             <BillCard
               key={bill.id}
               bill={bill}
-
               onEdit={() => editBill(bill)}
               onDelete={() => { if (confirm(`Delete bill #${bill.number}?`)) deleteBill(bill.id) }}
             />
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
