@@ -57,7 +57,8 @@ const NAME_CORRECTIONS_URL = new URL('data/name-corrections.json', import.meta.u
 const PLACE_CORRECTIONS_URL = new URL('data/place-corrections.json', import.meta.url)
 const PRODUCT_CORRECTIONS_URL = new URL('data/product-corrections.json', import.meta.url)
 const SCAN_FEEDBACK_URL = new URL('data/scan-feedback.jsonl', import.meta.url)
-const BILLS_STORE_URL   = new URL('data/bills.jsonl', import.meta.url)
+const BILLS_STORE_URL   = new URL('data/bills.jsonl',  import.meta.url)
+const BILLS_JSON_URL    = new URL('data/bills.json',   import.meta.url)
 const CATALOG_STORE_URL = new URL('data/catalog.json', import.meta.url)
 
 async function saveBillToStore(bill) {
@@ -89,6 +90,23 @@ async function saveCatalog(data) {
 function loadCatalog() {
   try {
     return JSON.parse(readFileSync(CATALOG_STORE_URL, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+async function saveBillsJson(bills) {
+  try {
+    await writeFile(BILLS_JSON_URL, JSON.stringify({ bills, _savedAt: new Date().toISOString() }, null, 2), 'utf8')
+  } catch (err) {
+    console.warn('[bills-json] failed to save:', err.message ?? err)
+  }
+}
+
+function loadBillsJson() {
+  try {
+    const parsed = JSON.parse(readFileSync(BILLS_JSON_URL, 'utf8'))
+    return Array.isArray(parsed?.bills) ? parsed.bills : null
   } catch {
     return null
   }
@@ -2155,6 +2173,24 @@ app.post('/catalog', async (req, res) => {
   }
   await saveCatalog({ hardwareCatalog, customCatalog, sets })
   res.json({ ok: true })
+})
+
+// ── Bills snapshot (full backup of all bills including drafts) ────────────────
+// Separate from bills.jsonl which is an append-only print audit log.
+// GET  /bills-store           -> { ok, bills: [...] }
+// POST /bills-store           -> save full bills array
+app.get('/bills-store', (_req, res) => {
+  const bills = loadBillsJson()
+  res.json({ ok: true, bills: bills ?? [] })
+})
+
+app.post('/bills-store', async (req, res) => {
+  const { bills } = req.body ?? {}
+  if (!Array.isArray(bills)) {
+    return res.status(400).json({ ok: false, error: 'Missing bills array' })
+  }
+  await saveBillsJson(bills)
+  res.json({ ok: true, count: bills.length })
 })
 
 // ── Render PNG ───────────────────────────────────────────────────────────────
