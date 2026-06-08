@@ -5,8 +5,10 @@ const config: CapacitorConfig = {
   appName: 'Shiv Hardware Panel',
   webDir: 'dist',
   server: {
-    androidScheme: 'http',
-    cleartext: true,
+    androidScheme: 'https',
+  },
+  android: {
+    loggingBehavior: 'none',
   },
 }
 
