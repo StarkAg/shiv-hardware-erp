@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { Minus, Plus, Printer, Share2, Trash2 } from 'lucide-react'
 import { useStore } from '../../lib/store'
@@ -20,13 +20,16 @@ import {
   defaultAddons,
   isAluminium,
 } from '../../lib/aluminium'
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Button, Input, Toggle } from '../../components/ui'
-import { PrintPreview } from '../print/PrintPreview'
 import { QuotationPrint } from '../print/QuotationPrint'
-import { renderPngOnServer } from '../../lib/printServer'
+import { printOnServer, renderPngOnServer } from '../../lib/printServer'
+import { createCloudPrintJob } from '../../lib/cloudApi'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
+const A4_W = 794
+const A4_H = 1123
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 const COVERAGE_OPTIONS: CoverageType[] = ['guarantee', 'warranty']
 const isCategory = (c?: string): c is ProductCategory =>
@@ -51,7 +54,7 @@ export function QuotationBuilder() {
     existing?.customer ?? { id: uid(), name: '', mobile: '', uid: '', address: '' },
   )
   const [withCustomer, setWithCustomer] = useState(!!existing?.customer?.name)
-  const [printMode, setPrintMode] = useState<null | 'quote'>(null)
+  const [printState, setPrintState] = useState<null | 'printing' | 'done' | { error: string }>(null)
   const [sharing, setSharing] = useState(false)
 
   const [cat, setCat] = useState<ProductCategory>(
@@ -163,6 +166,27 @@ export function QuotationBuilder() {
     }
   }
 
+  async function handleDirectPrint() {
+    if (!hasSize) return
+    setPrintState('printing')
+    save({ silent: true })
+    const printDoc = enrichQuotation(buildQuote())
+    try {
+      await printOnServer({ kind: 'quotation', quote: printDoc })
+      setPrintState('done')
+      setTimeout(() => setPrintState(null), 2500)
+    } catch (serverErr) {
+      // fallback: cloud print job
+      try {
+        await createCloudPrintJob({ kind: 'quotation', quote: printDoc })
+        setPrintState('done')
+        setTimeout(() => setPrintState(null), 2500)
+      } catch (cloudErr) {
+        setPrintState({ error: cloudErr instanceof Error ? cloudErr.message : String(cloudErr) })
+      }
+    }
+  }
+
   const doc = enrichQuotation(buildQuote())
   const toggle = (k: keyof AluAddons) => setAddons((a) => ({ ...a, [k]: !a[k] }))
   const focusNextSizeEntry = (e: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -195,8 +219,9 @@ export function QuotationBuilder() {
             >
               <Share2 size={16} /> {sharing ? 'Sharing' : 'WhatsApp'}
             </Button>
-            <Button onClick={() => setPrintMode('quote')} disabled={!hasSize} className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
-              <Printer size={16} /> Print
+            <Button onClick={handleDirectPrint} disabled={!hasSize || printState === 'printing'} className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
+              {printState === 'printing' ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
+              {printState === 'printing' ? 'Printing…' : 'Print'}
             </Button>
           </div>
         </div>
@@ -249,10 +274,10 @@ export function QuotationBuilder() {
               <div className="mt-3 md:mt-4">
                 <div className="grid grid-cols-2 gap-1.5 md:flex md:flex-wrap md:gap-2.5">
                   {[
-                    { key: 'chaukhat' as const, label: 'Chaukhat', show: true },
+                    { key: 'chaukhat' as const, label: 'Chaukhat', show: cat === 'aluminium-door' },
                     { key: 'accessories' as const, label: 'Accessories', show: cat === 'aluminium-door' },
-                    { key: 'ssNet' as const, label: 'SS Net', show: cat !== 'aluminium-door' },
-                    { key: 'decorFilm' as const, label: 'Decor Film', show: true },
+                    { key: 'ssNet' as const, label: 'SS Net', show: cat === 'window-2-track' },
+                    { key: 'decorFilm' as const, label: 'Decor Film', show: cat === 'aluminium-door' },
                     { key: 'brownCoated' as const, label: 'Brown Coated', show: true },
                   ]
                     .filter((o) => o.show)
@@ -292,27 +317,7 @@ export function QuotationBuilder() {
           </div>
         </div>
 
-        {/* Edit-set toolbar (rename / delete the active set) */}
-        {!alu && editMode && (
-          <div className="flex shrink-0 items-center justify-between rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
-            <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
-              Active set: <span className="text-shiv-green">{activeSet?.name ?? 'C1'}</span>
-            </div>
-            <Button
-              variant="ghost"
-              className="flex items-center gap-1.5 text-red-500"
-              disabled={sets.length <= 1}
-              onClick={() => {
-                if (confirm(`Delete ${activeSet?.name}?`)) {
-                  removeSet(setId)
-                  setSetId(sets.find((s) => s.id !== setId)?.id ?? sets[0]?.id)
-                }
-              }}
-            >
-              <Trash2 size={15} /> Delete set
-            </Button>
-          </div>
-        )}
+        <InlineQuotationPreview quote={doc} />
 
         {/* Live preview: all-brands rate card OR aluminium breakdown */}
         <div className="flex flex-col rounded-xl border border-stone-200/90 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
@@ -448,51 +453,113 @@ export function QuotationBuilder() {
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { label: cat === 'aluminium-door' ? 'Door' : 'Glass', key: 'doorCost' as const },
-                  addons.chaukhat ? { label: 'Chaukhat', key: 'chaukhatCost' as const } : null,
-                  cat === 'aluminium-door' && addons.accessories
-                    ? { label: 'Accessories', key: 'accessories' as const }
-                    : null,
-                  cat !== 'aluminium-door' && addons.ssNet
-                    ? { label: 'SS Net', key: 'accessories' as const }
-                    : null,
-                ].filter((row): row is { label: string; key: 'doorCost' | 'chaukhatCost' | 'accessories' } => !!row)
-                  .map(({ label, key }) => (
-                    <tr key={key} className="border-t border-stone-100 dark:border-white/10">
-                      <td className="break-words px-2 py-1.5 text-stone-500 dark:text-stone-400 md:px-4 md:py-2">{label}</td>
-                      {aluThicknesses.map((t) => (
-                        <td key={t.name} className="px-1.5 py-1.5 text-right md:px-4 md:py-2">{hasSize ? formatINR(t[key]) : '—'}</td>
+                {cat === 'aluminium-door' ? (
+                  <>
+                    {[
+                      { label: 'Door', key: 'doorCost' as const },
+                      addons.chaukhat ? { label: 'Chaukhat', key: 'chaukhatCost' as const } : null,
+                      addons.accessories ? { label: 'Accessories', key: 'accessories' as const } : null,
+                    ].filter((row): row is { label: string; key: 'doorCost' | 'chaukhatCost' | 'accessories' } => !!row)
+                      .map(({ label, key }) => (
+                        <tr key={key} className="border-t border-stone-100 dark:border-white/10">
+                          <td className="break-words px-2 py-1.5 text-stone-500 dark:text-stone-400 md:px-4 md:py-2">{label}</td>
+                          {aluThicknesses.map((t) => (
+                            <td key={t.name} className="px-1.5 py-1.5 text-right md:px-4 md:py-2">{hasSize ? formatINR(t[key]) : '—'}</td>
+                          ))}
+                        </tr>
                       ))}
-                    </tr>
-                  ))}
-                <tr className="border-t-2 border-stone-200 bg-stone-50 dark:border-white/20 dark:bg-white/5">
-                  <td className="break-words px-2 py-1.5 font-bold md:px-4 md:py-2.5">Total</td>
-                  {aluThicknesses.map((t) => (
-                    <td key={t.name} className="px-1.5 py-1.5 text-right font-bold text-shiv-green md:px-4 md:py-2.5">
-                      {hasSize ? formatINR(t.total) : '—'}
-                    </td>
-                  ))}
-                </tr>
-                {[
-                  addons.decorFilm ? { label: 'Decor Film', key: 'decorFilm' as const } : null,
-                  addons.brownCoated ? { label: 'Brown Coated', key: 'brownCoated' as const } : null,
-                ].filter((row): row is { label: string; key: 'decorFilm' | 'brownCoated' } => !!row)
-                  .map(({ label, key }) => (
-                    <tr key={key} className="border-t border-stone-100 dark:border-white/10">
-                      <td className="break-words px-2 py-1.5 text-[10px] uppercase text-stone-400 md:px-4 md:py-2 md:text-xs">{label}</td>
+                    <tr className="border-t-2 border-stone-200 bg-stone-50 dark:border-white/20 dark:bg-white/5">
+                      <td className="break-words px-2 py-1.5 font-bold md:px-4 md:py-2.5">Total</td>
                       {aluThicknesses.map((t) => (
-                        <td key={t.name} className="px-1.5 py-1.5 text-right text-[10px] text-stone-400 md:px-4 md:py-2 md:text-xs">
-                          {hasSize ? formatINR(t[key] ?? 0) : '—'}
+                        <td key={t.name} className="px-1.5 py-1.5 text-right font-bold text-shiv-green md:px-4 md:py-2.5">
+                          {hasSize ? formatINR(t.total) : '—'}
                         </td>
                       ))}
                     </tr>
-                  ))}
+                    {[
+                      addons.decorFilm ? { label: 'Decor Film', key: 'decorFilm' as const } : null,
+                      addons.brownCoated ? { label: 'Brown Coated', key: 'brownCoated' as const } : null,
+                    ].filter((row): row is { label: string; key: 'decorFilm' | 'brownCoated' } => !!row)
+                      .map(({ label, key }) => (
+                        <tr key={key} className="border-t border-stone-100 dark:border-white/10">
+                          <td className="break-words px-2 py-1.5 text-[10px] uppercase text-stone-400 md:px-4 md:py-2 md:text-xs">{label}</td>
+                          {aluThicknesses.map((t) => (
+                            <td key={t.name} className="px-1.5 py-1.5 text-right text-[10px] text-stone-400 md:px-4 md:py-2 md:text-xs">
+                              {hasSize ? formatINR(t[key] ?? 0) : '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                  </>
+                ) : (
+                  <>
+                    {[
+                      { label: 'Clear & Texture Glass', key: 'doorCost' },
+                      { label: 'Reflective Glass', key: 'reflectiveCost' },
+                    ].map(({ label, key }) => (
+                      <tr key={key} className="border-t border-stone-100 dark:border-white/10">
+                        <td className="break-words px-2 py-1.5 text-stone-500 dark:text-stone-400 md:px-4 md:py-2">{label}</td>
+                        {aluThicknesses.map((t) => (
+                          <td key={t.name} className="px-1.5 py-1.5 text-right md:px-4 md:py-2">
+                            {hasSize ? formatINR(Number((t as Record<string, unknown>)[key] ?? 0)) : '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    {(cat === 'window-2-track' && addons.ssNet) || addons.brownCoated ? (
+                      <tr className="border-t border-stone-100 bg-stone-50 dark:border-white/10 dark:bg-white/5">
+                        <td colSpan={4} className="px-2 py-1.5 text-[10px] font-bold uppercase text-stone-400 md:px-4 md:text-xs">Add-ons</td>
+                      </tr>
+                    ) : null}
+                    {cat === 'window-2-track' && addons.ssNet && (
+                      <tr className="border-t border-stone-100 dark:border-white/10">
+                        <td className="break-words px-2 py-1.5 text-[10px] uppercase text-stone-400 md:px-4 md:py-2 md:text-xs">SS Net</td>
+                        {aluThicknesses.map((t) => (
+                          <td key={t.name} className="px-1.5 py-1.5 text-right text-[10px] text-stone-400 md:px-4 md:py-2 md:text-xs">
+                            {hasSize ? formatINR(t.accessories) : '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    )}
+                    {addons.brownCoated && (
+                      <tr className="border-t border-stone-100 dark:border-white/10">
+                        <td className="break-words px-2 py-1.5 text-[10px] uppercase text-stone-400 md:px-4 md:py-2 md:text-xs">Brown Coated</td>
+                        {aluThicknesses.map((t) => (
+                          <td key={t.name} className="px-1.5 py-1.5 text-right text-[10px] text-stone-400 md:px-4 md:py-2 md:text-xs">
+                            {hasSize ? formatINR(t.brownCoated) : '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    )}
+                  </>
+                )}
               </tbody>
             </table>
             )}
           </div>
         </div>
+
+        {/* Edit-set toolbar (rename / delete the active set) */}
+        {!alu && editMode && (
+          <div className="flex shrink-0 items-center justify-between rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
+            <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+              Active set: <span className="text-shiv-green">{activeSet?.name ?? 'C1'}</span>
+            </div>
+            <Button
+              variant="ghost"
+              className="flex items-center gap-1.5 text-red-500"
+              disabled={sets.length <= 1}
+              onClick={() => {
+                if (confirm(`Delete ${activeSet?.name}?`)) {
+                  removeSet(setId)
+                  setSetId(sets.find((s) => s.id !== setId)?.id ?? sets[0]?.id)
+                }
+              }}
+            >
+              <Trash2 size={15} /> Delete set
+            </Button>
+          </div>
+        )}
       </div>
 
       {!alu && (
@@ -527,25 +594,92 @@ export function QuotationBuilder() {
         </div>
       )}
 
-      {printMode && (
-        <PrintPreview
-          title="Quotation"
-          onClose={() => setPrintMode(null)}
-          serverPrint={{ kind: 'quotation', quote: doc }}
-        >
-          <QuotationPrint quote={doc} />
-        </PrintPreview>
+      {/* Print status overlay */}
+      {printState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-xs rounded-2xl border border-white/10 bg-stone-900 p-6 text-center shadow-2xl">
+            {printState === 'printing' && (
+              <>
+                <Loader2 size={36} className="mx-auto mb-3 animate-spin text-shiv-green" />
+                <p className="font-semibold text-stone-100">Sending to printer…</p>
+              </>
+            )}
+            {printState === 'done' && (
+              <>
+                <CheckCircle2 size={36} className="mx-auto mb-3 text-shiv-green" />
+                <p className="font-semibold text-stone-100">Sent!</p>
+              </>
+            )}
+            {typeof printState === 'object' && 'error' in printState && (
+              <>
+                <AlertCircle size={36} className="mx-auto mb-3 text-red-400" />
+                <p className="mb-1 font-semibold text-stone-100">Print failed</p>
+                <p className="mb-4 text-sm text-stone-400">{printState.error}</p>
+                <button
+                  onClick={() => setPrintState(null)}
+                  className="rounded-lg bg-stone-700 px-4 py-2 text-sm font-medium text-stone-100 hover:bg-stone-600"
+                >
+                  Dismiss
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       )}
+    </div>
+  )
+}
+
+function InlineQuotationPreview({ quote }: { quote: Quotation }) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const update = () => {
+      const available = Math.max(0, el.clientWidth - 2)
+      setScale(Math.min(1, available / A4_W))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <div className="no-print rounded-xl border border-stone-200/90 bg-stone-50 p-2 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100 md:p-3">
+      <div className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Print Preview</div>
+      <div ref={wrapRef} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-200 dark:border-white/10 dark:bg-stone-950">
+        <div
+          className="mx-auto overflow-hidden bg-white"
+          style={{
+            width: Math.round(A4_W * scale),
+            height: Math.round(A4_H * scale),
+          }}
+        >
+          <div
+            style={{
+              width: A4_W,
+              height: A4_H,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            <QuotationPrint quote={quote} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
 
 function activeAddonLabels(cat: ProductCategory, a: AluAddons): string[] {
   const out: string[] = []
-  if (a.chaukhat) out.push('Chaukhat')
+  if (cat === 'aluminium-door' && a.chaukhat) out.push('Chaukhat')
   if (cat === 'aluminium-door' && a.accessories) out.push('Accessories')
-  if (cat !== 'aluminium-door' && a.ssNet) out.push('SS Net')
-  if (a.decorFilm) out.push('Decor Film')
+  if (cat === 'window-2-track' && a.ssNet) out.push('SS Net')
+  if (cat === 'aluminium-door' && a.decorFilm) out.push('Decor Film')
   if (a.brownCoated) out.push('Brown Coated')
   return out
 }

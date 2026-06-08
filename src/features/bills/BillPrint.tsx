@@ -67,9 +67,6 @@ export function BillPrint({ bill }: { bill: Bill }) {
               boxSizing: 'border-box',
               backgroundColor: '#fff',
               pageBreakAfter: isLast ? 'auto' : 'always',
-              // faint ruled lines
-              backgroundImage: 'repeating-linear-gradient(transparent, transparent 7.8mm, #e8eef5 7.8mm, #e8eef5 8mm)',
-              backgroundPositionY: '20mm',
             }}
           >
             {/* Top row: customer info (left) + bill number stamp (right) — same line */}

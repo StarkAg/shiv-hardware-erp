@@ -13,6 +13,8 @@ import { QuoteHistory } from './features/quotation/QuoteHistory'
 import { QuotationOptions } from './features/quotation/QuotationOptions'
 import { PrintDemo } from './features/print/PrintDemo'
 import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
+import { BillSelectPage } from './features/guarantee/BillSelectPage'
+import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
 import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
 import { BillBuilder } from './features/bills/BillBuilder'
@@ -116,8 +118,10 @@ const router = createHashRouter([
       { path: 'quote/:id',      element: <QuotationBuilder /> },
       { path: 'product/:category', element: <QuotationBuilder /> },
       { path: 'history',        element: <QuoteHistory /> },
-      { path: 'guarantee/card', element: <GuaranteeBuilder layout="card" /> },
-      { path: 'guarantee/a4',   element: <GuaranteeBuilder layout="a4" /> },
+      { path: 'guarantee/card',        element: <GuaranteeBuilder layout="card" /> },
+      { path: 'guarantee/a4',          element: <GuaranteeBuilder layout="a4" /> },
+      { path: 'guarantee/select-bill',  element: <BillSelectPage /> },
+      { path: 'guarantee/bill/:billId', element: <BillBrandCardsPage /> },
       { path: 'scan',           element: <BillScanner /> },
       { path: 'rates',          element: <RateManager /> },
       { path: 'inventory',      element: <Inventory /> },

@@ -113,6 +113,8 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
     return ''
   })
   const [showDrop, setShowDrop] = useState(false)
+  // First tap shows dropdown without keyboard; second tap unlocks keyboard
+  const [typingMode, setTypingMode] = useState(false)
   const amountRef = useRef<HTMLInputElement>(null)
 
   // "Add to catalog" inline form state
@@ -182,6 +184,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
   function selectCategory(opt: ProductOption) {
     setSearch(opt.label)
     setShowDrop(false)
+    setTypingMode(false)
     if (HARDWARE_CATS.includes(opt.category)) {
       const defaultSize  = catSizes(opt.category)[0]  ?? ''
       const defaultBrand = opt.category !== 'mica' ? (catBrands(opt.category)[0] ?? '') : ''
@@ -273,6 +276,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
 
   function clearCategory() {
     setSearch('')
+    setTypingMode(false)
     onUpdate(item.id, {
       category: undefined,
       customEntryId: undefined,
@@ -289,6 +293,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
   function selectCustomEntry(entry: { id: string; name: string; sizes: string[]; brands: string[]; rate?: number }) {
     setSearch(entry.name)
     setShowDrop(false)
+    setTypingMode(false)
     onUpdate(item.id, {
       customEntryId: entry.id,
       category: undefined,
@@ -384,15 +389,22 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
             <div className="relative flex-1 min-w-0">
               <input
                 type="text"
-                placeholder="Start Typing..."
+                placeholder="Tap to browse, tap again to type…"
+                readOnly={!typingMode}
                 value={isCatalog ? search : item.description}
+                onMouseDown={(e) => {
+                  if (!typingMode) {
+                    // First tap: block keyboard, just show dropdown
+                    e.preventDefault()
+                    setShowDrop(true)
+                    setTypingMode(true)
+                  }
+                  // Second tap: let focus happen normally → keyboard opens
+                }}
                 onFocus={(e) => {
                   setShowDrop(true)
-                  // Keep the selected item visible but pre-select it, so the
-                  // first keystroke replaces it (starts a fresh search).
                   if (isCatalog) e.target.select()
                 }}
-                onClick={() => setShowDrop(true)}
                 onChange={(e) => {
                   const v = e.target.value
                   if (isCatalog) {
@@ -413,7 +425,10 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
                   setSearch(v)
                   setShowDrop(true)
                 }}
-                onBlur={() => setTimeout(() => { if (!addingNewRef.current) setShowDrop(false) }, 150)}
+                onBlur={() => {
+                  setTypingMode(false)
+                  setTimeout(() => { if (!addingNewRef.current) setShowDrop(false) }, 150)
+                }}
                 className={`w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-sm dark:border-white/10 dark:text-white ${
                   isCatalog
                     ? 'bg-stone-100 cursor-pointer dark:bg-stone-700'
@@ -1486,14 +1501,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
 
         {/* Items */}
         <div>
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2">
             <h2 className="text-sm font-bold text-stone-700 dark:text-stone-200">Items</h2>
-            <button
-              onClick={addItem}
-              className="flex items-center gap-1 rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-200 dark:bg-white/10 dark:text-stone-200"
-            >
-              <Plus size={13} /> Add row
-            </button>
           </div>
 
           <div className="space-y-1">
@@ -1509,6 +1518,13 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             ))}
           </div>
 
+          <button
+            onClick={addItem}
+            className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-stone-300 py-2 text-xs font-semibold text-stone-500 hover:border-stone-400 hover:bg-stone-50 dark:border-white/15 dark:text-stone-400 dark:hover:bg-white/5"
+          >
+            <Plus size={13} /> Add Item
+          </button>
+
           {/* Running total */}
           <div className="mt-3 flex justify-end">
             <div className="rounded-xl bg-stone-100 px-5 py-2 dark:bg-stone-800">
@@ -1517,9 +1533,6 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             </div>
           </div>
         </div>
-
-        {/* Live print preview — scaled to fit phone width */}
-        <BillPreview bill={{ ...draft, total }} />
 
         {/* Actions */}
         <div className="flex items-center gap-3">
@@ -1548,6 +1561,9 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             </button>
           </div>
         </div>
+
+        {/* Live print preview — scaled to fit phone width */}
+        <BillPreview bill={{ ...draft, total }} />
 
         {/* Print modal */}
         {printState !== null && (

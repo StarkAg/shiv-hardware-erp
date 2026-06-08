@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus, Printer, ScanLine, Trash2 } from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { FileText, Plus, Printer, ScanLine, Trash2 } from 'lucide-react'
 import { Button, Card, Input, Select } from '../../components/ui'
 import { useStore } from '../../lib/store'
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
+  type Bill,
   type Dimension,
   type GuaranteeDocument,
   type GuaranteeYears,
@@ -29,11 +30,27 @@ type BilledItem = {
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
-const GUARANTEE_YEAR_OPTIONS: GuaranteeYears[] = [1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 const GUARANTEE_CATEGORIES = CATEGORY_ORDER.filter((c) => !['aluminium-door', 'window-2-track', 'window-3-track'].includes(c))
 
+const GUARANTEE_YEAR_VALUES: GuaranteeYears[] = [1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
+
+function inchesToDim(val: number): Dimension {
+  const inches = Math.floor(val)
+  const soot = Math.round((val - inches) * 8)
+  return { inches, soot }
+}
+
+function nearestGuaranteeYears(n: number): GuaranteeYears {
+  return (
+    GUARANTEE_YEAR_VALUES.find((y) => y >= n) ??
+    GUARANTEE_YEAR_VALUES[GUARANTEE_YEAR_VALUES.length - 1]
+  )
+}
+
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
-  const { sets } = useStore()
+  const { sets, bills } = useStore()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [number] = useState(() => `GC-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`)
   const [category, setCategory] = useState<ProductCategory>('readymade-door')
   const [brandName, setBrandName] = useState('')
@@ -55,6 +72,17 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   useEffect(() => {
     setBrandName('')
   }, [category])
+
+  // When returning from BillSelectPage, import the selected bill
+  useEffect(() => {
+    const state = location.state as { selectedBillId?: string } | null
+    if (!state?.selectedBillId) return
+    const bill = bills.find((b) => b.id === state.selectedBillId)
+    if (bill) importBill(bill)
+    // Clear the state so navigating back doesn't re-import
+    window.history.replaceState({}, '')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function focusNextSizeEntry(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return
@@ -89,6 +117,37 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
   function removeBilledItem(id: string) {
     setBilledItems((items) => items.filter((item) => item.id !== id))
+  }
+
+  function importBill(bill: Bill) {
+    // Fill customer details
+    setCustomer((c) => ({
+      ...c,
+      name: bill.customerName || c.name,
+      mobile: bill.customerPhone || c.mobile,
+      uid: bill.customerUid || c.uid,
+    }))
+
+    // Import items that have a category + size (board/door items)
+    const imported: BilledItem[] = bill.items
+      .filter((it) => it.category && (it.heightIn ?? 0) > 0 && (it.widthIn ?? 0) > 0)
+      .map((it) => {
+        const brandInSet = sets[0]?.brands.find(
+          (b) => b.category === it.category && b.name === it.brandName,
+        )
+        const gy = nearestGuaranteeYears(brandInSet?.guaranteeYears ?? years)
+        return {
+          id: uid(),
+          category: it.category!,
+          brandName: it.brandName || '',
+          guaranteeYears: gy,
+          height: inchesToDim(it.heightIn!),
+          width: inchesToDim(it.widthIn!),
+          qty: it.qty,
+        }
+      })
+
+    if (imported.length) setBilledItems((prev) => [...prev, ...imported])
   }
 
   function buildGuaranteeDoc(): GuaranteeDocument {
@@ -129,7 +188,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   return (
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
-        <div className="no-print flex justify-center gap-3">
+        <div className="no-print flex flex-wrap justify-center gap-3">
           <Button onClick={openPreview} disabled={!hasSize && !billedItems.length} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Printer size={20} /> Print
           </Button>
@@ -139,6 +198,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           >
             <ScanLine size={20} /> Scan Bill
           </Link>
+          <button
+            onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: `/guarantee/${layout}` } })}
+            className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
+          >
+            <FileText size={20} /> Select Bill
+          </button>
         </div>
 
         <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
@@ -199,7 +264,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
               ))}
             </Select>
             <Select label="Years" value={years} onChange={(e) => setYears(Number(e.target.value) as GuaranteeYears)}>
-              {GUARANTEE_YEAR_OPTIONS.map((y) => (
+              {GUARANTEE_YEAR_VALUES.map((y) => (
                 <option key={y} value={y}>{y} Years</option>
               ))}
             </Select>
@@ -280,6 +345,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           <GuaranteeCard document={doc} layout={layout} />
         </PrintPreview>
       )}
+
     </div>
   )
 }
