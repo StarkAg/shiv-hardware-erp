@@ -5,6 +5,7 @@ import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
 import { pushBillsToServer, pushCatalogToServer } from './printServer'
+import { pushBillsToConvex, pushCatalogToConvex } from './convexSync'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const codeSets = (sets: BrandSet[]): BrandSet[] => sets.map((s, i) => ({ ...s, name: `C${i + 1}` }))
@@ -26,6 +27,25 @@ function scheduleBillsPush(get: () => AppState) {
   _billsPushTimer = setTimeout(() => {
     pushBillsToServer(get().bills)
   }, 2000)
+}
+
+// Convex push — slightly longer debounce (5s) to batch more changes
+let _convexBillsTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleConvexBillsPush(get: () => AppState) {
+  if (_convexBillsTimer) clearTimeout(_convexBillsTimer)
+  _convexBillsTimer = setTimeout(() => {
+    const s = get()
+    void pushBillsToConvex(s.bills, s.billSeq)
+  }, 5000)
+}
+
+let _convexCatalogTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleConvexCatalogPush(get: () => AppState) {
+  if (_convexCatalogTimer) clearTimeout(_convexCatalogTimer)
+  _convexCatalogTimer = setTimeout(() => {
+    const s = get()
+    void pushCatalogToConvex({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
+  }, 5000)
 }
 
 interface AppState {
@@ -59,8 +79,18 @@ interface AppState {
   nextBillNumber: () => string
   saveBill: (b: Bill) => void
   deleteBill: (id: string) => void
-  /** Bulk-restore all bills from a server snapshot (startup only). */
+  /** Bulk-restore all bills from a server snapshot (startup only — DOES push to remotes). */
   saveBillsSnapshot: (bills: Bill[]) => void
+  /**
+   * Apply a bills update that arrived from a remote (SSE / Convex real-time).
+   * Saves to localStorage only — does NOT push back to any remote, preventing sync loops.
+   */
+  syncBillsFromRemote: (bills: Bill[], remoteBillSeq: number) => void
+  /**
+   * Apply a catalog update that arrived from a remote (Convex real-time).
+   * Saves to localStorage only.
+   */
+  syncCatalogFromRemote: (snap: { hardwareCatalog: HardwareCatalog; customCatalog: CustomCatalogEntry[]; sets: BrandSet[] }) => void
 
   // hardware catalog
   setHardwareCatalog: (c: HardwareCatalog) => void
@@ -86,6 +116,8 @@ function persist(get: () => AppState) {
   })
   scheduleCatalogPush(get)
   scheduleBillsPush(get)
+  scheduleConvexBillsPush(get)
+  scheduleConvexCatalogPush(get)
 }
 
 const saved = db.load()
@@ -224,13 +256,27 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   saveBillsSnapshot: (bills) => {
-    // Derive billSeq from the highest numeric bill number in the snapshot
     const maxSeq = bills.reduce((m, b) => {
       const n = Number(b.number)
       return Number.isFinite(n) ? Math.max(m, n) : m
     }, 0)
     set((st) => ({ bills, billSeq: Math.max(st.billSeq, maxSeq) }))
-    persist(get)
+    persist(get) // full persist — DOES push to remotes (used on startup)
+  },
+
+  syncBillsFromRemote: (bills, remoteBillSeq) => {
+    set((st) => ({ bills, billSeq: Math.max(st.billSeq, remoteBillSeq) }))
+    // Save to localStorage only — no remote push to avoid sync loops
+    const s = get()
+    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills, billSeq: s.billSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+  },
+
+  syncCatalogFromRemote: (snap) => {
+    const newSets = snap.sets?.length ? codeSets(snap.sets) : get().sets
+    set({ hardwareCatalog: snap.hardwareCatalog, customCatalog: snap.customCatalog ?? [], sets: newSets })
+    // Save to localStorage only
+    const s = get()
+    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
   },
 
   setHardwareCatalog: (c) => {

@@ -81,7 +81,9 @@ function loadBillsFromStore() {
 
 async function saveCatalog(data) {
   try {
-    await writeFile(CATALOG_STORE_URL, JSON.stringify({ ...data, _savedAt: new Date().toISOString() }, null, 2), 'utf8')
+    const savedAt = new Date().toISOString()
+    await writeFile(CATALOG_STORE_URL, JSON.stringify({ ...data, _savedAt: savedAt }, null, 2), 'utf8')
+    broadcastSync('catalog', { savedAt })
   } catch (err) {
     console.warn('[catalog-store] failed to save:', err.message ?? err)
   }
@@ -97,7 +99,9 @@ function loadCatalog() {
 
 async function saveBillsJson(bills) {
   try {
-    await writeFile(BILLS_JSON_URL, JSON.stringify({ bills, _savedAt: new Date().toISOString() }, null, 2), 'utf8')
+    const savedAt = new Date().toISOString()
+    await writeFile(BILLS_JSON_URL, JSON.stringify({ bills, _savedAt: savedAt }, null, 2), 'utf8')
+    broadcastSync('bills', { count: bills.length, savedAt })
   } catch (err) {
     console.warn('[bills-json] failed to save:', err.message ?? err)
   }
@@ -116,6 +120,17 @@ const app = express()
 app.set('trust proxy', true)
 app.use(cors())
 app.use(express.json({ limit: process.env.PRINT_UPLOAD_LIMIT || '100mb' }))
+
+// ── Server-Sent Events — multi-device live sync ───────────────────────────────
+const _sseClients = new Set()
+
+function broadcastSync(event, data = {}) {
+  if (_sseClients.size === 0) return
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+  for (const res of [..._sseClients]) {
+    try { res.write(msg) } catch { _sseClients.delete(res) }
+  }
+}
 
 function findChromePath() {
   const configured = process.env.CHROME_PATH?.trim()
@@ -1951,6 +1966,33 @@ app.get('/status', (_req, res) => res.json({
     blackAndWhiteFallbackOnError: BW_FALLBACK_ON_ERROR,
   },
 }))
+// GET /sync  — SSE stream; clients reconnect automatically on disconnect
+app.get('/sync', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no') // prevent nginx buffering
+  res.flushHeaders()
+
+  // Immediately send the current state so the client can sync on connect
+  const bills   = loadBillsJson()
+  const catalog = loadCatalog()
+  res.write(`event: connected\ndata: ${JSON.stringify({
+    billCount:   bills?.length ?? 0,
+    catalogSavedAt: catalog?._savedAt ?? null,
+  })}\n\n`)
+
+  _sseClients.add(res)
+
+  // Heartbeat every 25s keeps the connection alive through NAT/proxies
+  const heartbeat = setInterval(() => {
+    try { res.write(`:heartbeat\n\n`) }
+    catch { clearInterval(heartbeat); _sseClients.delete(res) }
+  }, 25_000)
+
+  req.on('close', () => { clearInterval(heartbeat); _sseClients.delete(res) })
+})
+
 app.get('/printers', async (_req, res) => {
   try {
     const list = await listInstalledPrinters()
