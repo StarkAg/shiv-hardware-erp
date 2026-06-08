@@ -37,7 +37,7 @@ function toProperCase(s: string) {
   return s.replace(/\b\w/g, c => c.toUpperCase())
 }
 
-function shortenBrand(name: string): string {
+export function shortenBrand(name: string): string {
   if (!name || name.length <= 9) return name
   const words = name.trim().split(/\s+/)
   if (words.length < 2) return name
@@ -130,7 +130,7 @@ export function buildBillHtml(bill: Bill): string {
 
     const breakStyle = isLast ? '' : 'page-break-after:always;'
 
-    return `<div style="position:relative;width:148mm;min-height:210mm;margin:0 auto;padding:8mm 7mm 10mm;box-sizing:border-box;background-color:#fff;background-image:repeating-linear-gradient(transparent,transparent 7.8mm,#e8eef5 7.8mm,#e8eef5 8mm);background-position-y:22mm;${breakStyle}">
+    return `<div style="position:relative;width:148mm;min-height:210mm;margin:0 auto;padding:8mm 7mm 10mm;box-sizing:border-box;background-color:#fff;${breakStyle}">
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;letter-spacing:5px;color:#888;text-transform:uppercase;margin-bottom:2mm;padding-bottom:1mm;border-bottom:0.5px solid #bbb">
         <span>Estimate</span>
         <span>${esc(bill.number)}${pages.length > 1 ? ` (${pageIdx + 1})` : ''}</span>

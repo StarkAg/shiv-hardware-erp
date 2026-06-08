@@ -72,6 +72,15 @@ input[type='number'] { -moz-appearance: textfield; }
 .mobile-main {
   padding-top: var(--mobile-topbar-height);
   padding-bottom: var(--mobile-bottom-nav-space);
+  height: 100dvh;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Each page owns its own scroll — keeps the fixed top bar out of the scroll context */
+.mobile-main > * {
+  height: 100%;
+  overflow-y: auto;
 }
 
 .mobile-bottom-nav {
@@ -109,6 +118,8 @@ input[type='number'] { -moz-appearance: textfield; }
   .mobile-main {
     padding-top: 0;
     padding-bottom: 0;
+    height: 100vh;
+    overflow: hidden;
   }
 
   .mobile-panel-screen {
