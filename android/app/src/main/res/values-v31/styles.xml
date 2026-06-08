@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Android 12+ (API 31+): Override the launch theme to use Theme.SplashScreen
+        so installSplashScreen() in MainActivity works. Background is black to match
+        the app's dark theme — no icon is shown (setKeepOnScreenCondition → false
+        dismisses the splash instantly before any frame is drawn).
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#000000</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
+        <item name="windowSplashScreenIconBackgroundColor">#000000</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+</resources>

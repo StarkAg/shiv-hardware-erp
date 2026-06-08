@@ -97,7 +97,7 @@ interface AppState {
 
   // custom catalog
   setCustomCatalog: (c: CustomCatalogEntry[]) => void
-  addCustomEntry: (name: string) => void
+  addCustomEntry: (name: string) => string   // returns new entry id
   updateCustomEntry: (id: string, patch: Partial<Omit<CustomCatalogEntry, 'id'>>) => void
   removeCustomEntry: (id: string) => void
 }
@@ -290,8 +290,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addCustomEntry: (name) => {
-    set((st) => ({ customCatalog: [...st.customCatalog, { id: uid(), name, sizes: [], brands: [] }] }))
+    const id = uid()
+    set((st) => ({ customCatalog: [...st.customCatalog, { id, name, sizes: [], brands: [] }] }))
     persist(get)
+    return id
   },
 
   updateCustomEntry: (id, patch) => {

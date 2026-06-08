@@ -20,6 +20,7 @@ import { startOfflineSync } from './lib/offlineSync'
 import { getPrintServerUrl, pullBillsFromServer, pullCatalogFromServer } from './lib/printServer'
 import { useStore } from './lib/store'
 import { subscribeSyncStream } from './lib/syncStream'
+import { convexEnabled, pushBillsToConvex, pushCatalogToConvex } from './lib/convexSync'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
@@ -59,6 +60,17 @@ pullBillsFromServer().then((serverBills) => {
     useStore.getState().saveBillsSnapshot(serverBills)
   }
 }).catch(() => { /* print server offline — no-op */ })
+
+// ── Convex startup push — populate cloud from localStorage ─────────────────
+// Runs regardless of print-server state. Safe because all mutations are upserts.
+// Delayed 3 s so the print-server pulls above can update the store first.
+if (convexEnabled()) {
+  setTimeout(() => {
+    const s = useStore.getState()
+    void pushCatalogToConvex({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
+    if (s.bills.length) void pushBillsToConvex(s.bills, s.billSeq)
+  }, 3000)
+}
 
 // ── SSE: subscribe to real-time changes from the print server ───────────────
 // Once the server URL is confirmed, open an EventSource for live push.

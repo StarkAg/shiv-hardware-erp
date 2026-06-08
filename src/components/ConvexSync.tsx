@@ -7,8 +7,7 @@
  */
 import { useEffect } from 'react'
 import { useQuery } from 'convex/react'
-// anyApi allows any function reference — replaced by fully-typed api after `npx convex dev`
-import { anyApi as api } from 'convex/server'
+import { api } from '../../convex/_generated/api'
 import { useStore } from '../lib/store'
 import type { Bill, BrandSet, CustomCatalogEntry, HardwareCatalog } from '../lib/types'
 

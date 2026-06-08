@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { printBillOnServer, savePrintServerUrl, getSavedPrintServerUrl, fetchPrinters, getSavedPrinter, savePrinter } from '../../lib/printServer'
 import { useStore } from '../../lib/store'
-import type { Bill, BillItem, ProductCategory } from '../../lib/types'
+import type { Bill, BillItem, CatalogField, ProductCategory } from '../../lib/types'
 import { CATEGORY_META } from '../../lib/types'
 import { buildBillHtml } from '../../lib/billHtml'
 import { DropDown } from '../../components/ui'
@@ -87,7 +87,7 @@ interface SmartItemRowProps {
 }
 
 function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowProps) {
-  const { sets, hardwareCatalog, setHardwareCatalog } = useStore()
+  const { sets, hardwareCatalog, setHardwareCatalog, customCatalog, addCustomEntry, updateCustomEntry } = useStore()
   const activeSet = sets[0]
   const catSizes  = (cat: ProductCategory) => hardwareCatalog[cat]?.sizes ?? []
   const catBrands = (cat: ProductCategory) => hardwareCatalog[cat]?.brands ?? []
@@ -107,11 +107,34 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
   }
 
   // product type search state
-  const [search, setSearch] = useState(() =>
-    item.category ? (PRODUCT_OPTIONS.find(p => p.category === item.category)?.label ?? '') : ''
-  )
+  const [search, setSearch] = useState(() => {
+    if (item.category) return PRODUCT_OPTIONS.find(p => p.category === item.category)?.label ?? ''
+    if (item.customEntryId) return item.description
+    return ''
+  })
   const [showDrop, setShowDrop] = useState(false)
   const amountRef = useRef<HTMLInputElement>(null)
+
+  // "Add to catalog" inline form state
+  const [addingNew, setAddingNew]   = useState(false)
+  const [newName,   setNewName]     = useState('')
+  const [newRate,   setNewRate]     = useState(0)
+  const addingNewRef = useRef(false)  // ref copy so the blur closure reads current value
+  // Creation form "More options" — sizes/brands to attach at creation time
+  const [showMoreOpts,   setShowMoreOpts]   = useState(false)
+  const [newItemSizes,   setNewItemSizes]   = useState<string[]>([])
+  const [newItemBrands,  setNewItemBrands]  = useState<string[]>([])
+  const [newSizeInput,   setNewSizeInput]   = useState('')
+  const [newBrandInput,  setNewBrandInput]  = useState('')
+
+  // Inline sub-option editing for a selected custom entry
+  // inlineAdd: which sub-thing we're currently adding
+  const [inlineAdd,        setInlineAdd]        = useState<'size' | 'brand' | 'field' | null>(null)
+  const [inlineVal,        setInlineVal]        = useState('')
+  const [inlineFieldLabel, setInlineFieldLabel] = useState('')
+  // Adding a new value to an existing custom field (e.g. add "Blue" to Color)
+  const [addToField,    setAddToField]    = useState<string | null>(null)  // field label
+  const [addToFieldVal, setAddToFieldVal] = useState('')
 
   const filtered = useMemo(() => {
     // A committed category isn't a live query — show all options so the user
@@ -123,6 +146,20 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
       p.label.toLowerCase().includes(q) || p.keywords.some(k => k.startsWith(q))
     )
   }, [search, item.category])
+
+  // Custom catalog entries filtered by search
+  const customFiltered = useMemo(() => {
+    if (item.customEntryId) return customCatalog   // already selected → show all for switching
+    const q = search.toLowerCase().trim()
+    if (!q) return customCatalog
+    return customCatalog.filter(e => e.name.toLowerCase().includes(q))
+  }, [search, item.customEntryId, customCatalog])
+
+  // The custom catalog entry currently selected (if any)
+  const selectedCustomEntry = useMemo(() =>
+    item.customEntryId ? customCatalog.find(e => e.id === item.customEntryId) : undefined,
+    [item.customEntryId, customCatalog]
+  )
 
   const brandsForCat = useMemo(() => {
     if (!item.category || !activeSet) return []
@@ -238,6 +275,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
     setSearch('')
     onUpdate(item.id, {
       category: undefined,
+      customEntryId: undefined,
       brandName: undefined,
       sizeIn: undefined,
       heightIn: undefined,
@@ -247,8 +285,93 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
     })
   }
 
-  const isCatalog = !!item.category
-  const isHardware = isCatalog && HARDWARE_CATS.includes(item.category!)
+  // ── Custom entry helpers ─────────────────────────────────────────────────
+  function selectCustomEntry(entry: { id: string; name: string; sizes: string[]; brands: string[]; rate?: number }) {
+    setSearch(entry.name)
+    setShowDrop(false)
+    onUpdate(item.id, {
+      customEntryId: entry.id,
+      category: undefined,
+      description: entry.name,
+      sizeIn:    entry.sizes[0] ?? undefined,
+      brandName: entry.brands[0] ?? undefined,
+      rateSqft:  entry.rate ?? undefined,
+      amount:    entry.rate ? Math.round(entry.rate * item.qty) : 0,
+      heightIn:  undefined,
+      widthIn:   undefined,
+      unit: item.unit || 'Pc',
+    })
+  }
+
+  function customDesc(over: { sizeIn?: string; brandName?: string; fieldValues?: Record<string,string> } = {}) {
+    const name      = selectedCustomEntry?.name ?? item.description
+    const sizeIn    = over.sizeIn    ?? item.sizeIn    ?? ''
+    const brandName = over.brandName ?? item.brandName ?? ''
+    const fv        = over.fieldValues ?? item.fieldValues ?? {}
+    const fieldStr  = Object.values(fv).filter(Boolean).join(' ')
+    return [name, sizeIn, brandName, fieldStr].filter(Boolean).join(' ')
+  }
+
+  function handleCustomSizeIn(sizeIn: string) {
+    onUpdate(item.id, { sizeIn, description: customDesc({ sizeIn }) })
+  }
+
+  function handleCustomBrand(brandName: string) {
+    onUpdate(item.id, { brandName, description: customDesc({ brandName }) })
+  }
+
+  function handleCustomFieldValue(label: string, value: string) {
+    const fv = { ...(item.fieldValues ?? {}), [label]: value }
+    onUpdate(item.id, { fieldValues: fv, description: customDesc({ fieldValues: fv }) })
+  }
+
+  function saveCustomEntryRate(entryId: string, rate: number) {
+    if (!rate) return
+    updateCustomEntry(entryId, { rate })
+  }
+
+  /** Confirm the current inline sub-option add (size / brand / new field). */
+  function commitInlineAdd() {
+    const val = inlineVal.trim()
+    if (!val || !selectedCustomEntry) return
+    if (inlineAdd === 'size') {
+      const sizes = [...selectedCustomEntry.sizes, val]
+      updateCustomEntry(selectedCustomEntry.id, { sizes })
+      onUpdate(item.id, { sizeIn: val, description: customDesc({ sizeIn: val }) })
+    } else if (inlineAdd === 'brand') {
+      const brands = [...selectedCustomEntry.brands, val]
+      updateCustomEntry(selectedCustomEntry.id, { brands })
+      onUpdate(item.id, { brandName: val, description: customDesc({ brandName: val }) })
+    } else if (inlineAdd === 'field') {
+      const label    = inlineFieldLabel.trim() || 'Field'
+      const newField: CatalogField = { id: Math.random().toString(36).slice(2,10), label, values: [val] }
+      const fields   = [...(selectedCustomEntry.fields ?? []), newField]
+      updateCustomEntry(selectedCustomEntry.id, { fields })
+      const fv = { ...(item.fieldValues ?? {}), [label]: val }
+      onUpdate(item.id, { fieldValues: fv, description: customDesc({ fieldValues: fv }) })
+    }
+    setInlineAdd(null)
+    setInlineVal('')
+    setInlineFieldLabel('')
+  }
+
+  /** Add a new value to an existing custom field (e.g. add "Blue" to the Color field). */
+  function commitAddToField() {
+    const val = addToFieldVal.trim()
+    if (!val || !selectedCustomEntry || !addToField) return
+    const fields = (selectedCustomEntry.fields ?? []).map(f =>
+      f.label === addToField ? { ...f, values: [...f.values, val] } : f
+    )
+    updateCustomEntry(selectedCustomEntry.id, { fields })
+    const fv = { ...(item.fieldValues ?? {}), [addToField]: val }
+    onUpdate(item.id, { fieldValues: fv, description: customDesc({ fieldValues: fv }) })
+    setAddToField(null)
+    setAddToFieldVal('')
+  }
+
+  const isCatalog    = !!item.category || !!item.customEntryId
+  const isHardware   = !!item.category && HARDWARE_CATS.includes(item.category)
+  const isCustomEntry = !!item.customEntryId && !item.category
 
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-3 dark:border-white/10 dark:bg-stone-900">
@@ -276,6 +399,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
                     // Typing over a committed selection → drop it, start fresh.
                     onUpdate(item.id, {
                       category: undefined,
+                      customEntryId: undefined,
                       brandName: undefined,
                       sizeIn: undefined,
                       heightIn: undefined,
@@ -289,7 +413,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
                   setSearch(v)
                   setShowDrop(true)
                 }}
-                onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+                onBlur={() => setTimeout(() => { if (!addingNewRef.current) setShowDrop(false) }, 150)}
                 className={`w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-sm dark:border-white/10 dark:text-white ${
                   isCatalog
                     ? 'bg-stone-100 cursor-pointer dark:bg-stone-700'
@@ -304,17 +428,239 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
                   <X size={13} />
                 </button>
               )}
-              {showDrop && filtered.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-20 mt-0.5 rounded-lg border border-stone-200 bg-white shadow-lg dark:border-white/10 dark:bg-stone-800">
-                  {filtered.map(opt => (
-                    <button
-                      key={opt.category}
-                      onMouseDown={() => selectCategory(opt)}
-                      className="flex w-full items-center px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-white/10"
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+              {showDrop && (filtered.length > 0 || customFiltered.length > 0 || search.trim()) && (
+                <div className="absolute top-full left-0 right-0 z-20 mt-0.5 max-h-72 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl dark:border-white/10 dark:bg-stone-800">
+
+                  {/* ── Standard product options ── */}
+                  {filtered.length > 0 && (
+                    <div>
+                      {filtered.length < PRODUCT_OPTIONS.length && (
+                        <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Products</div>
+                      )}
+                      {filtered.map(opt => (
+                        <button
+                          key={opt.category}
+                          onMouseDown={() => selectCategory(opt)}
+                          className="flex w-full items-center px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-white/10"
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ── Custom catalog entries ── */}
+                  {customFiltered.length > 0 && (
+                    <div className={filtered.length > 0 ? 'border-t border-stone-100 dark:border-white/5' : ''}>
+                      <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">My Items</div>
+                      {customFiltered.map(entry => (
+                        <button
+                          key={entry.id}
+                          onMouseDown={() => selectCustomEntry(entry)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-white/10"
+                        >
+                          <span className="text-xs font-medium text-shiv-green">✦</span>
+                          <span className="flex-1">{entry.name}</span>
+                          {entry.rate ? <span className="text-xs text-stone-400">₹{entry.rate}</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ── Add new / inline form ── */}
+                  <div className="border-t border-stone-100 dark:border-white/5">
+                    {!addingNew ? (
+                      search.trim() ? (
+                        <button
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            addingNewRef.current = true
+                            setNewName(search.trim())
+                            setNewRate(0)
+                            setAddingNew(true)
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-shiv-green hover:bg-stone-50 dark:hover:bg-white/5"
+                        >
+                          <Plus size={13} />
+                          Add "{search.trim()}" to My Items
+                        </button>
+                      ) : (
+                        <button
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            addingNewRef.current = true
+                            setNewName('')
+                            setNewRate(0)
+                            setAddingNew(true)
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-stone-400 hover:bg-stone-50 dark:hover:bg-white/5"
+                        >
+                          <Plus size={13} />
+                          Add new custom item
+                        </button>
+                      )
+                    ) : (
+                      <div
+                        onMouseDown={(e) => e.preventDefault()}
+                        className="p-3 space-y-2"
+                      >
+                        <div className="text-xs font-semibold text-stone-500 dark:text-stone-400">Add to My Items</div>
+
+                        {/* Name + Rate */}
+                        <div className="flex gap-2">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={newName}
+                            onChange={(e) => setNewName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                            placeholder="Item name"
+                            className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-700 dark:text-white"
+                          />
+                          <div className="relative w-20 shrink-0">
+                            <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                            <input
+                              type="number"
+                              min={0}
+                              value={newRate || ''}
+                              onChange={(e) => setNewRate(Number(e.target.value))}
+                              placeholder="Rate"
+                              className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-6 pr-1.5 text-sm dark:border-white/10 dark:bg-stone-700 dark:text-white"
+                            />
+                          </div>
+                        </div>
+
+                        {/* More options toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreOpts(v => !v)}
+                          className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+                        >
+                          {showMoreOpts ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          {showMoreOpts ? 'Less options' : 'Add sizes / brands'}
+                        </button>
+
+                        {showMoreOpts && (
+                          <div className="space-y-2 rounded-lg bg-stone-50 p-2 dark:bg-white/5">
+                            {/* Sizes tag input */}
+                            <div>
+                              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Sizes</div>
+                              <div className="flex flex-wrap gap-1 mb-1">
+                                {newItemSizes.map(s => (
+                                  <span key={s} className="flex items-center gap-0.5 rounded-full bg-stone-200 px-2 py-0.5 text-xs dark:bg-white/10">
+                                    {s}
+                                    <button type="button" onClick={() => setNewItemSizes(p => p.filter(x => x !== s))} className="text-stone-400 hover:text-red-500 ml-0.5"><X size={10} /></button>
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="flex gap-1">
+                                <input
+                                  type="text"
+                                  value={newSizeInput}
+                                  onChange={(e) => setNewSizeInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((e.key === 'Enter' || e.key === ',') && newSizeInput.trim()) {
+                                      e.preventDefault()
+                                      setNewItemSizes(p => [...p, newSizeInput.trim()])
+                                      setNewSizeInput('')
+                                    }
+                                  }}
+                                  placeholder="Type size, press Enter"
+                                  className="flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-stone-700 dark:text-white"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => { if (newSizeInput.trim()) { setNewItemSizes(p => [...p, newSizeInput.trim()]); setNewSizeInput('') } }}
+                                  className="rounded-lg bg-stone-200 px-2 py-1 text-xs dark:bg-white/10"
+                                >+</button>
+                              </div>
+                            </div>
+
+                            {/* Brands tag input */}
+                            <div>
+                              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Brands</div>
+                              <div className="flex flex-wrap gap-1 mb-1">
+                                {newItemBrands.map(b => (
+                                  <span key={b} className="flex items-center gap-0.5 rounded-full bg-stone-200 px-2 py-0.5 text-xs dark:bg-white/10">
+                                    {b}
+                                    <button type="button" onClick={() => setNewItemBrands(p => p.filter(x => x !== b))} className="text-stone-400 hover:text-red-500 ml-0.5"><X size={10} /></button>
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="flex gap-1">
+                                <input
+                                  type="text"
+                                  value={newBrandInput}
+                                  onChange={(e) => setNewBrandInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if ((e.key === 'Enter' || e.key === ',') && newBrandInput.trim()) {
+                                      e.preventDefault()
+                                      setNewItemBrands(p => [...p, newBrandInput.trim()])
+                                      setNewBrandInput('')
+                                    }
+                                  }}
+                                  placeholder="Type brand, press Enter"
+                                  className="flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-stone-700 dark:text-white"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => { if (newBrandInput.trim()) { setNewItemBrands(p => [...p, newBrandInput.trim()]); setNewBrandInput('') } }}
+                                  className="rounded-lg bg-stone-200 px-2 py-1 text-xs dark:bg-white/10"
+                                >+</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              addingNewRef.current = false
+                              setAddingNew(false)
+                              setShowMoreOpts(false)
+                              setNewItemSizes([])
+                              setNewItemBrands([])
+                              setNewSizeInput('')
+                              setNewBrandInput('')
+                              setShowDrop(false)
+                            }}
+                            className="rounded-lg px-3 py-1.5 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-white/10"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              const name = newName.trim()
+                              if (!name) return
+                              // Flush any half-typed size/brand input
+                              const sizes  = newSizeInput.trim()  ? [...newItemSizes,  newSizeInput.trim()]  : newItemSizes
+                              const brands = newBrandInput.trim() ? [...newItemBrands, newBrandInput.trim()] : newItemBrands
+                              const newId = addCustomEntry(name)
+                              updateCustomEntry(newId, {
+                                ...(newRate  ? { rate: newRate }  : {}),
+                                ...(sizes.length   ? { sizes }   : {}),
+                                ...(brands.length  ? { brands }  : {}),
+                              })
+                              selectCustomEntry({ id: newId, name, sizes, brands, rate: newRate || undefined })
+                              addingNewRef.current = false
+                              setAddingNew(false)
+                              setShowMoreOpts(false)
+                              setNewItemSizes([])
+                              setNewItemBrands([])
+                              setNewSizeInput('')
+                              setNewBrandInput('')
+                              setShowDrop(false)
+                            }}
+                            className="rounded-lg bg-shiv-green px-3 py-1.5 text-xs font-semibold text-stone-900 disabled:opacity-40"
+                            disabled={!newName.trim()}
+                          >
+                            Add →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               )}
             </div>
@@ -338,12 +684,30 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
               />
             )}
             {/* Board/door: brand dropdown */}
-            {isCatalog && !isHardware && brandsForCat.length > 0 && (
+            {isCatalog && !isHardware && !isCustomEntry && brandsForCat.length > 0 && (
               <DropDown
                 className="w-28 shrink-0"
                 value={item.brandName ?? ''}
                 onChange={handleBrandChange}
                 options={brandsForCat.map(b => ({ value: b.name, label: b.name }))}
+              />
+            )}
+            {/* Custom entry: size dropdown */}
+            {isCustomEntry && (selectedCustomEntry?.sizes.length ?? 0) > 0 && (
+              <DropDown
+                className="w-20 shrink-0"
+                value={item.sizeIn ?? selectedCustomEntry!.sizes[0] ?? ''}
+                onChange={handleCustomSizeIn}
+                options={selectedCustomEntry!.sizes}
+              />
+            )}
+            {/* Custom entry: brand dropdown */}
+            {isCustomEntry && (selectedCustomEntry?.brands.length ?? 0) > 0 && (
+              <DropDown
+                className="w-24 shrink-0"
+                value={item.brandName ?? selectedCustomEntry!.brands[0] ?? ''}
+                onChange={handleCustomBrand}
+                options={selectedCustomEntry!.brands}
               />
             )}
 
@@ -477,8 +841,178 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
             </div>
           )}
 
+          {/* Custom entry: existing fields · sub-option chips · qty/rate */}
+          {isCustomEntry && (
+            <div className="space-y-1.5">
+
+              {/* Existing custom fields (Color, Width, etc.) — each as a dropdown */}
+              {(selectedCustomEntry?.fields?.filter(f => f.values.length > 0) ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedCustomEntry!.fields!.filter(f => f.values.length > 0).map(f => (
+                    <div key={f.id} className="flex items-center gap-0.5">
+                      {addToField === f.label ? (
+                        // Inline input to add a new value to this field
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-stone-400">{f.label}:</span>
+                          <input
+                            autoFocus
+                            type="text"
+                            value={addToFieldVal}
+                            placeholder={`new ${f.label.toLowerCase()}`}
+                            onChange={(e) => setAddToFieldVal(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') commitAddToField(); if (e.key === 'Escape') { setAddToField(null); setAddToFieldVal('') } }}
+                            className="w-24 rounded-lg border border-shiv-green/50 bg-stone-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-shiv-green/40 dark:bg-stone-800 dark:text-white"
+                          />
+                          <button onClick={commitAddToField} className="text-shiv-green hover:text-shiv-green/70"><CheckCircle2 size={14} /></button>
+                          <button onClick={() => { setAddToField(null); setAddToFieldVal('') }} className="text-stone-400 hover:text-red-400"><X size={12} /></button>
+                        </div>
+                      ) : (
+                        <DropDown
+                          className="shrink-0 min-w-[5rem]"
+                          value={item.fieldValues?.[f.label] ?? f.values[0] ?? ''}
+                          onChange={(v) => {
+                            if (v === '__add__') { setAddToField(f.label); setAddToFieldVal('') }
+                            else handleCustomFieldValue(f.label, v)
+                          }}
+                          options={[
+                            ...f.values.map(v => ({ value: v, label: v })),
+                            { value: '__add__', label: `+ Add ${f.label}…` },
+                          ]}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Sub-option add chips: + Size  + Brand  + [Color/Field] */}
+              <div className="flex flex-wrap gap-1.5">
+                {inlineAdd === 'size' ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={inlineVal}
+                      placeholder="e.g. 50kg"
+                      onChange={(e) => setInlineVal(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitInlineAdd(); if (e.key === 'Escape') setInlineAdd(null) }}
+                      className="w-24 rounded-lg border border-shiv-green/50 bg-stone-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-shiv-green/40 dark:bg-stone-800 dark:text-white"
+                    />
+                    <button onClick={commitInlineAdd} className="text-shiv-green hover:text-shiv-green/70"><CheckCircle2 size={14} /></button>
+                    <button onClick={() => setInlineAdd(null)} className="text-stone-400 hover:text-red-400"><X size={12} /></button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setInlineAdd('size'); setInlineVal('') }}
+                    className="flex items-center gap-1 rounded-lg border border-dashed border-stone-300 px-2 py-1 text-xs text-stone-500 hover:border-shiv-green hover:text-shiv-green dark:border-white/20 dark:hover:border-shiv-green"
+                  >
+                    <Plus size={11} /> Size
+                  </button>
+                )}
+
+                {inlineAdd === 'brand' ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={inlineVal}
+                      placeholder="e.g. UltraTech"
+                      onChange={(e) => setInlineVal(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitInlineAdd(); if (e.key === 'Escape') setInlineAdd(null) }}
+                      className="w-28 rounded-lg border border-shiv-green/50 bg-stone-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-shiv-green/40 dark:bg-stone-800 dark:text-white"
+                    />
+                    <button onClick={commitInlineAdd} className="text-shiv-green hover:text-shiv-green/70"><CheckCircle2 size={14} /></button>
+                    <button onClick={() => setInlineAdd(null)} className="text-stone-400 hover:text-red-400"><X size={12} /></button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setInlineAdd('brand'); setInlineVal('') }}
+                    className="flex items-center gap-1 rounded-lg border border-dashed border-stone-300 px-2 py-1 text-xs text-stone-500 hover:border-shiv-green hover:text-shiv-green dark:border-white/20 dark:hover:border-shiv-green"
+                  >
+                    <Plus size={11} /> Brand
+                  </button>
+                )}
+
+                {inlineAdd === 'field' ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={inlineFieldLabel}
+                      placeholder="Field (e.g. Color)"
+                      onChange={(e) => setInlineFieldLabel(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); (e.currentTarget.nextElementSibling as HTMLInputElement | null)?.focus() } if (e.key === 'Escape') setInlineAdd(null) }}
+                      className="w-28 rounded-lg border border-shiv-green/50 bg-stone-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-shiv-green/40 dark:bg-stone-800 dark:text-white"
+                    />
+                    <input
+                      type="text"
+                      value={inlineVal}
+                      placeholder="Value (e.g. Red)"
+                      onChange={(e) => setInlineVal(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitInlineAdd(); if (e.key === 'Escape') setInlineAdd(null) }}
+                      className="w-24 rounded-lg border border-shiv-green/50 bg-stone-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-shiv-green/40 dark:bg-stone-800 dark:text-white"
+                    />
+                    <button onClick={commitInlineAdd} className="text-shiv-green hover:text-shiv-green/70"><CheckCircle2 size={14} /></button>
+                    <button onClick={() => setInlineAdd(null)} className="text-stone-400 hover:text-red-400"><X size={12} /></button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setInlineAdd('field'); setInlineVal(''); setInlineFieldLabel('') }}
+                    className="flex items-center gap-1 rounded-lg border border-dashed border-stone-300 px-2 py-1 text-xs text-stone-500 hover:border-shiv-green hover:text-shiv-green dark:border-white/20 dark:hover:border-shiv-green"
+                  >
+                    <Plus size={11} /> Color / Field
+                  </button>
+                )}
+              </div>
+
+              {/* qty · unit · rate → amount */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={1} placeholder="Qty"
+                  value={item.qty || ''}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const q = Number(e.target.value)
+                    onUpdate(item.id, { qty: q, amount: Math.round((item.rateSqft ?? 0) * q) })
+                  }}
+                  className="w-14 shrink-0 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                />
+                <DropDown
+                  className="w-16 shrink-0"
+                  value={item.unit}
+                  onChange={(u) => onUpdate(item.id, { unit: u })}
+                  options={UNITS}
+                />
+                <div className="relative shrink-0 w-20">
+                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                  <input
+                    ref={amountRef}
+                    type="number" min={0} placeholder="Rate"
+                    value={item.rateSqft || ''}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const rate = Number(e.target.value)
+                      onUpdate(item.id, { rateSqft: rate, amount: Math.round(rate * (item.qty || 1)) })
+                    }}
+                    onBlur={(e) => {
+                      const rate = Number(e.target.value)
+                      if (rate && item.customEntryId) saveCustomEntryRate(item.customEntryId, rate)
+                    }}
+                    className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-6 pr-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                  />
+                </div>
+                <div className="ml-auto rounded-lg bg-shiv-green/15 px-3 py-1.5 text-sm font-bold text-stone-800 dark:text-white whitespace-nowrap">
+                  ₹{(item.amount || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Board/door: size · qty · cost — single line */}
-          {isCatalog && !isHardware && (
+          {isCatalog && !isHardware && !isCustomEntry && (
             <div className="flex items-center gap-1.5">
               <DropDown
                 className="w-16 shrink-0"

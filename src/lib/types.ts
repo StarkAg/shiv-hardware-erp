@@ -214,6 +214,8 @@ export interface BillItem {
   widthIn?: number
   /** Rate per sqft (₹) — drives amount = rateSqft × (H×W/144) × qty */
   rateSqft?: number
+  /** ID of a CustomCatalogEntry that this item was picked from */
+  customEntryId?: string
 }
 
 export interface Bill {
