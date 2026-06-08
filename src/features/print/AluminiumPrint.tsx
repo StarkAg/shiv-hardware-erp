@@ -3,10 +3,10 @@
 import { Fragment } from 'react'
 import type { ReactNode } from 'react'
 import type { Quotation } from '../../lib/types'
-import { toInches } from '../../lib/pricing'
 import {
   ALU_THICKNESSES,
   doorRates,
+  toAluminiumExcelInches,
   windowThicknessRates,
   window2TrackAreaRates,
   window3TrackAreaRates,
@@ -132,8 +132,10 @@ function ProductDiagram({ hIn, wIn, image, kind }: { hIn: number; wIn: number; i
 // ---- Main component ----
 export function AluminiumPrint({ quote }: { quote: Quotation }) {
   const { height, width, category } = quote
-  const hIn = toInches(height)
-  const wIn = toInches(width)
+  const hIn = toAluminiumExcelInches(height)
+  const wIn = toAluminiumExcelInches(width)
+  const diagramHIn = Number(height.inches || 0) + Number(height.soot || 0) / 8
+  const diagramWIn = Number(width.inches || 0) + Number(width.soot || 0) / 8
   const area = r2((hIn * wIn) / 144)
   const isDoor = category === 'aluminium-door'
   const is2Track = category === 'window-2-track'
@@ -147,13 +149,14 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
   const hasSsNet = selectedAddons.has('SS Net')
   const hasDecorFilm = selectedAddons.has('Decor Film')
   const hasBrownCoated = selectedAddons.has('Brown Coated')
-  const hasAnyExtraAddon = hasSsNet || hasDecorFilm || hasBrownCoated
+  const hasWindowSsNet = is2Track && hasSsNet
+  const hasAnyWindowAddon = hasWindowSsNet || hasBrownCoated
 
   const productTitle = isDoor
     ? `Bathroom Aluminium Door${hasChaukhat ? '\nWith Chaukhat' : ''}`
     : is2Track
     ? '2 Track Aluminium Sliding Window'
-    : `3 Track Aluminium Sliding Window${hasSsNet ? '\nWith Half SS Net' : ''}`
+    : '3 Track Aluminium Sliding Window\nWith Half SS Net'
   const headerImage = isDoor
     ? assetPath('assets/aluminium/header-door.jpeg')
     : assetPath('assets/aluminium/header-window.jpg')
@@ -188,13 +191,16 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
     const base = slabRate(area, table)
     const clearRate = base + tr.clear
     const clearCost = r0(area * clearRate)
+    const reflectiveRate = base + tr.reflective
+    const reflectiveCost = r0(area * reflectiveRate)
     const chaukhatCost = hasChaukhat ? r0(chaukhatRft * tr.chaukhat) : 0
     return {
       t,
       clearRate, clearCost,
+      reflectiveRate, reflectiveCost,
       chaukhatRate: tr.chaukhat, chaukhatCost,
       clearTotal: clearCost + chaukhatCost,
-      ssNet: hasSsNet ? r0(area * 50) : 0,
+      ssNet: hasWindowSsNet ? r0(area * 50) : 0,
       decorFilm: hasDecorFilm ? r0(area * 30) : 0,
       brownCoated: hasBrownCoated ? r0(area * 40) : 0,
     }
@@ -230,7 +236,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
               <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right font-semibold">Area -</td>
               <td className="border-2 border-black px-2 py-0.5 text-center">{area} Sqft</td>
             </tr>
-            {hasChaukhat && (
+            {isDoor && hasChaukhat && (
               <tr>
                 <td className="border-2 border-black bg-[#d9d9d9] px-2 py-0.5 text-right font-semibold">Chaukhat -</td>
                 <td className="border-2 border-black px-2 py-0.5 text-center">{chaukhatRft} Rft</td>
@@ -328,7 +334,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
             ) : (
               <>
                 <tr>
-                  <Td className="bg-[#d9d9d9] text-right">Glass</Td>
+                  <Td className="bg-[#d9d9d9] text-right">4 MM Clear &amp; Texture Glass</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
                       <Td className="bg-[#d9d9d9] text-right">@{d.clearRate}</Td>
@@ -336,45 +342,23 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                     </Fragment>
                   ))}
                 </tr>
-                {hasChaukhat && (
-                  <tr>
-                    <Td className="bg-[#d9d9d9] text-right">Chaukhat</Td>
-                    {wRows.map((d) => (
-                      <Fragment key={d.t}>
-                        <Td className="bg-[#d9d9d9] text-right">@{d.chaukhatRate}</Td>
-                        <Td className="text-right">{d.chaukhatCost}</Td>
-                      </Fragment>
-                    ))}
-                  </tr>
-                )}
                 <tr>
-                  <Td className="bg-[#d9d9d9] text-right font-bold">Total</Td>
+                  <Td className="bg-[#d9d9d9] text-right">4 MM Reflective Glass</Td>
                   {wRows.map((d) => (
                     <Fragment key={d.t}>
-                      <Td />
-                      <Td className="text-right font-bold">{d.clearTotal}</Td>
+                      <Td className="bg-[#d9d9d9] text-right">@{d.reflectiveRate}</Td>
+                      <Td className="text-right">{d.reflectiveCost}</Td>
                     </Fragment>
                   ))}
                 </tr>
-                {hasAnyExtraAddon && <tr><Td colSpan={7}>Add-ons</Td></tr>}
-                {hasSsNet && (
+                {hasAnyWindowAddon && <tr><Td colSpan={7}>Add-ons</Td></tr>}
+                {hasWindowSsNet && (
                   <tr>
                     <Td className="bg-[#d9d9d9] text-right">SS Net</Td>
                     {wRows.map((d) => (
                       <Fragment key={d.t}>
                         <Td className="bg-[#d9d9d9] text-right">@50</Td>
                         <Td className="text-right">{d.ssNet}</Td>
-                      </Fragment>
-                    ))}
-                  </tr>
-                )}
-                {hasDecorFilm && (
-                  <tr>
-                    <Td className="bg-[#d9d9d9] text-right">Décor Film</Td>
-                    {wRows.map((d) => (
-                      <Fragment key={d.t}>
-                        <Td className="bg-[#d9d9d9] text-right">@30</Td>
-                        <Td className="text-right">{d.decorFilm}</Td>
                       </Fragment>
                     ))}
                   </tr>
@@ -397,7 +381,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
 
         {/* Diagram */}
         <div className="mt-[5mm] flex justify-center">
-          <ProductDiagram hIn={hIn} wIn={wIn} image={productImage} kind={diagramKind} />
+          <ProductDiagram hIn={diagramHIn} wIn={diagramWIn} image={productImage} kind={diagramKind} />
         </div>
       </div>
       </div>

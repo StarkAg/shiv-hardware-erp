@@ -376,9 +376,11 @@ async function buildAluminiumHtml(quote) {
   const hasSsNet = selected.has('SS Net')
   const hasDecorFilm = selected.has('Decor Film')
   const hasBrownCoated = selected.has('Brown Coated')
-  const hasAnyExtraAddon = hasSsNet || hasDecorFilm || hasBrownCoated
-  const hIn = Number(height.inches || 0) + Number(height.soot || 0) / 8
-  const wIn = Number(width.inches || 0) + Number(width.soot || 0) / 8
+  const hasWindowSsNet = is2Track && hasSsNet
+  const hasAnyWindowAddon = hasWindowSsNet || hasBrownCoated
+  const aluExcelInches = dim => Number(dim?.inches || 0) + (Number(dim?.soot || 0) > 0 ? 1 : 0)
+  const hIn = aluExcelInches(height)
+  const wIn = aluExcelInches(width)
   const area = Math.round((hIn * wIn / 144) * 100) / 100
   const chaukhatRft = isDoor
     ? Math.max(Math.round(((hIn * 2 + wIn) / 12) * 100) / 100, 14.5)
@@ -388,7 +390,7 @@ async function buildAluminiumHtml(quote) {
     ? `Bathroom Aluminium Door${hasChaukhat ? '<br>With Chaukhat' : ''}`
     : is2Track
       ? '2 Track Aluminium Sliding Window'
-      : `3 Track Aluminium Sliding Window${hasSsNet ? '<br>With Half SS Net' : ''}`
+      : '3 Track Aluminium Sliding Window<br>With Half SS Net'
   const headerImage = await b64(isDoor ? 'aluminium/header-door.jpeg' : 'aluminium/header-window.jpg')
   const productImage = await b64(
     isDoor ? 'aluminium/door.png' : is2Track ? 'aluminium/window-2-track.jpeg' : 'aluminium/window-3-track.jpeg',
@@ -410,12 +412,14 @@ async function buildAluminiumHtml(quote) {
     if (hasDecorFilm) rows += row('Décor Film', thicknesses.map(t => pairCells(t.decorFilmRate, t.decorFilm)).join(''))
     if (hasBrownCoated) rows += row('Brown Coated', thicknesses.map(t => pairCells(t.brownCoatedRate, t.brownCoated)).join(''))
   } else {
-    rows = row('Glass', thicknesses.map(t => pairCells(t.doorRate, t.doorCost)).join(''))
-    if (hasChaukhat) rows += row('Chaukhat', thicknesses.map(t => pairCells(t.chaukhatRate, t.chaukhatCost)).join(''))
-    rows += row('Total', thicknesses.map(t => pairCells('', t.total, false, 'bold')).join(''), 'shade right bold')
-    if (hasAnyExtraAddon) rows += addonHeader
-    if (hasSsNet) rows += row('SS Net', thicknesses.map(t => pairCells(50, t.accessories)).join(''))
-    if (hasDecorFilm) rows += row('Décor Film', thicknesses.map(t => pairCells(30, t.decorFilm)).join(''))
+    rows = row('4 MM Clear &amp; Texture Glass', thicknesses.map(t => pairCells(t.doorRate, t.doorCost)).join(''))
+    rows += row('4 MM Reflective Glass', thicknesses.map(t => {
+      const rate = t.reflectiveRate ?? Number(t.doorRate || 0) + 20
+      const amount = t.reflectiveCost ?? Math.round(area * rate)
+      return pairCells(rate, amount)
+    }).join(''))
+    if (hasAnyWindowAddon) rows += addonHeader
+    if (hasWindowSsNet) rows += row('SS Net', thicknesses.map(t => pairCells(50, t.accessories)).join(''))
     if (hasBrownCoated) rows += row('Brown Coated', thicknesses.map(t => pairCells(40, t.brownCoated)).join(''))
   }
 
@@ -480,7 +484,7 @@ async function buildAluminiumHtml(quote) {
     <table class="info"><tbody>
       <tr><td class="label">Size -</td><td class="center">${dimStr(height)}&nbsp; X &nbsp;${dimStr(width)}</td></tr>
       <tr><td class="label">Area -</td><td class="center">${area} Sqft</td></tr>
-      ${hasChaukhat ? `<tr><td class="label">Chaukhat -</td><td class="center">${chaukhatRft} Rft</td></tr>` : ''}
+      ${isDoor && hasChaukhat ? `<tr><td class="label">Chaukhat -</td><td class="center">${chaukhatRft} Rft</td></tr>` : ''}
     </tbody></table>
     <table class="compare">
       <colgroup><col style="width:22%">${thicknesses.map(() => '<col style="width:9%"><col style="width:14.33%">').join('')}</colgroup>
