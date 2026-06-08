@@ -9,7 +9,6 @@
 //   - add-ons: chaukhat, accessories, decor film, SS net, brown coated
 
 import type { Dimension, ProductCategory } from './types'
-import { toInches } from './pricing'
 
 export type AluThickness = '1.2 MM' | '1.6 MM' | '1.2 MM Hindalco'
 export type GlassType = 'clear' | 'reflective'
@@ -49,6 +48,10 @@ function slabRate(area: number, table: { area: number; rate: number }[]): number
   return sorted[sorted.length - 1].rate
 }
 
+export function toAluminiumExcelInches(d: Dimension): number {
+  return Number(d.inches || 0) + (Number(d.soot || 0) > 0 ? 1 : 0)
+}
+
 export interface AluAddons {
   chaukhat: boolean
   accessories: boolean // door only
@@ -82,8 +85,8 @@ export function calcAluminium(
   width: Dimension,
   addons: AluAddons,
 ): AluResult {
-  let hIn = toInches(height)
-  let wIn = toInches(width)
+  let hIn = toAluminiumExcelInches(height)
+  let wIn = toAluminiumExcelInches(width)
 
   if (category === 'aluminium-door') {
     hIn = Math.min(hIn || 65, DOOR_MAX_H)
@@ -107,12 +110,11 @@ export function calcAluminium(
   const base = slabRate(area, table)
   const tr = windowThicknessRates[thickness]
   const glassRate = base + (addons.glassType === 'clear' ? tr.clear : tr.reflective)
+  const glassLabel = addons.glassType === 'clear' ? '4 MM Clear & Texture Glass' : '4 MM Reflective Glass'
   const breakdown: { label: string; amount: number }[] = [
-    { label: `Glass (${addons.glassType}) @${glassRate}`, amount: area * glassRate },
+    { label: `${glassLabel} @${glassRate}`, amount: area * glassRate },
   ]
-  if (addons.chaukhat) breakdown.push({ label: 'Chaukhat', amount: ((hIn * 2 + wIn) / 12) * tr.chaukhat })
-  if (addons.decorFilm) breakdown.push({ label: 'Decor Film', amount: area * 30 })
-  if (addons.ssNet) breakdown.push({ label: 'SS Net', amount: area * 50 })
+  if (category === 'window-2-track' && addons.ssNet) breakdown.push({ label: 'SS Net', amount: area * 50 })
   if (addons.brownCoated) breakdown.push({ label: 'Brown Coated', amount: area * 40 })
   return { area, baseRate: glassRate, total: sum(breakdown), breakdown }
 }
@@ -124,8 +126,8 @@ export function calcAllThicknesses(
   width: Dimension,
   addons: AluAddons,
 ) {
-  const hIn = toInches(height)
-  const wIn = toInches(width)
+  const hIn = toAluminiumExcelInches(height)
+  const wIn = toAluminiumExcelInches(width)
   const area = round2((hIn * wIn) / 144)
   const isDoor = category === 'aluminium-door'
   const chaukhatRft = isDoor ? Math.max(round2((hIn * 2 + wIn) / 12), 14.5) : round2((hIn * 2 + wIn) / 12)
@@ -154,16 +156,19 @@ export function calcAllThicknesses(
       const base = slabRate(area, table)
       const glassRate = base + (addons.glassType === 'reflective' ? tr.reflective : tr.clear)
       const glassCost = Math.round(area * glassRate)
+      const reflectiveRate = base + tr.reflective
+      const reflectiveCost = Math.round(area * reflectiveRate)
       const chaukhatCost = addons.chaukhat ? Math.round(chaukhatRft * tr.chaukhat) : 0
       const decorFilm = addons.decorFilm ? Math.round(area * 30) : 0
-      const ssNet = addons.ssNet ? Math.round(area * 50) : 0
+      const ssNet = addons.ssNet && is2Track ? Math.round(area * 50) : 0
       const brownCoated = addons.brownCoated ? Math.round(area * 40) : 0
       return {
         name: t,
         doorRate: glassRate, doorCost: glassCost,
+        reflectiveRate, reflectiveCost,
         chaukhatRate: tr.chaukhat, chaukhatCost,
         accessories: ssNet,
-        total: glassCost + chaukhatCost,
+        total: glassCost,
         decorFilmRate: 30, decorFilm,
         brownCoatedRate: 40, brownCoated,
       }
