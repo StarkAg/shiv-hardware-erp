@@ -17,6 +17,7 @@ import { BillSelectPage } from './features/guarantee/BillSelectPage'
 import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
 import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
+import { DeliverPage } from './features/transport/DeliverPage'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { startOfflineSync } from './lib/offlineSync'
 import { getPrintServerUrl, pullBillsFromServer, pullCatalogFromServer } from './lib/printServer'
@@ -127,6 +128,7 @@ const router = createHashRouter([
       { path: 'inventory',      element: <Inventory /> },
       { path: 'customers',      element: <Customers /> },
       { path: 'transport',      element: <Transport /> },
+      { path: 'transport/deliver/:deliveryId', element: <DeliverPage /> },
       { path: 'bills',          element: <BillBuilder /> },
       { path: 'bills/:id',      element: <BillBuilder /> },
     ],

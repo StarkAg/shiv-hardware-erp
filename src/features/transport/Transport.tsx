@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { Truck, Plus, X, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Truck, Plus, X, Trash2, Navigation } from 'lucide-react'
 import { Button, Input } from '../../components/ui'
+import { PRINT_SERVER_URL } from '../../lib/printServer'
 
 interface Driver {
   id: string
@@ -9,10 +11,12 @@ interface Driver {
 }
 
 export function Transport() {
+  const navigate = useNavigate()
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [showModal, setShowModal] = useState(false)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const [startingId, setStartingId] = useState<string | null>(null)
 
   const addDriver = () => {
     if (!name.trim() || phone.length !== 10) return
@@ -30,6 +34,24 @@ export function Transport() {
 
   const removeDriver = (id: string) => {
     setDrivers(drivers.filter((d) => d.id !== id))
+  }
+
+  const startDelivery = async (driver: Driver) => {
+    setStartingId(driver.id)
+    try {
+      const res = await fetch(`${PRINT_SERVER_URL}/delivery/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverName: driver.name }),
+      })
+      if (!res.ok) throw new Error('Server error')
+      const { id } = await res.json()
+      navigate(`/transport/deliver/${id}`, { state: { driverName: driver.name } })
+    } catch {
+      alert('Could not connect to print server. Make sure it is running.')
+    } finally {
+      setStartingId(null)
+    }
   }
 
   return (
@@ -122,15 +144,25 @@ export function Transport() {
           {drivers.map((driver) => (
             <div
               key={driver.id}
-              className="flex items-center justify-between rounded-lg border border-stone-200/90 bg-stone-50 p-4 dark:border-white/10 dark:bg-stone-900/90"
+              className="flex items-center justify-between gap-3 rounded-lg border border-stone-200/90 bg-stone-50 p-4 dark:border-white/10 dark:bg-stone-900/90"
             >
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="font-semibold text-stone-950 dark:text-white">{driver.name}</p>
-                <p className="text-sm text-stone-600 dark:text-stone-400">{driver.phone}</p>
+                <p className="text-sm text-stone-500 dark:text-stone-400">{driver.phone}</p>
               </div>
+
+              <button
+                onClick={() => startDelivery(driver)}
+                disabled={startingId === driver.id}
+                className="flex items-center gap-1.5 rounded-lg bg-shiv-green px-3 py-2 text-xs font-bold text-stone-950 shadow-sm disabled:opacity-60"
+              >
+                <Navigation size={14} />
+                {startingId === driver.id ? 'Starting…' : 'Deliver'}
+              </button>
+
               <button
                 onClick={() => removeDriver(driver.id)}
-                className="text-red-500 hover:bg-red-50 rounded-lg p-2 dark:hover:bg-red-950/30"
+                className="rounded-lg p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
               >
                 <Trash2 size={18} />
               </button>
