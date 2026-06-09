@@ -2267,6 +2267,147 @@ app.post('/render-png', async (req, res) => {
   }
 })
 
+// ── Live Delivery Tracking ──────────────────────────────────────────────────
+// deliveries: Map<id, { driverName, lat, lng, startedAt, updatedAt, clients }>
+const deliveries = new Map()
+
+app.post('/delivery/start', (req, res) => {
+  const id = Math.random().toString(36).slice(2, 10)
+  deliveries.set(id, {
+    id,
+    driverName: String(req.body?.driverName ?? 'Driver'),
+    lat: null, lng: null,
+    startedAt: Date.now(), updatedAt: null,
+    clients: new Set(),
+  })
+  res.json({ ok: true, id })
+})
+
+app.get('/delivery/:id', (req, res) => {
+  const d = deliveries.get(req.params.id)
+  if (!d) return res.status(404).json({ ok: false, error: 'not found' })
+  const { id, driverName, lat, lng, startedAt, updatedAt } = d
+  res.json({ ok: true, id, driverName, lat, lng, startedAt, updatedAt })
+})
+
+app.post('/delivery/:id/location', (req, res) => {
+  const d = deliveries.get(req.params.id)
+  if (!d) return res.status(404).json({ ok: false })
+  d.lat = req.body?.lat; d.lng = req.body?.lng; d.updatedAt = Date.now()
+  const msg = `data: ${JSON.stringify({ lat: d.lat, lng: d.lng, updatedAt: d.updatedAt })}\n\n`
+  for (const c of d.clients) try { c.write(msg) } catch {}
+  res.json({ ok: true })
+})
+
+app.get('/delivery/:id/stream', (req, res) => {
+  const d = deliveries.get(req.params.id)
+  if (!d) return res.status(404).json({ ok: false })
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+  if (d.lat !== null) res.write(`data: ${JSON.stringify({ lat: d.lat, lng: d.lng, updatedAt: d.updatedAt })}\n\n`)
+  d.clients.add(res)
+  req.on('close', () => d.clients.delete(res))
+})
+
+app.post('/delivery/:id/stop', (req, res) => {
+  const d = deliveries.get(req.params.id)
+  if (!d) return res.status(404).json({ ok: false })
+  const msg = `data: ${JSON.stringify({ stopped: true })}\n\n`
+  for (const c of d.clients) try { c.write(msg); c.end() } catch {}
+  deliveries.delete(req.params.id)
+  res.json({ ok: true })
+})
+
+// Customer-facing tracking page (no app needed — works on any phone)
+app.get('/track/:id', (req, res) => {
+  const serverBase = PRINT_SERVER_PUBLIC_URL || `http://localhost:${PORT}`
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.send(`<!doctype html><html><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Live Tracking — Shiv Hardware</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:system-ui,sans-serif;background:#f5f4f0;display:flex;flex-direction:column;height:100dvh}
+    #topbar{background:#fff;border-bottom:1px solid #e5e7eb;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+    #topbar img{width:36px;height:36px;border-radius:8px;object-fit:contain}
+    #info{flex:1;min-width:0}
+    #driver-name{font-size:14px;font-weight:700;color:#1c1917}
+    #status{font-size:12px;color:#78716c;margin-top:1px}
+    #map{flex:1}
+    #stopped-banner{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center}
+    #stopped-banner div{background:#fff;border-radius:16px;padding:24px 28px;text-align:center;max-width:280px}
+    #stopped-banner h2{font-size:18px;font-weight:700;margin-bottom:8px}
+    #stopped-banner p{font-size:14px;color:#78716c}
+  </style>
+</head><body>
+  <div id="topbar">
+    <div id="info">
+      <div id="driver-name">Loading…</div>
+      <div id="status">Waiting for location…</div>
+    </div>
+  </div>
+  <div id="map"></div>
+  <div id="stopped-banner">
+    <div>
+      <h2>Delivery Complete</h2>
+      <p>The driver has ended this delivery session.</p>
+    </div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const deliveryId = ${JSON.stringify(req.params.id)}
+    const serverBase = ${JSON.stringify(serverBase)}
+
+    // Init map
+    const map = L.map('map', { zoomControl: true })
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19
+    }).addTo(map)
+
+    const icon = L.divIcon({
+      className: '',
+      html: '<div style="width:40px;height:40px;border-radius:50%;background:#b9924b;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center"><svg width=20 height=20 viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>',
+      iconSize: [40, 40], iconAnchor: [20, 20],
+    })
+
+    let marker = null
+    let firstFix = true
+
+    function updateLocation(lat, lng) {
+      const ll = [lat, lng]
+      if (!marker) { marker = L.marker(ll, { icon }).addTo(map) } else { marker.setLatLng(ll) }
+      if (firstFix) { map.setView(ll, 16); firstFix = false } else { map.panTo(ll) }
+      document.getElementById('status').textContent = 'Live · updated ' + new Date().toLocaleTimeString()
+    }
+
+    // Fetch driver info
+    fetch(serverBase + '/delivery/' + deliveryId)
+      .then(r => r.json()).then(d => {
+        if (d.ok) {
+          document.getElementById('driver-name').textContent = '🚚 ' + d.driverName
+          if (d.lat) updateLocation(d.lat, d.lng)
+        }
+      }).catch(() => {})
+
+    // SSE stream
+    const es = new EventSource(serverBase + '/delivery/' + deliveryId + '/stream')
+    es.onmessage = (e) => {
+      const data = JSON.parse(e.data)
+      if (data.stopped) {
+        document.getElementById('stopped-banner').style.display = 'flex'
+        es.close(); return
+      }
+      updateLocation(data.lat, data.lng)
+    }
+    es.onerror = () => { document.getElementById('status').textContent = 'Reconnecting…' }
+  </script>
+</body></html>`)
+})
+
 app.listen(PORT, '0.0.0.0', () => {
   const networkUrls = localNetworkUrls(PORT)
   console.log(`\n✓  Shiv Print Server running`)

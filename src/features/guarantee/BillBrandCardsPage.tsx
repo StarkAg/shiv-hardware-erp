@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, Phone, Printer } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import { CATEGORY_META } from '../../lib/types'
@@ -244,11 +244,10 @@ function BrandFlipCard({
 export function BillBrandCardsPage() {
   const { billId } = useParams<{ billId: string }>()
   const navigate = useNavigate()
-  const location = useLocation()
+
   const { bills } = useStore()
 
-  const returnTo: string =
-    (location.state as { returnTo?: string })?.returnTo ?? '/guarantee/card'
+
 
   const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set())
 
