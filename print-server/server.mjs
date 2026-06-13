@@ -169,11 +169,11 @@ const WHATSAPP_AUTO_PRINT_MEDIA_TYPES = new Set(
     .map(value => value.trim().toLowerCase())
     .filter(Boolean),
 )
-// Print images straight through SumatraPDF/lp (which scale them to the page via
-// the "fit" print setting) instead of first wrapping them in a PDF with Chrome.
-// Removes a ~1-3s browser launch per image. Set to false to restore the old
-// Chrome-rendered A4 wrapping if a specific image format ever misbehaves.
-const WHATSAPP_IMAGE_DIRECT_PRINT = !['0', 'false', 'no', 'off'].includes(String(process.env.WHATSAPP_IMAGE_DIRECT_PRINT ?? 'true').trim().toLowerCase())
+// When true, print images straight through SumatraPDF/lp instead of first wrapping
+// them in an A4 PDF with Chrome. It is faster, but SumatraPDF's direct image
+// printing produced blank pages on the Epson L8050 driver, so it defaults to false
+// (use the reliable Chrome-rendered A4 wrapping). Set to true to re-enable.
+const WHATSAPP_IMAGE_DIRECT_PRINT = !['0', 'false', 'no', 'off'].includes(String(process.env.WHATSAPP_IMAGE_DIRECT_PRINT ?? 'false').trim().toLowerCase())
 const WHATSAPP_COLOR_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_COLOR_PRINT_SETTINGS || 'fit,color,portrait,paper=A4,bin=Rear Paper Feeder')
 const WHATSAPP_BW_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_BW_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4')
 const QUOTATION_PRINT_SETTINGS = parsePrintSettings(process.env.QUOTATION_PRINT_SETTINGS || 'fit,color,portrait,paper=A4,bin=Rear Paper Feeder,print-quality=5')
@@ -181,9 +181,9 @@ const BW_FALLBACK_PRINT_SETTINGS = parsePrintSettings(process.env.BW_FALLBACK_PR
 const BW_FALLBACK_RESET_PLAIN_A4 = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_RESET_PLAIN_A4 ?? 'true').trim().toLowerCase())
 const EPSON_DEFAULT_RESET_PLAIN_A4_COLOR = !['0', 'false', 'no', 'off'].includes(String(process.env.EPSON_DEFAULT_RESET_PLAIN_A4_COLOR ?? 'true').trim().toLowerCase())
 // Epson L8050 driver quality options are: Draft, Standard, HighQuality, AdvancedSetting
-// (mapped to ns0000:<value>). "HighQuality" is the best; an unknown value like the
-// old "High" is silently ignored by the driver and falls back to Standard.
-const EPSON_A4_PRINT_QUALITY = process.env.EPSON_A4_PRINT_QUALITY || 'HighQuality'
+// (mapped to ns0000:<value>). Default to Standard — the everyday mode that reliably
+// puts ink on plain A4. (HighQuality on plain paper caused blank output here.)
+const EPSON_A4_PRINT_QUALITY = process.env.EPSON_A4_PRINT_QUALITY || 'Standard'
 const WHATSAPP_WEB_AUTH_DIR = fileURLToPath(new URL('data/baileys-auth', import.meta.url))
 const WHATSAPP_PROCESSED_MESSAGES_URL = new URL('data/whatsapp-processed-messages.json', import.meta.url)
 // Every WhatsApp media file is downloaded here BEFORE it is queued for printing,
@@ -1180,20 +1180,33 @@ async function renderUploadedImagePdf(file) {
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
     }
     img {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
       display: block;
+      flex: none;
+      object-fit: contain;
+      image-orientation: from-image;
+      width: 210mm;
+      height: 297mm;
     }
   </style>
 </head>
 <body>
-  <img src="data:${file.mediaType};base64,${file.data}" alt="${escapeHtml(file.name)}" />
+  <img id="print-image" src="data:${file.mediaType};base64,${file.data}" alt="${escapeHtml(file.name)}" />
 </body>
 </html>`
     await page.setContent(html, { waitUntil: 'networkidle0' })
+    const size = await page.evaluate(async () => {
+      const img = document.getElementById('print-image')
+      if (!img) return { width: 0, height: 0 }
+      try {
+        if (img.decode) await img.decode()
+      } catch {}
+
+      return { width: img.naturalWidth || 0, height: img.naturalHeight || 0 }
+    })
+    console.log(`[image-pdf] ${file.name} ${size.width}x${size.height} fit=A4`)
     return await page.pdf({
       format: 'A4',
       printBackground: true,
