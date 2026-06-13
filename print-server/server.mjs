@@ -180,7 +180,10 @@ const QUOTATION_PRINT_SETTINGS = parsePrintSettings(process.env.QUOTATION_PRINT_
 const BW_FALLBACK_PRINT_SETTINGS = parsePrintSettings(process.env.BW_FALLBACK_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4,bin=Rear Paper Feeder')
 const BW_FALLBACK_RESET_PLAIN_A4 = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_RESET_PLAIN_A4 ?? 'true').trim().toLowerCase())
 const EPSON_DEFAULT_RESET_PLAIN_A4_COLOR = !['0', 'false', 'no', 'off'].includes(String(process.env.EPSON_DEFAULT_RESET_PLAIN_A4_COLOR ?? 'true').trim().toLowerCase())
-const EPSON_A4_PRINT_QUALITY = process.env.EPSON_A4_PRINT_QUALITY || 'High'
+// Epson L8050 driver quality options are: Draft, Standard, HighQuality, AdvancedSetting
+// (mapped to ns0000:<value>). "HighQuality" is the best; an unknown value like the
+// old "High" is silently ignored by the driver and falls back to Standard.
+const EPSON_A4_PRINT_QUALITY = process.env.EPSON_A4_PRINT_QUALITY || 'HighQuality'
 const WHATSAPP_WEB_AUTH_DIR = fileURLToPath(new URL('data/baileys-auth', import.meta.url))
 const WHATSAPP_PROCESSED_MESSAGES_URL = new URL('data/whatsapp-processed-messages.json', import.meta.url)
 // Every WhatsApp media file is downloaded here BEFORE it is queued for printing,
