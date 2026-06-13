@@ -3,6 +3,7 @@ dist
 release
 print-server/.env
 print-server/data/wwebjs-auth/
+print-server/data/baileys-auth/
 print-server/data/whatsapp-processed-messages.json
 print-server/data/bills.jsonl
 print-server/data/bills.json
