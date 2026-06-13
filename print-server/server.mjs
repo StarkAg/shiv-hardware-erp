@@ -16,8 +16,8 @@ import express from 'express'
 import cors from 'cors'
 import Anthropic from '@anthropic-ai/sdk'
 import { execFile } from 'child_process'
-import { appendFile, writeFile, unlink } from 'fs/promises'
-import { networkInterfaces, tmpdir } from 'os'
+import { appendFile, writeFile, unlink, mkdir } from 'fs/promises'
+import { networkInterfaces, tmpdir, homedir } from 'os'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
 import { buildGuaranteeHtml, buildQuotationHtml, buildBillHtml } from './template.mjs'
@@ -169,13 +169,23 @@ const WHATSAPP_AUTO_PRINT_MEDIA_TYPES = new Set(
     .map(value => value.trim().toLowerCase())
     .filter(Boolean),
 )
+// Print images straight through SumatraPDF/lp (which scale them to the page via
+// the "fit" print setting) instead of first wrapping them in a PDF with Chrome.
+// Removes a ~1-3s browser launch per image. Set to false to restore the old
+// Chrome-rendered A4 wrapping if a specific image format ever misbehaves.
+const WHATSAPP_IMAGE_DIRECT_PRINT = !['0', 'false', 'no', 'off'].includes(String(process.env.WHATSAPP_IMAGE_DIRECT_PRINT ?? 'true').trim().toLowerCase())
 const WHATSAPP_COLOR_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_COLOR_PRINT_SETTINGS || 'fit,color,portrait,paper=A4,bin=Rear Paper Feeder')
 const WHATSAPP_BW_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_BW_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4')
+const QUOTATION_PRINT_SETTINGS = parsePrintSettings(process.env.QUOTATION_PRINT_SETTINGS || 'fit,color,portrait,paper=A4,bin=Rear Paper Feeder,print-quality=5')
 const BW_FALLBACK_PRINT_SETTINGS = parsePrintSettings(process.env.BW_FALLBACK_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4,bin=Rear Paper Feeder')
 const BW_FALLBACK_RESET_PLAIN_A4 = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_RESET_PLAIN_A4 ?? 'true').trim().toLowerCase())
 const EPSON_DEFAULT_RESET_PLAIN_A4_COLOR = !['0', 'false', 'no', 'off'].includes(String(process.env.EPSON_DEFAULT_RESET_PLAIN_A4_COLOR ?? 'true').trim().toLowerCase())
+const EPSON_A4_PRINT_QUALITY = process.env.EPSON_A4_PRINT_QUALITY || 'High'
 const WHATSAPP_WEB_AUTH_DIR = fileURLToPath(new URL('data/baileys-auth', import.meta.url))
 const WHATSAPP_PROCESSED_MESSAGES_URL = new URL('data/whatsapp-processed-messages.json', import.meta.url)
+// Every WhatsApp media file is downloaded here BEFORE it is queued for printing,
+// so nothing is lost and the print can run from a stable on-disk copy.
+const WHATSAPP_PRINTS_DIR = process.env.WHATSAPP_PRINTS_DIR || join(homedir(), 'Downloads', 'whatsapp Prints')
 
 const whatsappWebState = {
   enabled: WHATSAPP_AUTO_PRINT_ENABLED,
@@ -190,7 +200,6 @@ const whatsappWebState = {
   lastError: null,
 }
 const whatsappProcessedMessageIds = new Set(loadWhatsAppProcessedMessageIds())
-const whatsappPrintCommands = new Map()
 const whatsappPendingMedia = new Map()
 const whatsappGroupNameCache = new Map()
 const printerHealthCache = new Map()
@@ -732,6 +741,7 @@ function findSumatraPdfPath() {
 
 function selectDocumentPrinter({ kind, layout = 'a4' } = {}) {
   if (kind === 'guarantee' && layout === 'card') return COLOR_PRINTER
+  if (kind === 'quotation') return COLOR_PRINTER
   return BW_PRINTER
 }
 
@@ -831,12 +841,17 @@ async function getWindowsPrinterHealth(printer) {
 }
 
 function epsonPlainA4PrintTicketXml({ color = true } = {}) {
+  const qualityOption = /^[-:_a-z0-9]+$/i.test(EPSON_A4_PRINT_QUALITY)
+    ? EPSON_A4_PRINT_QUALITY
+    : 'High'
+  const qualityName = qualityOption.includes(':') ? qualityOption : `ns0000:${qualityOption}`
+
   return `<?xml version="1.0"?>
 <psf:PrintTicket xmlns:psf="http://schemas.microsoft.com/windows/2003/08/printing/printschemaframework" xmlns:psk="http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords" xmlns:ns0000="http://schema.epson.net/printschema/business/v100" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" version="1">
   <psf:Feature name="psk:PageInputBin"><psf:Option name="ns0000:AutoSheetFeeder"/></psf:Feature>
   <psf:Feature name="psk:PageMediaType"><psf:Option name="psk:Plain"/></psf:Feature>
   <psf:Feature name="psk:PageOutputColor"><psf:Option name="psk:${color ? 'Color' : 'Monochrome'}"/></psf:Feature>
-  <psf:Feature name="psk:PageOutputQuality"><psf:Option name="ns0000:Standard"/></psf:Feature>
+  <psf:Feature name="psk:PageOutputQuality"><psf:Option name="${qualityName}"/></psf:Feature>
   <psf:Feature name="psk:PageMediaSize"><psf:Option name="psk:ISOA4"><psf:ScoredProperty name="psk:MediaSizeWidth"><psf:Value xsi:type="xsd:integer">210000</psf:Value></psf:ScoredProperty><psf:ScoredProperty name="psk:MediaSizeHeight"><psf:Value xsi:type="xsd:integer">297000</psf:Value></psf:ScoredProperty></psf:Option></psf:Feature>
   <psf:Feature name="psk:PageBorderless"><psf:Option name="psk:None"/></psf:Feature>
   <psf:Feature name="psk:PageOrientation"><psf:Option name="psk:Portrait"/></psf:Feature>
@@ -931,24 +946,6 @@ function whatsappPrintCommandKey(jid, sender = '') {
   return `${jid}|${sender}`
 }
 
-function rememberWhatsAppPrintCommand(jid, sender, mode) {
-  if (!mode) return
-  const entry = { mode, at: Date.now(), sender }
-  whatsappPrintCommands.set(whatsappPrintCommandKey(jid), entry)
-  whatsappPrintCommands.set(whatsappPrintCommandKey(jid, sender), entry)
-}
-
-function recentWhatsAppPrintCommand(jid, sender) {
-  const now = Date.now()
-  for (const key of [whatsappPrintCommandKey(jid, sender), whatsappPrintCommandKey(jid)]) {
-    const entry = whatsappPrintCommands.get(key)
-    if (!entry) continue
-    if (now - entry.at <= WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS) return entry
-    whatsappPrintCommands.delete(key)
-  }
-  return null
-}
-
 function rememberWhatsAppPendingMedia(jid, sender, file) {
   const key = whatsappPrintCommandKey(jid, sender)
   const list = whatsappPendingMedia.get(key) || []
@@ -962,6 +959,47 @@ function flushWhatsAppPendingMedia(jid, sender) {
   const list = whatsappPendingMedia.get(key) || []
   whatsappPendingMedia.delete(key)
   return list.filter(e => now - e.at <= WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS).map(e => e.file)
+}
+
+// ---- Serial print queue --------------------------------------------------
+// Only ONE physical print job runs at a time. Without this, a newly-arrived
+// job (e.g. another WhatsApp page) would spawn a concurrent SumatraPDF /
+// Set-PrintConfiguration call that interrupts the job already spooling on the
+// printer. Jobs are appended to the chain and executed strictly in order; a
+// failure in one job never blocks the next.
+let printChain = Promise.resolve()
+
+function runPrintExclusive(label, fn) {
+  const run = printChain.then(() => {
+    if (label) console.log(`[print-queue] start ${label}`)
+    return fn()
+  })
+  // Keep the chain alive across both success and failure, swallowing the
+  // settled value so the next job starts cleanly. The real result/rejection is
+  // returned to the caller via `run`.
+  printChain = run.then(() => {}, () => {})
+  if (label) {
+    run.then(
+      () => console.log(`[print-queue] done ${label}`),
+      err => console.log(`[print-queue] failed ${label}: ${err?.message ?? err}`),
+    )
+  }
+  return run
+}
+
+// Save a downloaded WhatsApp media file into the persistent "whatsapp Prints"
+// folder and return its path. The print job runs from this copy.
+async function saveWhatsAppPrintFile(file) {
+  await mkdir(WHATSAPP_PRINTS_DIR, { recursive: true })
+  const rawName = (file?.name || 'whatsapp').toString()
+  const cleaned = rawName.replace(/[\\/:*?"<>|\r\n]+/g, '_').replace(/\s+/g, ' ').trim() || 'whatsapp'
+  const hasExt = /\.[a-z0-9]{2,5}$/i.test(cleaned)
+  const safeName = hasExt ? cleaned : `${cleaned}${extensionForMediaType(file.mediaType)}`
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const rand = Math.random().toString(16).slice(2, 6)
+  const savedPath = join(WHATSAPP_PRINTS_DIR, `${stamp}-${rand}-${safeName}`)
+  await writeFile(savedPath, file.buffer)
+  return savedPath
 }
 
 async function printFileWithLp(filePath, copies, title, printer = PRINT_PRINTER, printSettings = []) {
@@ -1163,21 +1201,34 @@ async function renderUploadedImagePdf(file) {
   }
 }
 
-async function printUploadedFile(file, copies, printerOverride = null, printSettingsOverride = null) {
+function printUploadedFile(file, copies, printerOverride = null, printSettingsOverride = null) {
+  return runPrintExclusive(
+    `upload ${file?.name ?? 'file'}`,
+    () => printUploadedFileImpl(file, copies, printerOverride, printSettingsOverride),
+  )
+}
+
+async function printUploadedFileImpl(file, copies, printerOverride = null, printSettingsOverride = null) {
   const primaryPrinter = printerOverride || selectUploadPrinter(file)
   const primaryPrintSettings = printSettingsOverride || printSettingsForWhatsAppPrinter(primaryPrinter)
   const route = await routeBwPrinterOnError(primaryPrinter, primaryPrintSettings, 'upload-print')
   const { printer, printSettings } = route
   if (printer === COLOR_PRINTER) await prepareEpsonPlainA4ColorDefaults(printer, 'upload-print')
   const extension = extensionForMediaType(file.mediaType)
-  const sourcePath = join(tmpdir(), `shiv-whatsapp-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`)
+  // If the file was already downloaded to the "whatsapp Prints" folder, print
+  // from that stable copy and keep it; otherwise stage a temp copy and clean up.
+  const savedPath = file.savedPath || null
+  const sourcePath = savedPath || join(tmpdir(), `shiv-whatsapp-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`)
   let printPath = sourcePath
   let renderedPdfPath = null
 
   try {
-    await writeFile(sourcePath, file.buffer)
+    if (!savedPath) await writeFile(sourcePath, file.buffer)
 
-    if (file.mediaType.startsWith('image/')) {
+    // Images print directly (the printer driver scales them via the "fit"
+    // setting). Only fall back to the Chrome-rendered A4 PDF wrapper when
+    // direct printing is explicitly disabled.
+    if (file.mediaType.startsWith('image/') && !WHATSAPP_IMAGE_DIRECT_PRINT) {
       const pdf = await renderUploadedImagePdf(file)
       renderedPdfPath = join(tmpdir(), `shiv-whatsapp-${Date.now()}-${Math.random().toString(16).slice(2)}.pdf`)
       await writeFile(renderedPdfPath, pdf)
@@ -1193,7 +1244,7 @@ async function printUploadedFile(file, copies, printerOverride = null, printSett
       jobId: result.jobId,
     }
   } finally {
-    await unlink(sourcePath).catch(() => {})
+    if (!savedPath) await unlink(sourcePath).catch(() => {})
     if (renderedPdfPath) await unlink(renderedPdfPath).catch(() => {})
   }
 }
@@ -1217,8 +1268,22 @@ function chatMatchesWhatsAppAutoPrintTarget(jid, name) {
   return Boolean(expected && actual && actual === expected)
 }
 
-function getBaileysText(msg) {
+function unwrapBaileysMessage(msg) {
   const m = msg.message
+  if (!m) return null
+  // WhatsApp wraps some message types — unwrap to get the actual content
+  return (
+    m.ephemeralMessage?.message ||
+    m.viewOnceMessage?.message ||
+    m.viewOnceMessageV2?.message?.viewOnceMessage?.message ||
+    m.documentWithCaptionMessage?.message ||
+    m.editedMessage?.message?.protocolMessage?.editedMessage ||
+    m
+  )
+}
+
+function getBaileysText(msg) {
+  const m = unwrapBaileysMessage(msg)
   if (!m) return ''
   return (
     m.conversation ||
@@ -1231,10 +1296,17 @@ function getBaileysText(msg) {
 }
 
 function getBaileysMediaMimetype(msg) {
-  const m = msg.message
+  const m = unwrapBaileysMessage(msg)
   if (!m) return null
   if (m.imageMessage) return (m.imageMessage.mimetype || 'image/jpeg').toLowerCase()
-  if (m.documentMessage) return (m.documentMessage.mimetype || 'application/octet-stream').toLowerCase()
+  if (m.documentMessage) {
+    const mime = (m.documentMessage.mimetype || '').toLowerCase()
+    if (mime) return mime
+    // fall back to extension if mimetype missing
+    const ext = (m.documentMessage.fileName || '').split('.').pop().toLowerCase()
+    if (ext === 'pdf') return 'application/pdf'
+    return 'application/octet-stream'
+  }
   if (m.stickerMessage) return 'image/webp'
   return null
 }
@@ -1260,11 +1332,11 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
 
   const sender = msg.key.participant || jid
   const text = getBaileysText(msg)
+  // A bw/cp command only applies to THIS message (its own caption) or, when sent
+  // as a standalone text message, to media already buffered before it. It is NOT
+  // remembered for future media — a command sent before any image must never
+  // auto-print images that arrive later.
   const directPrintMode = parseWhatsAppPrintMode(text)
-  if (directPrintMode) {
-    rememberWhatsAppPrintCommand(jid, sender, directPrintMode)
-    console.log(`[whatsapp-web] remembered mode="${directPrintMode}" for group="${groupName}" sender="${sender}"`)
-  }
 
   const mediaType = getBaileysMediaMimetype(msg)
 
@@ -1273,7 +1345,10 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
       const pending = flushWhatsAppPendingMedia(jid, sender)
       if (pending.length > 0) {
         console.log(`[whatsapp-web] flushing ${pending.length} buffered media for sender="${sender}" mode="${directPrintMode}"`)
-        await Promise.all(pending.map(async file => {
+        // Print buffered media one at a time, in the order received. The shared
+        // print queue already serializes execution, but iterating sequentially
+        // also preserves page order.
+        for (const file of pending) {
           try {
             const route = await routeWhatsAppPrintJob(directPrintMode, file)
             const result = await printUploadedFile(file, WHATSAPP_AUTO_PRINT_COPIES, route.printer, route.printSettings)
@@ -1287,7 +1362,7 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
           } catch (printErr) {
             console.error(`[whatsapp-web] failed to print buffered ${file.name}`, printErr)
           }
-        }))
+        }
       }
     }
     return
@@ -1300,9 +1375,15 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
 
   whatsappWebState.lastMessageAt = new Date().toISOString()
 
+  // Build a synthetic msg with the unwrapped content for downloadMediaMessage
+  const unwrapped = unwrapBaileysMessage(msg)
+  const msgForDownload = unwrapped === msg.message
+    ? msg
+    : { ...msg, message: unwrapped }
+
   let buffer
   try {
-    buffer = await downloadMediaMessage(msg, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage })
+    buffer = await downloadMediaMessage(msgForDownload, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage })
   } catch (dlErr) {
     console.error('[whatsapp-web] failed to download media', dlErr.message ?? dlErr)
     return
@@ -1310,15 +1391,25 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
   if (!buffer?.length) return
 
   const extension = extensionForMediaType(mediaType)
-  const filename = msg.message?.documentMessage?.fileName || `whatsapp-${Date.now()}${extension}`
-  const rememberedPrintMode = recentWhatsAppPrintCommand(jid, sender)
-  const printMode = directPrintMode || rememberedPrintMode?.mode || null
+  const filename = unwrapped?.documentMessage?.fileName || `whatsapp-${Date.now()}${extension}`
+  // Only this media's own caption can trigger an immediate print. Otherwise it is
+  // buffered until a bw/cp command is sent. No stale/earlier command is applied.
+  const printMode = directPrintMode || null
 
   const file = decodeUploadedFile({
     name: filename,
     mediaType,
     data: buffer.toString('base64'),
   }, 0)
+
+  // Download to the persistent "whatsapp Prints" folder BEFORE queueing to print,
+  // so the media is never lost even if it has to wait behind other jobs.
+  try {
+    file.savedPath = await saveWhatsAppPrintFile(file)
+    console.log(`[whatsapp-web] saved ${file.mediaType} to "${file.savedPath}"`)
+  } catch (saveErr) {
+    console.error('[whatsapp-web] failed to save media to prints folder', saveErr.message ?? saveErr)
+  }
 
   if (!printMode) {
     rememberWhatsAppPendingMedia(jid, sender, file)
@@ -1406,8 +1497,13 @@ async function startWhatsAppWebAutoPrint() {
       })
 
       sock.ev.on('messages.upsert', ({ messages, type }) => {
-        if (type !== 'notify') return
+        // 'notify' = real-time; 'append' = catchup after reconnect — process both,
+        // but skip 'append' messages older than the command TTL (avoid reprinting old msgs)
+        if (type !== 'notify' && type !== 'append') return
+        const cutoff = type === 'append' ? Date.now() - WHATSAPP_AUTO_PRINT_COMMAND_TTL_MS : 0
         for (const msg of messages) {
+          const msgTs = (msg.messageTimestamp ?? 0) * 1000
+          if (cutoff > 0 && msgTs < cutoff) continue
           handleBaileysMessage(sock, msg, downloadMediaMessage).catch(err => {
             console.error('[whatsapp-web] message handling error', err.message ?? err)
           })
@@ -1423,25 +1519,36 @@ async function startWhatsAppWebAutoPrint() {
   }
 }
 
-async function printDocumentPayload({ kind, quote, document, bill, layout = 'a4', printerOverride }, copies) {
-  if (kind === 'guarantee' && !document) throw new Error('Missing guarantee document data')
-  if (kind === 'bill' && !bill) throw new Error('Missing bill data')
-  if (kind !== 'guarantee' && kind !== 'bill' && !quote) throw new Error('Missing quotation data')
-  const primaryPrinter = printerOverride || selectDocumentPrinter({ kind, layout })
-  const isCard = kind === 'guarantee' && layout === 'card'
+function printDocumentPayload(payload, copies) {
+  const kind = payload?.kind ?? 'quotation'
+  return runPrintExclusive(`document ${kind}`, () => printDocumentPayloadImpl(payload, copies))
+}
+
+async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 'a4', printerOverride }, copies) {
+  const documentKind = kind ?? 'quotation'
+  if (documentKind === 'guarantee' && !document) throw new Error('Missing guarantee document data')
+  if (documentKind === 'bill' && !bill) throw new Error('Missing bill data')
+  if (documentKind !== 'guarantee' && documentKind !== 'bill' && !quote) throw new Error('Missing quotation data')
+  const primaryPrinter = printerOverride || selectDocumentPrinter({ kind: documentKind, layout })
+  const isCard = documentKind === 'guarantee' && layout === 'card'
   // Bills print at best quality (print-quality=5 is the IPP "best" level)
   const billPrintSettings = parsePrintSettings(process.env.BILL_PRINT_SETTINGS || 'print-quality=5')
   const route = isCard
     ? { printer: primaryPrinter, printSettings: EPSON_CARD_PRINT_SETTINGS, fallback: null }
-    : await routeBwPrinterOnError(primaryPrinter, kind === 'bill' ? billPrintSettings : [], `document-print:${kind ?? 'quotation'}`)
+    : documentKind === 'quotation'
+      ? { printer: primaryPrinter, printSettings: QUOTATION_PRINT_SETTINGS, fallback: null }
+      : await routeBwPrinterOnError(primaryPrinter, documentKind === 'bill' ? billPrintSettings : [], `document-print:${documentKind}`)
   const { printer } = route
+  if (documentKind === 'quotation' && printer === COLOR_PRINTER) {
+    await prepareEpsonPlainA4ColorDefaults(printer, 'document-print:quotation')
+  }
 
   let browser
   let tmp
   try {
-    const html = kind === 'guarantee'
+    const html = documentKind === 'guarantee'
       ? await buildGuaranteeHtml(document, layout)
-      : kind === 'bill'
+      : documentKind === 'bill'
         ? buildBillHtml(bill)
         : await buildQuotationHtml(quote)
     browser = await launchPuppeteerBrowser()
@@ -1449,7 +1556,7 @@ async function printDocumentPayload({ kind, quote, document, bill, layout = 'a4'
 
     // For bills: pin viewport to exactly 148×210mm at 96dpi so Puppeteer renders
     // at the same pixel dimensions as the in-app preview iframe (559×793px).
-    if (kind === 'bill') {
+    if (documentKind === 'bill') {
       await page.setViewport({ width: 559, height: 793, deviceScaleFactor: 1 })
     }
 
@@ -1468,7 +1575,7 @@ async function printDocumentPayload({ kind, quote, document, bill, layout = 'a4'
       })
       tmp = join(tmpdir(), `shiv-card-${Date.now()}.png`)
       await writeFile(tmp, png)
-      const printResult = await printCardImage(tmp, copies, `Shiv ${kind ?? 'card'}`, printer)
+      const printResult = await printCardImage(tmp, copies, `Shiv ${documentKind}`, printer)
       return {
         printer,
         fallback: route.fallback,
@@ -1485,12 +1592,12 @@ async function printDocumentPayload({ kind, quote, document, bill, layout = 'a4'
           preferCSSPageSize: true,
           margin: { top: 0, right: 0, bottom: 0, left: 0 },
         }
-      : kind === 'bill'
+      : documentKind === 'bill'
         ? { width: '148mm', height: '210mm', printBackground: true, preferCSSPageSize: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } }
         : { format: 'A4', printBackground: true })
     tmp = join(tmpdir(), `shiv-print-${Date.now()}.pdf`)
     await writeFile(tmp, pdf)
-    const printResult = await printFileWithLp(tmp, copies, `Shiv ${kind ?? 'quotation'}`, printer, route.printSettings)
+    const printResult = await printFileWithLp(tmp, copies, `Shiv ${documentKind}`, printer, route.printSettings)
     return {
       printer,
       fallback: route.fallback,
@@ -1961,6 +2068,7 @@ app.get('/status', (_req, res) => res.json({
   printer: PRINT_PRINTER,
   printers: {
     color: COLOR_PRINTER,
+    quotation: COLOR_PRINTER,
     blackAndWhite: BW_PRINTER,
     blackAndWhiteFallback: BW_FALLBACK_PRINTER,
     blackAndWhiteFallbackOnError: BW_FALLBACK_ON_ERROR,
