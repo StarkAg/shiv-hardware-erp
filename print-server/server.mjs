@@ -2093,6 +2093,95 @@ async function listInstalledPrinters() {
   return stdout.trim().split('\n').map(l => l.split(' ')[0]).filter(Boolean)
 }
 
+// ── Live printer queue (jobs + printer state/alerts) ─────────────────────────
+async function getCupsPrintQueue() {
+  const printers = new Map() // name -> { name, state, alert, jobs: [] }
+
+  // Printer states + alerts (e.g. "Alerts: media-jam-error")
+  const { stdout: pOut } = await execFileAsync('lpstat', ['-l', '-p']).catch(() => ({ stdout: '' }))
+  let current = null
+  for (const line of pOut.split('\n')) {
+    const m = line.match(/^printer (\S+) (is idle|now printing|disabled|is stopped)/)
+    if (m) {
+      const state = m[2].includes('printing') ? 'printing' : /disabled|stopped/.test(m[2]) ? 'stopped' : 'idle'
+      current = { name: m[1], state, alert: null, jobs: [] }
+      printers.set(m[1], current)
+      continue
+    }
+    const a = line.match(/Alerts:\s*(.+)$/)
+    if (a && current) {
+      const alert = a[1].trim()
+      current.alert = alert && alert !== 'none' ? alert : null
+    }
+  }
+
+  // Active jobs: "PrinterName-503  user  94208  Fri Jun 19 16:27:08 2026"
+  const { stdout: jOut } = await execFileAsync('lpstat', ['-o']).catch(() => ({ stdout: '' }))
+  const jobs = []
+  for (const raw of jOut.split('\n')) {
+    const line = raw.trim()
+    const m = line.match(/^(\S+)-(\d+)\s+(\S+)\s+(\d+)\s+(.+)$/)
+    if (!m) continue
+    const [, printer, num, user, size, when] = m
+    const job = { id: `${printer}-${num}`, number: Number(num), printer, user, sizeKb: Math.round(Number(size) / 1024), when: when.trim() }
+    jobs.push(job)
+    printers.get(printer)?.jobs.push(job)
+  }
+
+  return { platform: process.platform, printers: [...printers.values()], jobs }
+}
+
+async function getWindowsPrintQueue() {
+  const script = `
+$out = @()
+Get-Printer | ForEach-Object {
+  $p = $_
+  $jobs = @(Get-PrintJob -PrinterName $p.Name -ErrorAction SilentlyContinue | ForEach-Object {
+    [pscustomobject]@{ id = "$($p.Name)-$($_.Id)"; number = $_.Id; printer = $p.Name; user = $_.UserName; sizeKb = [math]::Round($_.Size/1024); status = "$($_.JobStatus)"; when = "$($_.SubmittedTime)" }
+  })
+  $alert = if ("$($p.PrinterStatus)" -match 'Error|Jam|Offline|PaperOut') { "$($p.PrinterStatus)" } else { $null }
+  $out += [pscustomobject]@{ name = $p.Name; state = "$($p.PrinterStatus)"; alert = $alert; jobs = $jobs }
+}
+ConvertTo-Json @($out) -Depth 6 -Compress
+`
+  const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-Command', script], { windowsHide: true })
+  const parsed = JSON.parse((stdout || '').trim() || '[]')
+  const printers = Array.isArray(parsed) ? parsed : [parsed]
+  const jobs = printers.flatMap((p) => p.jobs ?? [])
+  return { platform: 'win32', printers, jobs }
+}
+
+async function getPrintQueue() {
+  return process.platform === 'win32' ? await getWindowsPrintQueue() : await getCupsPrintQueue()
+}
+
+app.get('/queue', async (_req, res) => {
+  try {
+    const queue = await getPrintQueue()
+    res.json({ ok: true, ...queue })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
+app.post('/queue/cancel', async (req, res) => {
+  try {
+    if (process.platform === 'win32') {
+      const printer = String(req.body?.printer ?? '').trim()
+      const number = Number(req.body?.number)
+      if (!printer || !Number.isFinite(number)) throw new Error('printer and number are required')
+      await execFileAsync('powershell.exe', ['-NoProfile', '-Command', `Remove-PrintJob -PrinterName '${printer.replace(/'/g, "''")}' -ID ${number}`], { windowsHide: true })
+    } else {
+      const jobId = String(req.body?.jobId ?? '').trim()
+      if (!jobId) throw new Error('jobId is required')
+      await execFileAsync('cancel', [jobId])
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/status', (_req, res) => res.json({
   ok: true,

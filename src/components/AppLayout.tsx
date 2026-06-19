@@ -13,6 +13,7 @@ import {
   Moon,
   Package,
   Plus,
+  Printer,
   ReceiptText,
   ShieldCheck,
   Sun,
@@ -181,6 +182,9 @@ export function AppLayout() {
         </NavLink>
         <NavLink to="/transport" className={linkClass}>
           <Truck size={18} /> Transport
+        </NavLink>
+        <NavLink to="/printer-queue" className={linkClass}>
+          <Printer size={18} /> Printer Queue
         </NavLink>
       </nav>
 
