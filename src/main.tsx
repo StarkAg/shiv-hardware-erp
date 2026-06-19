@@ -19,6 +19,7 @@ import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
 import { DeliverPage } from './features/transport/DeliverPage'
 import { BillBuilder } from './features/bills/BillBuilder'
+import { PrinterQueue } from './features/print/PrinterQueue'
 import { startOfflineSync } from './lib/offlineSync'
 import { getPrintServerUrl, pullBillsFromServer, pullCatalogFromServer } from './lib/printServer'
 import { useStore } from './lib/store'
@@ -131,6 +132,7 @@ const router = createHashRouter([
       { path: 'transport/deliver/:deliveryId', element: <DeliverPage /> },
       { path: 'bills',          element: <BillBuilder /> },
       { path: 'bills/:id',      element: <BillBuilder /> },
+      { path: 'printer-queue',  element: <PrinterQueue /> },
     ],
   },
   { path: '/demo', element: <PrintDemo /> },

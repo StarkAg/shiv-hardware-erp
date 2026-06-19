@@ -195,6 +195,51 @@ export async function printBillOnServer(bill: Bill, copies = 1, printer?: string
   return printOnServer({ kind: 'bill', bill }, copies, printer)
 }
 
+// ── Live printer queue ─────────────────────────────────────────────────────────
+
+export type PrintQueueJob = {
+  id: string
+  number: number
+  printer: string
+  user?: string
+  sizeKb?: number
+  status?: string
+  when?: string
+}
+
+export type PrintQueuePrinter = {
+  name: string
+  state: string
+  alert: string | null
+  jobs: PrintQueueJob[]
+}
+
+export type PrintQueueSnapshot = {
+  ok: true
+  platform: string
+  printers: PrintQueuePrinter[]
+  jobs: PrintQueueJob[]
+}
+
+/** Read the shop printer queue (active jobs + per-printer state/alerts). */
+export async function fetchPrintQueue(): Promise<PrintQueueSnapshot> {
+  const res = await fetchPrintServer('/queue', undefined, 8000)
+  const json = await res.json().catch(() => null)
+  if (!json?.ok) throw new Error(json?.error ?? 'Could not read the printer queue')
+  return json as PrintQueueSnapshot
+}
+
+/** Cancel one queued job. Pass jobId (macOS/Linux) or printer+number (Windows). */
+export async function cancelPrintJob(job: { jobId?: string; printer?: string; number?: number }): Promise<void> {
+  const res = await fetchPrintServer('/queue/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(job),
+  }, 8000)
+  const json = await res.json().catch(() => null)
+  if (!json?.ok) throw new Error(json?.error ?? 'Could not cancel the job')
+}
+
 // ── Catalog sync ─────────────────────────────────────────────────────────────
 
 export interface CatalogSnapshot {
