@@ -1,4 +1,5 @@
 import type { Bill, BrandSet, CustomCatalogEntry, GuaranteeDocument, HardwareCatalog, Quotation } from './types'
+import { fetchPrinterAgentLanUrls } from './cloudApi'
 
 const PRINT_SERVER_PORT = import.meta.env.VITE_PRINT_SERVER_PORT || '3333'
 const configuredPrintServer = (import.meta.env.VITE_PRINT_SERVER || '').trim().replace(/\/+$/, '')
@@ -85,6 +86,29 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
   }
 }
 
+/**
+ * Ask the cloud for the print server's last-reported LAN URL(s) and probe them.
+ * One exact address per interface — far faster and subnet-agnostic compared to
+ * the brute-force scan. Returns null if the cloud has no record or none respond.
+ */
+async function discoverViaCloud() {
+  const lanUrls = await fetchPrinterAgentLanUrls()
+  for (const raw of lanUrls) {
+    const url = raw.replace(/\/+$/, '')
+    try {
+      const response = await fetchWithTimeout(`${url}/status`)
+      const json = await response.json().catch(() => null)
+      if (response.ok && json?.server === 'Shiv Print Server') {
+        savePrintServerUrl(url)
+        return url
+      }
+    } catch {
+      /* try the next reported address */
+    }
+  }
+  return null
+}
+
 async function discoverPrintServer() {
   const candidates = DISCOVERY_PREFIXES.flatMap((prefix) =>
     Array.from({ length: 254 }, (_, index) => `http://${prefix}.${index + 1}:${PRINT_SERVER_PORT}`),
@@ -125,6 +149,10 @@ export async function getPrintServerUrl() {
       /* try the next candidate */
     }
   }
+
+  // Cloud-assisted: ask the cloud for the exact LAN IP before brute-scanning.
+  const viaCloud = await discoverViaCloud()
+  if (viaCloud) return viaCloud
 
   return await discoverPrintServer()
 }
