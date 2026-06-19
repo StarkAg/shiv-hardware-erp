@@ -2,6 +2,7 @@ import type { GuaranteeDocument, Quotation } from './types'
 
 export const CLOUD_API_URL = import.meta.env.VITE_CLOUD_API_URL ?? ''
 const CLOUD_API_KEY = import.meta.env.VITE_CLOUD_API_KEY ?? ''
+export const PRINTER_AGENT_ID = import.meta.env.VITE_PRINTER_AGENT_ID ?? 'shiv-shop-printer'
 
 export type CloudPrintJobKind = 'quotation' | 'guarantee' | 'raw-file'
 export type CloudPrintJobSource = 'android' | 'web' | 'whatsapp' | 'server'
@@ -147,4 +148,21 @@ export async function saveCloudGuarantee(document: GuaranteeDocument): Promise<{
 
 export async function checkCloudApi(): Promise<{ ok: true; service: string; convexConfigured: boolean; authEnabled: boolean }> {
   return await cloudFetch('/health')
+}
+
+/**
+ * Ask the cloud which LAN URL(s) the shop print server last reported. Lets a
+ * tablet on the same Wi-Fi reach the exact address without scanning the subnet.
+ * Returns [] on any error (old cloud build, offline, agent not seen yet).
+ */
+export async function fetchPrinterAgentLanUrls(printerId = PRINTER_AGENT_ID): Promise<string[]> {
+  if (!CLOUD_API_URL) return []
+  try {
+    const json = await cloudFetch<{ ok: true; agent: { lanUrls: string[]; online: boolean } }>(
+      `/api/printer-agents/${encodeURIComponent(printerId)}`,
+    )
+    return Array.isArray(json.agent?.lanUrls) ? json.agent.lanUrls : []
+  } catch {
+    return []
+  }
 }

@@ -33,6 +33,7 @@ const CLOUD_API_URL = (process.env.CLOUD_API_URL || '').replace(/\/+$/, '')
 const CLOUD_API_KEY = process.env.CLOUD_API_KEY || ''
 const PRINTER_AGENT_ID = process.env.PRINTER_AGENT_ID || 'shiv-shop-printer'
 const CLOUD_POLL_INTERVAL_MS = Math.max(3000, Number(process.env.CLOUD_POLL_INTERVAL_MS) || 7000)
+const CLOUD_HEARTBEAT_INTERVAL_MS = Math.max(15000, Number(process.env.CLOUD_HEARTBEAT_INTERVAL_MS) || 30000)
 const SUMATRA_PDF_PATH = process.env.SUMATRA_PDF_PATH || findSumatraPdfPath()
 const EPSON_CARD_PRINT_SETTINGS = (process.env.EPSON_CARD_PRINT_SETTINGS || 'noscale,color,portrait,bin=Disc/ID Card Tray')
   .split(',')
@@ -1625,6 +1626,21 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
   }
 }
 
+// Report our current LAN URL(s) to the cloud so same-Wi-Fi tablets can find us
+// without scanning the whole subnet. Best-effort: silently ignored if the cloud
+// is unreachable or running an older build without the endpoint.
+async function sendCloudHeartbeat() {
+  if (!CLOUD_API_URL) return
+  try {
+    await cloudRequest('/api/printer-agents/heartbeat', {
+      method: 'POST',
+      body: JSON.stringify({ printerId: PRINTER_AGENT_ID, lanUrls: localNetworkUrls(PORT) }),
+    })
+  } catch {
+    /* best-effort presence beacon */
+  }
+}
+
 async function cloudRequest(path, options = {}) {
   if (!CLOUD_API_URL) throw new Error('CLOUD_API_URL is not configured')
   const response = await fetch(`${CLOUD_API_URL}${path}`, {
@@ -2548,6 +2564,8 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`   Cloud printer agent: ${PRINTER_AGENT_ID}`)
     setInterval(pollCloudPrintJobs, CLOUD_POLL_INTERVAL_MS)
     pollCloudPrintJobs()
+    setInterval(sendCloudHeartbeat, CLOUD_HEARTBEAT_INTERVAL_MS)
+    sendCloudHeartbeat()
   } else {
     console.log('   Cloud polling: disabled')
   }

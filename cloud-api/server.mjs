@@ -168,6 +168,42 @@ app.post('/api/print-jobs/:id/fail', async (req, res) => {
   }
 })
 
+// ── Printer-agent LAN discovery ───────────────────────────────────────────────
+// The shop print server heartbeats its current LAN URL(s) here so tablets on the
+// same Wi-Fi can fetch the exact address instead of brute-scanning the subnet.
+// Kept in-memory: it is ephemeral presence data refreshed on every heartbeat.
+const printerAgents = new Map() // printerId -> { lanUrls: string[], lastSeen: number }
+const AGENT_ONLINE_WINDOW_MS = 90_000
+
+app.post('/api/printer-agents/heartbeat', (req, res) => {
+  try {
+    const printerId = requiredString(req.body.printerId, 'printerId')
+    const lanUrls = Array.isArray(req.body.lanUrls)
+      ? [...new Set(req.body.lanUrls.map((u) => String(u).trim().replace(/\/+$/, '')).filter(Boolean))]
+      : []
+    printerAgents.set(printerId, { lanUrls, lastSeen: Date.now() })
+    res.json({ ok: true })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+app.get('/api/printer-agents/:id', (req, res) => {
+  const agent = printerAgents.get(req.params.id)
+  if (!agent) {
+    res.status(404).json({ ok: false, error: 'Printer agent has not reported in yet' })
+    return
+  }
+  res.json({
+    ok: true,
+    agent: {
+      lanUrls: agent.lanUrls,
+      lastSeen: agent.lastSeen,
+      online: Date.now() - agent.lastSeen < AGENT_ONLINE_WINDOW_MS,
+    },
+  })
+})
+
 app.post('/api/customers', async (req, res) => {
   try {
     const id = await convex.mutation(refs.upsertCustomer, req.body)
