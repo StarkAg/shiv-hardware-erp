@@ -1,10 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 import path from 'node:path'
 
+// HTTPS on the dev server so phones/tablets (which auto-upgrade http -> https)
+// can open the LAN URL. The cert is self-signed: the device shows a one-time
+// "not private" warning — tap Advanced > Proceed to continue.
 export default defineConfig({
   base: './',
-  plugins: [react()],
+  plugins: [react(), basicSsl()],
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },

@@ -732,6 +732,57 @@ async function launchPuppeteerBrowser() {
   })
 }
 
+// Keep ONE Chromium alive and hand out a fresh page per job. Launching Chromium
+// costs ~1-3s; opening a page on a warm browser costs ~50ms. This is the main
+// reason printing felt slow — every job used to cold-start (and close) Chrome.
+let sharedBrowserPromise = null
+
+function browserIsAlive(browser) {
+  try {
+    return typeof browser.connected === 'boolean' ? browser.connected : browser.isConnected()
+  } catch {
+    return false
+  }
+}
+
+async function getSharedBrowser() {
+  if (sharedBrowserPromise) {
+    try {
+      const existing = await sharedBrowserPromise
+      if (browserIsAlive(existing)) return existing
+    } catch {
+      /* launch failed earlier — fall through and relaunch */
+    }
+    sharedBrowserPromise = null
+  }
+
+  sharedBrowserPromise = launchPuppeteerBrowser().then((browser) => {
+    // If Chrome dies/crashes, drop the cache so the next job relaunches it.
+    browser.on('disconnected', () => {
+      if (sharedBrowserPromise) sharedBrowserPromise = null
+    })
+    return browser
+  })
+
+  try {
+    return await sharedBrowserPromise
+  } catch (err) {
+    sharedBrowserPromise = null
+    throw err
+  }
+}
+
+// Warm the browser at boot so the first real print is fast too. Best-effort.
+async function warmUpBrowser() {
+  if (!CHROME_PATH) return
+  try {
+    await getSharedBrowser()
+    console.log('[browser] warmed up and ready')
+  } catch (err) {
+    console.warn(`[browser] warm-up skipped: ${err?.message ?? err}`)
+  }
+}
+
 function findSumatraPdfPath() {
   const candidates = [
     'C:\\Program Files\\SumatraPDF\\SumatraPDF.exe',
@@ -1161,10 +1212,10 @@ async function printCardImage(filePath, copies, title, printer = COLOR_PRINTER) 
 }
 
 async function renderUploadedImagePdf(file) {
-  let browser
+  let page
   try {
-    browser = await launchPuppeteerBrowser()
-    const page = await browser.newPage()
+    const browser = await getSharedBrowser()
+    page = await browser.newPage()
     const html = `<!doctype html>
 <html>
 <head>
@@ -1214,7 +1265,7 @@ async function renderUploadedImagePdf(file) {
       margin: { top: 0, right: 0, bottom: 0, left: 0 },
     })
   } finally {
-    await browser?.close().catch(() => {})
+    await page?.close().catch(() => {})
   }
 }
 
@@ -1560,7 +1611,7 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
     await prepareEpsonPlainA4ColorDefaults(printer, 'document-print:quotation')
   }
 
-  let browser
+  let page
   let tmp
   try {
     const html = documentKind === 'guarantee'
@@ -1568,8 +1619,8 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
       : documentKind === 'bill'
         ? buildBillHtml(bill)
         : await buildQuotationHtml(quote)
-    browser = await launchPuppeteerBrowser()
-    const page = await browser.newPage()
+    const browser = await getSharedBrowser()
+    page = await browser.newPage()
 
     // For bills: pin viewport to exactly 148×210mm at 96dpi so Puppeteer renders
     // at the same pixel dimensions as the in-app preview iframe (559×793px).
@@ -1621,7 +1672,7 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
       jobId: printResult.jobId,
     }
   } finally {
-    await browser?.close().catch(() => {})
+    await page?.close().catch(() => {})
     if (tmp) await unlink(tmp).catch(() => {})
   }
 }
@@ -2471,13 +2522,13 @@ app.post('/render-png', async (req, res) => {
   if (kind === 'guarantee' && !document) return res.status(400).json({ error: 'Missing guarantee document data' })
   if (kind !== 'guarantee' && !quote) return res.status(400).json({ error: 'Missing quotation data' })
 
-  let browser
+  let page
   try {
     const html = kind === 'guarantee'
       ? await buildGuaranteeHtml(document, layout)
       : await buildQuotationHtml(quote)
-    browser = await launchPuppeteerBrowser()
-    const page = await browser.newPage()
+    const browser = await getSharedBrowser()
+    page = await browser.newPage()
     const width = Math.round((210 / 25.4) * 96)
     const height = Math.round((297 / 25.4) * 96)
     await page.setViewport({ width, height, deviceScaleFactor: scale })
@@ -2492,7 +2543,7 @@ app.post('/render-png', async (req, res) => {
     console.error('[render-png error]', err)
     res.status(500).json({ error: String(err) })
   } finally {
-    await browser?.close().catch(() => {})
+    await page?.close().catch(() => {})
   }
 })
 
@@ -2660,6 +2711,7 @@ app.listen(PORT, '0.0.0.0', () => {
   }
   startWhatsAppWebAutoPrint()
   prepareEpsonPlainA4ColorDefaults(COLOR_PRINTER, 'startup')
+  warmUpBrowser()
   if (!process.env.ANTHROPIC_API_KEY) console.warn('⚠  ANTHROPIC_API_KEY not set')
   console.log()
 })

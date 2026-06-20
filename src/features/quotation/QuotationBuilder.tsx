@@ -13,7 +13,7 @@ import {
   type ProductCategory,
   type Quotation,
 } from '../../lib/types'
-import { areaSqft, buildBrandRows, enrichQuotation, formatINR, formatSize } from '../../lib/pricing'
+import { areaSqft, buildBrandRows, enrichQuotation, formatINR, formatSize, isFootSized } from '../../lib/pricing'
 import {
   type AluAddons,
   calcAllThicknesses,
@@ -78,9 +78,10 @@ export function QuotationBuilder() {
   }, [category])
 
   const alu = isAluminium(cat)
+  const foot = isFootSized(cat)
   const hasSize = h.inches > 0 || w.inches > 0
   const brands = (activeSet?.brands ?? []).filter((b) => b.category === cat)
-  const sqft = areaSqft(h, w)
+  const sqft = areaSqft(h, w, cat)
   const aluThicknesses = alu ? calcAllThicknesses(cat, h, w, addons) : []
 
   const rows = !alu ? buildBrandRows(brands, h, w, 1) : []
@@ -94,7 +95,7 @@ export function QuotationBuilder() {
       category: cat,
       height: h,
       width: w,
-      sqft: areaSqft(h, w),
+      sqft: areaSqft(h, w, cat),
       notes: '',
     }
     if (alu) {
@@ -265,8 +266,8 @@ export function QuotationBuilder() {
           <div className="rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100 md:p-4">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400 md:mb-3">Size</h2>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-10 md:items-end md:gap-3">
-              <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} className="min-w-0 md:col-span-5" />
-              <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} className="min-w-0 md:col-span-5" />
+              <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} feet={foot} className="min-w-0 md:col-span-5" />
+              <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} feet={foot} className="min-w-0 md:col-span-5" />
             </div>
 
             {/* Aluminium options */}
@@ -312,7 +313,7 @@ export function QuotationBuilder() {
             )}
 
             <div className="mt-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-600 dark:border-white/10 dark:bg-white/5 dark:text-stone-300 md:mt-3">
-              Size: <b>{formatSize(h, w) || '—'}</b> · <b>{sqft.toFixed(2)}</b> sqft
+              Size: <b>{formatSize(h, w, cat) || '—'}</b> · <b>{sqft.toFixed(2)}</b> sqft
             </div>
           </div>
         </div>
@@ -690,18 +691,21 @@ function DimInput({
   dim,
   onChange,
   onKeyDown,
+  feet = false,
   className = '',
 }: {
   label: string
   dim: Dimension
   onChange: (d: Dimension) => void
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
+  feet?: boolean
   className?: string
 }) {
   return (
     <div className={className}>
       <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</label>
-      <div className="grid grid-cols-[minmax(0,1fr)_4rem] gap-1.5 md:grid-cols-[minmax(0,1fr)_5rem] md:gap-2">
+      {/* Boards are sized in whole feet (no soot); doors/aluminium use inches + n/8. */}
+      <div className={feet ? 'grid grid-cols-1' : 'grid grid-cols-[minmax(0,1fr)_4rem] gap-1.5 md:grid-cols-[minmax(0,1fr)_5rem] md:gap-2'}>
         <label className="relative block">
           <input
             type="number"
@@ -713,26 +717,28 @@ function DimInput({
             value={dim.inches || ''}
             onFocus={(e) => e.currentTarget.select()}
             onKeyDown={onKeyDown}
-            onChange={(e) => onChange({ ...dim, inches: Number(e.target.value) })}
+            onChange={(e) => onChange({ inches: Number(e.target.value), soot: feet ? 0 : dim.soot })}
           />
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500 md:right-3">in</span>
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500 md:right-3">{feet ? 'ft' : 'in'}</span>
         </label>
-        <label className="relative block">
-          <input
-            type="number"
-            min={0}
-            max={7}
-            inputMode="numeric"
-            data-size-entry
-            className="h-10 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-2 pr-6 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-11 md:px-3 md:pr-7"
-            placeholder="0"
-            value={dim.soot || ''}
-            onFocus={(e) => e.currentTarget.select()}
-            onKeyDown={onKeyDown}
-            onChange={(e) => onChange({ ...dim, soot: Math.min(7, Math.max(0, Number(e.target.value))) })}
-          />
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">/8</span>
-        </label>
+        {!feet && (
+          <label className="relative block">
+            <input
+              type="number"
+              min={0}
+              max={7}
+              inputMode="numeric"
+              data-size-entry
+              className="h-10 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-2 pr-6 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-11 md:px-3 md:pr-7"
+              placeholder="0"
+              value={dim.soot || ''}
+              onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={onKeyDown}
+              onChange={(e) => onChange({ ...dim, soot: Math.min(7, Math.max(0, Number(e.target.value))) })}
+            />
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">/8</span>
+          </label>
+        )}
       </div>
     </div>
   )

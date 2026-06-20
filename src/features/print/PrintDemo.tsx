@@ -11,7 +11,7 @@ const customer = { id: 'c1', name: 'Rajesh Kumar', mobile: '9876543210', uid: 'J
 function doorQuote(): Quotation {
   const h = { inches: 78, soot: 0 }, w = { inches: 36, soot: 0 }
   const brands = SEED_BRANDS.filter((b) => b.category === 'readymade-door')
-  return { id: uid(), number: 'SH-2026-0001', date: '2026-06-02T10:00:00.000Z', customer, category: 'readymade-door', height: h, width: w, sqft: areaSqft(h, w), rows: buildBrandRows(brands, h, w, 1), notes: 'Rates for the above size only.' }
+  return { id: uid(), number: 'SH-2026-0001', date: '2026-06-02T10:00:00.000Z', customer, category: 'readymade-door', height: h, width: w, sqft: areaSqft(h, w, 'readymade-door'), rows: buildBrandRows(brands, h, w, 1), notes: 'Rates for the above size only.' }
 }
 
 function aluQuote(): Quotation {
