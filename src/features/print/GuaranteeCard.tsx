@@ -58,7 +58,7 @@ export function GuaranteeCard({
 
         <div className="my-3 flex items-center gap-6 rounded border border-slate-400 bg-slate-50 px-4 py-2">
           <span className="text-[14px] font-bold">{CATEGORY_LABELS[document.category]}</span>
-          <span className="text-[13px]">Size: <b>{formatSize(document.height, document.width) || '—'}</b></span>
+          <span className="text-[13px]">Size: <b>{formatSize(document.height, document.width, document.category) || '—'}</b></span>
           <span className="text-[13px]">Qty: <b>{document.qty}</b></span>
         </div>
 
@@ -144,7 +144,7 @@ function CompactGuaranteeCard({ document }: { document: GuaranteeDocument }) {
             <div><span className="font-bold">UID:</span> {document.customer.uid || 'N/A'}</div>
             <div><span className="font-bold">Mobile:</span> {document.customer.mobile || 'N/A'}</div>
             <div className="col-span-2"><span className="font-bold">Product:</span> {CATEGORY_LABELS[document.category]}</div>
-            <div className="col-span-2"><span className="font-bold">Size:</span> {formatSize(document.height, document.width) || '-'} | <span className="font-bold">Qty:</span> {document.qty}</div>
+            <div className="col-span-2"><span className="font-bold">Size:</span> {formatSize(document.height, document.width, document.category) || '-'} | <span className="font-bold">Qty:</span> {document.qty}</div>
             <div className="col-span-2"><span className="font-bold">Brand:</span> {primaryRow?.brandName ?? '-'}</div>
           </div>
 

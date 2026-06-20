@@ -12,7 +12,7 @@ import {
   type GuaranteeYears,
   type ProductCategory,
 } from '../../lib/types'
-import { formatSize } from '../../lib/pricing'
+import { formatSize, isFootSized } from '../../lib/pricing'
 import { PrintPreview } from '../print/PrintPreview'
 import { GuaranteeCard } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
@@ -156,7 +156,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       ? billedItems.map((item) => ({
           brandName: item.brandName,
           guaranteeYears: item.guaranteeYears,
-          sizeLabel: `${CATEGORY_LABELS[item.category]} - ${formatSize(item.height, item.width) || '-'} - Qty ${item.qty}`,
+          sizeLabel: `${CATEGORY_LABELS[item.category]} - ${formatSize(item.height, item.width, item.category) || '-'} - Qty ${item.qty}`,
         }))
       : [
           {
@@ -277,8 +277,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         >
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Size</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
-            <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} className="md:col-span-5" />
-            <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} className="md:col-span-5" />
+            <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} feet={isFootSized(category)} className="md:col-span-5" />
+            <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} feet={isFootSized(category)} className="md:col-span-5" />
             <div className="md:col-span-2">
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Qty</label>
               <input
@@ -314,7 +314,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                       {CATEGORY_LABELS[item.category]} - {item.brandName}
                     </div>
                     <div className="mt-0.5 text-xs font-medium text-stone-500 dark:text-stone-400">
-                      {formatSize(item.height, item.width) || '-'} - Qty {item.qty} - {item.guaranteeYears} Years
+                      {formatSize(item.height, item.width, item.category) || '-'} - Qty {item.qty} - {item.guaranteeYears} Years
                     </div>
                   </div>
                   <button
@@ -355,18 +355,21 @@ function DimInput({
   dim,
   onChange,
   onKeyDown,
+  feet = false,
   className = '',
 }: {
   label: string
   dim: Dimension
   onChange: (d: Dimension) => void
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
+  feet?: boolean
   className?: string
 }) {
   return (
     <div className={className}>
       <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</label>
-      <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
+      {/* Boards are sized in whole feet (no soot); doors/aluminium use inches + n/8. */}
+      <div className={feet ? 'grid grid-cols-1' : 'grid grid-cols-[minmax(0,1fr)_5rem] gap-2'}>
         <label className="relative block">
           <input
             type="number"
@@ -378,26 +381,28 @@ function DimInput({
             value={dim.inches || ''}
             onFocus={(e) => e.currentTarget.select()}
             onKeyDown={onKeyDown}
-            onChange={(e) => onChange({ ...dim, inches: Number(e.target.value) })}
+            onChange={(e) => onChange({ inches: Number(e.target.value), soot: feet ? 0 : dim.soot })}
           />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">in</span>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">{feet ? 'ft' : 'in'}</span>
         </label>
-        <label className="relative block">
-          <input
-            type="number"
-            min={0}
-            max={7}
-            inputMode="numeric"
-            data-size-entry
-            className="h-11 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-3 pr-7 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-            placeholder="0"
-            value={dim.soot || ''}
-            onFocus={(e) => e.currentTarget.select()}
-            onKeyDown={onKeyDown}
-            onChange={(e) => onChange({ ...dim, soot: Math.min(7, Math.max(0, Number(e.target.value))) })}
-          />
-          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">/8</span>
-        </label>
+        {!feet && (
+          <label className="relative block">
+            <input
+              type="number"
+              min={0}
+              max={7}
+              inputMode="numeric"
+              data-size-entry
+              className="h-11 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-3 pr-7 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+              placeholder="0"
+              value={dim.soot || ''}
+              onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={onKeyDown}
+              onChange={(e) => onChange({ ...dim, soot: Math.min(7, Math.max(0, Number(e.target.value))) })}
+            />
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">/8</span>
+          </label>
+        )}
       </div>
     </div>
   )

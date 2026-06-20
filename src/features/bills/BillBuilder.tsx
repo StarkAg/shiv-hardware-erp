@@ -18,6 +18,7 @@ import { useStore } from '../../lib/store'
 import type { Bill, BillItem, CatalogField, ProductCategory } from '../../lib/types'
 import { CATEGORY_META } from '../../lib/types'
 import { buildBillHtml } from '../../lib/billHtml'
+import { billSqft, isFootSized } from '../../lib/pricing'
 import { DropDown } from '../../components/ui'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -65,15 +66,18 @@ const QUICK_QTY: Partial<Record<ProductCategory, number[]>> = {
 }
 const HEIGHT_OPTIONS = [78, 81, 84, 90, 96, 72, 74, 76, 42, 48, 36]
 const WIDTH_OPTIONS  = [36, 38, 40, 42, 48, 30, 33, 44]
+// Boards/plywood are sized in whole feet (8'×4' etc.), not inches.
+const BOARD_HEIGHT_FT = [8, 7, 6, 5, 4]
+const BOARD_WIDTH_FT  = [4, 3, 5, 6, 7, 8]
 
-function calcCost(rateSqft: number, heightIn: number, widthIn: number, qty: number) {
+function calcCost(rateSqft: number, heightIn: number, widthIn: number, qty: number, category?: ProductCategory) {
   if (!rateSqft || !heightIn || !widthIn) return 0
-  return Math.round(rateSqft * (heightIn * widthIn / 144) * qty)
+  return Math.round(rateSqft * billSqft(category, heightIn, widthIn) * qty)
 }
 
 function buildDescription(category: ProductCategory | undefined, brandName: string, heightIn: number, widthIn: number, qty: number) {
   const label = category ? (PRODUCT_OPTIONS.find(p => p.category === category)?.label ?? CATEGORY_META[category]?.short ?? '') : ''
-  const size = heightIn && widthIn ? `${heightIn}×${widthIn}` : ''
+  const size = heightIn && widthIn ? (isFootSized(category) ? `${heightIn}'×${widthIn}'` : `${heightIn}×${widthIn}`) : ''
   return [label, brandName, size, qty > 1 ? `${qty}Pc` : ''].filter(Boolean).join(' ')
 }
 
@@ -174,7 +178,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
     if (!item.category) return
     if (HARDWARE_CATS.includes(item.category)) return  // hardware: handlers own the amount
     const desc = buildDescription(item.category, item.brandName ?? '', item.heightIn ?? 0, item.widthIn ?? 0, item.qty)
-    const cost = calcCost(item.rateSqft ?? 0, item.heightIn ?? 0, item.widthIn ?? 0, item.qty)
+    const cost = calcCost(item.rateSqft ?? 0, item.heightIn ?? 0, item.widthIn ?? 0, item.qty, item.category)
     if (desc !== item.description || cost !== item.amount) {
       onUpdate(item.id, { description: desc, amount: cost })
     }
@@ -209,10 +213,11 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
     const brands = activeSet?.brands.filter(b => b.category === opt.category) ?? []
     const firstBrand = brands[0]
     const isBoard = BOARD_CATS.includes(opt.category)
-    const h = isBoard ? 84 : 78
-    const w = isBoard ? 48 : 36
+    // Boards default to a standard 8'×4' sheet (feet); doors to 78"×36" (inches).
+    const h = isBoard ? 8 : 78
+    const w = isBoard ? 4 : 36
     const rate = firstBrand?.rate ?? 0
-    const cost = calcCost(rate, h, w, item.qty)
+    const cost = calcCost(rate, h, w, item.qty, opt.category)
     const desc = buildDescription(opt.category, firstBrand?.name ?? '', h, w, item.qty)
     onUpdate(item.id, {
       category: opt.category,
@@ -230,7 +235,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
   function handleBrandChange(brandName: string) {
     const brand = brandsForCat.find(b => b.name === brandName)
     const rate = brand?.rate ?? item.rateSqft ?? 0
-    const cost = calcCost(rate, item.heightIn ?? 0, item.widthIn ?? 0, item.qty)
+    const cost = calcCost(rate, item.heightIn ?? 0, item.widthIn ?? 0, item.qty, item.category)
     const desc = buildDescription(item.category, brandName, item.heightIn ?? 0, item.widthIn ?? 0, item.qty)
     onUpdate(item.id, { brandName, rateSqft: rate, amount: cost, description: desc })
   }
@@ -238,19 +243,19 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
   function handleDim(field: 'heightIn' | 'widthIn', val: number) {
     const h = field === 'heightIn' ? val : (item.heightIn ?? 0)
     const w = field === 'widthIn' ? val : (item.widthIn ?? 0)
-    const cost = calcCost(item.rateSqft ?? 0, h, w, item.qty)
+    const cost = calcCost(item.rateSqft ?? 0, h, w, item.qty, item.category)
     const desc = buildDescription(item.category, item.brandName ?? '', h, w, item.qty)
     onUpdate(item.id, { [field]: val, amount: cost, description: desc })
   }
 
   function handleQty(qty: number) {
-    const cost = calcCost(item.rateSqft ?? 0, item.heightIn ?? 0, item.widthIn ?? 0, qty)
+    const cost = calcCost(item.rateSqft ?? 0, item.heightIn ?? 0, item.widthIn ?? 0, qty, item.category)
     const desc = buildDescription(item.category, item.brandName ?? '', item.heightIn ?? 0, item.widthIn ?? 0, qty)
     onUpdate(item.id, { qty, amount: cost, description: desc })
   }
 
   function handleRate(rate: number) {
-    const cost = calcCost(rate, item.heightIn ?? 0, item.widthIn ?? 0, item.qty)
+    const cost = calcCost(rate, item.heightIn ?? 0, item.widthIn ?? 0, item.qty, item.category)
     onUpdate(item.id, { rateSqft: rate, amount: cost })
   }
 
@@ -1026,21 +1031,21 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, disabled }: SmartItemRowP
             </div>
           )}
 
-          {/* Board/door: size · qty · cost — single line */}
+          {/* Board/door: size · qty · cost — single line. Boards pick feet, others inches. */}
           {isCatalog && !isHardware && !isCustomEntry && (
             <div className="flex items-center gap-1.5">
               <DropDown
                 className="w-16 shrink-0"
                 value={String(item.heightIn ?? '')}
                 onChange={(v) => handleDim('heightIn', Number(v))}
-                options={HEIGHT_OPTIONS.map(h => ({ value: String(h), label: `${h}"` }))}
+                options={(isFootSized(item.category) ? BOARD_HEIGHT_FT : HEIGHT_OPTIONS).map(h => ({ value: String(h), label: isFootSized(item.category) ? `${h} ft` : `${h}"` }))}
               />
               <span className="text-xs text-stone-400">×</span>
               <DropDown
                 className="w-16 shrink-0"
                 value={String(item.widthIn ?? '')}
                 onChange={(v) => handleDim('widthIn', Number(v))}
-                options={WIDTH_OPTIONS.map(w => ({ value: String(w), label: `${w}"` }))}
+                options={(isFootSized(item.category) ? BOARD_WIDTH_FT : WIDTH_OPTIONS).map(w => ({ value: String(w), label: isFootSized(item.category) ? `${w} ft` : `${w}"` }))}
               />
               <input
                 type="number"

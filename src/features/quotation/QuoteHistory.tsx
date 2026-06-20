@@ -50,7 +50,7 @@ export function QuoteHistory() {
                     <div className="text-xs text-slate-400 dark:text-stone-500">{x.customer.mobile}</div>
                   </td>
                   <td className="px-4 py-2">{CATEGORY_LABELS[x.category]}</td>
-                  <td className="px-4 py-2">{formatSize(x.height, x.width) || '—'}</td>
+                  <td className="px-4 py-2">{formatSize(x.height, x.width, x.category) || '—'}</td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-1">
                       <Link to={`/quote/${x.id}`} title="Edit">
