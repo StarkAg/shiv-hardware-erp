@@ -28,6 +28,9 @@ const BW_PRINTER = process.env.BW_PRINTER || process.env.PRINT_PRINTER || 'NPI33
 const BW_FALLBACK_PRINTER = process.env.BW_FALLBACK_PRINTER || COLOR_PRINTER
 const BW_FALLBACK_ON_ERROR = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_ON_ERROR ?? 'true').trim().toLowerCase())
 const PRINT_PRINTER = process.env.PRINT_PRINTER || BW_PRINTER
+// When the chosen printer is offline/unreachable, auto-route to any printer that
+// is actually online. Set PRINTER_AUTO_SELECT=false to always use the fixed printer.
+const PRINTER_AUTO_SELECT = !['0', 'false', 'no', 'off'].includes(String(process.env.PRINTER_AUTO_SELECT ?? 'true').trim().toLowerCase())
 const PRINT_SERVER_PUBLIC_URL = (process.env.PRINT_SERVER_PUBLIC_URL || '').replace(/\/+$/, '')
 const CLOUD_API_URL = (process.env.CLOUD_API_URL || '').replace(/\/+$/, '')
 const CLOUD_API_KEY = process.env.CLOUD_API_KEY || ''
@@ -803,6 +806,36 @@ function selectDocumentPrinter({ kind, layout = 'a4' } = {}) {
 function selectUploadPrinter(file) {
   if (file?.mediaType?.startsWith('image/')) return COLOR_PRINTER
   return BW_PRINTER
+}
+
+// A printer is "reachable" when it isn't stopped and isn't reporting that it's
+// offline / can't connect to the device. (getPrintQueue is hoisted below.)
+function printerIsReachable(p) {
+  if (!p) return false
+  if (p.state === 'stopped') return false
+  const reasons = String(p.alert || '').toLowerCase()
+  return !/offline|connecting-to-device|shutdown|unplugged|not-?responding/.test(reasons)
+}
+
+// If `preferred` is offline, fall back to any other online printer. Skips
+// thermal/test devices and prefers the configured fallback printers when online.
+async function pickReachablePrinter(preferred) {
+  if (!PRINTER_AUTO_SELECT) return { printer: preferred, switched: false }
+  try {
+    const { printers } = await getPrintQueue()
+    const byName = new Map(printers.map((p) => [p.name, p]))
+    if (printerIsReachable(byName.get(preferred))) return { printer: preferred, switched: false }
+
+    const skip = /thermal|test|fax|virtual|pdf/i
+    const online = printers.filter((p) => p.name !== preferred && !skip.test(p.name) && printerIsReachable(p))
+    if (!online.length) return { printer: preferred, switched: false }
+
+    const ranked = [BW_FALLBACK_PRINTER, BW_PRINTER, COLOR_PRINTER, PRINT_PRINTER]
+    const chosen = ranked.map((n) => online.find((p) => p.name === n)).find(Boolean) || online[0]
+    return { printer: chosen.name, switched: true, from: preferred }
+  } catch {
+    return { printer: preferred, switched: false }
+  }
 }
 
 function parseWhatsAppPrintMode(text) {
@@ -1606,7 +1639,16 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
     : documentKind === 'quotation'
       ? { printer: primaryPrinter, printSettings: QUOTATION_PRINT_SETTINGS, fallback: null }
       : await routeBwPrinterOnError(primaryPrinter, documentKind === 'bill' ? billPrintSettings : [], `document-print:${documentKind}`)
-  const { printer } = route
+  let { printer } = route
+  // Auto-route away from an offline printer to any online one (cards need the
+  // EPSON ID-card tray, so they are never re-routed).
+  if (!isCard) {
+    const picked = await pickReachablePrinter(printer)
+    if (picked.switched) {
+      console.log(`[auto-printer] "${picked.from}" offline → routing to "${picked.printer}"`)
+      printer = picked.printer
+    }
+  }
   if (documentKind === 'quotation' && printer === COLOR_PRINTER) {
     await prepareEpsonPlainA4ColorDefaults(printer, 'document-print:quotation')
   }
