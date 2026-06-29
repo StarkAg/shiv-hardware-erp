@@ -247,11 +247,11 @@ export function QuotationBuilder() {
               variant="outline"
               onClick={shareWhatsApp}
               className="flex flex-1 items-center justify-center gap-1.5 md:flex-none"
-              disabled={!hasSize || sharing}
+              disabled={(!hasSize && !fixed) || sharing}
             >
               <Share2 size={16} /> {sharing ? 'Sharing' : 'WhatsApp'}
             </Button>
-            <Button onClick={handleDirectPrint} disabled={!hasSize || printState === 'printing'} className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
+            <Button onClick={handleDirectPrint} disabled={(!hasSize && !fixed) || printState === 'printing'} className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
               {printState === 'printing' ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
               {printState === 'printing' ? 'Printing…' : 'Print'}
             </Button>
@@ -260,12 +260,14 @@ export function QuotationBuilder() {
       </div>
 
       <div className="flex flex-col gap-2 p-2 md:gap-3 md:p-4">
-        {/* Optional customer details */}
+        {/* Optional customer details — hidden for fixed rate cards (no inputs) */}
+        {!fixed && (
         <div className="shrink-0">
           <Toggle checked={withCustomer} onChange={setWithCustomer} label="Add customer details (optional)" />
         </div>
+        )}
 
-        {withCustomer && (
+        {!fixed && withCustomer && (
           <div className="shrink-0 rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Customer</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
