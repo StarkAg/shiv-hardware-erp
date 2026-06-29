@@ -4,9 +4,23 @@ import { buildBrandRows, areaSqft } from '../../lib/pricing'
 import { SEED_BRANDS } from '../../lib/data/brands'
 import { QuotationPrint } from './QuotationPrint'
 import { GuaranteeCard } from './GuaranteeCard'
+import { calcAllUpvcBrands } from '../../lib/upvc'
+import { defaultAddons } from '../../lib/aluminium'
+import { FIXED_CARDS } from '../../lib/data/fixedCards'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const customer = { id: 'c1', name: 'Rajesh Kumar', mobile: '9876543210', uid: 'JH-1029', address: 'Subhash Chowk, Ramgarh Cantt' }
+
+function ffPlyQuote(): Quotation {
+  return { id: uid(), number: 'SH-2026-0003', date: '2026-06-02T10:00:00.000Z', customer, category: 'film-face-ply', height: { inches: 0, soot: 0 }, width: { inches: 0, soot: 0 }, sqft: 0, fixedRows: FIXED_CARDS['film-face-ply'] }
+}
+function wpcQuote(): Quotation {
+  return { id: uid(), number: 'SH-2026-0004', date: '2026-06-02T10:00:00.000Z', customer, category: 'wpc-door-frame', height: { inches: 0, soot: 0 }, width: { inches: 0, soot: 0 }, sqft: 0, fixedRows: FIXED_CARDS['wpc-door-frame'] }
+}
+function upvcQuote(): Quotation {
+  const h = { inches: 48, soot: 4 }, w = { inches: 48, soot: 4 }
+  return { id: uid(), number: 'SH-2026-0005', date: '2026-06-02T10:00:00.000Z', customer, category: 'upvc-2-track', height: h, width: w, sqft: 16.67, alu: { addons: [], glassType: 'clear', thicknesses: calcAllUpvcBrands('upvc-2-track', h, w, defaultAddons()) } }
+}
 
 function doorQuote(): Quotation {
   const h = { inches: 78, soot: 0 }, w = { inches: 36, soot: 0 }
@@ -40,6 +54,9 @@ export function PrintDemo() {
       <div data-doc="door"><QuotationPrint quote={door} /></div>
       <div data-doc="guarantee"><GuaranteeCard document={guarantee} /></div>
       <div data-doc="aluminium"><QuotationPrint quote={alu} /></div>
+      <div data-doc="ffply"><QuotationPrint quote={ffPlyQuote()} /></div>
+      <div data-doc="wpc"><QuotationPrint quote={wpcQuote()} /></div>
+      <div data-doc="upvc"><QuotationPrint quote={upvcQuote()} /></div>
     </div>
   )
 }

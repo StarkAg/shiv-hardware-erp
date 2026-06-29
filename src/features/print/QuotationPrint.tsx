@@ -1,6 +1,10 @@
 import type { BrandQuoteRow, ProductCategory, Quotation } from '../../lib/types'
 import { CATEGORY_LABELS } from '../../lib/types'
 import { isAluminium } from '../../lib/aluminium'
+import { isUpvc } from '../../lib/upvc'
+import { isFixedCard } from '../../lib/data/fixedCards'
+import { UpvcPrint } from './UpvcPrint'
+import { FixedCardPrint } from './FixedCardPrint'
 import { A4Page } from './A4Page'
 import { AluminiumPrint } from './AluminiumPrint'
 import { assetPath } from '../../lib/assets'
@@ -99,6 +103,8 @@ function buildPrintItems(category: ProductCategory, rows: BrandQuoteRow[]): Prin
 
 export function QuotationPrint({ quote }: { quote: Quotation }) {
   if (isAluminium(quote.category)) return <AluminiumPrint quote={quote} />
+  if (isUpvc(quote.category)) return <UpvcPrint quote={quote} />
+  if (isFixedCard(quote.category)) return <FixedCardPrint quote={quote} />
   const enrichedQuote = enrichQuotation(quote)
   const twoCol = hasTwoGtyCols(quote.category)
   const tintRight = twoCol ? '2mm' : '32mm'

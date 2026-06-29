@@ -96,12 +96,7 @@ export const SEED_BRANDS: Brand[] = [
   { id: id(), category: 'block-board-19', name: 'Grace Pro', rate: 68, guaranteeYears: 7, coverage: 'warranty', thicknessMm: 19 },
   { id: id(), category: 'block-board-19', name: 'Assam Gold', rate: 49, guaranteeYears: 0, thicknessMm: 19 },
 
-  // ---- Film Face Ply (Latest/12mm FF Ply Rate.xlsm) — sold by 8'x4' sheet ----
-  { id: id(), category: 'film-face-ply', name: 'FF Red 24 Kg', rate: 41.25, guaranteeYears: 0, thicknessMm: 12 },
-  { id: id(), category: 'film-face-ply', name: 'FF Red 30 Kg', rate: 52, guaranteeYears: 0, thicknessMm: 12 },
-  { id: id(), category: 'film-face-ply', name: 'FF Red 32 Kg', rate: 67.5, guaranteeYears: 0, thicknessMm: 12 },
-  { id: id(), category: 'film-face-ply', name: 'FF Signature Red 32 Kg', rate: 70, guaranteeYears: 0, accentColor: GREEN_TINT, thicknessMm: 12 },
-
+  // Film Face Ply is a FIXED rate card — see lib/data/fixedCards.ts
   // Aluminium (door / 2-track / 3-track) is calculated in lib/aluminium.ts
   // UPVC (windows / door) is calculated in lib/upvc.ts
 ]

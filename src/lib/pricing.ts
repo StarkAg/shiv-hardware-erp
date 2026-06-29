@@ -13,7 +13,7 @@ import { SEED_BRANDS } from './data/brands'
 // soot. Their area is simply heightFt * widthFt — no /144. Everything else
 // (doors, aluminium) is sized in inches + soot. The numeric value lives in
 // Dimension.inches either way; the category decides how it's read.
-export const FOOT_SIZED_CATEGORIES: ProductCategory[] = ['plywood-6', 'block-board-12', 'block-board-19', 'film-face-ply']
+export const FOOT_SIZED_CATEGORIES: ProductCategory[] = ['plywood-6', 'block-board-12', 'block-board-19']
 
 export function isFootSized(category?: ProductCategory): boolean {
   return !!category && FOOT_SIZED_CATEGORIES.includes(category)
