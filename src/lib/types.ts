@@ -9,9 +9,15 @@ export type ProductCategory =
   | 'plywood-6'
   | 'block-board-12'
   | 'block-board-19'
+  | 'film-face-ply'
   | 'aluminium-door'
   | 'window-2-track'
   | 'window-3-track'
+  | 'upvc-2-track'
+  | 'upvc-2.5-track'
+  | 'upvc-3-track'
+  | 'upvc-door'
+  | 'wpc-door-frame'
   // Hardware (bill-only, no sqft rate)
   | 'hinge'
   | 'screw'
@@ -108,6 +114,8 @@ export interface Quotation {
   category: ProductCategory
   height: Dimension
   width: Dimension
+  /** number of pieces — cost = rate × area × qty (matches the Excel Quantity field) */
+  qty?: number
   sqft: number
   /** brand categories: one row per brand with its cost for this size */
   rows?: BrandQuoteRow[]
@@ -147,9 +155,15 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'plywood-6': 'Water Proof Plywood 6mm',
   'block-board-12': 'Water Proof Block Board 12mm',
   'block-board-19': 'Water Proof Block Board 19mm',
+  'film-face-ply': 'Film Face Ply',
   'aluminium-door': 'Aluminium Door',
   'window-2-track': '2 Track Sliding Window',
   'window-3-track': '3 Track Sliding Window',
+  'upvc-2-track': '2 Track UPVC Sliding Window',
+  'upvc-2.5-track': '2.5 Track UPVC Sliding Window',
+  'upvc-3-track': '3 Track UPVC Sliding Window',
+  'upvc-door': 'UPVC Door',
+  'wpc-door-frame': 'WPC Door Frame (Chaukhat)',
   'hinge':    'Hinges',
   'screw':    'Screw',
   'aldrop':   'Aldrop',
@@ -163,10 +177,10 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
 /** Icon key (resolved to a lucide-react component in the UI) per category. */
 export type CategoryIcon = 'door' | 'board' | 'window'
 
-export type ProductGroup = 'Doors' | 'Plywoods' | 'Aluminium'
+export type ProductGroup = 'Doors' | 'Plywoods' | 'Aluminium' | 'UPVC' | 'WPC'
 
 /** Sidebar group display order. */
-export const GROUP_ORDER: ProductGroup[] = ['Doors', 'Plywoods', 'Aluminium']
+export const GROUP_ORDER: ProductGroup[] = ['Doors', 'Plywoods', 'Aluminium', 'UPVC', 'WPC']
 
 /** Short label + icon + image for each category, used on the sidebar submenu. */
 export const CATEGORY_META: Record<
@@ -178,9 +192,15 @@ export const CATEGORY_META: Record<
   'plywood-6': { short: 'Plywood 6mm', icon: 'board', group: 'Plywoods' },
   'block-board-12': { short: 'Block Board 12mm', icon: 'board', group: 'Plywoods' },
   'block-board-19': { short: 'Block Board 19mm', icon: 'board', group: 'Plywoods' },
+  'film-face-ply': { short: 'Film Face Ply', icon: 'board', group: 'Plywoods' },
   'aluminium-door': { short: 'Aluminium Door', icon: 'door', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
   'window-2-track': { short: '2 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
   'window-3-track': { short: '3 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
+  'upvc-2-track': { short: '2 Track UPVC', icon: 'window', group: 'UPVC' },
+  'upvc-2.5-track': { short: '2.5 Track UPVC', icon: 'window', group: 'UPVC' },
+  'upvc-3-track': { short: '3 Track UPVC', icon: 'window', group: 'UPVC' },
+  'upvc-door': { short: 'UPVC Door', icon: 'door', group: 'UPVC' },
+  'wpc-door-frame': { short: 'WPC Door Frame', icon: 'door', group: 'WPC' },
   // Hardware — bill-only, not shown in quotation sidebar
   'hinge':    { short: 'Hinges',   icon: 'board', group: 'Doors' },
   'screw':    { short: 'Screw',    icon: 'board', group: 'Doors' },
@@ -274,7 +294,13 @@ export const CATEGORY_ORDER: ProductCategory[] = [
   'plywood-6',
   'block-board-12',
   'block-board-19',
+  'film-face-ply',
   'aluminium-door',
   'window-2-track',
   'window-3-track',
+  'upvc-2-track',
+  'upvc-2.5-track',
+  'upvc-3-track',
+  'upvc-door',
+  'wpc-door-frame',
 ]
