@@ -14,9 +14,15 @@ const legacyCategoryLabel = (category: Quotation['category']) => ({
   'plywood-6': 'Water Proof Plywood',
   'block-board-12': 'Water Proof Block Board',
   'block-board-19': 'Water Proof Block Board',
+  'film-face-ply': 'Film Face Ply',
   'aluminium-door': CATEGORY_LABELS['aluminium-door'],
   'window-2-track': CATEGORY_LABELS['window-2-track'],
   'window-3-track': CATEGORY_LABELS['window-3-track'],
+  'upvc-2-track': CATEGORY_LABELS['upvc-2-track'],
+  'upvc-2.5-track': CATEGORY_LABELS['upvc-2.5-track'],
+  'upvc-3-track': CATEGORY_LABELS['upvc-3-track'],
+  'upvc-door': CATEGORY_LABELS['upvc-door'],
+  'wpc-door-frame': CATEGORY_LABELS['wpc-door-frame'],
   'hinge': '', 'screw': '', 'aldrop': '', 'handle': '', 'tb': '', 'fevicol': '', 'mica': '', 'tape': '',
 }[category])
 
@@ -30,9 +36,11 @@ const legacyThickness = (category: Quotation['category']) => ({
   'plywood-6': '6mm',
   'block-board-12': '12mm',
   'block-board-19': '19mm',
+  'film-face-ply': '12mm',
   'aluminium-door': '',
   'window-2-track': '',
   'window-3-track': '',
+  'upvc-2-track': '', 'upvc-2.5-track': '', 'upvc-3-track': '', 'upvc-door': '', 'wpc-door-frame': '',
   'hinge': '', 'screw': '', 'aldrop': '', 'handle': '', 'tb': '', 'fevicol': '', 'mica': '', 'tape': '',
 }[category])
 
@@ -107,14 +115,16 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
         />
         <div className="absolute left-[29mm] top-[81.3mm] text-[15pt] text-[#00b050]">{legacyCategoryLabel(quote.category)}</div>
         <div className="absolute left-[29mm] top-[94.6mm] text-[15pt] leading-[1.1]">Thickness</div>
-        <div className="absolute left-[108mm] top-[94.6mm] text-[15pt] leading-[1.1]">Height</div>
-        <div className="absolute left-[142mm] top-[94.6mm] text-[15pt] leading-[1.1]">Width</div>
+        <div className="absolute left-[96mm] top-[94.6mm] text-[15pt] leading-[1.1]">Height</div>
+        <div className="absolute left-[120mm] top-[94.6mm] text-[15pt] leading-[1.1]">Width</div>
+        <div className="absolute left-[148mm] w-[30mm] text-center top-[94.6mm] text-[15pt] leading-[1.1]">Quantity</div>
         {/* Yellow background row for dimensions — matches brand tint right boundary */}
         <div className="absolute left-[29mm]" style={{ top: '100mm', height: '7mm', backgroundColor: '#FFFF00', right: twoCol ? '2mm' : '34mm' }} />
         <div className="absolute left-[29mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyThickness(quote.category)}</div>
-        <div className="absolute left-[102mm] top-[101.3mm] w-[21mm] text-right text-[15pt] leading-[1.1]">{legacyDimension(quote.height)}</div>
-        <div className="absolute left-[130mm] top-[101.3mm] w-[5mm] text-center text-[15pt] leading-[1.1]">X</div>
-        <div className="absolute left-[142mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyDimension(quote.width)}</div>
+        <div className="absolute left-[88mm] top-[101.3mm] w-[21mm] text-right text-[15pt] leading-[1.1]">{legacyDimension(quote.height)}</div>
+        <div className="absolute left-[114mm] top-[101.3mm] w-[5mm] text-center text-[15pt] leading-[1.1]">X</div>
+        <div className="absolute left-[122mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyDimension(quote.width)}</div>
+        <div className="absolute left-[148mm] top-[101.3mm] w-[30mm] text-center text-[15pt] leading-[1.1]">{quote.qty ?? 1}</div>
         <div className="absolute left-[29mm] top-[107mm] border-t-[1.5px] border-black" style={{ right: twoCol ? '2mm' : '34mm' }} />
         <div className="absolute left-[29mm] top-[113.5mm] text-[15pt] leading-[1.1]">Rate</div>
         <div className="absolute left-[56.4mm] top-[113.5mm] text-[15pt] leading-[1.1]">Brand</div>

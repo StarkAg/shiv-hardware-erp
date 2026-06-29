@@ -15,10 +15,10 @@ const PINK_TINT = '#FFCCFF'
 
 export const SEED_BRANDS: Brand[] = [
   // ---- Readymade Door Water Proof (Formats/Plywood and Door color.xlsm > ReadyMade) ----
-  { id: id(), category: 'readymade-door', name: 'Arya Membrane', rate: 160, guaranteeYears: 0, thicknessMm: 30 },
-  { id: id(), category: 'readymade-door', name: 'Arya 3D Lamination', rate: 160, guaranteeYears: 0, accentColor: PINK_TINT, thicknessMm: 30 },
+  { id: id(), category: 'readymade-door', name: 'Arya Membrane', rate: 170, guaranteeYears: 0, thicknessMm: 30 },
+  { id: id(), category: 'readymade-door', name: 'Arya 3D Lamination', rate: 170, guaranteeYears: 0, accentColor: PINK_TINT, thicknessMm: 30 },
   { id: id(), category: 'readymade-door', name: 'Arya Sunmica', rate: 248, guaranteeYears: 0, accentColor: LIGHT_GREEN_TINT, thicknessMm: 30 },
-  { id: id(), category: 'readymade-door', name: 'DDoor 3D Lamination', rate: 210, guaranteeYears: 7, accentColor: PINK_TINT, thicknessMm: 30 },
+  { id: id(), category: 'readymade-door', name: 'DDoor 3D Lamination', rate: 220, guaranteeYears: 7, accentColor: PINK_TINT, thicknessMm: 30 },
   { id: id(), category: 'readymade-door', name: 'DDoor Sunmica', rate: 288, guaranteeYears: 10, accentColor: LIGHT_GREEN_TINT, thicknessMm: 30 },
   { id: id(), category: 'readymade-door', name: 'DDoor Sunmica PM', rate: 329, guaranteeYears: 10, accentColor: LIGHT_GREEN_TINT, thicknessMm: 30 },
   { id: id(), category: 'readymade-door', name: 'DDoor Melamine', rate: 245, guaranteeYears: 10, thicknessMm: 30 },
@@ -96,7 +96,14 @@ export const SEED_BRANDS: Brand[] = [
   { id: id(), category: 'block-board-19', name: 'Grace Pro', rate: 68, guaranteeYears: 7, coverage: 'warranty', thicknessMm: 19 },
   { id: id(), category: 'block-board-19', name: 'Assam Gold', rate: 49, guaranteeYears: 0, thicknessMm: 19 },
 
+  // ---- Film Face Ply (Latest/12mm FF Ply Rate.xlsm) — sold by 8'x4' sheet ----
+  { id: id(), category: 'film-face-ply', name: 'FF Red 24 Kg', rate: 41.25, guaranteeYears: 0, thicknessMm: 12 },
+  { id: id(), category: 'film-face-ply', name: 'FF Red 30 Kg', rate: 52, guaranteeYears: 0, thicknessMm: 12 },
+  { id: id(), category: 'film-face-ply', name: 'FF Red 32 Kg', rate: 67.5, guaranteeYears: 0, thicknessMm: 12 },
+  { id: id(), category: 'film-face-ply', name: 'FF Signature Red 32 Kg', rate: 70, guaranteeYears: 0, accentColor: GREEN_TINT, thicknessMm: 12 },
+
   // Aluminium (door / 2-track / 3-track) is calculated in lib/aluminium.ts
+  // UPVC (windows / door) is calculated in lib/upvc.ts
 ]
 
 /** Default price sets - C1 holds the seed brands above. */

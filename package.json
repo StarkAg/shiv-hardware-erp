@@ -1,7 +1,7 @@
 {
   "name": "shiv-panel",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.7",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Shiv Hardware Store — quotation, rate & guarantee-card panel with pixel-accurate A4 printing",
@@ -15,6 +15,7 @@
     "print:server": "node print-server/server.mjs",
     "shop": "concurrently -n panel,print -c cyan,yellow \"vite --host 0.0.0.0\" \"node print-server/server.mjs\"",
     "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "release:win": "npm run build && electron-builder --win nsis --x64 --publish always",
     "dist:win:dir": "npm run build && electron-builder --win dir --x64",
     "dist:win:portable": "npm run build && electron-builder --win portable --x64",
     "preview": "vite preview",
@@ -25,6 +26,7 @@
   },
   "dependencies": {
     "convex": "^1.40.0",
+    "electron-updater": "^6.3.9",
     "lucide-react": "^1.17.0",
     "puppeteer-core": "^25.1.0",
     "react": "^18.3.1",
@@ -45,9 +47,11 @@
     "electron": "^41.7.1",
     "electron-builder": "^26.8.1",
     "postcss": "^8.4.47",
+    "rcedit": "^5.0.2",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "xlsx": "^0.18.5"
   },
   "build": {
     "appId": "in.shivhardware.panel",
@@ -64,6 +68,14 @@
       "main": "electron/main.cjs"
     },
     "asar": true,
+    "afterPack": "./electron/after-pack.cjs",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "StarkAg",
+        "repo": "shiv-panel-releases"
+      }
+    ],
     "win": {
       "icon": "build/icon.ico",
       "signAndEditExecutable": false,

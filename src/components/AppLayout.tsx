@@ -22,6 +22,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
+import { UpdateBanner } from './UpdateBanner'
+import { CURRENT_VERSION } from '../lib/appUpdate'
 
 const CATEGORY_ICONS: Record<CategoryIcon, LucideIcon> = {
   door: DoorClosed,
@@ -196,21 +198,27 @@ export function AppLayout() {
           {dark ? <Sun size={16} /> : <Moon size={16} />}
           {dark ? 'Light mode' : 'Dark mode'}
         </button>
-        <a
-          href="https://www.linkedin.com/in/harshxagarwal"
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-2 px-3 text-xs text-stone-500 transition hover:text-stone-950 dark:text-stone-400 dark:hover:text-white"
-        >
-          <Wrench size={13} />
-          By Harsh
-        </a>
+        <div className="flex items-center justify-between px-3">
+          <a
+            href="https://www.linkedin.com/in/harshxagarwal"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 text-xs text-stone-500 transition hover:text-stone-950 dark:text-stone-400 dark:hover:text-white"
+          >
+            <Wrench size={13} />
+            By Harsh
+          </a>
+          <span className="rounded-full bg-stone-200/70 px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-white/10 dark:text-stone-400">
+            v{CURRENT_VERSION}
+          </span>
+        </div>
       </div>
     </>
   )
 
   return (
     <div className="min-h-screen md:flex">
+      <UpdateBanner />
       <div className="no-print fixed inset-x-0 top-0 z-50 flex items-center border-b border-stone-200/80 bg-stone-50/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-stone-950/95 md:hidden" style={{ paddingTop: 'calc(0.5rem + env(safe-area-inset-top))', willChange: 'transform', transform: 'translateZ(0)' }}>
         <div className="flex items-center gap-2">
           <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 rounded-lg bg-white object-contain p-1" />

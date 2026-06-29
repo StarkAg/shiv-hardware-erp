@@ -25,6 +25,7 @@ import { Button, Input, Toggle } from '../../components/ui'
 import { QuotationPrint } from '../print/QuotationPrint'
 import { printOnServer, renderPngOnServer } from '../../lib/printServer'
 import { createCloudPrintJob } from '../../lib/cloudApi'
+import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -56,12 +57,14 @@ export function QuotationBuilder() {
   const [withCustomer, setWithCustomer] = useState(!!existing?.customer?.name)
   const [printState, setPrintState] = useState<null | 'printing' | 'done' | { error: string }>(null)
   const [sharing, setSharing] = useState(false)
+  const { printNode, mount: localPrintMount } = useLocalPrint()
 
   const [cat, setCat] = useState<ProductCategory>(
     isCategory(category) ? category : existing?.category ?? 'readymade-door',
   )
   const [h, setH] = useState<Dimension>(existing?.height ?? blankDim())
   const [w, setW] = useState<Dimension>(existing?.width ?? blankDim())
+  const [qty, setQty] = useState<number>(existing?.qty ?? 1)
   const [addons, setAddons] = useState<AluAddons>(defaultAddons())
   // selected price set
   const [setId, setSetId] = useState(sets[0]?.id)
@@ -84,7 +87,7 @@ export function QuotationBuilder() {
   const sqft = areaSqft(h, w, cat)
   const aluThicknesses = alu ? calcAllThicknesses(cat, h, w, addons) : []
 
-  const rows = !alu ? buildBrandRows(brands, h, w, 1) : []
+  const rows = !alu ? buildBrandRows(brands, h, w, Math.max(1, qty)) : []
 
   function buildQuote(): Quotation {
     const base = {
@@ -95,6 +98,7 @@ export function QuotationBuilder() {
       category: cat,
       height: h,
       width: w,
+      qty: Math.max(1, qty),
       sqft: areaSqft(h, w, cat),
       notes: '',
     }
@@ -172,12 +176,26 @@ export function QuotationBuilder() {
     setPrintState('printing')
     save({ silent: true })
     const printDoc = enrichQuotation(buildQuote())
+
+    // Offline-first: in the desktop app, print straight to the local printer —
+    // instant, and works with no internet (no print-server / no cloud queue).
+    if (canLocalPrint()) {
+      try {
+        await printNode(<QuotationPrint quote={printDoc} />)
+        setPrintState('done')
+        setTimeout(() => setPrintState(null), 2500)
+        return
+      } catch {
+        // fall through to server / cloud below
+      }
+    }
+
     try {
       await printOnServer({ kind: 'quotation', quote: printDoc })
       setPrintState('done')
       setTimeout(() => setPrintState(null), 2500)
     } catch (serverErr) {
-      // fallback: cloud print job
+      // fallback: cloud print job (needs internet)
       try {
         await createCloudPrintJob({ kind: 'quotation', quote: printDoc })
         setPrintState('done')
@@ -204,6 +222,7 @@ export function QuotationBuilder() {
 
   return (
     <div className="flex flex-col">
+      {localPrintMount}
       <div className="no-print border-b border-stone-200/80 bg-stone-50/95 px-2 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-stone-950/90 md:px-4">
         <div className="flex items-center justify-center pb-2">
           <span className="rounded-full border border-stone-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-stone-500 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-stone-300">
@@ -268,6 +287,17 @@ export function QuotationBuilder() {
             <div className="grid grid-cols-2 gap-2 md:grid-cols-10 md:items-end md:gap-3">
               <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} feet={foot} className="min-w-0 md:col-span-5" />
               <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} feet={foot} className="min-w-0 md:col-span-5" />
+            </div>
+            <div className="mt-2 md:mt-3">
+              <label className="mb-1 block text-xs font-medium text-stone-500 dark:text-stone-400">Qty</label>
+              <input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={qty || ''}
+                onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+                className="w-24 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-shiv-green focus:ring-1 focus:ring-shiv-green dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+              />
             </div>
 
             {/* Aluminium options */}

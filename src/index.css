@@ -153,12 +153,20 @@ input[type='number'] { -moz-appearance: textfield; }
   box-shadow: 0 4px 24px rgba(0,0,0,0.25);
 }
 
+/* Off-screen mount for direct/silent printing: hidden on screen, but the
+   @media print rules below pull it back on-page so it prints correctly. */
+.print-offscreen { position: fixed; left: -10000px; top: 0; width: 210mm; pointer-events: none; }
+
 @media print {
   @page { size: A4 portrait; margin: 0; }
+  /* Force background colors (yellow dimension row, brand-tint accent rows, gray
+     cells) to actually print — browsers drop backgrounds without this. */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
   body * { visibility: hidden; }
   .print-root, .print-root * { visibility: visible; }
   .print-root { position: absolute; left: 0; top: 0; width: 210mm; }
+  .print-offscreen { position: absolute; left: 0; top: 0; }
   .no-print { display: none !important; }
   .preview-scale { transform: none !important; width: auto !important; height: auto !important; }
   .a4-page { box-shadow: none !important; margin: 0 !important; page-break-after: always; }
