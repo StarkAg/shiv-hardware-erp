@@ -81,6 +81,18 @@ export interface BrandQuoteRow {
   cost: number
 }
 
+/** One row on a fixed rate card (Film Face Ply, WPC Door Frame): no size calc. */
+export interface FixedCardRow {
+  /** left column: weight (FF Ply) or chaukhat size (WPC) */
+  label: string
+  brand: string
+  /** per-sqft rate (FF Ply only) */
+  rate?: number
+  cost: number
+  guaranteeYears?: GuaranteeYears
+  accentColor?: string
+}
+
 export interface GuaranteeCardItem {
   brandName: string
   guaranteeYears: GuaranteeYears
@@ -119,7 +131,9 @@ export interface Quotation {
   sqft: number
   /** brand categories: one row per brand with its cost for this size */
   rows?: BrandQuoteRow[]
-  /** aluminium categories: ALL 3 thicknesses shown like the Excel sheet */
+  /** fixed rate-card categories (Film Face Ply, WPC Door Frame): static price list */
+  fixedRows?: FixedCardRow[]
+  /** aluminium / UPVC categories: ALL thickness/brand variants shown like the Excel sheet */
   alu?: {
     addons: string[]
     glassType?: string
@@ -133,6 +147,7 @@ export interface Quotation {
       brownCoatedRate?: number; brownCoated?: number
       /** windows */
       glassRate?: number; glassCost?: number
+      reflectiveRate?: number; reflectiveCost?: number
       chaukhatRft?: number
     }[]
   }

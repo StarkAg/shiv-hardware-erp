@@ -20,6 +20,8 @@ import {
   defaultAddons,
   isAluminium,
 } from '../../lib/aluminium'
+import { calcAllUpvcBrands, isUpvc } from '../../lib/upvc'
+import { FIXED_CARDS, FIXED_CARD_META, isFixedCard } from '../../lib/data/fixedCards'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Button, Input, Toggle } from '../../components/ui'
 import { QuotationPrint } from '../print/QuotationPrint'
@@ -81,13 +83,20 @@ export function QuotationBuilder() {
   }, [category])
 
   const alu = isAluminium(cat)
+  const upvc = isUpvc(cat)
+  const aluLike = alu || upvc
+  const fixed = isFixedCard(cat)
   const foot = isFootSized(cat)
   const hasSize = h.inches > 0 || w.inches > 0
   const brands = (activeSet?.brands ?? []).filter((b) => b.category === cat)
   const sqft = areaSqft(h, w, cat)
-  const aluThicknesses = alu ? calcAllThicknesses(cat, h, w, addons) : []
+  const aluThicknesses = alu
+    ? calcAllThicknesses(cat, h, w, addons)
+    : upvc
+      ? calcAllUpvcBrands(cat, h, w, addons)
+      : []
 
-  const rows = !alu ? buildBrandRows(brands, h, w, Math.max(1, qty)) : []
+  const rows = !aluLike && !fixed ? buildBrandRows(brands, h, w, Math.max(1, qty)) : []
 
   function buildQuote(): Quotation {
     const base = {
@@ -102,7 +111,7 @@ export function QuotationBuilder() {
       sqft: areaSqft(h, w, cat),
       notes: '',
     }
-    if (alu) {
+    if (aluLike) {
       return {
         ...base,
         alu: {
@@ -111,6 +120,9 @@ export function QuotationBuilder() {
           thicknesses: aluThicknesses,
         },
       }
+    }
+    if (fixed) {
+      return { ...base, fixedRows: FIXED_CARDS[cat] ?? [] }
     }
     return { ...base, rows }
   }
@@ -280,7 +292,8 @@ export function QuotationBuilder() {
           </div>
         )}
 
-        {/* Size */}
+        {/* Size — hidden for fixed rate cards (FF Ply / WPC have no size calc) */}
+        {!fixed && (
         <div ref={sizeCardRef} className="shrink-0">
           <div className="rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100 md:p-4">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400 md:mb-3">Size</h2>
@@ -300,16 +313,16 @@ export function QuotationBuilder() {
               />
             </div>
 
-            {/* Aluminium options */}
-            {alu && (
+            {/* Aluminium / UPVC options */}
+            {aluLike && (
               <div className="mt-3 md:mt-4">
                 <div className="grid grid-cols-2 gap-1.5 md:flex md:flex-wrap md:gap-2.5">
                   {[
-                    { key: 'chaukhat' as const, label: 'Chaukhat', show: cat === 'aluminium-door' },
-                    { key: 'accessories' as const, label: 'Accessories', show: cat === 'aluminium-door' },
-                    { key: 'ssNet' as const, label: 'SS Net', show: cat === 'window-2-track' },
+                    { key: 'chaukhat' as const, label: 'Chaukhat', show: cat === 'aluminium-door' || cat === 'upvc-2-track' || cat === 'upvc-2.5-track' || cat === 'upvc-3-track' },
+                    { key: 'accessories' as const, label: 'Accessories', show: cat === 'aluminium-door' || cat === 'upvc-door' },
+                    { key: 'ssNet' as const, label: 'SS Net', show: cat === 'window-2-track' || cat === 'upvc-2-track' || cat === 'upvc-2.5-track' || cat === 'upvc-3-track' },
                     { key: 'decorFilm' as const, label: 'Decor Film', show: cat === 'aluminium-door' },
-                    { key: 'brownCoated' as const, label: 'Brown Coated', show: true },
+                    { key: 'brownCoated' as const, label: 'Brown Coated', show: alu || cat === 'upvc-2-track' || cat === 'upvc-2.5-track' || cat === 'upvc-3-track' },
                   ]
                     .filter((o) => o.show)
                     .map((o) => (
@@ -347,18 +360,42 @@ export function QuotationBuilder() {
             </div>
           </div>
         </div>
+        )}
 
         <InlineQuotationPreview quote={doc} />
 
         {/* Live preview: all-brands rate card OR aluminium breakdown */}
         <div className="flex flex-col rounded-xl border border-stone-200/90 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
-          {alu && (
+          {aluLike && (
             <div className="shrink-0 border-b border-stone-100 bg-stone-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400 md:px-4 md:py-2 md:text-xs">
-              Aluminium Cost
+              {upvc ? 'UPVC' : 'Aluminium'} Cost
             </div>
           )}
           <div className="overflow-visible">
-            {!alu ? (
+            {fixed ? (
+              <table className="w-full text-[11px] leading-tight md:text-sm">
+                <thead className="bg-stone-50 text-left text-[10px] uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500 md:text-xs">
+                  <tr>
+                    <th className="px-2 py-1.5 md:px-4 md:py-2">{FIXED_CARD_META[cat]?.leftHeader}</th>
+                    <th className="px-2 py-1.5 md:px-4 md:py-2">Brand</th>
+                    {FIXED_CARD_META[cat]?.showRate && <th className="px-2 py-1.5 text-right md:px-4 md:py-2">Rate</th>}
+                    <th className="px-2 py-1.5 text-right md:px-4 md:py-2">Cost</th>
+                    {FIXED_CARD_META[cat]?.showGuarantee && <th className="px-2 py-1.5 text-center md:px-4 md:py-2">Guarantee</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(FIXED_CARDS[cat] ?? []).map((r, i) => (
+                    <tr key={i} className="border-t border-stone-100 dark:border-white/10" style={r.accentColor ? { backgroundColor: r.accentColor } : undefined}>
+                      <td className="px-2 py-1.5 font-medium md:px-4 md:py-2">{r.label}</td>
+                      <td className="px-2 py-1.5 md:px-4 md:py-2">{r.brand}</td>
+                      {FIXED_CARD_META[cat]?.showRate && <td className="px-2 py-1.5 text-right text-stone-500 dark:text-stone-400 md:px-4 md:py-2">{r.rate}</td>}
+                      <td className="px-2 py-1.5 text-right font-semibold md:px-4 md:py-2">{formatINR(r.cost)}</td>
+                      {FIXED_CARD_META[cat]?.showGuarantee && <td className="px-2 py-1.5 text-center text-shiv-red md:px-4 md:py-2">{r.guaranteeYears ? `${r.guaranteeYears} Years` : ''}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : !aluLike ? (
             <table className="w-full table-fixed text-[11px] leading-tight md:text-sm">
               <thead className="bg-stone-50 text-left text-[10px] uppercase text-stone-400 dark:bg-white/5 dark:text-stone-500 md:text-xs">
                 <tr>
