@@ -1413,7 +1413,9 @@ function getBaileysMediaMimetype(msg) {
 }
 
 async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
-  if (msg.key.fromMe) return
+  // fromMe messages are intentionally NOT skipped: the shop owner often sends
+  // images and the bw/cp command from the same account that hosts this WhatsApp
+  // session, so their own media must buffer and their own commands must flush.
   const jid = msg.key.remoteJid || ''
   if (!jid.endsWith('@g.us')) return
 
