@@ -134,7 +134,7 @@ export function QuotationBuilder() {
   }
 
   async function shareWhatsApp() {
-    if (!hasSize) return
+    if (!hasSize && !fixed) return
     setSharing(true)
     try {
       save({ silent: true })
@@ -184,7 +184,7 @@ export function QuotationBuilder() {
   }
 
   async function handleDirectPrint() {
-    if (!hasSize) return
+    if (!hasSize && !fixed) return
     setPrintState('printing')
     save({ silent: true })
     const printDoc = enrichQuotation(buildQuote())
