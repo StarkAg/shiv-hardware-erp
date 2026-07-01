@@ -27,6 +27,10 @@ const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 
 const BW_PRINTER = process.env.BW_PRINTER || process.env.PRINT_PRINTER || 'NPI33F31D (HP LaserJet Tank MFP 2606sdw)'
 const BW_FALLBACK_PRINTER = process.env.BW_FALLBACK_PRINTER || COLOR_PRINTER
 const BW_FALLBACK_ON_ERROR = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_ON_ERROR ?? 'true').trim().toLowerCase())
+// Color (cp) fallback: when the EPSON color printer is offline/erroring, print
+// the color job on the HP (BW) printer instead (it comes out monochrome).
+const COLOR_FALLBACK_PRINTER = process.env.COLOR_FALLBACK_PRINTER || BW_PRINTER
+const COLOR_FALLBACK_ON_ERROR = !['0', 'false', 'no', 'off'].includes(String(process.env.COLOR_FALLBACK_ON_ERROR ?? 'true').trim().toLowerCase())
 const PRINT_PRINTER = process.env.PRINT_PRINTER || BW_PRINTER
 // When the chosen printer is offline/unreachable, auto-route to any printer that
 // is actually online. Set PRINTER_AUTO_SELECT=false to always use the fixed printer.
@@ -182,6 +186,8 @@ const WHATSAPP_COLOR_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_CO
 const WHATSAPP_BW_PRINT_SETTINGS = parsePrintSettings(process.env.WHATSAPP_BW_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4')
 const QUOTATION_PRINT_SETTINGS = parsePrintSettings(process.env.QUOTATION_PRINT_SETTINGS || 'fit,color,portrait,paper=A4,bin=Rear Paper Feeder,print-quality=5')
 const BW_FALLBACK_PRINT_SETTINGS = parsePrintSettings(process.env.BW_FALLBACK_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4,bin=Rear Paper Feeder')
+// The HP is a mono laser, so a color job falling back to it prints monochrome A4.
+const COLOR_FALLBACK_PRINT_SETTINGS = parsePrintSettings(process.env.COLOR_FALLBACK_PRINT_SETTINGS || 'fit,monochrome,portrait,paper=A4')
 const BW_FALLBACK_RESET_PLAIN_A4 = !['0', 'false', 'no', 'off'].includes(String(process.env.BW_FALLBACK_RESET_PLAIN_A4 ?? 'true').trim().toLowerCase())
 const EPSON_DEFAULT_RESET_PLAIN_A4_COLOR = !['0', 'false', 'no', 'off'].includes(String(process.env.EPSON_DEFAULT_RESET_PLAIN_A4_COLOR ?? 'true').trim().toLowerCase())
 // Epson L8050 driver quality options are: Draft, Standard, HighQuality, AdvancedSetting
@@ -987,14 +993,37 @@ async function prepareBwFallbackPrinter(printer, source = 'print') {
 async function routeWhatsAppPrintJob(mode, file) {
   const primaryPrinter = printerForWhatsAppPrintMode(mode, file)
   if (mode !== 'bw') {
-    return {
-      printer: primaryPrinter,
-      printSettings: printSettingsForWhatsAppPrintMode(mode, primaryPrinter),
-      fallback: null,
-    }
+    // Color job → EPSON, but fall back to the HP (mono) if the EPSON is offline.
+    return await routeColorPrinterOnError(primaryPrinter, printSettingsForWhatsAppPrintMode(mode, primaryPrinter), 'whatsapp-web')
   }
 
   return await routeBwPrinterOnError(primaryPrinter, WHATSAPP_BW_PRINT_SETTINGS, 'whatsapp-web')
+}
+
+// Mirror of routeBwPrinterOnError: if the color (EPSON) printer is unavailable,
+// route the job to the HP printer instead (prints monochrome).
+async function routeColorPrinterOnError(primaryPrinter, printSettings = [], source = 'print') {
+  const primarySettings = printSettings ?? []
+  if (!COLOR_FALLBACK_ON_ERROR || primaryPrinter !== COLOR_PRINTER || COLOR_FALLBACK_PRINTER === COLOR_PRINTER) {
+    return { printer: primaryPrinter, printSettings: primarySettings, fallback: null }
+  }
+
+  const epsonHealth = await getWindowsPrinterHealth(COLOR_PRINTER)
+  if (epsonHealth.ok) {
+    return { printer: primaryPrinter, printSettings: primarySettings, fallback: null }
+  }
+
+  const fallback = {
+    from: COLOR_PRINTER,
+    to: COLOR_FALLBACK_PRINTER,
+    reason: epsonHealth.reason || epsonHealth.status,
+  }
+  console.warn(`[${source}] Color printer unavailable; falling back to "${COLOR_FALLBACK_PRINTER}" with monochrome settings (${fallback.reason})`)
+  return {
+    printer: COLOR_FALLBACK_PRINTER,
+    printSettings: COLOR_FALLBACK_PRINT_SETTINGS.length ? COLOR_FALLBACK_PRINT_SETTINGS : primarySettings,
+    fallback,
+  }
 }
 
 async function routeBwPrinterOnError(primaryPrinter, printSettings = [], source = 'print') {
