@@ -3,7 +3,6 @@ import { CATEGORY_LABELS, SHOP } from '../../lib/types'
 import { formatSize, sealForYears } from '../../lib/pricing'
 import { Letterhead } from './Letterhead'
 import { A4Page } from './A4Page'
-import { assetPath } from '../../lib/assets'
 
 // Standalone guarantee document. It is not tied to a quotation.
 
@@ -111,49 +110,69 @@ export function GuaranteeCard({
   )
 }
 
+// Compact labels used on the PVC card overlay (legacy Excel style: "30MM")
+const CARD_THICKNESS: Partial<Record<GuaranteeDocument['category'], string>> = {
+  'readymade-door': '30MM',
+  'flush-door': '30MM',
+  'plywood-6': '6MM',
+  'block-board-12': '12MM',
+  'block-board-19': '19MM',
+  'film-face-ply': '12MM',
+}
+
+// Size without inch marks, as on the old card: 79 4/8 X 44
+const cardDimension = (dim: GuaranteeDocument['height']) =>
+  dim?.soot ? `${dim.inches} ${dim.soot}/8` : dim?.inches ? String(dim.inches) : ''
+
+/**
+ * Overlay layout for PRE-PRINTED PVC guarantee cards: the physical card already
+ * carries the shop design; only the variable details are printed, matching the
+ * legacy Excel "Gaurantee Card Name Print" positions. Must stay in sync with
+ * the print server's template.mjs card layout.
+ */
 function CompactGuaranteeCard({ document }: { document: GuaranteeDocument }) {
-  const dateStr = new Date(document.date).toLocaleDateString('en-GB')
+  const dateStr = new Date(document.date).toLocaleDateString('en-GB').replace(/\//g, '-')
   const guaranteedRows = document.items.filter((r) => r.guaranteeYears > 0)
-  const maxYears = Math.max(0, ...guaranteedRows.map((r) => r.guaranteeYears))
-  const seal = sealForYears(maxYears)
-  const primaryRow = guaranteedRows[0]
+  const rows = (guaranteedRows.length ? guaranteedRows : document.items).slice(0, 5)
+  const thickness = CARD_THICKNESS[document.category] ?? ''
+  const sizeStr = [cardDimension(document.height), cardDimension(document.width)].filter(Boolean).join(' X ')
+  const totalAmount = rows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+  const customer = document.customer
 
   return (
     <A4Page>
       <div className="flex h-[297mm] items-start justify-center bg-white pt-[18mm] font-print text-black">
-        <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-[3mm] border-[1.5px] border-black bg-white p-[4mm]">
-          <div className="flex items-center justify-between border-b border-black pb-[2mm]">
-            <div className="flex min-w-0 items-center gap-[1.5mm]">
-              <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-[8mm] w-[8mm] shrink-0 object-contain" />
-              <div>
-                <div className="text-[10px] font-bold leading-none">{SHOP.name}</div>
-                <div className="text-[5.8px] font-semibold leading-tight">{SHOP.address}</div>
-              </div>
+        <div className="relative h-[86mm] w-[54mm] overflow-hidden bg-white">
+          {/* card boundary shown on screen only, never printed */}
+          <div className="pointer-events-none absolute inset-0 border border-dashed border-slate-300 print:hidden" />
+
+          <div className="absolute left-[3mm] right-[3mm] top-[2.5mm] text-[7pt] font-semibold leading-[1.18]">
+            <div className="overflow-hidden whitespace-nowrap">
+              M/s {customer.name || ''}{customer.address ? `,${customer.address}` : ''}
             </div>
-            {seal && <img src={seal} alt={`${maxYears} year guarantee`} className="h-[10mm] w-[10mm] shrink-0 object-contain" />}
+            <div>Mob - {customer.mobile || ''}</div>
+            <div>UID - {customer.uid || 'N/A'}</div>
           </div>
 
-          <div className="mt-[3mm] text-center text-[11px] font-bold tracking-wide" style={{ color: 'var(--shiv-green)' }}>
-            GUARANTEE CARD
-          </div>
+          <div className="absolute right-[3mm] top-[12.4mm] text-[7pt] font-medium">{dateStr}</div>
 
-          <div className="mt-[3mm] grid grid-cols-2 gap-x-[2mm] gap-y-[1.5mm] text-[7.5px] leading-tight">
-            <div><span className="font-bold">Ref:</span> {document.number}</div>
-            <div><span className="font-bold">Date:</span> {dateStr}</div>
-            <div className="col-span-2"><span className="font-bold">M/s:</span> {document.customer.name || '-'}</div>
-            <div><span className="font-bold">UID:</span> {document.customer.uid || 'N/A'}</div>
-            <div><span className="font-bold">Mobile:</span> {document.customer.mobile || 'N/A'}</div>
-            <div className="col-span-2"><span className="font-bold">Product:</span> {CATEGORY_LABELS[document.category]}</div>
-            <div className="col-span-2"><span className="font-bold">Size:</span> {formatSize(document.height, document.width, document.category) || '-'} | <span className="font-bold">Qty:</span> {document.qty}</div>
-            <div className="col-span-2"><span className="font-bold">Brand:</span> {primaryRow?.brandName ?? '-'}</div>
-          </div>
-
-          <div className="absolute bottom-[4mm] left-[4mm] right-[4mm] flex items-end justify-between">
-            <div className="text-[10px] font-bold" style={{ color: 'var(--shiv-red)' }}>
-              {maxYears ? `${maxYears} Years` : 'No Guarantee'}
+          {rows.map((item, i) => (
+            <div key={i} className="absolute left-0 right-0 whitespace-nowrap text-[5pt] leading-none" style={{ top: `${18 + i * 3.2}mm` }}>
+              <span className="absolute left-[3mm]">{thickness}</span>
+              <span className="absolute left-[10mm] max-w-[12.5mm] overflow-hidden">{item.brandName}</span>
+              <span className="absolute left-[24.5mm]">{sizeStr}</span>
+              <span className="absolute left-[38mm]">{document.qty} Pcs</span>
+              <span className="absolute right-[3mm] text-right">{Number(item.amount) ? Math.round(Number(item.amount)) : ''}</span>
             </div>
-            <div className="w-[21mm] border-t border-black pt-[1mm] text-center text-[7px]">Proprietor</div>
-          </div>
+          ))}
+
+          {totalAmount > 0 && (
+            <>
+              <div className="absolute right-[3mm] top-[76.5mm] w-[8mm] border-t border-black" />
+              <div className="absolute right-[3mm] top-[79.3mm] text-[7pt] font-semibold">{Math.round(totalAmount)}</div>
+              <div className="absolute right-[3mm] top-[82.2mm] w-[8mm] border-t border-black" />
+            </>
+          )}
         </div>
       </div>
     </A4Page>

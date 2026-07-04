@@ -1,5 +1,7 @@
 param(
   [string]$ImagePath,
+  # Optional second card image, drawn at the slot-2 position in the same pass
+  [string]$ImagePath2,
 
   [string]$PrinterName = "EPSON L8050 Series",
   [string]$DevmodeFile = (Join-Path $PSScriptRoot "..\data\epson-card.devmode"),
@@ -21,6 +23,9 @@ $ErrorActionPreference = "Stop"
 
 if (-not $FullTrayCalibration -and -not (Test-Path -LiteralPath $ImagePath)) {
   throw "Image not found: $ImagePath"
+}
+if ($ImagePath2 -and -not (Test-Path -LiteralPath $ImagePath2)) {
+  throw "Second image not found: $ImagePath2"
 }
 if (-not (Test-Path -LiteralPath $DevmodeFile)) {
   throw "Captured Epson card DEVMODE not found: $DevmodeFile. Run capture-epson-card-devmode.ps1 first."
@@ -103,6 +108,7 @@ Force-CardDevmodeFields $devmodeBytes
 $devmode = [Runtime.InteropServices.Marshal]::AllocHGlobal($devmodeBytes.Length)
 $hdc = [IntPtr]::Zero
 $image = $null
+$image2 = $null
 
 try {
   [Runtime.InteropServices.Marshal]::Copy($devmodeBytes, 0, $devmode, $devmodeBytes.Length)
@@ -121,6 +127,7 @@ try {
 
   if (-not $FullTrayCalibration) {
     $image = [System.Drawing.Image]::FromFile($ImagePath)
+    if ($ImagePath2) { $image2 = [System.Drawing.Image]::FromFile($ImagePath2) }
   }
   $width = [NativeGdiPrint]::GetDeviceCaps($hdc, [NativeGdiPrint]::HORZRES)
   $height = [NativeGdiPrint]::GetDeviceCaps($hdc, [NativeGdiPrint]::VERTRES)
@@ -152,6 +159,12 @@ try {
   $drawTop = [int][Math]::Round($drawTopMm * $pxPerMmY)
   $drawWidth = [int][Math]::Round($drawWidthMm * $pxPerMmX)
   $drawHeight = [int][Math]::Round($drawHeightMm * $pxPerMmY)
+
+  # Second card always sits in slot 2
+  $draw2LeftMm = $Slot2LeftMm + (($CardWidthMm - $drawWidthMm) / 2.0) + $OffsetXmm
+  $draw2TopMm = $Slot2TopMm + (($CardHeightMm - $drawHeightMm) / 2.0) + $OffsetYmm
+  $draw2Left = [int][Math]::Round($draw2LeftMm * $pxPerMmX)
+  $draw2Top = [int][Math]::Round($draw2TopMm * $pxPerMmY)
 
   for ($copy = 1; $copy -le [Math]::Max(1, $Copies); $copy++) {
     if ([NativeGdiPrint]::StartPage($hdc) -le 0) {
@@ -220,6 +233,9 @@ try {
         }
       } else {
         $graphics.DrawImage($image, $drawLeft, $drawTop, $drawWidth, $drawHeight)
+        if ($image2) {
+          $graphics.DrawImage($image2, $draw2Left, $draw2Top, $drawWidth, $drawHeight)
+        }
       }
     }
     finally {
@@ -238,7 +254,8 @@ try {
   if ($FullTrayCalibration) {
     Write-Host "sent full-tray calibration to $PrinterName using $DevmodeFile canvas=${width}x${height} ${pageWidthMm}x${pageHeightMm}mm slot1=${SlotLeftMm},${SlotTopMm} slot2=${Slot2LeftMm},${Slot2TopMm}"
   } else {
-    Write-Host "sent to $PrinterName using $DevmodeFile canvas=${width}x${height} ${pageWidthMm}x${pageHeightMm}mm draw=${drawLeft},${drawTop},${drawWidth},${drawHeight}px"
+    $draw2Note = if ($image2) { " draw2=${draw2Left},${draw2Top}px" } else { "" }
+    Write-Host "sent to $PrinterName using $DevmodeFile canvas=${width}x${height} ${pageWidthMm}x${pageHeightMm}mm draw=${drawLeft},${drawTop},${drawWidth},${drawHeight}px$draw2Note"
   }
 }
 catch {
@@ -247,6 +264,7 @@ catch {
 }
 finally {
   if ($image) { $image.Dispose() }
+  if ($image2) { $image2.Dispose() }
   if ($hdc -ne [IntPtr]::Zero) { [NativeGdiPrint]::DeleteDC($hdc) | Out-Null }
   if ($devmode -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::FreeHGlobal($devmode) }
 }

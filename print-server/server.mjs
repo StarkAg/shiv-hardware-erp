@@ -55,6 +55,8 @@ const EPSON_CARD_OFFSET_Y_MM = Number(process.env.EPSON_CARD_OFFSET_Y_MM) || 0
 const EPSON_CARD_SCALE_PERCENT = Number(process.env.EPSON_CARD_SCALE_PERCENT) || 100
 const EPSON_CARD_SLOT_LEFT_MM = Number(process.env.EPSON_CARD_SLOT_LEFT_MM ?? 13)
 const EPSON_CARD_SLOT_TOP_MM = Number(process.env.EPSON_CARD_SLOT_TOP_MM ?? 25)
+const EPSON_CARD_SLOT2_LEFT_MM = Number(process.env.EPSON_CARD_SLOT2_LEFT_MM ?? 78)
+const EPSON_CARD_SLOT2_TOP_MM = Number(process.env.EPSON_CARD_SLOT2_TOP_MM ?? EPSON_CARD_SLOT_TOP_MM)
 const CARD_WIDTH_MM = 54
 const CARD_HEIGHT_MM = 86
 const CHROME_PATH = findChromePath()
@@ -1174,10 +1176,14 @@ function shouldUseCardImageEngine(isCard) {
   return process.platform === 'win32' && isCard && ['devmode', 'excel'].includes(EPSON_CARD_PRINT_ENGINE)
 }
 
-async function printCardImageWithDevmode(filePath, copies, title, printer = COLOR_PRINTER) {
+async function printCardImageWithDevmode(filePath, copies, title, printer = COLOR_PRINTER, { slot = 1, filePath2 = null } = {}) {
   if (!existsSync(EPSON_CARD_DEVMODE_PATH)) {
     throw new Error(`Missing Epson card DEVMODE file: ${EPSON_CARD_DEVMODE_PATH}. Run print-server/tools/capture-epson-card-devmode.ps1 first.`)
   }
+
+  // Single card can go to either slot; a second image always lands in slot 2.
+  const primaryLeft = slot === 2 ? EPSON_CARD_SLOT2_LEFT_MM : EPSON_CARD_SLOT_LEFT_MM
+  const primaryTop = slot === 2 ? EPSON_CARD_SLOT2_TOP_MM : EPSON_CARD_SLOT_TOP_MM
 
   return new Promise((ok, fail) => {
     const args = [
@@ -1197,9 +1203,13 @@ async function printCardImageWithDevmode(filePath, copies, title, printer = COLO
       '-JobName',
       title,
       '-SlotLeftMm',
-      String(EPSON_CARD_SLOT_LEFT_MM),
+      String(primaryLeft),
       '-SlotTopMm',
-      String(EPSON_CARD_SLOT_TOP_MM),
+      String(primaryTop),
+      '-Slot2LeftMm',
+      String(EPSON_CARD_SLOT2_LEFT_MM),
+      '-Slot2TopMm',
+      String(EPSON_CARD_SLOT2_TOP_MM),
       '-CardWidthMm',
       String(CARD_WIDTH_MM),
       '-CardHeightMm',
@@ -1211,8 +1221,9 @@ async function printCardImageWithDevmode(filePath, copies, title, printer = COLO
       '-ScalePercent',
       String(EPSON_CARD_SCALE_PERCENT),
     ]
+    if (filePath2) args.push('-ImagePath2', filePath2)
 
-    console.log(`[windows-card-print] printer="${printer}" devmode="${EPSON_CARD_DEVMODE_PATH}" file="${filePath}"`)
+    console.log(`[windows-card-print] printer="${printer}" devmode="${EPSON_CARD_DEVMODE_PATH}" slot=${slot} file="${filePath}"${filePath2 ? ` file2="${filePath2}"` : ''}`)
     execFile('powershell.exe', args, { windowsHide: true, timeout: 120000 }, (err, stdout, stderr) => {
       const output = [stdout, stderr].map(text => text?.trim()).filter(Boolean).join('\n')
       if (err) {
@@ -1266,11 +1277,14 @@ async function printCardImageWithExcel(filePath, copies, title, printer = COLOR_
   })
 }
 
-async function printCardImage(filePath, copies, title, printer = COLOR_PRINTER) {
+async function printCardImage(filePath, copies, title, printer = COLOR_PRINTER, options = {}) {
   if (EPSON_CARD_PRINT_ENGINE === 'excel') {
+    if (options.slot === 2 || options.filePath2) {
+      console.warn('[windows-card-excel] slot selection / two-card printing is only supported by the devmode engine; printing slot 1 only')
+    }
     return await printCardImageWithExcel(filePath, copies, title, printer)
   }
-  return await printCardImageWithDevmode(filePath, copies, title, printer)
+  return await printCardImageWithDevmode(filePath, copies, title, printer, options)
 }
 
 async function renderUploadedImagePdf(file) {
@@ -1656,8 +1670,11 @@ function printDocumentPayload(payload, copies) {
   return runPrintExclusive(`document ${kind}`, () => printDocumentPayloadImpl(payload, copies))
 }
 
-async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 'a4', printerOverride }, copies) {
+async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 'a4', printerOverride, slot, documents }, copies) {
   const documentKind = kind ?? 'quotation'
+  // Card jobs may carry two documents (one per tray slot) via `documents`.
+  const cardDocuments = Array.isArray(documents) && documents.length ? documents.slice(0, 2) : null
+  if (documentKind === 'guarantee' && cardDocuments) document = document ?? cardDocuments[0]
   if (documentKind === 'guarantee' && !document) throw new Error('Missing guarantee document data')
   if (documentKind === 'bill' && !bill) throw new Error('Missing bill data')
   if (documentKind !== 'guarantee' && documentKind !== 'bill' && !quote) throw new Error('Missing quotation data')
@@ -1686,6 +1703,7 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
 
   let page
   let tmp
+  let tmp2
   try {
     const html = documentKind === 'guarantee'
       ? await buildGuaranteeHtml(document, layout)
@@ -1716,7 +1734,24 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
       })
       tmp = join(tmpdir(), `shiv-card-${Date.now()}.png`)
       await writeFile(tmp, png)
-      const printResult = await printCardImage(tmp, copies, `Shiv ${documentKind}`, printer)
+
+      // Second document → second card rendered for slot 2 in the same pass
+      const secondDocument = cardDocuments?.[1] ?? null
+      if (secondDocument) {
+        const html2 = await buildGuaranteeHtml(secondDocument, layout)
+        await page.setContent(html2, { waitUntil: 'networkidle0' })
+        const png2 = await page.screenshot({
+          type: 'png',
+          clip: { x: 0, y: 0, width: cardWidthPx, height: cardHeightPx },
+        })
+        tmp2 = join(tmpdir(), `shiv-card-${Date.now()}-slot2.png`)
+        await writeFile(tmp2, png2)
+      }
+
+      const printResult = await printCardImage(tmp, copies, `Shiv ${documentKind}`, printer, {
+        slot: Number(slot) === 2 ? 2 : 1,
+        filePath2: tmp2 ?? null,
+      })
       return {
         printer,
         fallback: route.fallback,
@@ -1747,6 +1782,7 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
   } finally {
     await page?.close().catch(() => {})
     if (tmp) await unlink(tmp).catch(() => {})
+    if (tmp2) await unlink(tmp2).catch(() => {})
   }
 }
 
@@ -2515,14 +2551,16 @@ app.post('/whatsapp-print/jobs', async (req, res) => {
 
 // ── Print ─────────────────────────────────────────────────────────────────────
 app.post('/print', async (req, res) => {
-  const { kind, quote, document, bill, layout = 'a4', printer: printerOverride } = req.body
+  const { kind, quote, document, bill, layout = 'a4', printer: printerOverride, slot, documents } = req.body
   const copies = sanitizeCopies(req.body.copies)
-  if (kind === 'guarantee' && !document) return res.status(400).json({ error: 'Missing guarantee document data' })
+  if (kind === 'guarantee' && !document && !(Array.isArray(documents) && documents.length)) {
+    return res.status(400).json({ error: 'Missing guarantee document data' })
+  }
   if (kind === 'bill' && !bill) return res.status(400).json({ error: 'Missing bill data' })
   if (kind !== 'guarantee' && kind !== 'bill' && !quote) return res.status(400).json({ error: 'Missing quotation data' })
 
   try {
-    const printResult = await printDocumentPayload({ kind, quote, document, bill, layout, printerOverride }, copies)
+    const printResult = await printDocumentPayload({ kind, quote, document, bill, layout, printerOverride, slot, documents }, copies)
     if (kind === 'bill' && bill) await saveBillToStore(bill)
     res.json({
       ok: true,

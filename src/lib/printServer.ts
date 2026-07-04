@@ -29,7 +29,15 @@ export const PRINT_SERVER_URL = detectPrintServerUrl()
 
 export type ServerPrintPayload =
   | { kind: 'quotation'; quote: Quotation }
-  | { kind: 'guarantee'; document: GuaranteeDocument; layout?: 'a4' | 'card' }
+  | {
+      kind: 'guarantee'
+      document: GuaranteeDocument
+      layout?: 'a4' | 'card'
+      /** Card layout only: which Epson tray slot to print in (default 1). */
+      slot?: 1 | 2
+      /** Card layout only: two documents = both tray slots in one pass. */
+      documents?: GuaranteeDocument[]
+    }
   | { kind: 'bill'; bill: Bill }
 
 export type ServerPrintResult = {
