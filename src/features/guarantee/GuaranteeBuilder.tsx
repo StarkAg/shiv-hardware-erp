@@ -61,6 +61,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const [qty, setQty] = useState(1)
   const [billedItems, setBilledItems] = useState<BilledItem[]>([])
   const [preview, setPreview] = useState(false)
+  // Which tray slot the PVC card prints in ('both' = same card in both slots)
+  const [cardSlot, setCardSlot] = useState<'1' | '2' | 'both'>('1')
   const sizeCardRef = useRef<HTMLDivElement>(null)
 
   const brandOptions = (sets[0]?.brands ?? []).filter((b) => b.category === category)
@@ -188,10 +190,22 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   return (
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
-        <div className="no-print flex flex-wrap justify-center gap-3">
+        <div className="no-print flex flex-wrap items-center justify-center gap-3">
           <Button onClick={openPreview} disabled={!hasSize && !billedItems.length} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Printer size={20} /> Print
           </Button>
+          {layout === 'card' && (
+            <Select
+              aria-label="Card tray slot"
+              value={cardSlot}
+              onChange={(e) => setCardSlot(e.target.value as '1' | '2' | 'both')}
+              className="!w-auto"
+            >
+              <option value="1">Slot 1</option>
+              <option value="2">Slot 2</option>
+              <option value="both">Both slots (2 cards)</option>
+            </Select>
+          )}
           <Link
             to="/scan"
             className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
@@ -340,7 +354,17 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         <PrintPreview
           title={previewTitle}
           onClose={() => setPreview(false)}
-          serverPrint={{ kind: 'guarantee', document: doc, layout }}
+          serverPrint={{
+            kind: 'guarantee',
+            document: doc,
+            layout,
+            ...(layout === 'card'
+              ? {
+                  slot: cardSlot === '2' ? (2 as const) : (1 as const),
+                  ...(cardSlot === 'both' ? { documents: [doc, doc] } : {}),
+                }
+              : {}),
+          }}
         >
           <GuaranteeCard document={doc} layout={layout} />
         </PrintPreview>

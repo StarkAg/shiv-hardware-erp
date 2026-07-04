@@ -60,6 +60,18 @@ const legacyThickness = category => ({
   'block-board-12': '12mm',
   'block-board-19': '19mm',
 })[category] ?? ''
+// Compact labels used on the PVC card overlay (legacy Excel style: "30MM")
+const cardThickness = category => ({
+  'readymade-door': '30MM',
+  'flush-door': '30MM',
+  'plywood-6': '6MM',
+  'block-board-12': '12MM',
+  'block-board-19': '19MM',
+  'film-face-ply': '12MM',
+})[category] ?? ''
+// Size without inch marks, as on the old card: 79 4/8 X 44
+const cardDimension = dim => dim?.soot ? `${dim.inches} ${dim.soot}/8` : dim?.inches ? String(dim.inches) : ''
+const cardSize = (height, width) => [cardDimension(height), cardDimension(width)].filter(Boolean).join(' X ')
 const legacyCategoryLabel = category => ({
   'readymade-door': 'Readymade Door Water Proof',
   'flush-door': 'Flush Door (Plain Door) Water Proof',
@@ -289,35 +301,38 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
     : ''
 
   if (layout === 'card') {
-    const logo = await b64('letterhead/shiv-logo.png')
-    const primary = guaranteedRows[0]
+    // Overlay format for PRE-PRINTED PVC guarantee cards: the card already
+    // carries the shop design; we only print the variable details, matching
+    // the legacy Excel "Gaurantee Card Name Print" layout positions.
+    const rows = (guaranteedRows.length ? guaranteedRows : (document.items ?? [])).slice(0, 5)
+    const cardDate = new Date(document.date).toLocaleDateString('en-GB').replaceAll('/', '-')
+    const thickness = cardThickness(document.category)
+    const sizeStr = cardSize(document.height, document.width)
+    const totalAmount = rows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+    const customer = document.customer ?? {}
+    // Item line at 5pt (Excel-style small print), everything else at 7pt
+    const itemRows = rows.map((item, i) => `
+        <div style="position:absolute;left:0;right:0;top:${(18 + i * 3.2).toFixed(1)}mm;font-size:5pt;line-height:1;white-space:nowrap">
+          <span style="position:absolute;left:3mm">${esc(thickness)}</span>
+          <span style="position:absolute;left:10mm;max-width:12.5mm;overflow:hidden">${esc(item.brandName)}</span>
+          <span style="position:absolute;left:24.5mm">${esc(sizeStr)}</span>
+          <span style="position:absolute;left:38mm">${esc(document.qty)} Pcs</span>
+          <span style="position:absolute;right:3mm;text-align:right">${Number(item.amount) ? esc(Math.round(Number(item.amount))) : ''}</span>
+        </div>`).join('')
+
     return cardPage(`
-        <div style="position:relative;width:54mm;height:86mm;overflow:hidden;border:1.5px solid #000;border-radius:3mm;padding:4mm;font-family:Arial,sans-serif">
-          <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #000;padding-bottom:2mm">
-            <div style="display:flex;align-items:center;gap:1.5mm;min-width:0">
-              <img src="${logo}" style="width:8mm;height:8mm;object-fit:contain;flex:0 0 auto"/>
-              <div>
-                <div style="font-size:10px;font-weight:700;line-height:1">Shiv Hardware Store</div>
-                <div style="font-size:5.8px;font-weight:600;line-height:1.2">Shivaji Road, Near Gandhi Highschool, Ramgarh Cantt - 829122</div>
-              </div>
-            </div>
-            ${seal ? `<img src="${seal}" style="width:10mm;height:10mm;object-fit:contain;flex:0 0 auto"/>` : ''}
+        <div style="position:relative;width:54mm;height:86mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
+          <div style="position:absolute;left:3mm;top:2.5mm;right:3mm;font-size:7pt;font-weight:600;line-height:1.18">
+            <div style="white-space:nowrap;overflow:hidden">M/s ${esc(customer.name || '')}${customer.address ? `,${esc(customer.address)}` : ''}</div>
+            <div>Mob - ${esc(customer.mobile || '')}</div>
+            <div>UID - ${esc(customer.uid || 'N/A')}</div>
           </div>
-          <div style="margin-top:3mm;text-align:center;font-size:11px;font-weight:700;letter-spacing:.08em;color:${GREEN}">GUARANTEE CARD</div>
-          <div style="margin-top:3mm;display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 2mm;font-size:7.5px;line-height:1.25">
-            <div><b>Ref:</b> ${esc(document.number)}</div>
-            <div><b>Date:</b> ${date}</div>
-            <div style="grid-column:span 2"><b>M/s:</b> ${esc(document.customer?.name || '-')}</div>
-            <div><b>UID:</b> ${esc(document.customer?.uid || 'N/A')}</div>
-            <div><b>Mobile:</b> ${esc(document.customer?.mobile || 'N/A')}</div>
-            <div style="grid-column:span 2"><b>Product:</b> ${esc(category)}</div>
-            <div style="grid-column:span 2"><b>Size:</b> ${esc(size)} | <b>Qty:</b> ${esc(document.qty)}</div>
-            <div style="grid-column:span 2"><b>Brand:</b> ${esc(primary?.brandName || '-')}</div>
-          </div>
-          <div style="position:absolute;bottom:4mm;left:4mm;right:4mm;display:flex;align-items:flex-end;justify-content:space-between">
-            <div style="font-size:10px;font-weight:700;color:${RED}">${maxYears ? `${maxYears} Years` : 'No Guarantee'}</div>
-            <div style="width:21mm;border-top:1px solid #000;padding-top:1mm;text-align:center;font-size:7px">Proprietor</div>
-          </div>
+          <div style="position:absolute;right:3mm;top:12.4mm;font-size:7pt;font-weight:500">${cardDate}</div>
+          ${itemRows}
+          ${totalAmount ? `
+          <div style="position:absolute;right:3mm;top:76.5mm;width:8mm;border-top:0.75pt solid #000"></div>
+          <div style="position:absolute;right:3mm;top:79.3mm;font-size:7pt;font-weight:600">${esc(Math.round(totalAmount))}</div>
+          <div style="position:absolute;right:3mm;top:82.2mm;width:8mm;border-top:0.75pt solid #000"></div>` : ''}
         </div>
       `)
   }
