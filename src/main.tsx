@@ -20,6 +20,7 @@ import { Transport } from './features/transport/Transport'
 import { DeliverPage } from './features/transport/DeliverPage'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { PrinterQueue } from './features/print/PrinterQueue'
+import { PdfViewer } from './features/pdf/PdfViewer'
 import { startOfflineSync } from './lib/offlineSync'
 import { getPrintServerUrl, pullBillsFromServer, pullCatalogFromServer } from './lib/printServer'
 import { useStore } from './lib/store'
@@ -133,6 +134,7 @@ const router = createHashRouter([
       { path: 'bills',          element: <BillBuilder /> },
       { path: 'bills/:id',      element: <BillBuilder /> },
       { path: 'printer-queue',  element: <PrinterQueue /> },
+      { path: 'pdf-viewer',     element: <PdfViewer /> },
     ],
   },
   { path: '/demo', element: <PrintDemo /> },
