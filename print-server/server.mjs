@@ -783,6 +783,35 @@ async function getSharedBrowser() {
   }
 }
 
+async function killSharedBrowser(browser) {
+  sharedBrowserPromise = null
+  try { browser.process()?.kill('SIGKILL') } catch { /* already dead */ }
+  try { await browser.close() } catch { /* already dead */ }
+}
+
+/**
+ * Returns a fresh page on the shared browser, health-checked first. A
+ * long-lived headless Chrome can silently wedge (renderer hang) after being
+ * reused across many jobs — page.newPage()/setContent() then hangs for the
+ * full navigation timeout instead of failing fast, which used to surface to
+ * users as "print failed" and fall back to the slower cloud queue. Probing
+ * with a trivial setContent call first, and force-relaunching Chrome on
+ * failure, converts that into a ~4s self-healing retry instead.
+ */
+async function getSharedPage() {
+  let browser = await getSharedBrowser()
+  try {
+    const page = await browser.newPage()
+    await page.setContent('<!doctype html><html></html>', { timeout: 4000 })
+    return page
+  } catch (err) {
+    console.warn(`[browser] health check failed (${err?.message ?? err}); relaunching Chrome`)
+    await killSharedBrowser(browser)
+    browser = await getSharedBrowser()
+    return await browser.newPage()
+  }
+}
+
 // Warm the browser at boot so the first real print is fast too. Best-effort.
 async function warmUpBrowser() {
   if (!CHROME_PATH) return
@@ -1290,8 +1319,7 @@ async function printCardImage(filePath, copies, title, printer = COLOR_PRINTER, 
 async function renderUploadedImagePdf(file) {
   let page
   try {
-    const browser = await getSharedBrowser()
-    page = await browser.newPage()
+    page = await getSharedPage()
     const html = `<!doctype html>
 <html>
 <head>
@@ -1710,8 +1738,7 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
       : documentKind === 'bill'
         ? buildBillHtml(bill)
         : await buildQuotationHtml(quote)
-    const browser = await getSharedBrowser()
-    page = await browser.newPage()
+    page = await getSharedPage()
 
     // For bills: pin viewport to exactly 148×210mm at 96dpi so Puppeteer renders
     // at the same pixel dimensions as the in-app preview iframe (559×793px).
@@ -2638,8 +2665,7 @@ app.post('/render-png', async (req, res) => {
     const html = kind === 'guarantee'
       ? await buildGuaranteeHtml(document, layout)
       : await buildQuotationHtml(quote)
-    const browser = await getSharedBrowser()
-    page = await browser.newPage()
+    page = await getSharedPage()
     const width = Math.round((210 / 25.4) * 96)
     const height = Math.round((297 / 25.4) * 96)
     await page.setViewport({ width, height, deviceScaleFactor: scale })

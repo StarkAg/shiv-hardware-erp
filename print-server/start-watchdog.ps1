@@ -13,7 +13,12 @@ if ($existing) {
 
 while ($true) {
     Add-Content $log "[$(Get-Date -f 'dd-MM-yyyy HH:mm:ss')] Shiv Print Server starting"
-    $cmdArgs = "/c `"$node`" server.mjs 1>>`"$log`" 2>>`"$err`""
+    # --watch: Node auto-restarts itself whenever server.mjs/template.mjs (or
+    # anything else it imports) changes on disk, so edits take effect live
+    # without this script (or a person) having to kill/relaunch it. If the
+    # process dies outright (crash, not a file-change restart), this loop's
+    # own 5s-retry still kicks in as the crash-safety net.
+    $cmdArgs = "/c `"$node`" --watch server.mjs 1>>`"$log`" 2>>`"$err`""
     $p = Start-Process 'cmd.exe' -ArgumentList $cmdArgs -WorkingDirectory $dir -WindowStyle Hidden -PassThru -Wait
     Add-Content $log "[$(Get-Date -f 'dd-MM-yyyy HH:mm:ss')] Shiv Print Server exited (code $($p.ExitCode)), restarting in 5s"
     Start-Sleep 5
