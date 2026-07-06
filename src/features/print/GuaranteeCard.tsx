@@ -121,7 +121,7 @@ const CARD_THICKNESS: Partial<Record<GuaranteeDocument['category'], string>> = {
 }
 
 // Size without inch marks, as on the old card: 79 4/8 X 44
-const cardDimension = (dim: GuaranteeDocument['height']) =>
+const cardDimension = (dim: GuaranteeDocument['height'] | null | undefined) =>
   dim?.soot ? `${dim.inches} ${dim.soot}/8` : dim?.inches ? String(dim.inches) : ''
 
 /**
@@ -131,50 +131,71 @@ const cardDimension = (dim: GuaranteeDocument['height']) =>
  * the print server's template.mjs card layout.
  */
 function CompactGuaranteeCard({ document }: { document: GuaranteeDocument }) {
-  const dateStr = new Date(document.date).toLocaleDateString('en-GB').replace(/\//g, '-')
-  const guaranteedRows = document.items.filter((r) => r.guaranteeYears > 0)
-  const rows = (guaranteedRows.length ? guaranteedRows : document.items).slice(0, 5)
-  const thickness = CARD_THICKNESS[document.category] ?? ''
-  const sizeStr = [cardDimension(document.height), cardDimension(document.width)].filter(Boolean).join(' X ')
-  const totalAmount = rows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
-  const customer = document.customer
-
   return (
     <A4Page>
       <div className="flex h-[297mm] items-start justify-center bg-white pt-[18mm] font-print text-black">
         <div className="relative h-[86mm] w-[54mm] overflow-hidden bg-white">
           {/* card boundary shown on screen only, never printed */}
           <div className="pointer-events-none absolute inset-0 border border-dashed border-slate-300 print:hidden" />
-
-          <div className="absolute left-[3mm] right-[3mm] top-[2.5mm] text-[7pt] font-semibold leading-[1.18]">
-            <div className="overflow-hidden whitespace-nowrap">
-              M/s {customer.name || ''}{customer.address ? `,${customer.address}` : ''}
-            </div>
-            <div>Mob - {customer.mobile || ''}</div>
-            <div>UID - {customer.uid || 'N/A'}</div>
-          </div>
-
-          <div className="absolute right-[3mm] top-[12.4mm] text-[7pt] font-medium">{dateStr}</div>
-
-          {rows.map((item, i) => (
-            <div key={i} className="absolute left-0 right-0 whitespace-nowrap text-[5pt] leading-none" style={{ top: `${18 + i * 3.2}mm` }}>
-              <span className="absolute left-[3mm]">{thickness}</span>
-              <span className="absolute left-[10mm] max-w-[12.5mm] overflow-hidden">{item.brandName}</span>
-              <span className="absolute left-[24.5mm]">{sizeStr}</span>
-              <span className="absolute left-[38mm]">{document.qty} Pcs</span>
-              <span className="absolute right-[3mm] text-right">{Number(item.amount) ? Math.round(Number(item.amount)) : ''}</span>
-            </div>
-          ))}
-
-          {totalAmount > 0 && (
-            <>
-              <div className="absolute right-[3mm] top-[76.5mm] w-[8mm] border-t border-black" />
-              <div className="absolute right-[3mm] top-[79.3mm] text-[7pt] font-semibold">{Math.round(totalAmount)}</div>
-              <div className="absolute right-[3mm] top-[82.2mm] w-[8mm] border-t border-black" />
-            </>
-          )}
+          <GuaranteeCardFace document={document} />
         </div>
       </div>
     </A4Page>
+  )
+}
+
+/**
+ * The 54mm x 86mm card content only — no page wrapper. Reused by the print
+ * preview (inside CompactGuaranteeCard/A4Page) and by inline UI thumbnails
+ * (e.g. the slot 1/2 previews in GuaranteeBuilder).
+ */
+export function GuaranteeCardFace({ document }: { document: GuaranteeDocument }) {
+  const dateStr = new Date(document.date).toLocaleDateString('en-GB').replace(/\//g, '-')
+  const guaranteedRows = document.items.filter((r) => r.guaranteeYears > 0)
+  const rows = (guaranteedRows.length ? guaranteedRows : document.items).slice(0, 5)
+  const docThickness = CARD_THICKNESS[document.category] ?? ''
+  const docSizeStr = [cardDimension(document.height), cardDimension(document.width)].filter(Boolean).join(' X ')
+  const totalAmount = rows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+  const customer = document.customer
+
+  return (
+    <>
+      <div className="absolute left-[3mm] right-[3mm] top-[4mm] text-[7pt] font-semibold leading-[1.18]">
+        <div className="overflow-hidden whitespace-nowrap">
+          M/s {customer.name || ''}{customer.address ? `,${customer.address}` : ''}
+        </div>
+        <div>Mob - {customer.mobile || ''}</div>
+        <div>UID - {customer.uid || 'N/A'}</div>
+      </div>
+
+      <div className="absolute right-[3mm] top-[13.9mm] text-[7pt] font-medium">{dateStr}</div>
+
+      {rows.map((item, i) => {
+        const rowThickness = item.thickness || docThickness
+        const rowSizeStr = (item.height || item.width)
+          ? [cardDimension(item.height), cardDimension(item.width)].filter(Boolean).join(' X ')
+          : docSizeStr
+        const rowQty = item.qty ?? document.qty
+        return (
+        <div
+          key={i}
+          className="absolute left-[3mm] right-[3mm] items-baseline text-[4pt] leading-none"
+          style={{ top: `${20.5 + i * 3.2}mm`, display: 'grid', gridTemplateColumns: '5.5mm 1fr 11mm 5mm 4.5mm', columnGap: '1.3mm' }}
+        >
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{rowThickness}</span>
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{item.brandName}</span>
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{rowSizeStr}</span>
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{rowQty} Pcs</span>
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap text-right">{Number(item.amount) ? Math.round(Number(item.amount)) : ''}</span>
+        </div>
+        )
+      })}
+
+      {totalAmount > 0 && (
+        <div className="absolute right-[3mm] top-[76.8mm] inline-block border-y border-black py-[0.8mm] text-[7pt] font-semibold leading-none">
+          {Math.round(totalAmount)}
+        </div>
+      )}
+    </>
   )
 }

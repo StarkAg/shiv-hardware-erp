@@ -98,6 +98,17 @@ export interface GuaranteeCardItem {
   guaranteeYears: GuaranteeYears
   sizeLabel?: string | null
   amount?: number | null
+  /**
+   * Per-row overlay fields for the compact PVC card table (Thickness/Length/
+   * Height/Pcs columns) — each billed row can be its own size, unlike the A4
+   * sheet which shares one document-level height/width/qty. Falls back to the
+   * document-level height/width/qty and the category's default thickness
+   * label when omitted.
+   */
+  thickness?: string | null
+  height?: Dimension | null
+  width?: Dimension | null
+  qty?: number | null
 }
 
 export interface GuaranteeDocument {

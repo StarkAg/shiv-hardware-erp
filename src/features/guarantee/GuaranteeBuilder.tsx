@@ -1,50 +1,114 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { FileText, Plus, Printer, ScanLine, Trash2 } from 'lucide-react'
-import { Button, Card, Input, Select } from '../../components/ui'
+import { Check, FileText, Printer, ScanLine, Trash2, X } from 'lucide-react'
+import { Button, Card, Input } from '../../components/ui'
 import { useStore } from '../../lib/store'
 import {
   CATEGORY_LABELS,
-  CATEGORY_ORDER,
   type Bill,
+  type Brand,
   type Dimension,
+  type GuaranteeCardItem,
   type GuaranteeDocument,
   type GuaranteeYears,
   type ProductCategory,
 } from '../../lib/types'
-import { formatSize, isFootSized } from '../../lib/pricing'
 import { PrintPreview } from '../print/PrintPreview'
-import { GuaranteeCard } from '../print/GuaranteeCard'
+import { GuaranteeCard, GuaranteeCardFace } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
 
 type GuaranteeLayout = 'card' | 'a4'
-type BilledItem = {
-  id: string
-  category: ProductCategory
-  brandName: string
-  guaranteeYears: GuaranteeYears
-  height: Dimension
-  width: Dimension
-  qty: number
-}
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
-const GUARANTEE_CATEGORIES = CATEGORY_ORDER.filter((c) => !['aluminium-door', 'window-2-track', 'window-3-track'].includes(c))
+// Normalizes however the name was typed (all caps, all lowercase, etc.) to
+// Proper Case for the printed/previewed card — e.g. "AJAY KUMAR JEE" -> "Ajay Kumar Jee".
+const toProperCase = (s: string) => s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())
 
-const GUARANTEE_YEAR_VALUES: GuaranteeYears[] = [1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
+// No Product/Brand/Years pickers anymore — the Items table's Type column is
+// typed freely and matched against every known brand; these are just the
+// fallback values used when a row's Type doesn't match one.
+const DEFAULT_CATEGORY: ProductCategory = 'readymade-door'
+const DEFAULT_YEARS: GuaranteeYears = 10
+const DEFAULT_BRAND_LABEL = CATEGORY_LABELS[DEFAULT_CATEGORY]
 
-function inchesToDim(val: number): Dimension {
-  const inches = Math.floor(val)
-  const soot = Math.round((val - inches) * 8)
-  return { inches, soot }
+// One spreadsheet row — Thickness / Type / Length / Height / Pcs / Rate — the
+// same shape the shop is used to from Excel. Length/Height are whole inches
+// plus an explicit soot (1/8") box, matching how the counter measures doors
+// and boards. Each row maps 1:1 onto a GuaranteeCardItem, so the PVC card can
+// print several different sizes/brands on one card instead of sharing a
+// single document-level size.
+type SizeRow = {
+  id: string
+  thickness: string
+  type: string
+  length: number | ''
+  lengthSoot: number | ''
+  height: number | ''
+  heightSoot: number | ''
+  qty: number | ''
+  rate: number | ''
 }
 
-function nearestGuaranteeYears(n: number): GuaranteeYears {
-  return (
-    GUARANTEE_YEAR_VALUES.find((y) => y >= n) ??
-    GUARANTEE_YEAR_VALUES[GUARANTEE_YEAR_VALUES.length - 1]
-  )
+const blankRow = (): SizeRow => ({
+  id: uid(),
+  thickness: '',
+  type: '',
+  length: '',
+  lengthSoot: '',
+  height: '',
+  heightSoot: '',
+  qty: '',
+  rate: '',
+})
+const isRowFilled = (r: SizeRow) =>
+  r.type.trim() !== '' ||
+  r.thickness.trim() !== '' ||
+  r.length !== '' ||
+  r.lengthSoot !== '' ||
+  r.height !== '' ||
+  r.heightSoot !== '' ||
+  r.qty !== '' ||
+  r.rate !== ''
+
+const rowDim = (inches: number | '', soot: number | ''): Dimension | null =>
+  inches !== '' || soot !== '' ? { inches: inches === '' ? 0 : Number(inches), soot: soot === '' ? 0 : Number(soot) } : null
+
+// Editing the last row auto-appends a fresh blank one, so the table always
+// has a trailing entry point (like continuing to type in Excel).
+function updateSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void, id: string, patch: Partial<SizeRow>) {
+  setRows((prev) => {
+    const next = prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
+    const last = next[next.length - 1]
+    if (last.id === id && isRowFilled(last)) next.push(blankRow())
+    return next
+  })
+}
+
+function removeSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void, id: string) {
+  setRows((prev) => {
+    const next = prev.filter((r) => r.id !== id)
+    return next.length ? next : [blankRow()]
+  })
+}
+
+function rowsToItems(rows: SizeRow[], brandOptions: Brand[], fallbackBrand: string, fallbackYears: GuaranteeYears): GuaranteeCardItem[] {
+  const filled = rows.filter(isRowFilled)
+  // No fake placeholder row when the table is empty — an empty table prints
+  // (and previews) with no item line at all.
+  if (!filled.length) return []
+  return filled.map((row) => {
+    const matched = brandOptions.find((b) => b.name.toLowerCase() === row.type.trim().toLowerCase())
+    return {
+      brandName: row.type.trim() || fallbackBrand,
+      guaranteeYears: matched?.guaranteeYears ?? fallbackYears,
+      thickness: row.thickness.trim() || null,
+      height: rowDim(row.length, row.lengthSoot),
+      width: rowDim(row.height, row.heightSoot),
+      qty: row.qty !== '' ? Number(row.qty) : null,
+      amount: row.rate !== '' ? Number(row.rate) : null,
+    }
+  })
 }
 
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
@@ -52,28 +116,21 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [number] = useState(() => `GC-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`)
-  const [category, setCategory] = useState<ProductCategory>('readymade-door')
-  const [brandName, setBrandName] = useState('')
-  const [years, setYears] = useState<GuaranteeYears>(10)
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
-  const [h, setH] = useState<Dimension>(blankDim)
-  const [w, setW] = useState<Dimension>(blankDim)
-  const [qty, setQty] = useState(1)
-  const [billedItems, setBilledItems] = useState<BilledItem[]>([])
+  const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
   const [preview, setPreview] = useState(false)
-  // Which tray slot the PVC card prints in ('both' = same card in both slots)
-  const [cardSlot, setCardSlot] = useState<'1' | '2' | 'both'>('1')
-  const sizeCardRef = useRef<HTMLDivElement>(null)
 
-  const brandOptions = (sets[0]?.brands ?? []).filter((b) => b.category === category)
-  const hasSize = h.inches > 0 || h.soot > 0 || w.inches > 0 || w.soot > 0
-  const selectedBrand = brandOptions.find((b) => b.name === brandName)
-  const displayBrand = brandName.trim() || selectedBrand?.name || CATEGORY_LABELS[category]
+  // Slot 2: an independent second card printed in the same tray pass.
+  // Ticking it on reveals its own small set of fields plus its own table.
+  const [secondCardOn, setSecondCardOn] = useState(false)
+  const [customer2, setCustomer2] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
+  const [rows2, setRows2] = useState<SizeRow[]>(() => [blankRow()])
+
+  // Unfiltered brand list — the Items table's Type column can match any known
+  // brand regardless of category, since there's no Product picker anymore.
+  const brandOptions = sets[0]?.brands ?? []
   const previewTitle = layout === 'card' ? 'Guarantee Card' : 'Guarantee A4 Sheet'
-
-  useEffect(() => {
-    setBrandName('')
-  }, [category])
+  const hasRows = rows.some(isRowFilled)
 
   // When returning from BillSelectPage, import the selected bill
   useEffect(() => {
@@ -86,43 +143,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function focusNextSizeEntry(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== 'Enter') return
-    e.preventDefault()
-    const entries = Array.from(sizeCardRef.current?.querySelectorAll<HTMLInputElement>('[data-size-entry]') ?? [])
-    const next = entries[entries.indexOf(e.currentTarget) + 1]
-    next?.focus()
-    next?.select()
-  }
-
-  function chooseBrand(name: string) {
-    setBrandName(name)
-    const brand = brandOptions.find((b) => b.name === name)
-    if (brand?.guaranteeYears) setYears(brand.guaranteeYears)
-  }
-
-  function addBilledItem() {
-    if (!hasSize) return
-    setBilledItems((items) => [
-      ...items,
-      {
-        id: uid(),
-        category,
-        brandName: displayBrand,
-        guaranteeYears: years,
-        height: { ...h },
-        width: { ...w },
-        qty: qty || 1,
-      },
-    ])
-  }
-
-  function removeBilledItem(id: string) {
-    setBilledItems((items) => items.filter((item) => item.id !== id))
-  }
-
   function importBill(bill: Bill) {
-    // Fill customer details
     setCustomer((c) => ({
       ...c,
       name: bill.customerName || c.name,
@@ -130,60 +151,72 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       uid: bill.customerUid || c.uid,
     }))
 
-    // Import items that have a category + size (board/door items)
-    const imported: BilledItem[] = bill.items
+    // Bill sizes are decimal inches (e.g. 4.5) — split into whole inches + soot.
+    const splitDecimalInches = (val: number) => {
+      const inches = Math.floor(val)
+      const soot = Math.round((val - inches) * 8)
+      return { inches, soot }
+    }
+
+    const imported: SizeRow[] = bill.items
       .filter((it) => it.category && (it.heightIn ?? 0) > 0 && (it.widthIn ?? 0) > 0)
       .map((it) => {
-        const brandInSet = sets[0]?.brands.find(
-          (b) => b.category === it.category && b.name === it.brandName,
-        )
-        const gy = nearestGuaranteeYears(brandInSet?.guaranteeYears ?? years)
+        const length = splitDecimalInches(it.heightIn!)
+        const height = splitDecimalInches(it.widthIn!)
         return {
           id: uid(),
-          category: it.category!,
-          brandName: it.brandName || '',
-          guaranteeYears: gy,
-          height: inchesToDim(it.heightIn!),
-          width: inchesToDim(it.widthIn!),
+          thickness: '',
+          type: it.brandName || '',
+          length: length.inches,
+          lengthSoot: length.soot,
+          height: height.inches,
+          heightSoot: height.soot,
           qty: it.qty,
+          rate: it.amount || '',
         }
       })
 
-    if (imported.length) setBilledItems((prev) => [...prev, ...imported])
+    if (imported.length) setRows((prev) => [...prev.filter(isRowFilled), ...imported, blankRow()])
   }
 
   function buildGuaranteeDoc(): GuaranteeDocument {
-    const primaryItem = billedItems[0]
-    const printItems = billedItems.length
-      ? billedItems.map((item) => ({
-          brandName: item.brandName,
-          guaranteeYears: item.guaranteeYears,
-          sizeLabel: `${CATEGORY_LABELS[item.category]} - ${formatSize(item.height, item.width, item.category) || '-'} - Qty ${item.qty}`,
-        }))
-      : [
-          {
-            brandName: displayBrand,
-            guaranteeYears: years,
-          },
-        ]
-
+    const filled = rows.filter(isRowFilled)
+    const primary = filled[0]
     return {
       id: number,
       number,
       date: new Date().toISOString(),
-      customer,
-      category: primaryItem?.category ?? category,
-      height: primaryItem?.height ?? h,
-      width: primaryItem?.width ?? w,
-      qty: primaryItem?.qty ?? (qty || 1),
-      items: printItems,
+      customer: { ...customer, name: toProperCase(customer.name) },
+      category: DEFAULT_CATEGORY,
+      height: (primary && rowDim(primary.length, primary.lengthSoot)) ?? blankDim(),
+      width: (primary && rowDim(primary.height, primary.heightSoot)) ?? blankDim(),
+      qty: primary && primary.qty !== '' ? Number(primary.qty) : 1,
+      items: rowsToItems(rows, brandOptions, DEFAULT_BRAND_LABEL, DEFAULT_YEARS),
+    }
+  }
+
+  function buildSecondDoc(): GuaranteeDocument {
+    const filled = rows2.filter(isRowFilled)
+    const primary = filled[0]
+    return {
+      id: `${number}-2`,
+      number,
+      date: new Date().toISOString(),
+      customer: { ...customer2, name: toProperCase(customer2.name) },
+      category: DEFAULT_CATEGORY,
+      height: (primary && rowDim(primary.length, primary.lengthSoot)) ?? blankDim(),
+      width: (primary && rowDim(primary.height, primary.heightSoot)) ?? blankDim(),
+      qty: primary && primary.qty !== '' ? Number(primary.qty) : 1,
+      items: rowsToItems(rows2, brandOptions, DEFAULT_BRAND_LABEL, DEFAULT_YEARS),
     }
   }
 
   const doc = buildGuaranteeDoc()
+  const doc2 = buildSecondDoc()
 
   function openPreview() {
     enqueueGuaranteeSync(doc)
+    if (secondCardOn) enqueueGuaranteeSync(doc2)
     setPreview(true)
   }
 
@@ -191,21 +224,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
         <div className="no-print flex flex-wrap items-center justify-center gap-3">
-          <Button onClick={openPreview} disabled={!hasSize && !billedItems.length} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+          <Button onClick={openPreview} disabled={!hasRows} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Printer size={20} /> Print
           </Button>
-          {layout === 'card' && (
-            <Select
-              aria-label="Card tray slot"
-              value={cardSlot}
-              onChange={(e) => setCardSlot(e.target.value as '1' | '2' | 'both')}
-              className="!w-auto"
-            >
-              <option value="1">Slot 1</option>
-              <option value="2">Slot 2</option>
-              <option value="both">Both slots (2 cards)</option>
-            </Select>
-          )}
           <Link
             to="/scan"
             className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
@@ -263,91 +284,93 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           </div>
         </Card>
 
-        <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Guarantee</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Select label="Product" value={category} onChange={(e) => setCategory(e.target.value as ProductCategory)}>
-              {GUARANTEE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-              ))}
-            </Select>
-            <Select label="Brand / Item" value={brandName} onChange={(e) => chooseBrand(e.target.value)}>
-              <option value="">{CATEGORY_LABELS[category]}</option>
-              {brandOptions.map((b) => (
-                <option key={b.id} value={b.name}>{b.name}</option>
-              ))}
-            </Select>
-            <Select label="Years" value={years} onChange={(e) => setYears(Number(e.target.value) as GuaranteeYears)}>
-              {GUARANTEE_YEAR_VALUES.map((y) => (
-                <option key={y} value={y}>{y} Years</option>
-              ))}
-            </Select>
-          </div>
-        </Card>
-
-        <div
-          ref={sizeCardRef}
-          className="shrink-0 rounded-xl border border-stone-200/90 bg-stone-50 p-4 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100"
-        >
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Size</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
-            <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} feet={isFootSized(category)} className="md:col-span-5" />
-            <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} feet={isFootSized(category)} className="md:col-span-5" />
-            <div className="md:col-span-2">
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Qty</label>
-              <input
-                type="number"
-                min={1}
-                inputMode="numeric"
-                data-size-entry
-                value={qty}
-                className="h-11 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-3 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-                onFocus={(e) => e.currentTarget.select()}
-                onKeyDown={focusNextSizeEntry}
-                onChange={(e) => setQty(Number(e.target.value))}
-              />
-            </div>
-          </div>
-          <div className="mt-3 flex justify-end">
-            <Button onClick={addBilledItem} disabled={!hasSize} className="flex items-center justify-center gap-1.5">
-              <Plus size={16} /> Add Item
-            </Button>
-          </div>
-        </div>
-
         <Card className="min-h-0 shrink-0 overflow-hidden text-stone-800 dark:text-stone-100">
           <div className="border-b border-stone-100 px-4 py-2 text-sm font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:text-stone-400">
-            Billed Items
+            Items
           </div>
-          {billedItems.length ? (
-            <div className="max-h-56 overflow-auto">
-              {billedItems.map((item) => (
-                <div key={item.id} className="flex items-center gap-3 border-b border-stone-100 px-4 py-3 last:border-b-0 dark:border-white/10">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-stone-900 dark:text-stone-100">
-                      {CATEGORY_LABELS[item.category]} - {item.brandName}
+          <SizeTable rows={rows} setRows={setRows} brandOptions={brandOptions} datalistId="type-options-1" />
+        </Card>
+
+        {layout === 'card' && (
+          <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Print Preview</h2>
+            <div className="flex flex-wrap items-start justify-center gap-6">
+              <div className="flex flex-col items-center gap-2">
+                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-stone-500 dark:bg-white/10 dark:text-stone-300">
+                  Slot 1
+                </span>
+                <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-md border border-stone-300 bg-white shadow-sm dark:border-white/20">
+                  <GuaranteeCardFace document={doc} />
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center gap-2">
+                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-stone-500 dark:bg-white/10 dark:text-stone-300">
+                  Slot 2
+                </span>
+                {secondCardOn ? (
+                  <div className="relative">
+                    <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-md border border-stone-300 bg-white shadow-sm dark:border-white/20">
+                      <GuaranteeCardFace document={doc2} />
                     </div>
-                    <div className="mt-0.5 text-xs font-medium text-stone-500 dark:text-stone-400">
-                      {formatSize(item.height, item.width, item.category) || '-'} - Qty {item.qty} - {item.guaranteeYears} Years
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSecondCardOn(false)}
+                      aria-label="Remove slot 2 card"
+                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-stone-300 bg-white text-stone-500 shadow-sm transition hover:border-red-400 hover:text-red-500 dark:border-white/20 dark:bg-stone-800 dark:text-stone-300"
+                    >
+                      <X size={13} />
+                    </button>
                   </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => removeBilledItem(item.id)}
-                    className="rounded-lg p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-                    aria-label="Remove billed item"
+                    onClick={() => setSecondCardOn(true)}
+                    className="flex h-[86mm] w-[54mm] flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 bg-stone-50 text-stone-400 transition hover:border-shiv-green hover:text-shiv-green dark:border-white/15 dark:bg-white/5"
                   >
-                    <Trash2 size={17} />
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-current">
+                      <Check size={16} />
+                    </span>
+                    <span className="text-xs font-semibold">Add 2nd card</span>
                   </button>
+                )}
+              </div>
+            </div>
+
+            {secondCardOn && (
+              <div className="mt-4 border-t border-stone-100 pt-4 dark:border-white/10">
+                <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Slot 2 Details</h3>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <Input label="M/s (Name)" value={customer2.name} onChange={(e) => setCustomer2({ ...customer2, name: e.target.value })} />
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Mobile</span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={customer2.mobile}
+                      onChange={(e) => setCustomer2({ ...customer2, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                      className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UID</span>
+                    <input
+                      type="text"
+                      maxLength={12}
+                      value={customer2.uid}
+                      onChange={(e) => setCustomer2({ ...customer2, uid: e.target.value.toUpperCase().slice(0, 12) })}
+                      className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                    />
+                  </label>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="px-4 py-5 text-center text-sm font-medium text-stone-400 dark:text-stone-500">
-              No billed items added.
-            </div>
-          )}
-        </Card>
+                <div className="mt-3">
+                  <SizeTable rows={rows2} setRows={setRows2} brandOptions={brandOptions} datalistId="type-options-2" />
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
       </div>
 
       {preview && (
@@ -360,8 +383,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             layout,
             ...(layout === 'card'
               ? {
-                  slot: cardSlot === '2' ? (2 as const) : (1 as const),
-                  ...(cardSlot === 'both' ? { documents: [doc, doc] } : {}),
+                  slot: 1 as const,
+                  ...(secondCardOn ? { documents: [doc, doc2] } : {}),
                 }
               : {}),
           }}
@@ -369,65 +392,158 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           <GuaranteeCard document={doc} layout={layout} />
         </PrintPreview>
       )}
-
     </div>
   )
 }
 
-function DimInput({
-  label,
-  dim,
-  onChange,
-  onKeyDown,
-  feet = false,
-  className = '',
+function SizeTable({
+  rows,
+  setRows,
+  brandOptions,
+  datalistId,
 }: {
-  label: string
-  dim: Dimension
-  onChange: (d: Dimension) => void
-  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
-  feet?: boolean
-  className?: string
+  rows: SizeRow[]
+  setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void
+  brandOptions: Brand[]
+  datalistId: string
 }) {
+  const cellClass =
+    'w-full rounded border border-transparent bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white dark:text-stone-100 dark:focus:bg-stone-950'
+  const sootClass =
+    'w-10 shrink-0 rounded border border-transparent bg-transparent px-1 py-1.5 text-sm text-stone-500 outline-none transition focus:border-shiv-green focus:bg-white dark:text-stone-400 dark:focus:bg-stone-950'
+
   return (
-    <div className={className}>
-      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</label>
-      {/* Boards are sized in whole feet (no soot); doors/aluminium use inches + n/8. */}
-      <div className={feet ? 'grid grid-cols-1' : 'grid grid-cols-[minmax(0,1fr)_5rem] gap-2'}>
-        <label className="relative block">
-          <input
-            type="number"
-            min={0}
-            inputMode="numeric"
-            data-size-entry
-            className="h-11 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-3 pr-9 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-            placeholder="0"
-            value={dim.inches || ''}
-            onFocus={(e) => e.currentTarget.select()}
-            onKeyDown={onKeyDown}
-            onChange={(e) => onChange({ inches: Number(e.target.value), soot: feet ? 0 : dim.soot })}
-          />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">{feet ? 'ft' : 'in'}</span>
-        </label>
-        {!feet && (
-          <label className="relative block">
-            <input
-              type="number"
-              min={0}
-              max={7}
-              inputMode="numeric"
-              data-size-entry
-              className="h-11 w-full rounded-lg border-2 border-stone-300 bg-stone-50 px-3 pr-7 text-lg font-semibold text-stone-950 outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-              placeholder="0"
-              value={dim.soot || ''}
-              onFocus={(e) => e.currentTarget.select()}
-              onKeyDown={onKeyDown}
-              onChange={(e) => onChange({ ...dim, soot: Math.min(7, Math.max(0, Number(e.target.value))) })}
-            />
-            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-400 dark:text-stone-500">/8</span>
-          </label>
-        )}
-      </div>
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-stone-200 bg-stone-100 text-xs font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400">
+            <th className="px-2 py-2 text-left">Thickness</th>
+            <th className="px-2 py-2 text-left">Type</th>
+            <th className="px-2 py-2 text-right">Length</th>
+            <th className="px-2 py-2 text-right">Height</th>
+            <th className="px-2 py-2 text-right">Pcs</th>
+            <th className="px-2 py-2 text-right">Rate</th>
+            <th className="w-9 px-1 py-2" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className="border-b border-stone-100 last:border-b-0 dark:border-white/5">
+              <td className="p-0.5">
+                <input
+                  value={row.thickness}
+                  placeholder="—"
+                  onChange={(e) => updateSizeRow(setRows, row.id, { thickness: e.target.value })}
+                  className={cellClass}
+                />
+              </td>
+              <td className="p-0.5">
+                <input
+                  list={datalistId}
+                  value={row.type}
+                  placeholder="Brand"
+                  onChange={(e) => updateSizeRow(setRows, row.id, { type: e.target.value })}
+                  className={cellClass}
+                />
+              </td>
+              <td className="p-0.5">
+                <div className="flex items-center gap-0.5">
+                  <input
+                    type="number"
+                    value={row.length}
+                    placeholder="0"
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => updateSizeRow(setRows, row.id, { length: e.target.value === '' ? '' : Number(e.target.value) })}
+                    className={`${cellClass} text-right`}
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={7}
+                    value={row.lengthSoot}
+                    placeholder="0"
+                    title="Soot (1/8 inch)"
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) =>
+                      updateSizeRow(setRows, row.id, {
+                        lengthSoot: e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))),
+                      })
+                    }
+                    className={`${sootClass} text-right`}
+                  />
+                  <span className="shrink-0 text-xs text-stone-400 dark:text-stone-500">/8</span>
+                </div>
+              </td>
+              <td className="p-0.5">
+                <div className="flex items-center gap-0.5">
+                  <input
+                    type="number"
+                    value={row.height}
+                    placeholder="0"
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => updateSizeRow(setRows, row.id, { height: e.target.value === '' ? '' : Number(e.target.value) })}
+                    className={`${cellClass} text-right`}
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={7}
+                    value={row.heightSoot}
+                    placeholder="0"
+                    title="Soot (1/8 inch)"
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) =>
+                      updateSizeRow(setRows, row.id, {
+                        heightSoot: e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))),
+                      })
+                    }
+                    className={`${sootClass} text-right`}
+                  />
+                  <span className="shrink-0 text-xs text-stone-400 dark:text-stone-500">/8</span>
+                </div>
+              </td>
+              <td className="p-0.5">
+                <input
+                  type="number"
+                  min={1}
+                  value={row.qty}
+                  placeholder="1"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => updateSizeRow(setRows, row.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
+                  className={`${cellClass} text-right`}
+                />
+              </td>
+              <td className="p-0.5">
+                <input
+                  type="number"
+                  value={row.rate}
+                  placeholder="0"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => updateSizeRow(setRows, row.id, { rate: e.target.value === '' ? '' : Number(e.target.value) })}
+                  className={`${cellClass} text-right`}
+                />
+              </td>
+              <td className="p-0.5 text-center">
+                {rows.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeSizeRow(setRows, row.id)}
+                    aria-label="Remove row"
+                    className="rounded p-1 text-stone-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <datalist id={datalistId}>
+        {brandOptions.map((b) => (
+          <option key={b.id} value={b.name} />
+        ))}
+      </datalist>
     </div>
   )
 }

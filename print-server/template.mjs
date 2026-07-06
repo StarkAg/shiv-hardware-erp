@@ -306,33 +306,41 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
     // the legacy Excel "Gaurantee Card Name Print" layout positions.
     const rows = (guaranteedRows.length ? guaranteedRows : (document.items ?? [])).slice(0, 5)
     const cardDate = new Date(document.date).toLocaleDateString('en-GB').replaceAll('/', '-')
-    const thickness = cardThickness(document.category)
-    const sizeStr = cardSize(document.height, document.width)
+    const docThickness = cardThickness(document.category)
+    const docSizeStr = cardSize(document.height, document.width)
     const totalAmount = rows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
     const customer = document.customer ?? {}
-    // Item line at 5pt (Excel-style small print), everything else at 7pt
-    const itemRows = rows.map((item, i) => `
-        <div style="position:absolute;left:0;right:0;top:${(18 + i * 3.2).toFixed(1)}mm;font-size:5pt;line-height:1;white-space:nowrap">
-          <span style="position:absolute;left:3mm">${esc(thickness)}</span>
-          <span style="position:absolute;left:10mm;max-width:12.5mm;overflow:hidden">${esc(item.brandName)}</span>
-          <span style="position:absolute;left:24.5mm">${esc(sizeStr)}</span>
-          <span style="position:absolute;left:38mm">${esc(document.qty)} Pcs</span>
-          <span style="position:absolute;right:3mm;text-align:right">${Number(item.amount) ? esc(Math.round(Number(item.amount))) : ''}</span>
-        </div>`).join('')
+    // Item line at 4pt (Excel-style small print), everything else at 7pt.
+    // A CSS grid keeps every row's columns aligned with a fixed, EQUAL gap
+    // between them; the Type (brand) column takes the remaining space (1fr)
+    // and truncates with an ellipsis instead of overlapping Size/Pcs/Rate.
+    // Each row can carry its own thickness/size/qty (spreadsheet-style entry);
+    // falls back to the document-level values when a row omits them.
+    const itemRows = rows.map((item, i) => {
+      const rowThickness = item.thickness || docThickness
+      const rowSize = (item.height || item.width) ? cardSize(item.height, item.width) : docSizeStr
+      const rowQty = item.qty ?? document.qty
+      return `
+        <div style="position:absolute;left:3mm;right:3mm;top:${(20.5 + i * 3.2).toFixed(1)}mm;display:grid;grid-template-columns:5.5mm 1fr 11mm 5mm 4.5mm;column-gap:1.3mm;align-items:baseline;font-size:4pt;line-height:1">
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rowThickness)}</span>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.brandName)}</span>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rowSize)}</span>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rowQty)} Pcs</span>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right">${Number(item.amount) ? esc(Math.round(Number(item.amount))) : ''}</span>
+        </div>`
+    }).join('')
 
     return cardPage(`
         <div style="position:relative;width:54mm;height:86mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
-          <div style="position:absolute;left:3mm;top:2.5mm;right:3mm;font-size:7pt;font-weight:600;line-height:1.18">
+          <div style="position:absolute;left:3mm;top:4mm;right:3mm;font-size:7pt;font-weight:600;line-height:1.18">
             <div style="white-space:nowrap;overflow:hidden">M/s ${esc(customer.name || '')}${customer.address ? `,${esc(customer.address)}` : ''}</div>
             <div>Mob - ${esc(customer.mobile || '')}</div>
             <div>UID - ${esc(customer.uid || 'N/A')}</div>
           </div>
-          <div style="position:absolute;right:3mm;top:12.4mm;font-size:7pt;font-weight:500">${cardDate}</div>
+          <div style="position:absolute;right:3mm;top:13.9mm;font-size:7pt;font-weight:500">${cardDate}</div>
           ${itemRows}
           ${totalAmount ? `
-          <div style="position:absolute;right:3mm;top:76.5mm;width:8mm;border-top:0.75pt solid #000"></div>
-          <div style="position:absolute;right:3mm;top:79.3mm;font-size:7pt;font-weight:600">${esc(Math.round(totalAmount))}</div>
-          <div style="position:absolute;right:3mm;top:82.2mm;width:8mm;border-top:0.75pt solid #000"></div>` : ''}
+          <div style="position:absolute;right:3mm;top:76.8mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
         </div>
       `)
   }
