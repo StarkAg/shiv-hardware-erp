@@ -9,6 +9,7 @@ import {
   CreditCard,
   DoorClosed,
   FileText,
+  FileType,
   History,
   Layers,
   Moon,
@@ -201,6 +202,9 @@ export function AppLayout() {
         </NavLink>
         <NavLink to="/printer-queue" className={linkClass}>
           <Printer size={18} /> Printer Queue
+        </NavLink>
+        <NavLink to="/pdf-viewer" className={linkClass}>
+          <FileType size={18} /> PDF Viewer
         </NavLink>
       </nav>
 
