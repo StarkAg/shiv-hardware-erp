@@ -82,5 +82,19 @@ export default defineSchema({
     .index('by_status_created_at', ['status', 'createdAt'])
     .index('by_printer_status_created_at', ['assignedPrinterId', 'status', 'createdAt'])
     .index('by_claimed_by_status', ['claimedBy', 'status']),
+
+  // ── Attendance: one row per day, marks = { staffName: 'P'|'N'|'H'|'C' } ────
+  attendanceDays: defineTable({
+    date: v.string(), // 'YYYY-MM-DD'
+    marks: v.any(),
+    locked: v.optional(v.boolean()), // true once saved — edits then need the password
+    updatedAt: v.number(),
+  }).index('by_date', ['date']),
+
+  // ── Attendance staff list (single row) ────────────────────────────────────
+  attendanceMeta: defineTable({
+    staff: v.array(v.string()),
+    updatedAt: v.number(),
+  }),
 })
 
