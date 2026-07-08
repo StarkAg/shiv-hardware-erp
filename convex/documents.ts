@@ -61,6 +61,30 @@ export const recentGuarantees = query({
   },
 })
 
+export const getGuaranteeByNumber = query({
+  args: {
+    number: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const clean = String(args.number ?? '').trim()
+    if (!clean) return null
+
+    // The QR and the print server both encode the `number` (e.g. GC-2026-0042).
+    // Look it up by index; fall back to a full scan if the index hasn't been
+    // back-filled yet.
+    const indexed = await ctx.db
+      .query('guaranteeDocuments')
+      .withIndex('by_number', q => q.eq('number', clean))
+      .first()
+    if (indexed) return indexed
+
+    return await ctx.db
+      .query('guaranteeDocuments')
+      .filter(q => q.eq(q.field('number'), clean))
+      .first()
+  },
+})
+
 export const saveGuarantee = mutation({
   args: {
     localId: v.string(),

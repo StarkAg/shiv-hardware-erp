@@ -9,6 +9,7 @@ import {
   CreditCard,
   DoorClosed,
   FileText,
+  History,
   Layers,
   Moon,
   Package,
@@ -171,6 +172,19 @@ export function AppLayout() {
               >
                 <FileText size={14} />
                 A4 Sheet
+              </NavLink>
+              <NavLink
+                to="/guarantee/history"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
+                    isActive
+                      ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
+                      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
+                  }`
+                }
+              >
+                <History size={14} />
+                History
               </NavLink>
             </div>
           )}

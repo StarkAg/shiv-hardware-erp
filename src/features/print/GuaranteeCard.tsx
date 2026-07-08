@@ -3,6 +3,8 @@ import { CATEGORY_LABELS, SHOP } from '../../lib/types'
 import { formatSize, sealForYears } from '../../lib/pricing'
 import { Letterhead } from './Letterhead'
 import { A4Page } from './A4Page'
+import { GuaranteeQr } from './GuaranteeQr'
+import { guaranteeOnlineUrl } from '../../lib/printServer'
 
 // Standalone guarantee document. It is not tied to a quotation.
 
@@ -99,8 +101,11 @@ export function GuaranteeCard({
           )}
         </div>
 
-        <div className="mt-[14mm] flex justify-end">
-          <div className="text-center text-[12px]">
+        <div className="relative mt-[10mm] min-h-[48mm]">
+          <div className="absolute bottom-[10mm] left-[10mm]">
+            <GuaranteeQr value={guaranteeOnlineUrl(document.number)} size="32mm" />
+          </div>
+          <div className="absolute bottom-0 right-0 text-center text-[12px]">
             <div className="mb-[14mm] font-bold">For {SHOP.name}</div>
             <div className="border-t border-black px-6 pt-1">Proprietor</div>
           </div>
@@ -160,7 +165,7 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
 
   return (
     <>
-      <div className="absolute left-[3mm] right-[3mm] top-[4mm] text-[7pt] font-semibold leading-[1.18]">
+      <div className="absolute left-[3mm] right-[3mm] top-[4mm] text-[6pt] font-semibold leading-[1.18]">
         <div className="overflow-hidden whitespace-nowrap">
           M/s {customer.name || ''}{customer.address ? `,${customer.address}` : ''}
         </div>
@@ -168,7 +173,7 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
         <div>UID - {customer.uid || 'N/A'}</div>
       </div>
 
-      <div className="absolute right-[3mm] top-[13.9mm] text-[7pt] font-medium">{dateStr}</div>
+      <div className="absolute right-[3mm] top-[13.9mm] text-[6pt] font-medium">{dateStr}</div>
 
       {rows.map((item, i) => {
         const rowThickness = item.thickness || docThickness
@@ -179,7 +184,7 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
         return (
         <div
           key={i}
-          className="absolute left-[3mm] right-[3mm] items-baseline text-[4pt] leading-none"
+          className="absolute left-[3mm] right-[3mm] items-baseline text-[5pt] leading-none"
           style={{ top: `${20.5 + i * 3.2}mm`, display: 'grid', gridTemplateColumns: '5.5mm 1fr 11mm 5mm 4.5mm', columnGap: '1.3mm' }}
         >
           <span className="overflow-hidden text-ellipsis whitespace-nowrap">{rowThickness}</span>
@@ -192,10 +197,14 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
       })}
 
       {totalAmount > 0 && (
-        <div className="absolute right-[3mm] top-[76.8mm] inline-block border-y border-black py-[0.8mm] text-[7pt] font-semibold leading-none">
+        <div className="absolute right-[3mm] top-[76.8mm] inline-block border-y border-black py-[0.8mm] text-[5pt] font-semibold leading-none">
           {Math.round(totalAmount)}
         </div>
       )}
+
+      <div className="absolute left-[3mm] top-[71mm]">
+        <GuaranteeQr value={guaranteeOnlineUrl(document.number)} size="12mm" />
+      </div>
     </>
   )
 }

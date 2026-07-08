@@ -338,6 +338,44 @@ export async function pullBillsFromServer(): Promise<Bill[] | null> {
   }
 }
 
+// ── Guarantee snapshot sync ───────────────────────────────────────────────────
+
+/** Push the full guarantees array to the print server. Fire-and-forget. */
+export async function pushGuaranteesToServer(guarantees: GuaranteeDocument[]): Promise<void> {
+  try {
+    await fetchPrintServer('/guarantees-store', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guarantees }),
+    }, 5000)
+  } catch {
+    // Server offline — silently ignore
+  }
+}
+
+/** Pull guarantees snapshot from the print server. Returns null if unreachable or empty. */
+export async function pullGuaranteesFromServer(): Promise<GuaranteeDocument[] | null> {
+  try {
+    const res = await fetchPrintServer('/guarantees-store', undefined, 5000)
+    const json = await res.json().catch(() => null)
+    if (!json?.ok || !Array.isArray(json.guarantees) || json.guarantees.length === 0) return null
+    return json.guarantees as GuaranteeDocument[]
+  } catch {
+    return null
+  }
+}
+
+/** Public URL of a single guarantee card on the print server — encoded into the QR. */
+export function guaranteeOnlineUrl(number: string, baseUrl?: string): string {
+  // Prefer the explicitly-configured public viewer (e.g. a Vercel deployment)
+  // over the local print-server URL. The print server is reachable only on
+  // the shop Wi-Fi; a global URL lets the printed card's QR resolve from
+  // any device.
+  const envBase = (import.meta.env.VITE_GUARANTEE_PUBLIC_URL ?? '').trim().replace(/\/+$/, '')
+  const base = (baseUrl ?? (envBase || PRINT_SERVER_URL)).replace(/\/+$/, '')
+  return `${base}/g/${encodeURIComponent(number)}`
+}
+
 export async function printOnServer(payload: ServerPrintPayload, copies = 1, printer?: string): Promise<ServerPrintResult> {
   try {
     const res = await fetchPrintServer('/print', {

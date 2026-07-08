@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Check, FileText, Printer, ScanLine, Trash2, X } from 'lucide-react'
+import { Check, FileText, Printer, Save, ScanLine, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
 import { useStore } from '../../lib/store'
 import {
@@ -112,13 +112,19 @@ function rowsToItems(rows: SizeRow[], brandOptions: Brand[], fallbackBrand: stri
 }
 
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
-  const { sets, bills } = useStore()
+  const { sets, bills, saveGuarantee, nextGuaranteeNumber } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
-  const [number] = useState(() => `GC-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`)
+  // Each Save or Print mints a fresh GC-YYYY-NNNN ref number from the store sequence,
+  // so every card becomes a permanent entry in the History tab and gets a stable QR.
+  const [ref, setRef] = useState<{ number: string; id: string }>(() => {
+    const number = `GC-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`
+    return { number, id: number }
+  })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
   const [preview, setPreview] = useState(false)
+  const [savedToast, setSavedToast] = useState<string | null>(null)
 
   // Slot 2: an independent second card printed in the same tray pass.
   // Ticking it on reveals its own small set of fields plus its own table.
@@ -131,6 +137,15 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const brandOptions = sets[0]?.brands ?? []
   const previewTitle = layout === 'card' ? 'Guarantee Card' : 'Guarantee A4 Sheet'
   const hasRows = rows.some(isRowFilled)
+
+  // Mint a new card number from the store sequence. Refreshing on every
+  // save/print means each click becomes a permanent record (matching what
+  // the shop would do physically with a fresh-stamped card).
+  function mintFreshRef() {
+    const number = nextGuaranteeNumber()
+    setRef({ number, id: number })
+    return { number, id: number }
+  }
 
   // When returning from BillSelectPage, import the selected bill
   useEffect(() => {
@@ -179,12 +194,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     if (imported.length) setRows((prev) => [...prev.filter(isRowFilled), ...imported, blankRow()])
   }
 
-  function buildGuaranteeDoc(): GuaranteeDocument {
+  function buildGuaranteeDoc(uuid = ref): GuaranteeDocument {
     const filled = rows.filter(isRowFilled)
     const primary = filled[0]
     return {
-      id: number,
-      number,
+      id: uuid.id,
+      number: uuid.number,
       date: new Date().toISOString(),
       customer: { ...customer, name: toProperCase(customer.name) },
       category: DEFAULT_CATEGORY,
@@ -195,12 +210,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     }
   }
 
-  function buildSecondDoc(): GuaranteeDocument {
+  function buildSecondDoc(uuid = ref): GuaranteeDocument {
     const filled = rows2.filter(isRowFilled)
     const primary = filled[0]
     return {
-      id: `${number}-2`,
-      number,
+      id: `${uuid.id}-2`,
+      number: uuid.number,
       date: new Date().toISOString(),
       customer: { ...customer2, name: toProperCase(customer2.name) },
       category: DEFAULT_CATEGORY,
@@ -215,18 +230,52 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const doc2 = buildSecondDoc()
 
   function openPreview() {
-    enqueueGuaranteeSync(doc)
-    if (secondCardOn) enqueueGuaranteeSync(doc2)
+    // Each Print mints AND saves a fresh card so the QR target is stable even
+    // if the user immediately resizes/refines and re-prints. The QR points to
+    // /guarantee/<number> on the print server, which only resolves once the
+    // card has been stored locally and pushed to the server.
+    const minted = mintFreshRef()
+    const freshDoc = buildGuaranteeDoc(minted)
+    const freshDoc2 = buildSecondDoc(minted)
+    saveGuarantee(freshDoc)
+    if (secondCardOn) saveGuarantee(freshDoc2)
+    enqueueGuaranteeSync(freshDoc)
+    if (secondCardOn) enqueueGuaranteeSync(freshDoc2)
     setPreview(true)
+  }
+
+  function saveCard() {
+    const minted = mintFreshRef()
+    const freshDoc = buildGuaranteeDoc(minted)
+    saveGuarantee(freshDoc)
+    if (secondCardOn) saveGuarantee(buildSecondDoc(minted))
+    enqueueGuaranteeSync(freshDoc)
+    if (secondCardOn) enqueueGuaranteeSync(buildSecondDoc(minted))
+    setSavedToast(`Saved ${minted.number}`)
+    window.setTimeout(() => setSavedToast(null), 1800)
   }
 
   return (
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
+        {savedToast && (
+          <div className="no-print fixed left-1/2 top-3 z-40 -translate-x-1/2 rounded-full bg-shiv-green px-4 py-1.5 text-sm font-semibold text-stone-900 shadow-lg" role="status">
+            {savedToast}
+          </div>
+        )}
         <div className="no-print flex flex-wrap items-center justify-center gap-3">
+          <Button onClick={saveCard} disabled={!hasRows} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+            <Save size={20} /> Save
+          </Button>
           <Button onClick={openPreview} disabled={!hasRows} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Printer size={20} /> Print
           </Button>
+          <Link
+            to="/guarantee/history"
+            className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
+          >
+            <FileText size={20} /> History
+          </Link>
           <Link
             to="/scan"
             className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
@@ -239,6 +288,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           >
             <FileText size={20} /> Select Bill
           </button>
+        </div>
+        <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+          Next Ref No: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref.number}</span>
         </div>
 
         <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">

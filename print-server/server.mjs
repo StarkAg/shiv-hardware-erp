@@ -69,6 +69,7 @@ const PRODUCT_CORRECTIONS_URL = new URL('data/product-corrections.json', import.
 const SCAN_FEEDBACK_URL = new URL('data/scan-feedback.jsonl', import.meta.url)
 const BILLS_STORE_URL   = new URL('data/bills.jsonl',  import.meta.url)
 const BILLS_JSON_URL    = new URL('data/bills.json',   import.meta.url)
+const GUARANTEES_JSON_URL = new URL('data/guarantees.json', import.meta.url)
 const CATALOG_STORE_URL = new URL('data/catalog.json', import.meta.url)
 
 async function saveBillToStore(bill) {
@@ -124,6 +125,87 @@ function loadBillsJson() {
   } catch {
     return null
   }
+}
+
+// ── Guarantees store (saved/printed guarantee cards; backs the QR web view) ──
+// Snapshot of all generated guarantee cards so that scanning a QR resolves to
+// the same card regardless of which device printed it.
+async function saveGuaranteesJson(guarantees) {
+  try {
+    const savedAt = new Date().toISOString()
+    await writeFile(GUARANTEES_JSON_URL, JSON.stringify({ guarantees, _savedAt: savedAt }, null, 2), 'utf8')
+    broadcastSync('guarantees', { count: guarantees.length, savedAt })
+  } catch (err) {
+    console.warn('[guarantees-json] failed to save:', err.message ?? err)
+  }
+}
+
+function loadGuaranteesJson() {
+  try {
+    const parsed = JSON.parse(readFileSync(GUARANTEES_JSON_URL, 'utf8'))
+    return Array.isArray(parsed?.guarantees) ? parsed.guarantees : null
+  } catch {
+    return null
+  }
+}
+
+function findGuaranteeByNumber(number) {
+  if (!number) return null
+  const all = loadGuaranteesJson() ?? []
+  return all.find((g) => String(g.number) === String(number)) ?? null
+}
+
+// Mobile-friendly viewer wrapper around the A4 guarantee card. Used by the QR
+// target on phones: shows the same letterheaded A4 sheet on screen plus an
+// "Open PDF" button that downloads a print-ready copy.
+function buildMobileGuaranteePageHtml(document) {
+  const cardHtml = buildGuaranteeHtml(document, 'a4')
+  const escapedNumber = String(document.number || '').replace(/[<>"']/g, (c) => ({
+    '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]))
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0d6e3f" />
+<title>Shiv Hardware — Guarantee Card ${escapedNumber}</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f1ec; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1c1917; }
+  header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #0d6e3f; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+  header h1 { margin: 0; font-size: 16px; line-height: 1.2; }
+  header span.tag { background: #fff; color: #0d6e3f; padding: 4px 8px; border-radius: 4px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  header .actions { margin-left: auto; display: flex; gap: 8px; }
+  header .actions a, header .actions button { background: #fff; color: #0d6e3f; padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 700; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+  main { padding: 16px; max-width: 880px; margin: 0 auto; }
+  .page-wrap { background: #fff; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); padding: 12px; overflow: auto; }
+  .meta { background: #fff; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); padding: 12px 16px; margin-bottom: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-size: 13px; }
+  .meta b { color: #57534e; font-weight: 600; }
+  @media (max-width: 480px) { header h1 { font-size: 14px; } .meta { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Shiv Hardware<br/><span style="font-size:11px;font-weight:400;opacity:.85">Online Guarantee Card</span></h1>
+  <span class="tag">${escapedNumber}</span>
+  <div class="actions">
+    <a href="/guarantee/${encodeURIComponent(escapedNumber)}/pdf" target="_blank" rel="noreferrer">📄 Open PDF</a>
+    <a href="/guarantee/${encodeURIComponent(escapedNumber)}/pdf" download>⬇ Download</a>
+  </div>
+</header>
+<main>
+  <div class="meta">
+    <span><b>Customer:</b> ${(document.customer.name || '').replace(/[<>&]/g, (c) => ({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]))}</span>
+    <span><b>Date:</b> ${new Date(document.date).toLocaleDateString('en-GB')}</span>
+    <span><b>Mobile:</b> ${(document.customer.mobile || '').replace(/[<>&]/g, (c) => ({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]))}</span>
+    <span><b>UID:</b> ${(document.customer.uid || 'N/A').replace(/[<>&]/g, (c) => ({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]))}</span>
+  </div>
+  <div class="page-wrap">${cardHtml}</div>
+</main>
+</body>
+</html>`
 }
 
 const app = express()
@@ -2651,6 +2733,79 @@ app.post('/bills-store', async (req, res) => {
   }
   await saveBillsJson(bills)
   res.json({ ok: true, count: bills.length })
+})
+
+// ── Guarantees snapshot ──────────────────────────────────────────────────────
+// GET  /guarantees-store               -> { ok, guarantees: [...] }
+// GET  /guarantees-store/:id           -> single guarantee card by id
+// POST /guarantees-store               -> save full guarantees array
+app.get('/guarantees-store', (_req, res) => {
+  const guarantees = loadGuaranteesJson()
+  res.json({ ok: true, guarantees: guarantees ?? [] })
+})
+
+app.get('/guarantees-store/:id', (req, res) => {
+  const guarantees = loadGuaranteesJson() ?? []
+  const card = guarantees.find((g) => g.id === req.params.id)
+  if (!card) return res.status(404).json({ ok: false, error: 'Guarantee card not found' })
+  res.json({ ok: true, guarantee: card })
+})
+
+app.post('/guarantees-store', async (req, res) => {
+  const { guarantees } = req.body ?? {}
+  if (!Array.isArray(guarantees)) {
+    return res.status(400).json({ ok: false, error: 'Missing guarantees array' })
+  }
+  await saveGuaranteesJson(guarantees)
+  res.json({ ok: true, count: guarantees.length })
+})
+
+// ── Public guarantee viewer (the QR target) ──────────────────────────────────
+// GET  /guarantee/:number       -> mobile-friendly HTML view of the saved card
+// GET  /guarantee/:number/pdf   -> PDF rendition of the same A4 card
+// GET  /g/:number, /g/:number/pdf -> same as above, matching the Vercel
+//   viewer's path. The QR keeps working on the shop LAN when no public
+//   viewer is configured.
+app.get('/guarantee/:number', (req, res) => {
+  const card = findGuaranteeByNumber(req.params.number)
+  if (!card) return res.status(404).type('html').send(
+    '<!doctype html><p style="font-family:sans-serif;padding:24px">Guarantee card not found. ' +
+    'It may have been printed from a different shop computer — ask at the counter.</p>'
+  )
+  res.type('html').send(buildMobileGuaranteePageHtml(card))
+})
+
+app.get('/guarantee/:number/pdf', async (req, res) => {
+  const card = findGuaranteeByNumber(req.params.number)
+  if (!card) return res.status(404).json({ ok: false, error: 'Guarantee card not found' })
+
+  let page
+  try {
+    const html = await buildGuaranteeHtml(card, 'a4')
+    page = await getSharedPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="guarantee-${card.number}.pdf"`)
+    res.end(pdf)
+  } catch (err) {
+    console.error('[guarantee pdf error]', err)
+    res.status(500).json({ error: String(err?.message ?? err) })
+  } finally {
+    await page?.close().catch(() => {})
+  }
+})
+
+// Same handlers under the path the Vercel viewer uses, so the QR
+// (which encodes `${PRINT_SERVER_URL}/g/<number>` by default) still
+// resolves locally before the public URL is configured.
+app.get('/g/:number', (req, res) => {
+  const card = findGuaranteeByNumber(req.params.number)
+  if (!card) return res.status(404).type('html').send(
+    '<!doctype html><p style="font-family:sans-serif;padding:24px">Guarantee card not found. ' +
+    'It may have been printed from a different shop computer — ask at the counter.</p>'
+  )
+  res.type('html').send(buildMobileGuaranteePageHtml(card))
 })
 
 // ── Render PNG ───────────────────────────────────────────────────────────────
