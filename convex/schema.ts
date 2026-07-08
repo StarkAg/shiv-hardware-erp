@@ -94,7 +94,26 @@ export default defineSchema({
   // ── Attendance staff list (single row) ────────────────────────────────────
   attendanceMeta: defineTable({
     staff: v.array(v.string()),
+    rates: v.optional(v.any()), // { staffName: dailyRate }
     updatedAt: v.number(),
   }),
+
+  // ── Advances paid to staff during a month ─────────────────────────────────
+  attendanceAdvances: defineTable({
+    staff: v.string(),
+    date: v.string(),   // 'YYYY-MM-DD'
+    amount: v.number(),
+    note: v.optional(v.string()),
+    at: v.number(),
+  }).index('by_date', ['date']),
+
+  // ── Attendance change history (audit log) ─────────────────────────────────
+  attendanceLog: defineTable({
+    at: v.number(),            // when the change happened
+    date: v.optional(v.string()), // attendance day affected ('YYYY-MM-DD')
+    action: v.string(),        // 'mark' | 'bulk' | 'lock' | 'staff'
+    summary: v.string(),       // human-readable description
+    changes: v.optional(v.any()), // [{ staff, from, to }]
+  }).index('by_at', ['at']),
 })
 
