@@ -41,6 +41,7 @@ body {
 .logo { width: 40px; height: 40px; object-fit: contain; border-radius: 10px; background: #fff; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
 .brand { font-weight: 800; letter-spacing: 0.01em; font-size: 20px; line-height: 1.1; }
 .sub { color: var(--muted); font-size: 12px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.2em; }
+.headbtns { display: flex; align-items: center; gap: 8px; }
 .themebtn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); display: inline-flex; align-items: center; justify-content: center; }
 .themebtn:active { background: var(--card2); }
 
@@ -140,5 +141,62 @@ body {
 .sheetbtns button { flex: 1; padding: 12px; border-radius: 12px; font-weight: 800; font-size: 15px; border: 1px solid var(--line); }
 .ghostbtn { background: transparent; color: var(--fg); }
 .primbtn { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+
+/* Pay tab */
+.payhdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.payhdr .mgttl { margin-bottom: 0; }
+.iconbtn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); display: inline-flex; align-items: center; justify-content: center; }
+.iconbtn:active { filter: brightness(0.96); }
+
+.payselect { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.payselect label { font-size: 13px; color: var(--muted); font-weight: 700; }
+.payselect select { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 16px; font-weight: 700; }
+.payselect select:focus { outline: none; border-color: var(--brass); }
+
+.motcard { margin-top: 14px; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: linear-gradient(160deg, var(--card2), var(--card)); text-align: center; }
+.motlabel { font-size: 13px; color: var(--muted); font-weight: 600; }
+.motnet { font-size: 34px; font-weight: 900; letter-spacing: 0.01em; color: var(--brass); margin: 2px 0 10px; }
+.motdays { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.progress { height: 12px; border-radius: 999px; background: rgba(120,113,108,0.18); overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--amber); border-radius: 999px; transition: width 0.3s ease; }
+.progress span.full { background: var(--brass); }
+.motmsg { font-size: 13px; color: var(--amber); margin-top: 10px; font-weight: 600; }
+.motmsg.good { color: var(--brass); }
+
+.paygrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 14px; text-align: left; }
+.paygrid > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding-bottom: 4px; }
+.paygrid > div.netrow { grid-column: 1 / -1; border-bottom: none; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
+.pk { font-size: 12px; color: var(--muted); }
+.pv { font-size: 14px; font-weight: 700; }
+.pv.neg { color: var(--red); } .pv.strong { color: var(--brass); font-weight: 900; font-size: 16px; }
+
+.advbox { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.advrow { display: flex; gap: 8px; margin-bottom: 8px; }
+.advrow input { flex: 1; min-width: 0; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 15px; }
+.advrow input:focus { outline: none; border-color: var(--brass); }
+.advbtn { padding: 0 22px; border-radius: 10px; border: none; background: var(--brass); color: var(--brass-ink); font-weight: 800; }
+.advlist { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.advchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--card2); font-size: 13px; font-weight: 600; }
+.advchip em { color: var(--muted); font-style: normal; font-size: 11px; }
+.advchip button { width: 22px; height: 22px; border-radius: 50%; border: none; background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+.advchip button:active { color: var(--red); background: rgba(159,29,32,0.12); }
+
+.ratelist { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-height: 56vh; overflow-y: auto; }
+.raterow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); }
+.rateinput { display: inline-flex; align-items: center; gap: 4px; }
+.rateinput span { color: var(--muted); font-weight: 700; }
+.rateinput input { width: 96px; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 16px; font-weight: 700; text-align: right; }
+.rateinput input:focus { outline: none; border-color: var(--brass); }
+
+/* Change history */
+.histsheet { max-width: 440px; text-align: left; }
+.histlist { max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+.histrow { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--card2); }
+.histtop { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.histwhen { font-weight: 800; font-size: 13px; }
+.histday { color: var(--muted); font-size: 12px; }
+.histsum { font-size: 14px; margin-top: 2px; }
+.histchanges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.histchip { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
 
 .foot { text-align: center; color: var(--muted); font-size: 12px; margin-top: 16px; }
