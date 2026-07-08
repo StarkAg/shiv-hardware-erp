@@ -13,6 +13,7 @@ import { QuoteHistory } from './features/quotation/QuoteHistory'
 import { QuotationOptions } from './features/quotation/QuotationOptions'
 import { PrintDemo } from './features/print/PrintDemo'
 import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
+import { GuaranteeHistory } from './features/guarantee/GuaranteeHistory'
 import { BillSelectPage } from './features/guarantee/BillSelectPage'
 import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
 import { BillScanner } from './features/scan/BillScanner'
@@ -21,7 +22,7 @@ import { DeliverPage } from './features/transport/DeliverPage'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { PrinterQueue } from './features/print/PrinterQueue'
 import { startOfflineSync } from './lib/offlineSync'
-import { getPrintServerUrl, pullBillsFromServer, pullCatalogFromServer } from './lib/printServer'
+import { getPrintServerUrl, pullBillsFromServer, pullCatalogFromServer, pullGuaranteesFromServer } from './lib/printServer'
 import { useStore } from './lib/store'
 import { subscribeSyncStream } from './lib/syncStream'
 import { convexEnabled, pushBillsToConvex, pushCatalogToConvex } from './lib/convexSync'
@@ -65,6 +66,20 @@ pullBillsFromServer().then((serverBills) => {
   }
 }).catch(() => { /* print server offline — no-op */ })
 
+// Pull the saved guarantee cards from the print-server so QR scans work offline too.
+pullGuaranteesFromServer().then((serverGuarantees) => {
+  if (!serverGuarantees?.length) return
+  const local = useStore.getState().guarantees
+  if (serverGuarantees.length >= local.length) {
+    const remoteSeq = serverGuarantees.reduce((m, g) => {
+      const match = /^GC-\d{4}-(\d{4,})$/.exec(g.number)
+      const n = match ? Number(match[1]) : 0
+      return Number.isFinite(n) ? Math.max(m, n) : m
+    }, 0)
+    useStore.getState().syncGuaranteesFromRemote(serverGuarantees, remoteSeq)
+  }
+}).catch(() => { /* print server offline — no-op */ })
+
 // ── Convex startup push — populate cloud from localStorage ─────────────────
 // Runs regardless of print-server state. Safe because all mutations are upserts.
 // Delayed 3 s so the print-server pulls above can update the store first.
@@ -101,6 +116,20 @@ getPrintServerUrl().then((serverUrl) => {
         useStore.getState().syncCatalogFromRemote(snap)
       }).catch(() => {})
     },
+    onGuarantees: () => {
+      pullGuaranteesFromServer().then((guarantees) => {
+        if (!guarantees?.length) return
+        const s = useStore.getState()
+        if (guarantees.length >= s.guarantees.length) {
+          const remoteSeq = guarantees.reduce((m, g) => {
+            const match = /^GC-\d{4}-(\d{4,})$/.exec(g.number)
+            const n = match ? Number(match[1]) : 0
+            return Number.isFinite(n) ? Math.max(m, n) : m
+          }, 0)
+          s.syncGuaranteesFromRemote(guarantees, remoteSeq)
+        }
+      }).catch(() => {})
+    },
   })
 }).catch(() => { /* print server offline — no SSE */ })
 
@@ -122,6 +151,7 @@ const router = createHashRouter([
       { path: 'history',        element: <QuoteHistory /> },
       { path: 'guarantee/card',        element: <GuaranteeBuilder layout="card" /> },
       { path: 'guarantee/a4',          element: <GuaranteeBuilder layout="a4" /> },
+      { path: 'guarantee/history',     element: <GuaranteeHistory /> },
       { path: 'guarantee/select-bill',  element: <BillSelectPage /> },
       { path: 'guarantee/bill/:billId', element: <BillBrandCardsPage /> },
       { path: 'scan',           element: <BillScanner /> },

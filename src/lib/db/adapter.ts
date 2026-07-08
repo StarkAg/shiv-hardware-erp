@@ -8,6 +8,8 @@ export interface PersistedState {
   quoteSeq: number
   bills: unknown
   billSeq: number
+  guarantees?: unknown
+  guaranteeSeq?: number
   hardwareCatalog: unknown
   customCatalog: unknown
 }

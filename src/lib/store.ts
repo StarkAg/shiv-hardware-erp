@@ -1,10 +1,10 @@
 import { create } from 'zustand'
-import type { Bill, Brand, BrandSet, CustomCatalogEntry, Customer, HardwareCatalog, ProductCategory, Quotation } from './types'
+import type { Bill, Brand, BrandSet, CustomCatalogEntry, Customer, GuaranteeDocument, HardwareCatalog, ProductCategory, Quotation } from './types'
 import { DEFAULT_HARDWARE_CATALOG } from './types'
 import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
-import { pushBillsToServer, pushCatalogToServer } from './printServer'
+import { pushBillsToServer, pushCatalogToServer, pushGuaranteesToServer } from './printServer'
 import { pushBillsToConvex, pushCatalogToConvex } from './convexSync'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -48,6 +48,15 @@ function scheduleConvexCatalogPush(get: () => AppState) {
   }, 5000)
 }
 
+// Debounce guarantee pushes (the print-server push is heavy enough to warrant throttling).
+let _guaranteesPushTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleGuaranteesPush(get: () => AppState) {
+  if (_guaranteesPushTimer) clearTimeout(_guaranteesPushTimer)
+  _guaranteesPushTimer = setTimeout(() => {
+    pushGuaranteesToServer(get().guarantees)
+  }, 1500)
+}
+
 interface AppState {
   sets: BrandSet[]
   customers: Customer[]
@@ -55,6 +64,8 @@ interface AppState {
   quoteSeq: number
   bills: Bill[]
   billSeq: number
+  guarantees: GuaranteeDocument[]
+  guaranteeSeq: number
   hardwareCatalog: HardwareCatalog
   customCatalog: CustomCatalogEntry[]
 
@@ -92,6 +103,16 @@ interface AppState {
    */
   syncCatalogFromRemote: (snap: { hardwareCatalog: HardwareCatalog; customCatalog: CustomCatalogEntry[]; sets: BrandSet[] }) => void
 
+  // guarantee cards (history)
+  nextGuaranteeNumber: () => string
+  saveGuarantee: (g: GuaranteeDocument) => void
+  deleteGuarantee: (id: string) => void
+  /**
+   * Apply a guarantees update that arrived from a remote (SSE).
+   * Saves to localStorage only — does NOT push back to the remote to avoid sync loops.
+   */
+  syncGuaranteesFromRemote: (guarantees: GuaranteeDocument[], remoteSeq: number) => void
+
   // hardware catalog
   setHardwareCatalog: (c: HardwareCatalog) => void
 
@@ -111,6 +132,8 @@ function persist(get: () => AppState) {
     quoteSeq: s.quoteSeq,
     bills: s.bills,
     billSeq: s.billSeq,
+    guarantees: s.guarantees,
+    guaranteeSeq: s.guaranteeSeq,
     hardwareCatalog: s.hardwareCatalog,
     customCatalog: s.customCatalog,
   })
@@ -118,6 +141,7 @@ function persist(get: () => AppState) {
   scheduleBillsPush(get)
   scheduleConvexBillsPush(get)
   scheduleConvexCatalogPush(get)
+  scheduleGuaranteesPush(get)
 }
 
 const saved = db.load()
@@ -129,6 +153,8 @@ export const useStore = create<AppState>((set, get) => ({
   quoteSeq: (saved?.quoteSeq as number) ?? 0,
   bills: (saved?.bills as Bill[]) ?? [],
   billSeq: (saved?.billSeq as number) ?? 0,
+  guarantees: (saved?.guarantees as GuaranteeDocument[]) ?? [],
+  guaranteeSeq: (saved?.guaranteeSeq as number) ?? 0,
   hardwareCatalog: (saved?.hardwareCatalog as HardwareCatalog) ?? DEFAULT_HARDWARE_CATALOG,
   customCatalog: (saved?.customCatalog as CustomCatalogEntry[]) ?? [],
 
@@ -268,7 +294,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((st) => ({ bills, billSeq: Math.max(st.billSeq, remoteBillSeq) }))
     // Save to localStorage only — no remote push to avoid sync loops
     const s = get()
-    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills, billSeq: s.billSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
   },
 
   syncCatalogFromRemote: (snap) => {
@@ -276,7 +302,45 @@ export const useStore = create<AppState>((set, get) => ({
     set({ hardwareCatalog: snap.hardwareCatalog, customCatalog: snap.customCatalog ?? [], sets: newSets })
     // Save to localStorage only
     const s = get()
-    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+  },
+
+  nextGuaranteeNumber: () => {
+    const seq = get().guaranteeSeq + 1
+    const year = new Date().getFullYear()
+    return `GC-${year}-${String(seq).padStart(4, '0')}`
+  },
+
+  saveGuarantee: (g) => {
+    set((st) => {
+      const i = st.guarantees.findIndex((x) => x.id === g.id)
+      const guarantees = [...st.guarantees]
+      let guaranteeSeq = st.guaranteeSeq
+      if (i >= 0) {
+        guarantees[i] = g
+      } else {
+        guarantees.unshift(g)
+        // Bump the sequence when number implies a higher one (always true on first save).
+        const match = /^GC-\d{4}-(\d{4,})$/.exec(g.number)
+        if (match) {
+          const n = Number(match[1])
+          if (Number.isFinite(n)) guaranteeSeq = Math.max(guaranteeSeq, n)
+        }
+      }
+      return { guarantees, guaranteeSeq }
+    })
+    persist(get)
+  },
+
+  deleteGuarantee: (id) => {
+    set((st) => ({ guarantees: st.guarantees.filter((g) => g.id !== id) }))
+    persist(get)
+  },
+
+  syncGuaranteesFromRemote: (remoteGuarantees, remoteSeq) => {
+    set((st) => ({ guarantees: remoteGuarantees, guaranteeSeq: Math.max(st.guaranteeSeq, remoteSeq) }))
+    const s = get()
+    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: remoteGuarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
   },
 
   setHardwareCatalog: (c) => {
