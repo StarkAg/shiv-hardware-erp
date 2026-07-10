@@ -2673,6 +2673,28 @@ app.get('/whatsapp-web/status', (_req, res) => {
   res.json(whatsappWebStatusPayload())
 })
 
+// Send the guarantee-ready message to a single number on demand. Diagnostic only:
+// exercises the exact send path (JID normalization + WhatsApp text) without
+// printing a card or recording dedupe, so it can be re-run freely.
+app.all('/whatsapp-web/test-notify', async (req, res) => {
+  const mobile = String(req.body?.mobile ?? req.query?.mobile ?? '').trim()
+  const jid = customerMobileToWhatsAppJid(mobile)
+  if (!jid) return res.status(400).json({ ok: false, error: `Cannot form a WhatsApp number from "${mobile}"` })
+  if (!whatsappSock || whatsappWebState.status !== 'ready') {
+    return res.status(503).json({ ok: false, error: `WhatsApp not connected (status=${whatsappWebState.status})` })
+  }
+  try {
+    try {
+      const [check] = await whatsappSock.onWhatsApp(jid)
+      if (check && check.exists === false) return res.status(404).json({ ok: false, error: `${jid} is not on WhatsApp` })
+    } catch { /* proceed even if the existence check fails */ }
+    await whatsappSock.sendMessage(jid, { text: WHATSAPP_GUARANTEE_MESSAGE })
+    res.json({ ok: true, jid, message: WHATSAPP_GUARANTEE_MESSAGE })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
 app.get('/whatsapp-web/group/latest', (_req, res) => {
   const groups = [...whatsappGroupNameCache.entries()]
     .filter(([jid]) => chatMatchesWhatsAppAutoPrintTarget(jid, whatsappGroupNameCache.get(jid) || ''))
