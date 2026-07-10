@@ -284,6 +284,19 @@ const WHATSAPP_PROCESSED_MESSAGES_URL = new URL('data/whatsapp-processed-message
 // so nothing is lost and the print can run from a stable on-disk copy.
 const WHATSAPP_PRINTS_DIR = process.env.WHATSAPP_PRINTS_DIR || join(homedir(), 'Downloads', 'whatsapp Prints')
 
+// ── Customer guarantee-card WhatsApp notification ────────────────────────────
+// When a guarantee card is generated/printed, message the customer's mobile from
+// the same WhatsApp account that hosts the auto-print. Deduped by card number so
+// reprints (and the A4 + PVC-card passes for one card) never double-send.
+const WHATSAPP_CUSTOMER_NOTIFY_ENABLED = parseBoolean(
+  process.env.WHATSAPP_CUSTOMER_NOTIFY_ENABLED ?? String(WHATSAPP_AUTO_PRINT_ENABLED),
+)
+// Country code prepended to bare 10-digit local mobiles. India (91) by default.
+const WHATSAPP_CUSTOMER_COUNTRY_CODE = String(process.env.WHATSAPP_CUSTOMER_COUNTRY_CODE || '91').replace(/\D/g, '')
+const WHATSAPP_GUARANTEE_MESSAGE = process.env.WHATSAPP_GUARANTEE_MESSAGE
+  || 'Thank you for purchasing with us. Your guarantee card is processed, please collect it from the shop.'
+const WHATSAPP_NOTIFIED_GUARANTEES_URL = new URL('data/whatsapp-notified-guarantees.json', import.meta.url)
+
 const whatsappWebState = {
   enabled: WHATSAPP_AUTO_PRINT_ENABLED,
   status: WHATSAPP_AUTO_PRINT_ENABLED ? 'starting' : 'disabled',
@@ -299,6 +312,10 @@ const whatsappWebState = {
 const whatsappProcessedMessageIds = new Set(loadWhatsAppProcessedMessageIds())
 const whatsappPendingMedia = new Map()
 const whatsappGroupNameCache = new Map()
+// Live Baileys socket, set once the WhatsApp Web connection opens (null while
+// disconnected/reconnecting). Used to send customer guarantee notifications.
+let whatsappSock = null
+const whatsappNotifiedGuarantees = new Set(loadWhatsAppNotifiedGuarantees())
 const printerHealthCache = new Map()
 const preparedPlainA4Printers = new Map()
 
@@ -325,6 +342,20 @@ function loadWhatsAppProcessedMessageIds() {
 async function saveWhatsAppProcessedMessageIds() {
   const ids = [...whatsappProcessedMessageIds].slice(-1000)
   await writeFile(WHATSAPP_PROCESSED_MESSAGES_URL, JSON.stringify({ ids }, null, 2))
+}
+
+function loadWhatsAppNotifiedGuarantees() {
+  try {
+    const data = JSON.parse(readFileSync(WHATSAPP_NOTIFIED_GUARANTEES_URL, 'utf8'))
+    return Array.isArray(data?.numbers) ? data.numbers.filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
+async function saveWhatsAppNotifiedGuarantees() {
+  const numbers = [...whatsappNotifiedGuarantees].slice(-2000)
+  await writeFile(WHATSAPP_NOTIFIED_GUARANTEES_URL, JSON.stringify({ numbers }, null, 2))
 }
 
 function publicUrlFromRequest(req) {
@@ -1733,6 +1764,7 @@ async function startWhatsAppWebAutoPrint() {
           console.log('   WhatsApp Web auto-print: scan QR at /whatsapp-web')
         }
         if (connection === 'open') {
+          whatsappSock = sock
           whatsappWebState.status = 'ready'
           whatsappWebState.readyAt = whatsappWebState.readyAt || new Date().toISOString()
           whatsappWebState.qrDataUrl = null
@@ -1740,6 +1772,7 @@ async function startWhatsAppWebAutoPrint() {
           console.log(`   WhatsApp Web auto-print: ready for group "${WHATSAPP_AUTO_PRINT_GROUP_NAME}"`)
         }
         if (connection === 'close') {
+          if (whatsappSock === sock) whatsappSock = null
           const code = lastDisconnect?.error?.output?.statusCode
           const loggedOut = code === DisconnectReason.loggedOut
           whatsappWebState.status = loggedOut ? 'logged_out' : 'reconnecting'
@@ -1772,6 +1805,66 @@ async function startWhatsAppWebAutoPrint() {
     whatsappWebState.status = 'error'
     whatsappWebState.lastError = { at: new Date().toISOString(), error: String(err.message ?? err) }
     console.error('[whatsapp-web] failed to start', err)
+  }
+}
+
+// Turn a customer's stored mobile into a WhatsApp JID. Handles the common Indian
+// formats: bare 10-digit local, a leading 0, a +country-code prefix, or an
+// already-full 12-digit number. Returns null if it can't form a plausible number.
+function customerMobileToWhatsAppJid(rawMobile) {
+  let digits = String(rawMobile ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  // Drop a single leading trunk 0 (e.g. 08709964141 -> 8709964141).
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1)
+  // Bare local number -> prepend the configured country code.
+  if (digits.length === 10) digits = `${WHATSAPP_CUSTOMER_COUNTRY_CODE}${digits}`
+  // Anything shorter than a country code + subscriber number is not dialable.
+  if (digits.length < 11 || digits.length > 15) return null
+  return `${digits}@s.whatsapp.net`
+}
+
+// Message the customer that their guarantee card is ready. Fire-and-forget:
+// callers should not await print completion on this. Deduped by card number.
+async function notifyCustomerGuaranteeReady(document) {
+  if (!WHATSAPP_CUSTOMER_NOTIFY_ENABLED) return
+  const number = document?.number ?? document?.id
+  const mobile = document?.customer?.mobile
+  const name = document?.customer?.name || ''
+  if (!number) return
+  if (whatsappNotifiedGuarantees.has(number)) return
+
+  const jid = customerMobileToWhatsAppJid(mobile)
+  if (!jid) {
+    console.warn(`[whatsapp-notify] guarantee ${number}: no usable customer mobile ("${mobile ?? ''}") — skipped`)
+    return
+  }
+  if (!whatsappSock || whatsappWebState.status !== 'ready') {
+    console.warn(`[whatsapp-notify] guarantee ${number}: WhatsApp not connected (status=${whatsappWebState.status}) — skipped`)
+    return
+  }
+
+  // Mark as notified BEFORE sending so a slow/failed send can't be retried into
+  // a duplicate by a concurrent reprint. Roll back only on a hard send failure.
+  whatsappNotifiedGuarantees.add(number)
+  try {
+    // Confirm the number is actually on WhatsApp before sending (avoids errors
+    // and stray messages to non-WhatsApp numbers). Tolerate the check failing.
+    try {
+      const [check] = await whatsappSock.onWhatsApp(jid)
+      if (check && check.exists === false) {
+        console.warn(`[whatsapp-notify] guarantee ${number}: ${jid} is not on WhatsApp — skipped`)
+        return
+      }
+    } catch { /* onWhatsApp check failed — proceed with the send anyway */ }
+
+    await whatsappSock.sendMessage(jid, { text: WHATSAPP_GUARANTEE_MESSAGE })
+    whatsappWebState.lastCustomerNotify = { at: new Date().toISOString(), number, jid, name }
+    console.log(`[whatsapp-notify] sent guarantee-ready message for ${number} to ${jid}${name ? ` (${name})` : ''}`)
+    await saveWhatsAppNotifiedGuarantees().catch(() => {})
+  } catch (err) {
+    whatsappNotifiedGuarantees.delete(number)
+    whatsappWebState.lastError = { at: new Date().toISOString(), error: `notify ${number}: ${String(err?.message ?? err)}` }
+    console.error(`[whatsapp-notify] failed to message customer for ${number}`, err?.message ?? err)
   }
 }
 
@@ -1944,7 +2037,10 @@ async function printCloudJob(job) {
   if (job.kind === 'guarantee') {
     const document = job.payload?.document ?? job.payload
     const layout = job.payload?.layout ?? 'a4'
-    return await printDocumentPayload({ kind: 'guarantee', document, layout }, copies)
+    const result = await printDocumentPayload({ kind: 'guarantee', document, layout }, copies)
+    notifyCustomerGuaranteeReady(document).catch(err =>
+      console.error('[whatsapp-notify] unhandled', err?.message ?? err))
+    return result
   }
 
   if (job.kind === 'raw-file') {
@@ -2671,6 +2767,15 @@ app.post('/print', async (req, res) => {
   try {
     const printResult = await printDocumentPayload({ kind, quote, document, bill, layout, printerOverride, slot, documents }, copies)
     if (kind === 'bill' && bill) await saveBillToStore(bill)
+    if (kind === 'guarantee') {
+      // Fire-and-forget: message each card's customer that it's ready to collect.
+      // Deduped by card number, so the A4 + PVC-card passes never double-send.
+      const cards = [document, ...(Array.isArray(documents) ? documents : [])].filter(Boolean)
+      for (const card of cards) {
+        notifyCustomerGuaranteeReady(card).catch(err =>
+          console.error('[whatsapp-notify] unhandled', err?.message ?? err))
+      }
+    }
     res.json({
       ok: true,
       printer: printResult.printer,
