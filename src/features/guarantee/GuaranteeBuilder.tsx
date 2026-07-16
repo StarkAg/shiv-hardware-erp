@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Check, FileText, Printer, Save, ScanLine, Trash2, X } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Check, Copy, FileText, Printer, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
 import { useStore } from '../../lib/store'
 import {
@@ -13,9 +13,10 @@ import {
   type GuaranteeYears,
   type ProductCategory,
 } from '../../lib/types'
-import { PrintPreview } from '../print/PrintPreview'
-import { GuaranteeCard, GuaranteeCardFace } from '../print/GuaranteeCard'
+import { GuaranteeCardFace } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
+import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, printOnServer, type ServerPrintPayload } from '../../lib/printServer'
+import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 
 type GuaranteeLayout = 'card' | 'a4'
 
@@ -123,8 +124,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
-  const [preview, setPreview] = useState(false)
   const [savedToast, setSavedToast] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [showWhatsAppLogin, setShowWhatsAppLogin] = useState(false)
 
   // Slot 2: an independent second card printed in the same tray pass.
   // Ticking it on reveals its own small set of fields plus its own table.
@@ -135,7 +137,6 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // Unfiltered brand list — the Items table's Type column can match any known
   // brand regardless of category, since there's no Product picker anymore.
   const brandOptions = sets[0]?.brands ?? []
-  const previewTitle = layout === 'card' ? 'Guarantee Card' : 'Guarantee A4 Sheet'
   const hasRows = rows.some(isRowFilled)
 
   // Mint a new card number from the store sequence. Refreshing on every
@@ -147,16 +148,45 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     return { number, id: number }
   }
 
-  // When returning from BillSelectPage, import the selected bill
+  // On entry: reopen a saved guarantee (from History) or import a selected bill.
   useEffect(() => {
-    const state = location.state as { selectedBillId?: string } | null
-    if (!state?.selectedBillId) return
-    const bill = bills.find((b) => b.id === state.selectedBillId)
-    if (bill) importBill(bill)
-    // Clear the state so navigating back doesn't re-import
-    window.history.replaceState({}, '')
+    const state = location.state as { selectedBillId?: string; reopenGuarantee?: GuaranteeDocument } | null
+    if (state?.reopenGuarantee) {
+      importGuarantee(state.reopenGuarantee)
+      window.history.replaceState({}, '')
+      return
+    }
+    if (state?.selectedBillId) {
+      const bill = bills.find((b) => b.id === state.selectedBillId)
+      if (bill) importBill(bill)
+      window.history.replaceState({}, '')
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Load a saved card back into the form so it can be viewed, edited or reprinted.
+  function importGuarantee(g: GuaranteeDocument) {
+    setRef({ number: g.number, id: g.id })
+    setCustomer({
+      id: g.customer.id || uid(),
+      name: g.customer.name || '',
+      mobile: g.customer.mobile || '',
+      uid: g.customer.uid || '',
+      address: g.customer.address || '',
+    })
+    const imported: SizeRow[] = g.items.map((it) => ({
+      id: uid(),
+      thickness: it.thickness || '',
+      type: it.brandName || '',
+      length: it.height?.inches ?? '',
+      lengthSoot: it.height?.soot ?? '',
+      height: it.width?.inches ?? '',
+      heightSoot: it.width?.soot ?? '',
+      qty: it.qty ?? '',
+      rate: it.amount ?? '',
+    }))
+    setRows(imported.length ? [...imported, blankRow()] : [blankRow()])
+  }
 
   function importBill(bill: Bill) {
     setCustomer((c) => ({
@@ -229,30 +259,100 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const doc = buildGuaranteeDoc()
   const doc2 = buildSecondDoc()
 
-  function openPreview() {
-    // Each Print mints AND saves a fresh card so the QR target is stable even
-    // if the user immediately resizes/refines and re-prints. The QR points to
-    // /guarantee/<number> on the print server, which only resolves once the
-    // card has been stored locally and pushed to the server.
-    const minted = mintFreshRef()
+  // Save (and enqueue for sync) both cards under a freshly minted ref. The QR
+  // points to /guarantee/<number> on the print server, which only resolves once
+  // the card has been stored locally and pushed to the server.
+  function persistCards(minted: { number: string; id: string }) {
     const freshDoc = buildGuaranteeDoc(minted)
-    const freshDoc2 = buildSecondDoc(minted)
     saveGuarantee(freshDoc)
-    if (secondCardOn) saveGuarantee(freshDoc2)
     enqueueGuaranteeSync(freshDoc)
-    if (secondCardOn) enqueueGuaranteeSync(freshDoc2)
-    setPreview(true)
+    if (secondCardOn) {
+      const freshDoc2 = buildSecondDoc(minted)
+      saveGuarantee(freshDoc2)
+      enqueueGuaranteeSync(freshDoc2)
+    }
   }
 
-  function saveCard() {
+  // WhatsApp the customer(s) that their card is being processed. Best-effort:
+  // the outcome is shown in the toast and a failure never blocks anything. The
+  // per-mobile cooldown on the server means Print-after-Generate won't double-send.
+  async function notifyCustomers(minted: { number: string; id: string }) {
+    const recipients = [
+      { mobile: customer.mobile.trim(), name: customer.name.trim() },
+      ...(secondCardOn ? [{ mobile: customer2.mobile.trim(), name: customer2.name.trim() }] : []),
+    ].filter((r) => r.mobile)
+    const seen = new Set<string>()
+    const uniqueRecipients = recipients.filter((r) => (seen.has(r.mobile) ? false : seen.add(r.mobile)))
+
+    if (uniqueRecipients.length === 0) {
+      setSavedToast(`Saved ${minted.number} · no mobile — WhatsApp skipped`)
+      window.setTimeout(() => setSavedToast(null), 2600)
+      return
+    }
+
+    setGenerating(true)
+    setSavedToast(`Saved ${minted.number} · sending WhatsApp…`)
+    let sent = 0
+    let firstError = ''
+    let notConnected = false
+    for (const r of uniqueRecipients) {
+      try {
+        const result = await sendGuaranteeWhatsApp(r.mobile, r.name)
+        if (!result.skipped) sent += 1
+      } catch (err) {
+        if (!firstError) firstError = err instanceof Error ? err.message : String(err)
+        if (isWhatsAppNotConnectedError(err)) notConnected = true
+      }
+    }
+    setGenerating(false)
+    if (notConnected) {
+      setSavedToast(`Saved ${minted.number} · WhatsApp needs login — scan the QR`)
+      setShowWhatsAppLogin(true)
+    } else if (firstError) {
+      setSavedToast(`Saved ${minted.number} · WhatsApp failed: ${firstError}`)
+    } else if (sent > 0) {
+      setSavedToast(`Saved ${minted.number} · WhatsApp sent`)
+    } else {
+      setSavedToast(`Saved ${minted.number} · customer already notified`)
+    }
+    window.setTimeout(() => setSavedToast(null), 4000)
+  }
+
+  // Print = save + WhatsApp the customer + send STRAIGHT to the printer (no preview).
+  async function printCard() {
+    if (generating) return
     const minted = mintFreshRef()
-    const freshDoc = buildGuaranteeDoc(minted)
-    saveGuarantee(freshDoc)
-    if (secondCardOn) saveGuarantee(buildSecondDoc(minted))
-    enqueueGuaranteeSync(freshDoc)
-    if (secondCardOn) enqueueGuaranteeSync(buildSecondDoc(minted))
-    setSavedToast(`Saved ${minted.number}`)
-    window.setTimeout(() => setSavedToast(null), 1800)
+    persistCards(minted)
+    // Save + WhatsApp (shows its own toast; opens the QR login if WhatsApp is down).
+    await notifyCustomers(minted)
+
+    const printDoc = buildGuaranteeDoc(minted)
+    const payload: ServerPrintPayload = layout === 'card'
+      ? {
+          kind: 'guarantee',
+          document: printDoc,
+          layout,
+          slot: 1,
+          ...(secondCardOn ? { documents: [printDoc, buildSecondDoc(minted)] } : {}),
+        }
+      : { kind: 'guarantee', document: printDoc, layout }
+
+    setSavedToast(`Printing ${minted.number}…`)
+    try {
+      const result = await printOnServer(payload)
+      setSavedToast(`Sent ${minted.number} to ${result.printer}`)
+    } catch (err) {
+      setSavedToast(`Print failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    window.setTimeout(() => setSavedToast(null), 4500)
+  }
+
+  // Generate = save the card(s) + WhatsApp the customer (no print).
+  async function generateCard() {
+    if (generating) return
+    const minted = mintFreshRef()
+    persistCards(minted)
+    await notifyCustomers(minted)
   }
 
   return (
@@ -264,24 +364,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           </div>
         )}
         <div className="no-print flex flex-wrap items-center justify-center gap-3">
-          <Button onClick={saveCard} disabled={!hasRows} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
-            <Save size={20} /> Save
+          <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+            <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
           </Button>
-          <Button onClick={openPreview} disabled={!hasRows} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+          <Button onClick={printCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Printer size={20} /> Print
           </Button>
-          <Link
-            to="/guarantee/history"
-            className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
-          >
-            <FileText size={20} /> History
-          </Link>
-          <Link
-            to="/scan"
-            className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
-          >
-            <ScanLine size={20} /> Scan Bill
-          </Link>
           <button
             onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: `/guarantee/${layout}` } })}
             className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
@@ -425,25 +513,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         )}
       </div>
 
-      {preview && (
-        <PrintPreview
-          title={previewTitle}
-          onClose={() => setPreview(false)}
-          serverPrint={{
-            kind: 'guarantee',
-            document: doc,
-            layout,
-            ...(layout === 'card'
-              ? {
-                  slot: 1 as const,
-                  ...(secondCardOn ? { documents: [doc, doc2] } : {}),
-                }
-              : {}),
-          }}
-        >
-          <GuaranteeCard document={doc} layout={layout} />
-        </PrintPreview>
-      )}
+      <WhatsAppLoginModal open={showWhatsAppLogin} onClose={() => setShowWhatsAppLogin(false)} />
     </div>
   )
 }
@@ -463,6 +533,21 @@ function SizeTable({
     'w-full rounded border border-transparent bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white dark:text-stone-100 dark:focus:bg-stone-950'
   const sootClass =
     'w-10 shrink-0 rounded border border-transparent bg-transparent px-1 py-1.5 text-sm text-stone-500 outline-none transition focus:border-shiv-green focus:bg-white dark:text-stone-400 dark:focus:bg-stone-950'
+
+  // Copy the last filled row into a new row (same size/brand for the next door),
+  // keeping a trailing blank so the table still grows as you type. When nothing
+  // is filled yet there's nothing to copy, so just ensure a blank row exists.
+  function duplicateRow() {
+    setRows((prev) => {
+      const filled = prev.filter(isRowFilled)
+      if (filled.length === 0) return [blankRow()]
+      const source = filled[filled.length - 1]
+      return [...filled, { ...source, id: uid() }, blankRow()]
+    })
+  }
+
+  const rowActionClass =
+    'mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-stone-300 bg-stone-50/60 px-3 py-2 text-xs font-semibold text-stone-600 transition hover:border-shiv-green hover:bg-stone-100 hover:text-stone-800 dark:border-white/15 dark:bg-white/5 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-stone-100'
 
   return (
     <div className="overflow-x-auto">
@@ -596,6 +681,9 @@ function SizeTable({
           <option key={b.id} value={b.name} />
         ))}
       </datalist>
+      <button type="button" onClick={duplicateRow} className={rowActionClass}>
+        <Copy size={15} /> Duplicate last row
+      </button>
     </div>
   )
 }

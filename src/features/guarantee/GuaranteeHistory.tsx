@@ -75,7 +75,7 @@ export function GuaranteeHistory() {
                           variant="ghost"
                           className="px-2 py-1"
                           title="Reopen in card builder"
-                          onClick={() => navigate('/guarantee/card')}
+                          onClick={() => navigate('/guarantee/card', { state: { reopenGuarantee: g } })}
                         >
                           <Eye size={16} />
                         </Button>

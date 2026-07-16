@@ -16,7 +16,7 @@ import express from 'express'
 import cors from 'cors'
 import Anthropic from '@anthropic-ai/sdk'
 import { execFile } from 'child_process'
-import { appendFile, writeFile, unlink, mkdir } from 'fs/promises'
+import { appendFile, writeFile, unlink, mkdir, rm } from 'fs/promises'
 import { networkInterfaces, tmpdir, homedir } from 'os'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
@@ -36,6 +36,10 @@ const PRINT_PRINTER = process.env.PRINT_PRINTER || BW_PRINTER
 // is actually online. Set PRINTER_AUTO_SELECT=false to always use the fixed printer.
 const PRINTER_AUTO_SELECT = !['0', 'false', 'no', 'off'].includes(String(process.env.PRINTER_AUTO_SELECT ?? 'true').trim().toLowerCase())
 const PRINT_SERVER_PUBLIC_URL = (process.env.PRINT_SERVER_PUBLIC_URL || '').replace(/\/+$/, '')
+// Base URL the printed guarantee-card QR points to (opens the online card view).
+// Prefer a public viewer (e.g. Vercel) so a customer's scan works off the shop
+// Wi-Fi; falls back to the request host so the QR at least works on the LAN.
+const GUARANTEE_PUBLIC_URL = (process.env.GUARANTEE_PUBLIC_URL || '').replace(/\/+$/, '')
 const CLOUD_API_URL = (process.env.CLOUD_API_URL || '').replace(/\/+$/, '')
 const CLOUD_API_KEY = process.env.CLOUD_API_KEY || ''
 const PRINTER_AGENT_ID = process.env.PRINTER_AGENT_ID || 'shiv-shop-printer'
@@ -155,14 +159,42 @@ function findGuaranteeByNumber(number) {
   return all.find((g) => String(g.number) === String(number)) ?? null
 }
 
-// Mobile-friendly viewer wrapper around the A4 guarantee card. Used by the QR
-// target on phones: shows the same letterheaded A4 sheet on screen plus an
-// "Open PDF" button that downloads a print-ready copy.
+// Mobile-first viewer for the QR target on phones: a clean, responsive page
+// showing the customer's Aadhaar (UID) + phone and the guaranteed items, plus
+// an "Open PDF" button for the full print-ready A4 card.
 function buildMobileGuaranteePageHtml(document) {
-  const cardHtml = buildGuaranteeHtml(document, 'a4')
-  const escapedNumber = String(document.number || '').replace(/[<>"']/g, (c) => ({
-    '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]))
+  const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => (
+    { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]
+  ))
+  const escapedNumber = esc(document.number || '')
+  const dateStr = new Date(document.date).toLocaleDateString('en-GB')
+  const cust = document.customer || {}
+
+  const fmtDim = (d) => (d && (d.inches || d.soot))
+    ? (d.soot > 0 ? `${d.inches || 0} ${d.soot}/8"` : `${d.inches}"`)
+    : ''
+  const fmtSize = (h, w) => { const a = fmtDim(h), b = fmtDim(w); return a && b ? `${a} × ${b}` : (a || b || '') }
+
+  const items = Array.isArray(document.items) ? document.items : []
+  const total = items.reduce((s, it) => s + (Number(it.amount) || 0), 0)
+
+  const itemsHtml = items.length ? items.map((it) => {
+    const size = fmtSize(it.height, it.width)
+    const gy = Number(it.guaranteeYears) || 0
+    const sub = [it.thickness ? esc(it.thickness) : '', size].filter(Boolean).join(' · ')
+    return `<div class="item">
+      <div class="item-info">
+        <div class="brand">${esc(it.brandName || '—')}</div>
+        ${sub ? `<div class="sub">${sub}</div>` : ''}
+      </div>
+      <div class="item-meta">
+        ${gy > 0 ? `<span class="badge">${gy} yr</span>` : ''}
+        ${it.qty ? `<span class="qty">${esc(it.qty)} pc</span>` : ''}
+        ${Number(it.amount) ? `<span class="amt">₹${Math.round(Number(it.amount))}</span>` : ''}
+      </div>
+    </div>`
+  }).join('') : '<div class="empty">No items listed on this card.</div>'
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -173,36 +205,56 @@ function buildMobileGuaranteePageHtml(document) {
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #f4f1ec; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1c1917; }
-  header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #0d6e3f; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-  header h1 { margin: 0; font-size: 16px; line-height: 1.2; }
-  header span.tag { background: #fff; color: #0d6e3f; padding: 4px 8px; border-radius: 4px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
-  header .actions { margin-left: auto; display: flex; gap: 8px; }
-  header .actions a, header .actions button { background: #fff; color: #0d6e3f; padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 700; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
-  main { padding: 16px; max-width: 880px; margin: 0 auto; }
-  .page-wrap { background: #fff; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); padding: 12px; overflow: auto; }
-  .meta { background: #fff; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); padding: 12px 16px; margin-bottom: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; font-size: 13px; }
-  .meta b { color: #57534e; font-weight: 600; }
-  @media (max-width: 480px) { header h1 { font-size: 14px; } .meta { grid-template-columns: 1fr; } }
+  body { margin: 0; background: #f4f1ec; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1c1917; -webkit-text-size-adjust: 100%; }
+  header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #0d6e3f; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+  header h1 { margin: 0; font-size: 16px; line-height: 1.2; flex: 1; }
+  header h1 small { display: block; font-size: 11px; font-weight: 400; opacity: .85; }
+  header .tag { background: #fff; color: #0d6e3f; padding: 4px 8px; border-radius: 6px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: nowrap; }
+  main { padding: 14px; max-width: 620px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.07); padding: 14px 16px; margin-bottom: 12px; }
+  .card h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #0d6e3f; font-weight: 700; }
+  .name { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+  .kv { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #f0ede7; }
+  .kv:first-of-type { border-top: 0; }
+  .kv .k { font-size: 12px; color: #78716c; width: 84px; flex-shrink: 0; text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+  .kv .v { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; word-break: break-word; }
+  .kv .v a { color: inherit; text-decoration: none; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-top: 1px solid #f0ede7; }
+  .item:first-of-type { border-top: 0; }
+  .item-info { flex: 1; min-width: 0; }
+  .item-info .brand { font-weight: 700; font-size: 15px; }
+  .item-info .sub { font-size: 13px; color: #78716c; margin-top: 2px; }
+  .item-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .badge { background: #eaf3ee; color: #0d6e3f; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .qty { font-size: 13px; color: #57534e; }
+  .amt { font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .empty { color: #a8a29e; font-size: 14px; padding: 6px 0; }
+  .total { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 2px solid #1c1917; font-weight: 700; font-size: 16px; }
+  .pdf { display: block; text-align: center; background: #0d6e3f; color: #fff; text-decoration: none; font-weight: 700; padding: 13px; border-radius: 12px; margin-bottom: 20px; }
+  .muted { text-align: center; color: #a8a29e; font-size: 11px; margin: 0 0 24px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Shiv Hardware<br/><span style="font-size:11px;font-weight:400;opacity:.85">Online Guarantee Card</span></h1>
+  <h1>Shiv Hardware<small>Online Guarantee Card</small></h1>
   <span class="tag">${escapedNumber}</span>
-  <div class="actions">
-    <a href="/guarantee/${encodeURIComponent(escapedNumber)}/pdf" target="_blank" rel="noreferrer">📄 Open PDF</a>
-    <a href="/guarantee/${encodeURIComponent(escapedNumber)}/pdf" download>⬇ Download</a>
-  </div>
 </header>
 <main>
-  <div class="meta">
-    <span><b>Customer:</b> ${(document.customer.name || '').replace(/[<>&]/g, (c) => ({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]))}</span>
-    <span><b>Date:</b> ${new Date(document.date).toLocaleDateString('en-GB')}</span>
-    <span><b>Mobile:</b> ${(document.customer.mobile || '').replace(/[<>&]/g, (c) => ({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]))}</span>
-    <span><b>UID:</b> ${(document.customer.uid || 'N/A').replace(/[<>&]/g, (c) => ({ '<':'&lt;','>':'&gt;','&':'&amp;' }[c]))}</span>
+  <div class="card">
+    <div class="name">${esc(cust.name || '—')}</div>
+    <div class="kv"><span class="k">Aadhaar</span><span class="v">${esc(cust.uid || 'N/A')}</span></div>
+    <div class="kv"><span class="k">Phone</span><span class="v">${cust.mobile ? `<a href="tel:${esc(cust.mobile)}">${esc(cust.mobile)}</a>` : 'N/A'}</span></div>
+    <div class="kv"><span class="k">Date</span><span class="v">${esc(dateStr)}</span></div>
   </div>
-  <div class="page-wrap">${cardHtml}</div>
+
+  <div class="card">
+    <h2>Items</h2>
+    ${itemsHtml}
+    ${total > 0 ? `<div class="total"><span>Total</span><span>₹${Math.round(total)}</span></div>` : ''}
+  </div>
+
+  <a class="pdf" href="/guarantee/${encodeURIComponent(escapedNumber)}/pdf" target="_blank" rel="noreferrer">📄 Open full guarantee card (PDF)</a>
+  <p class="muted">Shiv Hardware Store · Ramgarh Cantt</p>
 </main>
 </body>
 </html>`
@@ -293,9 +345,72 @@ const WHATSAPP_CUSTOMER_NOTIFY_ENABLED = parseBoolean(
 )
 // Country code prepended to bare 10-digit local mobiles. India (91) by default.
 const WHATSAPP_CUSTOMER_COUNTRY_CODE = String(process.env.WHATSAPP_CUSTOMER_COUNTRY_CODE || '91').replace(/\D/g, '')
-const WHATSAPP_GUARANTEE_MESSAGE = process.env.WHATSAPP_GUARANTEE_MESSAGE
-  || 'Thank you for purchasing with us. Your guarantee card is processed, please collect it from the shop.'
+// Message template. {name} is replaced with the customer's name. Keep {name}
+// in any custom text to personalize the greeting. A literal "\n" in the env
+// value is turned into a real line break (.env files can't hold raw newlines).
+const WHATSAPP_GUARANTEE_MESSAGE = (
+  process.env.WHATSAPP_GUARANTEE_MESSAGE
+  || 'Hi {name} 👋\n\nThank you for purchasing with us. Your guarantee card 💳 is processed — please collect it from the shop.'
+).replace(/\\n/g, '\n')
+
+// First name only, proper-cased ("HARSH KUMAR" / "harsh kumar" -> "Harsh") for the greeting.
+function greetingName(raw) {
+  const first = String(raw ?? '').trim().split(/\s+/)[0] ?? ''
+  return first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : ''
+}
+
+// Fill the template with the customer's name, degrading gracefully when unknown.
+function buildGuaranteeMessage(rawName) {
+  const name = greetingName(rawName)
+  if (WHATSAPP_GUARANTEE_MESSAGE.includes('{name}')) {
+    return WHATSAPP_GUARANTEE_MESSAGE.replace(/\{name\}/g, name || 'there')
+  }
+  return `${name ? `Hi ${name},` : 'Hi,'}\n\n${WHATSAPP_GUARANTEE_MESSAGE}`
+}
 const WHATSAPP_NOTIFIED_GUARANTEES_URL = new URL('data/whatsapp-notified-guarantees.json', import.meta.url)
+// Per-mobile cooldown so one customer never gets the same guarantee message
+// twice in quick succession — e.g. from both the Generate button and a Print,
+// or a double-click. 0 disables. Default 10 minutes.
+const WHATSAPP_NOTIFY_COOLDOWN_MS = Math.max(0, Number(process.env.WHATSAPP_NOTIFY_COOLDOWN_MS) || 10 * 60 * 1000)
+const whatsappRecentNotifyJids = new Map()
+
+function withinNotifyCooldown(jid) {
+  if (WHATSAPP_NOTIFY_COOLDOWN_MS <= 0) return false
+  const last = whatsappRecentNotifyJids.get(jid)
+  return last != null && Date.now() - last < WHATSAPP_NOTIFY_COOLDOWN_MS
+}
+
+function markJidNotified(jid) {
+  whatsappRecentNotifyJids.set(jid, Date.now())
+  if (whatsappRecentNotifyJids.size > 500) {
+    const cutoff = Date.now() - WHATSAPP_NOTIFY_COOLDOWN_MS
+    for (const [key, ts] of whatsappRecentNotifyJids) if (ts < cutoff) whatsappRecentNotifyJids.delete(key)
+  }
+}
+
+// ── WhatsApp auto-reply to direct (1:1) messages ─────────────────────────────
+// When anyone DMs the shop WhatsApp account, reply once (per cooldown) with a
+// redirect message. Groups are unaffected (those drive auto-print).
+const WHATSAPP_AUTOREPLY_ENABLED = parseBoolean(process.env.WHATSAPP_AUTOREPLY_ENABLED ?? 'true')
+const WHATSAPP_AUTOREPLY_MESSAGE = (process.env.WHATSAPP_AUTOREPLY_MESSAGE
+  || 'For any enquiries contact 8092850954 on WhatsApp.').replace(/\\n/g, '\n')
+// Don't reply to the same person more than once within this window. Default 1 hour.
+const WHATSAPP_AUTOREPLY_COOLDOWN_MS = Math.max(0, Number(process.env.WHATSAPP_AUTOREPLY_COOLDOWN_MS) || 60 * 60 * 1000)
+const whatsappRecentAutoReplyJids = new Map()
+
+function withinAutoReplyCooldown(jid) {
+  if (WHATSAPP_AUTOREPLY_COOLDOWN_MS <= 0) return false
+  const last = whatsappRecentAutoReplyJids.get(jid)
+  return last != null && Date.now() - last < WHATSAPP_AUTOREPLY_COOLDOWN_MS
+}
+
+function markAutoReplied(jid) {
+  whatsappRecentAutoReplyJids.set(jid, Date.now())
+  if (whatsappRecentAutoReplyJids.size > 1000) {
+    const cutoff = Date.now() - WHATSAPP_AUTOREPLY_COOLDOWN_MS
+    for (const [key, ts] of whatsappRecentAutoReplyJids) if (ts < cutoff) whatsappRecentAutoReplyJids.delete(key)
+  }
+}
 
 const whatsappWebState = {
   enabled: WHATSAPP_AUTO_PRINT_ENABLED,
@@ -365,6 +480,32 @@ function publicUrlFromRequest(req) {
   const protocol = forwardedProto || req.protocol || 'http'
   const host = req.get('host') || `localhost:${PORT}`
   return `${protocol}://${host}`
+}
+
+// URL the printed guarantee QR encodes: the online card view. `req` is optional
+// (absent for cloud print jobs), in which case only GUARANTEE_PUBLIC_URL applies.
+// When GUARANTEE_PUBLIC_URL is set it is the full path prefix (e.g.
+// https://www.shivhardware.store/Gaurantee) and the number is appended directly.
+// Otherwise the shop LAN address + the print server's /g/<number> route is used.
+function guaranteeCardUrl(number, req) {
+  if (!number) return ''
+  if (GUARANTEE_PUBLIC_URL) return `${GUARANTEE_PUBLIC_URL}/${encodeURIComponent(number)}`
+  let base = (req ? publicUrlFromRequest(req) : '').replace(/\/+$/, '')
+  if (!base) return ''
+  // A localhost base is useless in a QR a phone must scan — swap in a LAN IP.
+  if (/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(base)) {
+    const lan = localNetworkUrls(PORT)[0]
+    if (lan) base = lan
+  }
+  return `${base}/g/${encodeURIComponent(number)}`
+}
+
+// Return a copy of a guarantee document with the QR URL attached (used by the
+// print template). No-op when the URL can't be resolved.
+function withGuaranteeQr(doc, req) {
+  if (!doc) return doc
+  const url = guaranteeCardUrl(doc.number, req)
+  return url ? { ...doc, qrUrl: url } : doc
 }
 
 function localNetworkUrls(port) {
@@ -1596,11 +1737,39 @@ function getBaileysMediaMimetype(msg) {
   return null
 }
 
+// Reply to a direct (1:1) WhatsApp message with the enquiry redirect, once per
+// sender per cooldown. Skips our own outgoing messages and empty/system events.
+async function maybeAutoReplyToDirectMessage(sock, jid, msg) {
+  if (!WHATSAPP_AUTOREPLY_ENABLED) return
+  if (msg.key?.fromMe) return          // don't reply to messages we sent
+  if (!msg.message) return             // receipts / protocol events carry no content
+  const messageId = msg.key?.id || ''
+  if (messageId && rememberWhatsAppMessageId(messageId)) return  // already handled
+  if (withinAutoReplyCooldown(jid)) return
+
+  markAutoReplied(jid)
+  try {
+    await sock.sendMessage(jid, { text: WHATSAPP_AUTOREPLY_MESSAGE })
+    console.log(`[whatsapp-autoreply] replied to ${jid}`)
+  } catch (err) {
+    whatsappRecentAutoReplyJids.delete(jid)
+    console.error(`[whatsapp-autoreply] failed to reply to ${jid}`, err?.message ?? err)
+  }
+}
+
 async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
   // fromMe messages are intentionally NOT skipped: the shop owner often sends
   // images and the bw/cp command from the same account that hosts this WhatsApp
   // session, so their own media must buffer and their own commands must flush.
   const jid = msg.key.remoteJid || ''
+
+  // Direct 1:1 chats: auto-reply with the enquiry redirect, then stop. (Groups
+  // fall through to the auto-print handling below.)
+  if (jid.endsWith('@s.whatsapp.net')) {
+    await maybeAutoReplyToDirectMessage(sock, jid, msg)
+    return
+  }
+
   if (!jid.endsWith('@g.us')) return
 
   const messageId = msg.key.id || ''
@@ -1732,7 +1901,20 @@ async function startWhatsAppWebAutoPrint() {
       downloadMediaMessage, makeCacheableSignalKeyStore,
     } = await import('@whiskeysockets/baileys')
     const qrcode = await import('qrcode')
-    const { state, saveCreds } = await useMultiFileAuthState(WHATSAPP_WEB_AUTH_DIR)
+    // Reassignable: on a real logout we wipe the auth folder and reload these so
+    // the next connect() starts fresh and Baileys emits a new QR to re-scan.
+    let { state, saveCreds } = await useMultiFileAuthState(WHATSAPP_WEB_AUTH_DIR)
+
+    async function resetWhatsAppAuth() {
+      try {
+        await rm(WHATSAPP_WEB_AUTH_DIR, { recursive: true, force: true })
+      } catch (err) {
+        console.warn('[whatsapp-web] failed to clear auth dir', err.message ?? err)
+      }
+      const reloaded = await useMultiFileAuthState(WHATSAPP_WEB_AUTH_DIR)
+      state = reloaded.state
+      saveCreds = reloaded.saveCreds
+    }
 
     const silentLogger = {
       level: 'silent',
@@ -1780,7 +1962,13 @@ async function startWhatsAppWebAutoPrint() {
             ? { at: new Date().toISOString(), error: String(lastDisconnect.error.message ?? lastDisconnect.error) }
             : null
           console.log(`[whatsapp-web] disconnected code=${code}${loggedOut ? ', logged out — re-scan QR' : ', reconnecting...'}`)
-          if (loggedOut) whatsappGroupNameCache.clear()
+          if (loggedOut) {
+            whatsappGroupNameCache.clear()
+            whatsappWebState.qrDataUrl = null
+            whatsappWebState.readyAt = null
+            // Wipe the dead session so the reconnect below produces a fresh QR.
+            await resetWhatsAppAuth()
+          }
           setTimeout(connect, loggedOut ? 1000 : 5000)
         }
       })
@@ -1842,6 +2030,11 @@ async function notifyCustomerGuaranteeReady(document) {
     console.warn(`[whatsapp-notify] guarantee ${number}: WhatsApp not connected (status=${whatsappWebState.status}) — skipped`)
     return
   }
+  if (withinNotifyCooldown(jid)) {
+    console.log(`[whatsapp-notify] guarantee ${number}: ${jid} messaged within the cooldown window — skipped`)
+    whatsappNotifiedGuarantees.add(number)
+    return
+  }
 
   // Mark as notified BEFORE sending so a slow/failed send can't be retried into
   // a duplicate by a concurrent reprint. Roll back only on a hard send failure.
@@ -1857,7 +2050,8 @@ async function notifyCustomerGuaranteeReady(document) {
       }
     } catch { /* onWhatsApp check failed — proceed with the send anyway */ }
 
-    await whatsappSock.sendMessage(jid, { text: WHATSAPP_GUARANTEE_MESSAGE })
+    await whatsappSock.sendMessage(jid, { text: buildGuaranteeMessage(name) })
+    markJidNotified(jid)
     whatsappWebState.lastCustomerNotify = { at: new Date().toISOString(), number, jid, name }
     console.log(`[whatsapp-notify] sent guarantee-ready message for ${number} to ${jid}${name ? ` (${name})` : ''}`)
     await saveWhatsAppNotifiedGuarantees().catch(() => {})
@@ -1866,6 +2060,35 @@ async function notifyCustomerGuaranteeReady(document) {
     whatsappWebState.lastError = { at: new Date().toISOString(), error: `notify ${number}: ${String(err?.message ?? err)}` }
     console.error(`[whatsapp-notify] failed to message customer for ${number}`, err?.message ?? err)
   }
+}
+
+// Send the guarantee-ready message to one mobile immediately — no dedupe, no
+// print. Backs the "Generate" button and the diagnostic endpoint. Throws an
+// Error with a user-facing message on any failure; resolves with the JID sent to.
+async function sendGuaranteeWhatsAppTo(rawMobile, name = '') {
+  const jid = customerMobileToWhatsAppJid(rawMobile)
+  if (!jid) throw new Error(`Enter a valid mobile number (got "${rawMobile ?? ''}").`)
+  if (!whatsappSock || whatsappWebState.status !== 'ready') {
+    throw new Error(`WhatsApp is not connected on the shop computer (status: ${whatsappWebState.status}).`)
+  }
+  const message = buildGuaranteeMessage(name)
+  if (withinNotifyCooldown(jid)) {
+    console.log(`[whatsapp-notify] skipped ${jid} — messaged within the last cooldown window`)
+    return { jid, message, skipped: true }
+  }
+
+  let existsCheck
+  try {
+    const [check] = await whatsappSock.onWhatsApp(jid)
+    existsCheck = check
+  } catch { /* existence check failed — proceed with the send anyway */ }
+  if (existsCheck && existsCheck.exists === false) throw new Error(`${rawMobile} is not on WhatsApp.`)
+
+  await whatsappSock.sendMessage(jid, { text: message })
+  markJidNotified(jid)
+  whatsappWebState.lastCustomerNotify = { at: new Date().toISOString(), jid, name, source: 'manual' }
+  console.log(`[whatsapp-notify] sent guarantee message (manual) to ${jid}${name ? ` (${name})` : ''}`)
+  return { jid, message, skipped: false }
 }
 
 function printDocumentPayload(payload, copies) {
@@ -2037,7 +2260,7 @@ async function printCloudJob(job) {
   if (job.kind === 'guarantee') {
     const document = job.payload?.document ?? job.payload
     const layout = job.payload?.layout ?? 'a4'
-    const result = await printDocumentPayload({ kind: 'guarantee', document, layout }, copies)
+    const result = await printDocumentPayload({ kind: 'guarantee', document: withGuaranteeQr(document, null), layout }, copies)
     notifyCustomerGuaranteeReady(document).catch(err =>
       console.error('[whatsapp-notify] unhandled', err?.message ?? err))
     return result
@@ -2673,25 +2896,28 @@ app.get('/whatsapp-web/status', (_req, res) => {
   res.json(whatsappWebStatusPayload())
 })
 
-// Send the guarantee-ready message to a single number on demand. Diagnostic only:
-// exercises the exact send path (JID normalization + WhatsApp text) without
-// printing a card or recording dedupe, so it can be re-run freely.
+// Send the guarantee-ready message to a customer's mobile on demand. Backs the
+// "Generate" button in the guarantee builder (saving happens on the client).
+app.post('/whatsapp-notify-customer', async (req, res) => {
+  const mobile = String(req.body?.mobile ?? '').trim()
+  const name = String(req.body?.name ?? '').trim()
+  try {
+    const result = await sendGuaranteeWhatsAppTo(mobile, name)
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    res.status(400).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
+// Same send path, kept for quick manual testing (GET or POST with ?mobile=&name=).
 app.all('/whatsapp-web/test-notify', async (req, res) => {
   const mobile = String(req.body?.mobile ?? req.query?.mobile ?? '').trim()
-  const jid = customerMobileToWhatsAppJid(mobile)
-  if (!jid) return res.status(400).json({ ok: false, error: `Cannot form a WhatsApp number from "${mobile}"` })
-  if (!whatsappSock || whatsappWebState.status !== 'ready') {
-    return res.status(503).json({ ok: false, error: `WhatsApp not connected (status=${whatsappWebState.status})` })
-  }
+  const name = String(req.body?.name ?? req.query?.name ?? '').trim()
   try {
-    try {
-      const [check] = await whatsappSock.onWhatsApp(jid)
-      if (check && check.exists === false) return res.status(404).json({ ok: false, error: `${jid} is not on WhatsApp` })
-    } catch { /* proceed even if the existence check fails */ }
-    await whatsappSock.sendMessage(jid, { text: WHATSAPP_GUARANTEE_MESSAGE })
-    res.json({ ok: true, jid, message: WHATSAPP_GUARANTEE_MESSAGE })
+    const result = await sendGuaranteeWhatsAppTo(mobile, name)
+    res.json({ ok: true, ...result })
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err?.message ?? err) })
+    res.status(400).json({ ok: false, error: String(err?.message ?? err) })
   }
 })
 
@@ -2787,7 +3013,12 @@ app.post('/print', async (req, res) => {
   if (kind !== 'guarantee' && kind !== 'bill' && !quote) return res.status(400).json({ error: 'Missing quotation data' })
 
   try {
-    const printResult = await printDocumentPayload({ kind, quote, document, bill, layout, printerOverride, slot, documents }, copies)
+    // Attach the online-card QR URL so the printed guarantee carries a scannable QR.
+    const printDocument = kind === 'guarantee' ? withGuaranteeQr(document, req) : document
+    const printDocuments = kind === 'guarantee' && Array.isArray(documents)
+      ? documents.map((d) => withGuaranteeQr(d, req))
+      : documents
+    const printResult = await printDocumentPayload({ kind, quote, document: printDocument, bill, layout, printerOverride, slot, documents: printDocuments }, copies)
     if (kind === 'bill' && bill) await saveBillToStore(bill)
     if (kind === 'guarantee') {
       // Fire-and-forget: message each card's customer that it's ready to collect.
@@ -2908,7 +3139,7 @@ app.get('/guarantee/:number/pdf', async (req, res) => {
 
   let page
   try {
-    const html = await buildGuaranteeHtml(card, 'a4')
+    const html = await buildGuaranteeHtml(withGuaranteeQr(card, req), 'a4')
     page = await getSharedPage()
     await page.setContent(html, { waitUntil: 'networkidle0' })
     const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true })
@@ -2945,7 +3176,7 @@ app.post('/render-png', async (req, res) => {
   let page
   try {
     const html = kind === 'guarantee'
-      ? await buildGuaranteeHtml(document, layout)
+      ? await buildGuaranteeHtml(withGuaranteeQr(document, req), layout)
       : await buildQuotationHtml(quote)
     page = await getSharedPage()
     const width = Math.round((210 / 25.4) * 96)
