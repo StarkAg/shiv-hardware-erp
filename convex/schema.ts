@@ -115,5 +115,17 @@ export default defineSchema({
     summary: v.string(),       // human-readable description
     changes: v.optional(v.any()), // [{ staff, from, to }]
   }).index('by_at', ['at']),
-})
 
+  // ── Attendance app opening check-ins (only after the visitor responds to the prompt) ──
+  attendanceOpenings: defineTable({
+    deviceId: v.string(), // a random, browser-local identifier — not a hardware identifier
+    deviceModel: v.optional(v.string()), // provided by browser client hints when available
+    platform: v.optional(v.string()),
+    browser: v.optional(v.string()),
+    openedAt: v.number(), // set by the server when the check-in is received
+    locationStatus: v.union(v.literal('shared'), v.literal('declined'), v.literal('unavailable')),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    accuracyMeters: v.optional(v.number()),
+  }).index('by_opened_at', ['openedAt']),
+})
