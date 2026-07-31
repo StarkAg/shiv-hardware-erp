@@ -214,6 +214,69 @@ export const getLog = query({
   },
 })
 
+// ── App opening check-ins ──────────────────────────────────────────────────
+// The browser asks the visitor before location is included. `openedAt` is
+// assigned here rather than accepted from the client so the audit time cannot
+// be changed by the device clock.
+export const recordOpening = mutation({
+  args: {
+    deviceId: v.string(),
+    deviceModel: v.optional(v.string()),
+    platform: v.optional(v.string()),
+    browser: v.optional(v.string()),
+    locationStatus: v.union(v.literal('shared'), v.literal('declined'), v.literal('unavailable')),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    accuracyMeters: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const deviceId = args.deviceId.slice(0, 100)
+    if (!deviceId) throw new Error('A device identifier is required for an opening check-in.')
+
+    const hasLocation = args.locationStatus === 'shared'
+    if (hasLocation && (args.latitude === undefined || args.longitude === undefined)) {
+      throw new Error('Location coordinates are required when location is shared.')
+    }
+
+    return await ctx.db.insert('attendanceOpenings', {
+      deviceId,
+      ...(args.deviceModel?.trim() ? { deviceModel: args.deviceModel.trim().slice(0, 120) } : {}),
+      ...(args.platform?.trim() ? { platform: args.platform.trim().slice(0, 120) } : {}),
+      ...(args.browser?.trim() ? { browser: args.browser.trim().slice(0, 120) } : {}),
+      openedAt: Date.now(),
+      locationStatus: args.locationStatus,
+      ...(hasLocation ? {
+        latitude: args.latitude,
+        longitude: args.longitude,
+        ...(args.accuracyMeters === undefined ? {} : { accuracyMeters: args.accuracyMeters }),
+      } : {}),
+    })
+  },
+})
+
+export const getOpenings = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }) => {
+    const count = Math.min(Math.max(limit ?? 100, 1), 200)
+    const rows = await ctx.db
+      .query('attendanceOpenings')
+      .withIndex('by_opened_at')
+      .order('desc')
+      .take(count)
+    return rows.map((row) => ({
+      deviceId: row.deviceId,
+      deviceModel: row.deviceModel ?? null,
+      platform: row.platform ?? null,
+      browser: row.browser ?? null,
+      openedAt: row.openedAt,
+      locationStatus: row.locationStatus,
+      latitude: row.latitude ?? null,
+      longitude: row.longitude ?? null,
+      accuracyMeters: row.accuracyMeters ?? null,
+    }))
+  },
+})
+
 // ── Sample history seed (idempotent: skips if the log already has entries) ────
 export const seedLog = mutation({
   args: {},

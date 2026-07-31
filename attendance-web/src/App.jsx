@@ -27,6 +27,9 @@ const MONTH_CACHE_KEY = 'shiv-attendance:months'
 const STAFF_CACHE_KEY = 'shiv-attendance:staff'
 const RATES_CACHE_KEY = 'shiv-attendance:rates'
 const ADV_CACHE_KEY = 'shiv-attendance:advances'
+const HISTORY_SEEN_KEY = 'shiv-attendance:history-seen'
+const DEVICE_ID_KEY = 'shiv-attendance:device-id'
+const LOCATION_PERMISSION_KEY = 'shiv-attendance:location-approved'
 const ATTEND_THRESHOLD = 20 // min attended days to unlock Tuesday pay
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
 function readCache(key, fallback) {
@@ -34,6 +37,43 @@ function readCache(key, fallback) {
 }
 function writeCache(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)) } catch { /* ignore */ }
+}
+function readText(key) {
+  try { return localStorage.getItem(key) || '' } catch { return '' }
+}
+function getDeviceId() {
+  const existing = readText(DEVICE_ID_KEY)
+  if (existing) return existing
+  const next = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `browser-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  try { localStorage.setItem(DEVICE_ID_KEY, next) } catch { /* ignore */ }
+  return next
+}
+function browserName(ua) {
+  if (/Edg\//.test(ua)) return 'Microsoft Edge'
+  if (/OPR\//.test(ua)) return 'Opera'
+  if (/Firefox\//.test(ua)) return 'Firefox'
+  if (/CriOS\//.test(ua)) return 'Chrome on iOS'
+  if (/Chrome\//.test(ua)) return 'Chrome'
+  if (/Safari\//.test(ua)) return 'Safari'
+  return 'Unknown browser'
+}
+async function getDeviceDetails() {
+  const ua = navigator.userAgent || ''
+  const fallbackPlatform = navigator.platform || 'Unknown platform'
+  const details = { deviceModel: '', platform: fallbackPlatform, browser: browserName(ua) }
+  // Chromium browsers only reveal an Android device model after explicit
+  // high-entropy client-hint access. Other browsers may leave it blank.
+  try {
+    const hints = navigator.userAgentData
+    if (hints?.getHighEntropyValues) {
+      const high = await hints.getHighEntropyValues(['model', 'platform', 'platformVersion'])
+      details.deviceModel = high.model || ''
+      details.platform = [high.platform, high.platformVersion].filter(Boolean).join(' ') || fallbackPlatform
+    }
+  } catch { /* browser does not support client hints */ }
+  return details
 }
 
 const pad = (n) => String(n).padStart(2, '0')
@@ -68,14 +108,107 @@ export default function App() {
 
   const convex = useConvex()
 
+  // Each app load starts with an explicit, optional location check-in. The
+  // browser's permission prompt appears only after the visitor chooses to share.
+  const [openingCheckIn, setOpeningCheckIn] = useState(() => {
+    const approved = readText(LOCATION_PERMISSION_KEY) === 'granted'
+    return { open: true, status: approved ? 'locating' : 'idle', error: '' }
+  })
+  const [openingsOpen, setOpeningsOpen] = useState(false)
+  const [openings, setOpenings] = useState(null)
+  const historyTapRef = useRef({ count: 0, timer: null })
+  const automaticLocationCheckRef = useRef(false)
+  const completeOpening = async (locationStatus, position) => {
+    const coords = position?.coords
+    const device = await getDeviceDetails()
+    convex.mutation(api.attendance.recordOpening, {
+      deviceId: getDeviceId(),
+      ...device,
+      locationStatus,
+      ...(coords ? {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracyMeters: Math.round(coords.accuracy),
+      } : {}),
+    }).then(() => {
+      setOpeningCheckIn((prev) => ({ ...prev, open: false, status: 'done', error: '' }))
+    }).catch(() => {
+      setOpeningCheckIn((prev) => ({ ...prev, status: 'idle', error: 'Could not save this check-in. Check the connection and try again.' }))
+    })
+  }
+  const shareOpeningLocation = () => {
+    if (!navigator.geolocation) {
+      setOpeningCheckIn((prev) => ({ ...prev, status: 'idle', error: 'This browser cannot provide location. Open the app in a browser with location enabled.' }))
+      return
+    }
+    setOpeningCheckIn((prev) => ({ ...prev, status: 'locating', error: '' }))
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        try { localStorage.setItem(LOCATION_PERMISSION_KEY, 'granted') } catch { /* ignore */ }
+        completeOpening('shared', position)
+      },
+      () => setOpeningCheckIn((prev) => ({
+        ...prev,
+        status: 'idle',
+        error: 'Location access is required. Allow location in your browser settings, then retry.',
+      })),
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+    )
+  }
+  useEffect(() => {
+    if (readText(LOCATION_PERMISSION_KEY) !== 'granted' || automaticLocationCheckRef.current) return
+    automaticLocationCheckRef.current = true
+    shareOpeningLocation()
+    // The saved browser permission is checked once per application load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const openOpeningLog = () => {
+    setOpeningsOpen(true)
+    setOpenings(null)
+    convex.query(api.attendance.getOpenings, { limit: 100 })
+      .then((rows) => setOpenings(rows || []))
+      .catch(() => setOpenings([]))
+  }
+  const openHistoryOrOpenings = () => {
+    const taps = historyTapRef.current
+    taps.count += 1
+    if (taps.timer) clearTimeout(taps.timer)
+    taps.timer = setTimeout(() => {
+      const openDetails = taps.count >= 5
+      taps.count = 0
+      taps.timer = null
+      if (openDetails) openOpeningLog()
+      else openHistory()
+    }, 450)
+  }
+  useEffect(() => () => {
+    if (historyTapRef.current.timer) clearTimeout(historyTapRef.current.timer)
+  }, [])
+
   // Change history — fetched on demand when the panel opens.
   const [historyOpen, setHistoryOpen] = useState(false)
   const [log, setLog] = useState(null)
+  const [historyAlert, setHistoryAlert] = useState(false)
+  // A "suspicious" entry = a locked past day that was altered after its date.
+  const isSusEntry = (e) => !!e.date && e.date < dateKey(new Date(e.at))
+  useEffect(() => {
+    let off = false
+    convex.query(api.attendance.getLog, { limit: 200 }).then((rows) => {
+      if (off || !rows) return
+      const seen = Number(localStorage.getItem(HISTORY_SEEN_KEY) || 0)
+      setHistoryAlert(rows.some((e) => isSusEntry(e) && e.at > seen))
+    }).catch(() => {})
+    return () => { off = true }
+  }, [convex])
   const openHistory = () => {
     setHistoryOpen(true)
     setLog(null)
     convex.query(api.attendance.getLog, { limit: 200 })
-      .then((rows) => setLog(rows || []))
+      .then((rows) => {
+        setLog(rows || [])
+        try { localStorage.setItem(HISTORY_SEEN_KEY, String(Date.now())) } catch { /* ignore */ }
+        setHistoryAlert(false)
+      })
       .catch(() => setLog([]))
   }
 
@@ -240,8 +373,9 @@ export default function App() {
           </div>
         </div>
         <div className="headbtns">
-          <button className="themebtn" onClick={openHistory} aria-label="Change history" title="Change history">
+          <button className="themebtn histbtn" onClick={openHistoryOrOpenings} aria-label="Change history" title="Change history">
             <HistoryIcon />
+            {historyAlert && <span className="alertdot" aria-label="Past date changed">!</span>}
           </button>
           <button className="themebtn" onClick={toggleTheme} aria-label="Toggle theme" title="Toggle theme">
             {dark ? (
@@ -317,6 +451,14 @@ export default function App() {
 
       {pw.open && <PasswordModal error={pw.error} onSubmit={submitPw} onClose={closePw} />}
       {historyOpen && <HistoryModal log={log} onClose={() => setHistoryOpen(false)} />}
+      {openingsOpen && <OpeningLogModal openings={openings} onClose={() => setOpeningsOpen(false)} />}
+      {openingCheckIn.open && (
+        <OpeningCheckInModal
+          status={openingCheckIn.status}
+          error={openingCheckIn.error}
+          onShare={shareOpeningLocation}
+        />
+      )}
       <footer className="foot">Live sync • {Object.values(unlockedDates).some((e) => e > Date.now()) ? 'edit unlocked (10h)' : 'past days locked'} • {month}</footer>
     </div>
   )
@@ -801,6 +943,7 @@ const fmtDay = (dateStr) => {
 }
 
 function HistoryModal({ log, onClose }) {
+  const todayK = dateKey(new Date())
   return (
     <div className="modal" onClick={onClose}>
       <div className="sheet histsheet" onClick={(e) => e.stopPropagation()}>
@@ -812,24 +955,30 @@ function HistoryModal({ log, onClose }) {
           <div className="muted center">No changes recorded yet.</div>
         ) : (
           <div className="histlist">
-            {log.map((e, i) => (
-              <div className="histrow" key={i}>
-                <div className="histtop">
-                  <span className="histwhen">{fmtWhen(e.at)}</span>
-                  {e.date && <span className="histday">for {fmtDay(e.date)}</span>}
-                </div>
-                <div className="histsum">{e.summary}</div>
-                {e.changes && e.changes.length > 0 && (
-                  <div className="histchanges">
-                    {e.changes.map((c, j) => (
-                      <span className="histchip" key={j}>
-                        {c.staff}: {statusLabel(c.from)}→{statusLabel(c.to)}
-                      </span>
-                    ))}
+            {log.map((e, i) => {
+              const editDay = dateKey(new Date(e.at))
+              const isToday = editDay === todayK
+              const isSus = !!e.date && e.date < editDay
+              return (
+                <div className={`histrow ${isSus ? 'sus' : isToday ? 'today' : ''}`} key={i}>
+                  <div className="histtop">
+                    <span className="histwhen">{fmtWhen(e.at)}</span>
+                    {e.date && <span className="histday">for {fmtDay(e.date)}</span>}
                   </div>
-                )}
-              </div>
-            ))}
+                  <div className="histsum">{e.summary}</div>
+                  {isSus && <span className="susflag">Past date changed</span>}
+                  {e.changes && e.changes.length > 0 && (
+                    <div className="histchanges">
+                      {e.changes.map((c, j) => (
+                        <span className="histchip" key={j}>
+                          {c.staff}: {statusLabel(c.from)}→{statusLabel(c.to)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
         <div className="sheetbtns">
@@ -840,9 +989,76 @@ function HistoryModal({ log, onClose }) {
   )
 }
 
+function OpeningCheckInModal({ status, error, onShare }) {
+  const busy = status === 'locating'
+  return (
+    <div className="modal checkinmodal" role="dialog" aria-modal="true" aria-labelledby="checkin-title">
+      <div className="sheet checkinsheet">
+        <div className="sheetlock"><LocationIcon /></div>
+        <div id="checkin-title" className="sheettitle">Opening check-in</div>
+        <div className="sheetsub">Location access is required to open the attendance app. The opening time is recorded by the server.</div>
+        {busy && <div className="checkinprogress">Checking saved location permission…</div>}
+        {error && <div className="sheeterr">{error}</div>}
+        {!busy && <div className="sheetbtns checkinbtns">
+          <button className="primbtn" onClick={onShare}>{error ? 'Retry location access' : 'Share location & open'}</button>
+        </div>}
+      </div>
+    </div>
+  )
+}
+
+function OpeningLogModal({ openings, onClose }) {
+  return (
+    <div className="modal" onClick={onClose}>
+      <div className="sheet histsheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheettitle">Opening check-ins</div>
+        <div className="sheetsub">Latest app openings and the location choice made for each one</div>
+        {openings === null ? (
+          <div className="muted center">Loading…</div>
+        ) : openings.length === 0 ? (
+          <div className="muted center">No opening check-ins recorded yet.</div>
+        ) : (
+          <div className="histlist">
+            {openings.map((entry, i) => (
+              <div className="histrow" key={`${entry.openedAt}-${entry.deviceId}-${i}`}>
+                <div className="histtop">
+                  <span className="histwhen">{fmtWhen(entry.openedAt)}</span>
+                  <span className="histday">Device {entry.deviceId.slice(0, 8)}</span>
+                </div>
+                <div className="deviceinfo">
+                  <span>{entry.deviceModel || 'Model unavailable'}</span>
+                  <span>{entry.platform || 'Platform unavailable'}</span>
+                  <span>{entry.browser || 'Browser unavailable'}</span>
+                </div>
+                {entry.locationStatus === 'shared' ? (
+                  <div className="histsum">
+                    <a className="locationlink" href={`https://www.google.com/maps?q=${entry.latitude},${entry.longitude}`} target="_blank" rel="noreferrer">
+                      View location on map
+                    </a>
+                    <span className="coordtext">{Number(entry.latitude).toFixed(5)}, {Number(entry.longitude).toFixed(5)}{entry.accuracyMeters !== null ? ` · ±${Math.round(entry.accuracyMeters)} m` : ''}</span>
+                  </div>
+                ) : (
+                  <div className="histsum muted">Location {entry.locationStatus === 'declined' ? 'not shared' : 'unavailable'}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="sheetbtns"><button className="primbtn" onClick={onClose}>Close</button></div>
+      </div>
+    </div>
+  )
+}
+
 function HistoryIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l4 2" /></svg>
+  )
+}
+
+function LocationIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg>
   )
 }
 

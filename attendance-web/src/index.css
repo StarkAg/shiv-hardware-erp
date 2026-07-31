@@ -139,8 +139,20 @@ body {
 .sheeterr { color: var(--red); font-size: 13px; margin-top: 8px; }
 .sheetbtns { display: flex; gap: 10px; margin-top: 16px; }
 .sheetbtns button { flex: 1; padding: 12px; border-radius: 12px; font-weight: 800; font-size: 15px; border: 1px solid var(--line); }
+.sheetbtns button:disabled { opacity: 0.55; }
 .ghostbtn { background: transparent; color: var(--fg); }
 .primbtn { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+
+/* Opening check-in */
+.checkinmodal { z-index: 70; }
+.checkinsheet { max-width: 390px; }
+.checkinsheet .sheetsub { line-height: 1.45; }
+.checkinprogress { color: var(--brass); font-size: 13px; font-weight: 700; margin: 10px 0 -4px; }
+.checkinbtns button { font-size: 13px; }
+.locationlink { color: var(--brass); font-weight: 800; text-decoration: underline; }
+.coordtext { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+.deviceinfo { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 4px; }
+.deviceinfo span { color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 999px; font-size: 11px; padding: 3px 7px; }
 
 /* Pay tab */
 .payhdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -198,5 +210,16 @@ body {
 .histsum { font-size: 14px; margin-top: 2px; }
 .histchanges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .histchip { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
+
+/* Today's activity stands out in red; altered past days get a stronger warning. */
+.histrow.today { border-color: rgba(159,29,32,0.5); background: rgba(159,29,32,0.06); }
+.histrow.today .histwhen { color: var(--red); }
+.histrow.sus { border-color: var(--red); background: rgba(159,29,32,0.12); }
+.histrow.sus .histwhen { color: var(--red); }
+.susflag { display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; background: var(--red); padding: 3px 8px; border-radius: 6px; }
+
+/* Exclamation badge on the history icon */
+.histbtn { position: relative; }
+.alertdot { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--red); color: #fff; font-size: 12px; font-weight: 900; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--bg); }
 
 .foot { text-align: center; color: var(--muted); font-size: 12px; margin-top: 16px; }
