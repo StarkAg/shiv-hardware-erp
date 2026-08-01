@@ -29,6 +29,7 @@ const RATES_CACHE_KEY = 'shiv-attendance:rates'
 const ADV_CACHE_KEY = 'shiv-attendance:advances'
 const HISTORY_SEEN_KEY = 'shiv-attendance:history-seen'
 const DEVICE_ID_KEY = 'shiv-attendance:device-id'
+const OPENING_LOCATION_SETUP_KEY = 'shiv-attendance:opening-location-setup'
 const ATTEND_THRESHOLD = 20 // min attended days to unlock Tuesday pay
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
 function readCache(key, fallback) {
@@ -107,20 +108,68 @@ export default function App() {
 
   const convex = useConvex()
 
+  const [locationSetupOpen, setLocationSetupOpen] = useState(() => !readText(OPENING_LOCATION_SETUP_KEY))
+  const [locationSetup, setLocationSetup] = useState({ status: 'idle', error: '' })
   const [openingsOpen, setOpeningsOpen] = useState(false)
   const [openings, setOpenings] = useState(null)
   const historyTapRef = useRef({ count: 0, timer: null })
-  const recordOpening = async () => {
+  const recordOpening = async (location = null) => {
     const device = await getDeviceDetails()
     convex.mutation(api.attendance.recordOpening, {
       deviceId: getDeviceId(),
       ...device,
-      locationStatus: 'unavailable',
+      locationStatus: location ? 'shared' : 'unavailable',
+      ...(location || {}),
     }).catch(() => {})
   }
+  const finishWithoutLocation = () => {
+    try { localStorage.setItem(OPENING_LOCATION_SETUP_KEY, 'skipped') } catch { /* ignore */ }
+    setLocationSetupOpen(false)
+    recordOpening(null)
+  }
+  const saveOpeningLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationSetup({ status: 'idle', error: 'This device cannot provide location. You can continue without it.' })
+      return
+    }
+    setLocationSetup({ status: 'locating', error: '' })
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyMeters: Math.round(position.coords.accuracy),
+        }
+        try {
+          localStorage.setItem(OPENING_LOCATION_SETUP_KEY, 'saved')
+        } catch { /* ignore */ }
+        setLocationSetupOpen(false)
+        recordOpening(location)
+      },
+      () => setLocationSetup({
+        status: 'idle',
+        error: 'Location was not shared. You can try again or continue without it.',
+      }),
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+    )
+  }
   useEffect(() => {
-    // Keep the opening audit without any location check-in or permission request.
-    recordOpening()
+    // Once permission was granted, read a fresh position on each opening. The
+    // browser remembers the permission, so this does not show our setup popup again.
+    if (readText(OPENING_LOCATION_SETUP_KEY) !== 'saved') return
+    if (!navigator.geolocation) {
+      recordOpening()
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => recordOpening({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracyMeters: Math.round(position.coords.accuracy),
+      }),
+      () => recordOpening(),
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const openOpeningLog = () => {
@@ -413,6 +462,14 @@ export default function App() {
       {pw.open && <PasswordModal error={pw.error} onSubmit={submitPw} onClose={closePw} />}
       {historyOpen && <HistoryModal log={log} onClose={() => setHistoryOpen(false)} />}
       {openingsOpen && <OpeningLogModal openings={openings} onClose={() => setOpeningsOpen(false)} />}
+      {locationSetupOpen && (
+        <LocationSetupModal
+          status={locationSetup.status}
+          error={locationSetup.error}
+          onAllow={saveOpeningLocation}
+          onSkip={finishWithoutLocation}
+        />
+      )}
       <footer className="foot">Live sync • {Object.values(unlockedDates).some((e) => e > Date.now()) ? 'edit unlocked (10h)' : 'past days locked'} • {month}</footer>
     </div>
   )
@@ -938,6 +995,24 @@ function HistoryModal({ log, onClose }) {
         <div className="sheetbtns">
           <button className="primbtn" onClick={onClose}>Close</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function LocationSetupModal({ status, error, onAllow, onSkip }) {
+  const busy = status === 'locating'
+  return (
+    <div className="modal checkinmodal" role="dialog" aria-modal="true" aria-labelledby="location-setup-title">
+      <div className="sheet checkinsheet">
+        <div id="location-setup-title" className="sheettitle">Save your location</div>
+        <div className="sheetsub">Allow location once. This PWA then records a fresh location on future openings without showing this prompt again.</div>
+        {busy && <div className="checkinprogress">Saving location…</div>}
+        {error && <div className="sheeterr">{error}</div>}
+        {!busy && <div className="sheetbtns checkinbtns">
+          <button className="primbtn" onClick={onAllow}>{error ? 'Try location again' : 'Allow location once'}</button>
+          <button className="ghostbtn" onClick={onSkip}>Continue without location</button>
+        </div>}
       </div>
     </div>
   )
