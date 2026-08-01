@@ -108,16 +108,16 @@ export default function App() {
 
   const convex = useConvex()
 
-  // Each app load starts with an explicit, optional location check-in. The
-  // browser's permission prompt appears only after the visitor chooses to share.
+  // Ask for location only on the first check-in. Re-requesting it during every
+  // later launch can make Android/WebView show the permission dialog repeatedly.
   const [openingCheckIn, setOpeningCheckIn] = useState(() => {
     const approved = readText(LOCATION_PERMISSION_KEY) === 'granted'
-    return { open: true, status: approved ? 'locating' : 'idle', error: '' }
+    return { open: !approved, status: 'idle', error: '' }
   })
   const [openingsOpen, setOpeningsOpen] = useState(false)
   const [openings, setOpenings] = useState(null)
   const historyTapRef = useRef({ count: 0, timer: null })
-  const automaticLocationCheckRef = useRef(false)
+  const automaticOpeningRef = useRef(false)
   const completeOpening = async (locationStatus, position) => {
     const coords = position?.coords
     const device = await getDeviceDetails()
@@ -156,10 +156,10 @@ export default function App() {
     )
   }
   useEffect(() => {
-    if (readText(LOCATION_PERMISSION_KEY) !== 'granted' || automaticLocationCheckRef.current) return
-    automaticLocationCheckRef.current = true
-    shareOpeningLocation()
-    // The saved browser permission is checked once per application load.
+    if (readText(LOCATION_PERMISSION_KEY) !== 'granted' || automaticOpeningRef.current) return
+    automaticOpeningRef.current = true
+    // Keep the opening audit without invoking navigator.geolocation again.
+    completeOpening('unavailable')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const openOpeningLog = () => {
