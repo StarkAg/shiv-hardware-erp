@@ -29,7 +29,6 @@ const RATES_CACHE_KEY = 'shiv-attendance:rates'
 const ADV_CACHE_KEY = 'shiv-attendance:advances'
 const HISTORY_SEEN_KEY = 'shiv-attendance:history-seen'
 const DEVICE_ID_KEY = 'shiv-attendance:device-id'
-const LOCATION_PERMISSION_KEY = 'shiv-attendance:location-approved'
 const ATTEND_THRESHOLD = 20 // min attended days to unlock Tuesday pay
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
 function readCache(key, fallback) {
@@ -108,58 +107,20 @@ export default function App() {
 
   const convex = useConvex()
 
-  // Ask for location only on the first check-in. Re-requesting it during every
-  // later launch can make Android/WebView show the permission dialog repeatedly.
-  const [openingCheckIn, setOpeningCheckIn] = useState(() => {
-    const approved = readText(LOCATION_PERMISSION_KEY) === 'granted'
-    return { open: !approved, status: 'idle', error: '' }
-  })
   const [openingsOpen, setOpeningsOpen] = useState(false)
   const [openings, setOpenings] = useState(null)
   const historyTapRef = useRef({ count: 0, timer: null })
-  const automaticOpeningRef = useRef(false)
-  const completeOpening = async (locationStatus, position) => {
-    const coords = position?.coords
+  const recordOpening = async () => {
     const device = await getDeviceDetails()
     convex.mutation(api.attendance.recordOpening, {
       deviceId: getDeviceId(),
       ...device,
-      locationStatus,
-      ...(coords ? {
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracyMeters: Math.round(coords.accuracy),
-      } : {}),
-    }).then(() => {
-      setOpeningCheckIn((prev) => ({ ...prev, open: false, status: 'done', error: '' }))
-    }).catch(() => {
-      setOpeningCheckIn((prev) => ({ ...prev, status: 'idle', error: 'Could not save this check-in. Check the connection and try again.' }))
-    })
-  }
-  const shareOpeningLocation = () => {
-    if (!navigator.geolocation) {
-      setOpeningCheckIn((prev) => ({ ...prev, status: 'idle', error: 'This browser cannot provide location. Open the app in a browser with location enabled.' }))
-      return
-    }
-    setOpeningCheckIn((prev) => ({ ...prev, status: 'locating', error: '' }))
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        try { localStorage.setItem(LOCATION_PERMISSION_KEY, 'granted') } catch { /* ignore */ }
-        completeOpening('shared', position)
-      },
-      () => setOpeningCheckIn((prev) => ({
-        ...prev,
-        status: 'idle',
-        error: 'Location access is required. Allow location in your browser settings, then retry.',
-      })),
-      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
-    )
+      locationStatus: 'unavailable',
+    }).catch(() => {})
   }
   useEffect(() => {
-    if (readText(LOCATION_PERMISSION_KEY) !== 'granted' || automaticOpeningRef.current) return
-    automaticOpeningRef.current = true
-    // Keep the opening audit without invoking navigator.geolocation again.
-    completeOpening('unavailable')
+    // Keep the opening audit without any location check-in or permission request.
+    recordOpening()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const openOpeningLog = () => {
@@ -452,13 +413,6 @@ export default function App() {
       {pw.open && <PasswordModal error={pw.error} onSubmit={submitPw} onClose={closePw} />}
       {historyOpen && <HistoryModal log={log} onClose={() => setHistoryOpen(false)} />}
       {openingsOpen && <OpeningLogModal openings={openings} onClose={() => setOpeningsOpen(false)} />}
-      {openingCheckIn.open && (
-        <OpeningCheckInModal
-          status={openingCheckIn.status}
-          error={openingCheckIn.error}
-          onShare={shareOpeningLocation}
-        />
-      )}
       <footer className="foot">Live sync • {Object.values(unlockedDates).some((e) => e > Date.now()) ? 'edit unlocked (10h)' : 'past days locked'} • {month}</footer>
     </div>
   )
@@ -989,24 +943,6 @@ function HistoryModal({ log, onClose }) {
   )
 }
 
-function OpeningCheckInModal({ status, error, onShare }) {
-  const busy = status === 'locating'
-  return (
-    <div className="modal checkinmodal" role="dialog" aria-modal="true" aria-labelledby="checkin-title">
-      <div className="sheet checkinsheet">
-        <div className="sheetlock"><LocationIcon /></div>
-        <div id="checkin-title" className="sheettitle">Opening check-in</div>
-        <div className="sheetsub">Location access is required to open the attendance app. The opening time is recorded by the server.</div>
-        {busy && <div className="checkinprogress">Checking saved location permission…</div>}
-        {error && <div className="sheeterr">{error}</div>}
-        {!busy && <div className="sheetbtns checkinbtns">
-          <button className="primbtn" onClick={onShare}>{error ? 'Retry location access' : 'Share location & open'}</button>
-        </div>}
-      </div>
-    </div>
-  )
-}
-
 function OpeningLogModal({ openings, onClose }) {
   return (
     <div className="modal" onClick={onClose}>
@@ -1053,12 +989,6 @@ function OpeningLogModal({ openings, onClose }) {
 function HistoryIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l4 2" /></svg>
-  )
-}
-
-function LocationIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg>
   )
 }
 
