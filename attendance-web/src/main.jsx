@@ -17,7 +17,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 )
 
 if ('serviceWorker' in navigator) {
+  // When a new service worker takes control, reload once so the newest app shell loads.
+  let refreshing = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return
+    refreshing = true
+    window.location.reload()
+  })
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      reg.update() // check for a newer worker on every load
+    }).catch(() => {})
   })
 }
