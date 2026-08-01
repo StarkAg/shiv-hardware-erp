@@ -59,6 +59,14 @@ function browserName(ua) {
   if (/Safari\//.test(ua)) return 'Safari'
   return 'Unknown browser'
 }
+function modelFromUserAgent(ua) {
+  // Android WebView and older Chrome versions often expose the handset model
+  // immediately before "Build/..." even when UA client hints omit it.
+  const match = ua.match(/;\s*([^;()]+?)\s+Build\/[^;)]+/i)
+  if (!match) return ''
+  const model = match[1].trim()
+  return /^(android|linux|wv|mobile|k)$/i.test(model) ? '' : model
+}
 async function getDeviceDetails() {
   const ua = navigator.userAgent || ''
   const fallbackPlatform = navigator.platform || 'Unknown platform'
@@ -69,10 +77,11 @@ async function getDeviceDetails() {
     const hints = navigator.userAgentData
     if (hints?.getHighEntropyValues) {
       const high = await hints.getHighEntropyValues(['model', 'platform', 'platformVersion'])
-      details.deviceModel = high.model || ''
+      details.deviceModel = high.model?.trim() || ''
       details.platform = [high.platform, high.platformVersion].filter(Boolean).join(' ') || fallbackPlatform
     }
   } catch { /* browser does not support client hints */ }
+  if (!details.deviceModel) details.deviceModel = modelFromUserAgent(ua)
   return details
 }
 
