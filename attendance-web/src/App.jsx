@@ -295,8 +295,9 @@ export default function App() {
 
   const todayKey = dateKey(new Date())
   const isFuture = (d) => dateKey(d) > todayKey
-  // Every non-future day (including today) is locked and needs the password to edit.
-  const isLockedDate = (d) => dateKey(d) <= todayKey || lockedByDate[dateKey(d)] === true
+  // Past days are always locked. Today stays open for marking, password-free,
+  // until it's explicitly saved & locked for the day.
+  const isLockedDate = (d) => dateKey(d) < todayKey || lockedByDate[dateKey(d)] === true
   const isUnlockedNow = (dk) => { const e = unlockedDates[dk]; return !!e && e > Date.now() }
   const canEdit = (d) => !isFuture(d) && (isUnlockedNow(dateKey(d)) || !isLockedDate(d))
 
