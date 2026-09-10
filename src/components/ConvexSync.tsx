@@ -5,7 +5,7 @@
  * Uses syncBillsFromRemote / syncCatalogFromRemote — loop-safe store actions
  * that save to localStorage but do NOT push back to any remote.
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { useStore } from '../lib/store'
@@ -21,13 +21,26 @@ export function ConvexSync() {
     syncCatalogFromRemote,
   } = useStore()
 
-  // Sync bills: apply when Convex has more bills or a higher sequence number
+  // Sync bills. The old rule only accepted a snapshot with MORE bills or a
+  // higher sequence, so edits to an existing bill never arrived — you could not
+  // watch a bill being written on another machine. Now any newer snapshot is
+  // taken, except while this device is itself editing, where an incoming write
+  // would overwrite the operator's in-progress line.
+  const lastApplied = useRef(0)
   useEffect(() => {
     if (!serverBills?.bills?.length) return
+    const savedAt = (serverBills.savedAt as number) ?? 0
     const remoteBillSeq = (serverBills.billSeq as number) ?? 0
-    if (remoteBillSeq > billSeq || serverBills.bills.length > bills.length) {
-      syncBillsFromRemote(serverBills.bills as Bill[], remoteBillSeq)
-    }
+    const newer = savedAt > lastApplied.current
+    const grew = remoteBillSeq > billSeq || serverBills.bills.length > bills.length
+
+    // Safe to apply even while editing: the merge keeps whichever copy of each
+    // bill changed last, and this device's open bill is being stamped every
+    // couple of seconds by the draft autosave.
+    if (!newer && !grew) return
+
+    lastApplied.current = savedAt
+    syncBillsFromRemote(serverBills.bills as Bill[], Math.max(remoteBillSeq, billSeq))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverBills])
 

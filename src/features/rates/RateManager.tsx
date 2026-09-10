@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Copy, Minus, Plus, Save, Trash2 } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import {
   CATEGORY_LABELS,
@@ -40,12 +41,20 @@ function clone(set: BrandSet, name: string): BrandSet {
   return { id: uid(), name, brands: set.brands.map((b) => ({ ...b, id: uid() })) }
 }
 
-export function RateManager() {
+/**
+ * `basePath` exists because this page is also mounted inside Inventory's rates
+ * tab. Without it the open-category link would jump the user out of Inventory.
+ */
+export function RateManager({ basePath = '/rates' }: { basePath?: string } = {}) {
   const { sets, setSets } = useStore()
   // Edits are held in a local draft until "Save" is pressed.
   const [draft, setDraft] = useState<BrandSet[]>(() => codeSets(structuredClone(sets)))
   const [activeIdx, setActiveIdx] = useState(0)
-  const [openCat, setOpenCat] = useState<ProductCategory>('readymade-door')
+  const navigate = useNavigate()
+  const routeParams = useParams<{ category?: string; openId?: string }>()
+  const openCat = (routeParams.category ?? routeParams.openId ?? 'readymade-door') as ProductCategory
+  const setOpenCat = (cat: ProductCategory) =>
+    navigate(cat ? `${basePath}/${cat}` : basePath)
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(sets), [draft, sets])
   const active = draft[activeIdx] ?? draft[0]

@@ -10,8 +10,9 @@ export function BillSelectPage() {
   const returnTo: string =
     (location.state as { returnTo?: string })?.returnTo ?? '/guarantee/card'
 
+  // Every bill is a saved bill now — there are no drafts to leave out, and
+  // filtering on the old flag would hide bills written before it went.
   const savedBills = bills
-    .filter((b) => !b.isDraft)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date))
 

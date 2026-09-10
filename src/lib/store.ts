@@ -1,33 +1,23 @@
 import { create } from 'zustand'
-import type { Bill, Brand, BrandSet, CustomCatalogEntry, Customer, GuaranteeDocument, HardwareCatalog, ProductCategory, Quotation } from './types'
-import { DEFAULT_HARDWARE_CATALOG } from './types'
+import type { Bill, Brand, BrandSet, CustomCatalogEntry, Customer, GuaranteeDocument, HardwareCatalog, ProductCategory, Quotation, TotoAvailability, TotoDriver, VehicleType } from './types'
+import { DEFAULT_HARDWARE_CATALOG, TOTO_SEED } from './types'
 import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
-import { pushBillsToServer, pushCatalogToServer, pushGuaranteesToServer } from './printServer'
-import { pushBillsToConvex, pushCatalogToConvex } from './convexSync'
+import { pushBillsToConvex, pushCatalogToConvex, pushTotoToConvex, removeBillFromConvex } from './convexSync'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const codeSets = (sets: BrandSet[]): BrandSet[] => sets.map((s, i) => ({ ...s, name: `C${i + 1}` }))
 
-// Debounce catalog pushes so rapid changes (typing a rate) don't spam the server
-let _catalogPushTimer: ReturnType<typeof setTimeout> | null = null
-function scheduleCatalogPush(get: () => AppState) {
-  if (_catalogPushTimer) clearTimeout(_catalogPushTimer)
-  _catalogPushTimer = setTimeout(() => {
-    const s = get()
-    pushCatalogToServer({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
-  }, 2000)
-}
-
-// Debounce bills pushes so rapid edits (typing customer name) don't spam the server
-let _billsPushTimer: ReturnType<typeof setTimeout> | null = null
-function scheduleBillsPush(get: () => AppState) {
-  if (_billsPushTimer) clearTimeout(_billsPushTimer)
-  _billsPushTimer = setTimeout(() => {
-    pushBillsToServer(get().bills)
-  }, 2000)
-}
+/*
+ * The bills, the catalogue and the guarantee cards used to be pushed to a print
+ * server on the shop's Wi-Fi as well as to Convex. Each push searched for that
+ * server first, and with it switched off the search ended in a scan of a
+ * thousand addresses — so typing a customer's name set off a subnet scan.
+ *
+ * Convex carries all three, from anywhere, and the schedulers below are what
+ * actually keep the counters in step.
+ */
 
 // Convex push — slightly longer debounce (5s) to batch more changes
 let _convexBillsTimer: ReturnType<typeof setTimeout> | null = null
@@ -36,6 +26,14 @@ function scheduleConvexBillsPush(get: () => AppState) {
   _convexBillsTimer = setTimeout(() => {
     const s = get()
     void pushBillsToConvex(s.bills, s.billSeq)
+  }, 5000)   // a watching screen is at most this far behind
+}
+
+let _convexTotoTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleConvexTotoPush(get: () => AppState) {
+  if (_convexTotoTimer) clearTimeout(_convexTotoTimer)
+  _convexTotoTimer = setTimeout(() => {
+    void pushTotoToConvex(get().totoDrivers)
   }, 5000)
 }
 
@@ -46,15 +44,6 @@ function scheduleConvexCatalogPush(get: () => AppState) {
     const s = get()
     void pushCatalogToConvex({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
   }, 5000)
-}
-
-// Debounce guarantee pushes (the print-server push is heavy enough to warrant throttling).
-let _guaranteesPushTimer: ReturnType<typeof setTimeout> | null = null
-function scheduleGuaranteesPush(get: () => AppState) {
-  if (_guaranteesPushTimer) clearTimeout(_guaranteesPushTimer)
-  _guaranteesPushTimer = setTimeout(() => {
-    pushGuaranteesToServer(get().guarantees)
-  }, 1500)
 }
 
 interface AppState {
@@ -85,6 +74,8 @@ interface AppState {
 
   // customers
   upsertCustomer: (c: Customer) => void
+  /** One-time cleanup: rewrite existing customer names in proper case. */
+  normalizeCustomerNames: () => void
 
   // bills
   nextBillNumber: () => string
@@ -118,6 +109,16 @@ interface AppState {
 
   // custom catalog
   setCustomCatalog: (c: CustomCatalogEntry[]) => void
+  units: string[]
+  /** Add a unit the shop uses (deduped, case-insensitive). */
+  addUnit: (u: string) => void
+
+  totoDrivers: TotoDriver[]
+  setTotoAvailability: (id: string, availability: TotoAvailability) => void
+  addTotoDriver: (name: string, phone: string, vehicle?: VehicleType) => void
+  updateTotoDriver: (id: string, patch: Partial<Omit<TotoDriver, 'id'>>) => void
+  removeTotoDriver: (id: string) => void
+
   addCustomEntry: (name: string) => string   // returns new entry id
   updateCustomEntry: (id: string, patch: Partial<Omit<CustomCatalogEntry, 'id'>>) => void
   removeCustomEntry: (id: string) => void
@@ -136,12 +137,12 @@ function persist(get: () => AppState) {
     guaranteeSeq: s.guaranteeSeq,
     hardwareCatalog: s.hardwareCatalog,
     customCatalog: s.customCatalog,
+    units: s.units,
+    totoDrivers: s.totoDrivers,
   })
-  scheduleCatalogPush(get)
-  scheduleBillsPush(get)
   scheduleConvexBillsPush(get)
   scheduleConvexCatalogPush(get)
-  scheduleGuaranteesPush(get)
+  scheduleConvexTotoPush(get)
 }
 
 const saved = db.load()
@@ -157,6 +158,15 @@ export const useStore = create<AppState>((set, get) => ({
   guaranteeSeq: (saved?.guaranteeSeq as number) ?? 0,
   hardwareCatalog: (saved?.hardwareCatalog as HardwareCatalog) ?? DEFAULT_HARDWARE_CATALOG,
   customCatalog: (saved?.customCatalog as CustomCatalogEntry[]) ?? [],
+  // Seeded from whatever past bills actually used, so nothing already written
+  // loses its unit — not from a fixed list of options nobody picked.
+  units: (saved?.units as string[]) ?? (() => {
+    const used = ((saved?.bills as Bill[]) ?? [])
+      .flatMap(b => b.items ?? [])
+      .map(i => (i.unit ?? '').trim())
+      .filter(Boolean)
+    return Array.from(new Set(['Pc', ...used]))
+  })(),
 
   setSets: (sets) => {
     set({ sets: codeSets(sets) })
@@ -255,12 +265,41 @@ export const useStore = create<AppState>((set, get) => ({
     enqueueCustomerSync(c)
   },
 
+  normalizeCustomerNames: () => {
+    // Names were typed free-form for years; the bill now prints proper case, so
+    // bring the stored list in line rather than formatting at every read site.
+    const proper = (v: string) => v.replace(/\b\w/g, c => c.toUpperCase())
+    const changed: Customer[] = []
+    set((st) => {
+      const customers = st.customers.map((c) => {
+        const name = proper(c.name ?? '')
+        if (name === c.name) return c
+        const next = { ...c, name }
+        changed.push(next)
+        return next
+      })
+      return changed.length ? { customers } : {}
+    })
+    if (!changed.length) return
+    persist(get)
+    for (const c of changed) enqueueCustomerSync(c)
+  },
+
   nextBillNumber: () => {
     const seq = get().billSeq + 1
     return String(seq)
   },
 
-  saveBill: (b) => {
+  saveBill: (bill) => {
+    /**
+     * A voucher opened in the bill builder is not one of the shop's bills.
+     * Guarded here as well as at each call site, because it had already got in
+     * twice by a path nobody had thought about — and once it is in this list
+     * it syncs, shows in the day book beside the voucher it is a copy of, and
+     * can be "deleted" in a way that reaches the books.
+     */
+    if (bill.voucherId || String(bill.id).startsWith('vch-')) return
+    const b = { ...bill, updatedAt: Date.now() }
     set((st) => {
       const i = st.bills.findIndex((x) => x.id === b.id)
       const bills = [...st.bills]
@@ -277,6 +316,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteBill: (id) => {
+    // The server is told to delete rather than left to infer it from a shorter
+    // list: it moves the bill to the trash and takes the ledger voucher with
+    // it. Inferring deletion from absence is what let an empty device wipe
+    // every bill the shop had.
+    void removeBillFromConvex(id)
     set((st) => ({ bills: st.bills.filter((b) => b.id !== id) }))
     persist(get)
   },
@@ -290,11 +334,24 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get) // full persist — DOES push to remotes (used on startup)
   },
 
-  syncBillsFromRemote: (bills, remoteBillSeq) => {
-    set((st) => ({ bills, billSeq: Math.max(st.billSeq, remoteBillSeq) }))
+  syncBillsFromRemote: (remoteBills, remoteBillSeq) => {
+    // Merge per bill instead of swapping the whole list: for any bill both
+    // devices hold, the copy changed most recently wins, and a bill only one
+    // of them has is kept either way. A wholesale replace would throw away
+    // whatever this device had typed since the remote snapshot was taken.
+    set((st) => {
+      const byId = new Map(st.bills.map((b) => [b.id, b]))
+      for (const r of remoteBills) {
+        const mine = byId.get(r.id)
+        if (!mine || (r.updatedAt ?? 0) > (mine.updatedAt ?? 0)) byId.set(r.id, r)
+      }
+      const bills = Array.from(byId.values())
+        .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+      return { bills, billSeq: Math.max(st.billSeq, remoteBillSeq) }
+    })
     // Save to localStorage only — no remote push to avoid sync loops
     const s = get()
-    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
   },
 
   syncCatalogFromRemote: (snap) => {
@@ -350,6 +407,36 @@ export const useStore = create<AppState>((set, get) => ({
 
   setCustomCatalog: (c) => {
     set({ customCatalog: c })
+    persist(get)
+  },
+
+  totoDrivers: (saved?.totoDrivers as TotoDriver[]) ?? TOTO_SEED,
+
+  setTotoAvailability: (id, availability) => {
+    set((st) => ({ totoDrivers: st.totoDrivers.map(d => d.id === id ? { ...d, availability } : d) }))
+    persist(get)
+  },
+  addTotoDriver: (name, phone, vehicle = 'toto') => {
+    const n = name.trim(), p = phone.trim()
+    if (!n || !p) return
+    set((st) => ({ totoDrivers: [...st.totoDrivers, { id: uid(), name: n, phone: p, availability: 'green', vehicle }] }))
+    persist(get)
+  },
+  updateTotoDriver: (id, patch) => {
+    set((st) => ({ totoDrivers: st.totoDrivers.map(d => d.id === id ? { ...d, ...patch } : d) }))
+    persist(get)
+  },
+  removeTotoDriver: (id) => {
+    set((st) => ({ totoDrivers: st.totoDrivers.filter(d => d.id !== id) }))
+    persist(get)
+  },
+
+  addUnit: (u) => {
+    const unit = u.trim()
+    if (!unit) return
+    const existing = get().units
+    if (existing.some(x => x.toLowerCase() === unit.toLowerCase())) return
+    set({ units: [...existing, unit] })
     persist(get)
   },
 

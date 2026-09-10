@@ -3,6 +3,8 @@
 
 import type React from 'react'
 import type { Bill, ProductCategory } from '../../lib/types'
+import { formatItemDescription } from '../../lib/billHtml'
+import { isRoundupLine, isAmountOnlyLine, billLines, billCharges } from '../../lib/types'
 
 // Short labels with thickness/size prefix first (used only in bill print)
 const BILL_LABEL: Record<ProductCategory, string> = {
@@ -49,13 +51,15 @@ function chunk<T>(arr: T[], size: number): T[][] {
 }
 
 export function BillPrint({ bill }: { bill: Bill }) {
-  const pages = chunk(bill.items, PAGE_ITEMS)
+  const items = billLines(bill.items)
+  const charges = billCharges(bill.items)
+  const pages = chunk(items, PAGE_ITEMS)
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', color: '#111' }}>
       {pages.map((pageItems, pageIdx) => {
         const isLast = pageIdx === pages.length - 1
-        const prevTotal = bill.items
+        const prevTotal = items
           .slice(0, pageIdx * PAGE_ITEMS)
           .reduce((s, i) => s + (Number(i.amount) || 0), 0)
         const pageSubtotal = pageItems.reduce((s, i) => s + (Number(i.amount) || 0), 0)
@@ -72,6 +76,10 @@ export function BillPrint({ bill }: { bill: Bill }) {
               padding: '8mm 7mm 10mm',
               boxSizing: 'border-box',
               backgroundColor: '#fff',
+              // The ruled paper the shop's bills are written on, which the
+              // printer draws — see buildBillHtml, which draws the same lines.
+              backgroundImage: 'repeating-linear-gradient(transparent,transparent 7.8mm,#e8eef5 7.8mm,#e8eef5 8mm)',
+              backgroundPositionY: '22mm',
               pageBreakAfter: isLast ? 'auto' : 'always',
             }}
           >
@@ -79,9 +87,11 @@ export function BillPrint({ bill }: { bill: Bill }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '3mm' }}>
               {/* Customer name — page 1 only */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                {pageIdx === 0 && bill.customerName && (
+                {pageIdx === 0 && (bill.customerName || bill.customerPhone || bill.customerUid || bill.ref) && (
                   <>
-                    <div style={{ fontWeight: 700, fontSize: '10.5pt' }}>M/s &nbsp;{toProperCase(bill.customerName)}</div>
+                    {bill.customerName && (
+                      <div style={{ fontWeight: 700, fontSize: '10.5pt' }}>M/s&nbsp;{toProperCase(bill.customerName)}</div>
+                    )}
                     {bill.customerPhone && (
                       <div style={{ fontWeight: 400, fontSize: '9pt', color: '#555', marginTop: '0.5mm' }}>
                         {bill.customerPhone}
@@ -90,6 +100,11 @@ export function BillPrint({ bill }: { bill: Bill }) {
                     {bill.customerUid && (
                       <div style={{ fontWeight: 400, fontSize: '8.5pt', color: '#777', marginTop: '0.5mm' }}>
                         UID - {bill.customerUid}
+                      </div>
+                    )}
+                    {bill.ref && (
+                      <div style={{ fontWeight: 400, fontSize: '8.5pt', color: '#777', marginTop: '0.5mm' }}>
+                        Ref - {bill.ref}
                       </div>
                     )}
                   </>
@@ -124,17 +139,20 @@ export function BillPrint({ bill }: { bill: Bill }) {
                 The attributes cell auto-equalises brand/size/custom fields per item. */}
             <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '10pt' }}>
               <colgroup>
-                <col style={{ width: '6mm' }} />   {/* α */}
-                <col style={{ width: '34mm' }} />   {/* product */}
-                <col style={{ width: '40mm' }} />   {/* attributes */}
-                <col style={{ width: '16mm' }} />   {/* qty */}
-                <col style={{ width: '18mm' }} />   {/* amount */}
+                {/* The widths the bill has always been drawn at: millimetres
+                    summing to 114 of the table's 134, with the browser sharing
+                    the missing 20mm out in proportion. Stated outright now. */}
+                <col style={{ width: '5.3%' }} />   {/* α */}
+                <col style={{ width: '29.8%' }} />  {/* product */}
+                <col style={{ width: '35.1%' }} />  {/* attributes */}
+                <col style={{ width: '14%' }} />    {/* qty */}
+                <col style={{ width: '15.8%' }} />  {/* amount */}
               </colgroup>
               <tbody>
                 {pageItems.map((item) => {
                   const isCatalog = !!item.category
                   const GAP = '4mm'
-                  const cell: React.CSSProperties = { verticalAlign: 'top', paddingTop: '1.5mm', paddingBottom: '1.5mm' }
+                  const cell: React.CSSProperties = { verticalAlign: 'top', paddingTop: '0.8mm', paddingBottom: '0.8mm' }
                   const attrs: string[] = []
                   if (item.brandName) attrs.push(item.brandName)
                   const size = item.sizeIn ? item.sizeIn : (item.heightIn && item.widthIn ? `${item.heightIn}×${item.widthIn}` : '')
@@ -154,14 +172,14 @@ export function BillPrint({ bill }: { bill: Bill }) {
                       {isCatalog ? (
                         <>
                           {/* Product name */}
-                          <td style={{ ...cell, lineHeight: 1.3, overflow: 'hidden' }}>
+                          <td style={{ ...cell, lineHeight: 1.3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', maxWidth: '38mm' }}>
                             {BILL_LABEL[item.category!]}
                           </td>
                           {/* Attributes — equal-width columns */}
-                          <td style={{ ...cell, paddingLeft: '3mm' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5mm' }}>
+                          <td style={{ ...cell, paddingLeft: '2mm' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '3mm' }}>
                               {attrs.map((a, i) => (
-                                <span key={i} style={{ flex: 1, minWidth: 0, textAlign: 'center', color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <span key={i} style={{ minWidth: 0, color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {a}
                                 </span>
                               ))}
@@ -169,15 +187,24 @@ export function BillPrint({ bill }: { bill: Bill }) {
                           </td>
                         </>
                       ) : (
-                        /* Free-text: spans product + attributes columns */
-                        <td colSpan={2} style={{ ...cell, lineHeight: 1.3 }}>
-                          {item.description || <span style={{ color: '#ccc' }}>—</span>}
-                        </td>
+                        /* A typed line stays exactly as the counter wrote
+                           it: one column, no guessed brand or size split. */
+                        isRoundupLine(item) ? (
+                          <td colSpan={2} style={{ ...cell, lineHeight: 1.3 }} />
+                        ) : (
+                          <td colSpan={2} style={{ ...cell, lineHeight: 1.3, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                            {item.description?.trim()
+                              ? formatItemDescription(item.description)
+                              : <span style={{ color: '#ccc' }}>—</span>}
+                          </td>
+                        )
                       )}
 
                       {/* Qty */}
                       <td style={{ ...cell, paddingLeft: GAP, color: '#555', whiteSpace: 'nowrap' }}>
-                        {item.qty} {item.unit}
+                        {isRoundupLine(item) || isAmountOnlyLine(item) || !Number(item.qty)
+                          ? ''
+                          : `${item.qty} ${item.unit}`}
                       </td>
                       {/* Amount */}
                       <td style={{ ...cell, paddingLeft: GAP, textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -197,11 +224,20 @@ export function BillPrint({ bill }: { bill: Bill }) {
             </table>
 
             {/* Bottom row: P.T.O. or Total */}
+            <div style={{ position: 'absolute', bottom: '10mm', left: '7mm', right: '7mm' }}>
+
+            {/* Fare and round-off: a charge on the bill, not one of the goods,
+                so they read just above the total they change. */}
+            {isLast && charges.map((c) => (
+              <div key={c.id} style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '4mm', fontSize: '10pt', marginBottom: '1.5mm' }}>
+                <span style={{ color: '#555' }}>{formatItemDescription(c.description)}</span>
+                <span style={{ fontWeight: 600, minWidth: '24mm', textAlign: 'right', ...(Number(c.amount) < 0 ? { color: '#b00' } : {}) }}>
+                  {Number(c.amount).toLocaleString('en-IN')}
+                </span>
+              </div>
+            ))}
+
             <div style={{
-              position: 'absolute',
-              bottom: '10mm',
-              left: '7mm',
-              right: '7mm',
               borderTop: '1.5px solid #333',
               paddingTop: '2mm',
               display: 'flex',
@@ -253,6 +289,7 @@ export function BillPrint({ bill }: { bill: Bill }) {
                   </>
                 )}
               </div>
+            </div>
             </div>
 
             {/* PAID stamp */}

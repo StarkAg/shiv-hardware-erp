@@ -25,9 +25,11 @@
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0",
     "@types/qrcode": "^1.5.6",
     "convex": "^1.40.0",
     "electron-updater": "^6.3.9",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.17.0",
     "pdfjs-dist": "^4.10.38",
     "puppeteer-core": "^25.1.0",

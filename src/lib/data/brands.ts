@@ -102,4 +102,9 @@ export const SEED_BRANDS: Brand[] = [
 ]
 
 /** Default price sets - C1 holds the seed brands above. */
-export const SEED_SETS: BrandSet[] = [{ id: 'set-a', name: 'C1', brands: SEED_BRANDS }]
+/**
+ * No seeded price set. The C1 card reappeared on every fresh load, which put
+ * the old Excel rates back after the catalogue was cleared. SEED_BRANDS is kept
+ * below so a set can be re-seeded deliberately if the rate cards come back.
+ */
+export const SEED_SETS: BrandSet[] = []

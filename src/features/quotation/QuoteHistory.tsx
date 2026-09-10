@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { Pencil, Printer, Trash2 } from 'lucide-react'
 import { CATEGORY_LABELS } from '../../lib/types'
@@ -7,12 +6,20 @@ import { enrichQuotation, formatSize } from '../../lib/pricing'
 import { Button, Card, Input, PageHeader } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
 import { QuotationPrint } from '../print/QuotationPrint'
-import type { Quotation } from '../../lib/types'
 
 export function QuoteHistory() {
   const { quotations, deleteQuotation } = useStore()
-  const [q, setQ] = useState('')
-  const [preview, setPreview] = useState<Quotation | null>(null)
+  const navigate = useNavigate()
+  const { id } = useParams<{ id: string }>()
+  // Search and open preview both live in the URL, so a quotation someone is
+  // looking at can be sent to another counter as a plain link.
+  const [params, setParams] = useSearchParams()
+  const q = params.get('q') ?? ''
+  const setQ = (value: string) => {
+    setParams(value ? { q: value } : {}, { replace: true })
+  }
+  const found = quotations.find((x) => x.id === id)
+  const preview = found ? enrichQuotation(found) : null
 
   const filtered = quotations.filter(
     (x) =>
@@ -62,7 +69,7 @@ export function QuoteHistory() {
                         variant="ghost"
                         className="px-2 py-1"
                         title="Print quotation"
-                        onClick={() => setPreview(enrichQuotation(x))}
+                        onClick={() => navigate(`/history/${x.id}`)}
                       >
                         <Printer size={16} />
                       </Button>
@@ -93,7 +100,7 @@ export function QuoteHistory() {
       {preview && (
         <PrintPreview
           title="Quotation"
-          onClose={() => setPreview(null)}
+          onClose={() => navigate(q ? `/history?q=${encodeURIComponent(q)}` : '/history')}
           serverPrint={{ kind: 'quotation', quote: preview }}
         >
           <QuotationPrint quote={preview} />

@@ -134,6 +134,9 @@ export function DropDown({
   placeholder,
   className = '',
   disabled = false,
+  navigable = false,
+  onNavKey,
+  onCommit,
 }: {
   value: string
   onChange: (v: string) => void
@@ -141,15 +144,28 @@ export function DropDown({
   placeholder?: string
   className?: string
   disabled?: boolean
+  /** Join a keyboard field chain (adds data-bill-nav to the trigger). */
+  navigable?: boolean
+  /** Called for keys this dropdown doesn't own — lets the page move focus on. */
+  onNavKey?: (e: React.KeyboardEvent) => void
+  /** Fired after a value is taken, so the page can advance to the next field. */
+  onCommit?: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [hl, setHl] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   const normalised = (options as Array<string | { value: string; label: string }>).map((o) =>
     typeof o === 'string' ? { value: o, label: o } : o,
   )
 
   const selected = normalised.find((o) => o.value === value)
+
+  useEffect(() => {
+    if (!open) return
+    listRef.current?.querySelector('[data-hl="1"]')?.scrollIntoView({ block: 'nearest' })
+  }, [hl, open])
 
   useEffect(() => {
     if (!open) return
@@ -170,7 +186,48 @@ export function DropDown({
       <button
         type="button"
         disabled={disabled}
+        {...(navigable ? { 'data-bill-nav': '1' } : {})}
+        onFocus={() => {
+          // Tally opens the list as soon as the field is reached.
+          if (!navigable || disabled) return
+          setHl(Math.max(0, normalised.findIndex((o) => o.value === value)))
+          setOpen(true)
+        }}
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (open) {
+            // While the list is showing, the arrows belong to it.
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault()
+              setHl((h) => Math.min(normalised.length - 1, Math.max(0, h + (e.key === 'ArrowDown' ? 1 : -1))))
+              return
+            }
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              const pick = normalised[hl]
+              if (pick) onChange(pick.value)
+              setOpen(false)
+              // Tally accepts the line and moves on in one keystroke.
+              if (e.key === 'Enter') onCommit?.()
+              return
+            }
+            if (e.key === 'Home' || e.key === 'End') {
+              e.preventDefault()
+              setHl(e.key === 'Home' ? 0 : normalised.length - 1)
+              return
+            }
+            if (e.key === 'Escape') { e.preventDefault(); setOpen(false); return }
+            return
+          }
+          // Closed: Enter or Space opens it, anything else is the page's business.
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setHl(Math.max(0, normalised.findIndex((o) => o.value === value)))
+            setOpen(true)
+            return
+          }
+          onNavKey?.(e)
+        }}
         className={`flex w-full items-center justify-between gap-1 rounded-lg border px-2 py-1.5 text-sm font-medium transition-colors
           ${open
             ? 'border-shiv-green bg-white text-stone-900 shadow-sm shadow-shiv-green/20 dark:bg-stone-800 dark:text-white'
@@ -187,18 +244,25 @@ export function DropDown({
       {/* Panel */}
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 min-w-full overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg shadow-stone-900/10 dark:border-white/10 dark:bg-stone-900">
-          <div className="max-h-52 overflow-y-auto py-1">
-            {normalised.map((opt) => {
+          <div ref={listRef} className="max-h-52 overflow-y-auto py-1">
+            {normalised.map((opt, i) => {
               const active = opt.value === value
+              // `active` is the saved value; `hl` is where the keyboard is. They
+              // start together but move apart as soon as you press an arrow, so
+              // both need to be visible or the arrows look like they do nothing.
+              const highlighted = i === hl
               return (
                 <button
                   key={opt.value}
                   type="button"
+                  data-hl={highlighted ? '1' : undefined}
+                  onMouseEnter={() => setHl(i)}
                   onMouseDown={() => { onChange(opt.value); setOpen(false) }}
                   className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors
+                    ${highlighted ? 'bg-stone-100 dark:bg-white/10' : ''}
                     ${active
-                      ? 'bg-shiv-green/10 font-semibold text-stone-900 dark:text-white'
-                      : 'text-stone-700 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-white/5'
+                      ? 'font-semibold text-stone-900 dark:text-white'
+                      : 'text-stone-700 dark:text-stone-200'
                     }`}
                 >
                   <span className="flex-1 truncate">{opt.label}</span>

@@ -12,6 +12,10 @@ export interface PersistedState {
   guaranteeSeq?: number
   hardwareCatalog: unknown
   customCatalog: unknown
+  /** Units the shop actually uses — grows as they are added. */
+  units?: unknown
+  /** Toto driver contacts and their availability tags. */
+  totoDrivers?: unknown
 }
 
 export interface DataAdapter {

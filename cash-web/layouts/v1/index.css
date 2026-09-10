@@ -1,0 +1,865 @@
+:root {
+  --bg: #e8e5df;          /* warm parchment (Shiv Panel light) */
+  --card: #f3f0ea;
+  --card2: #ede9e1;
+  --fg: #1c1917;          /* stone-900 */
+  --muted: #78716c;       /* stone-500 */
+  --line: rgba(28, 25, 23, 0.12);
+  --brass: #b9924b;       /* shiv-green (brass) */
+  --brass-ink: #201804;
+  --red: #9f1d20;         /* shiv-red */
+  --amber: #b47016;
+  --glass: rgba(243, 240, 234, 0.72);
+  --sheen: rgba(255, 255, 255, 0.9);
+  --sheen-mid: rgba(255, 255, 255, 0.3);
+  --hairline: rgba(255, 255, 255, 0.95);
+  --glass-edge: rgba(28, 25, 23, 0.12);
+  --grain: 0.03;
+  --navdrop: 0 10px 30px rgba(28, 25, 23, 0.14);
+  --green: #1a7a4a;                       /* note green, and the confirm key */
+  --green-ink: #ffffff;
+  --pe: #5f259f;                          /* PhonePe brand purple */
+  --pe-tint: rgba(95, 37, 159, 0.13);
+  --pe-ink: #ffffff;
+}
+:root.dark {
+  --bg: #12110f;
+  --card: #1a1815;
+  --card2: #211e1a;
+  --fg: #eae7e1;
+  --muted: #a8a29e;
+  --line: rgba(255, 255, 255, 0.10);
+  --brass: #c9a45c;
+  --brass-ink: #1a1204;
+  --red: #d3595c;
+  --amber: #d9a441;
+  --glass: rgba(20, 18, 16, 0.62);
+  --sheen: rgba(255, 255, 255, 0.22);
+  --sheen-mid: rgba(255, 255, 255, 0.04);
+  --hairline: rgba(255, 255, 255, 0.12);
+  --glass-edge: rgba(255, 255, 255, 0.09);
+  --grain: 0.05;
+  --navdrop: 0 10px 34px rgba(0, 0, 0, 0.44);
+  --green: #4cb782;
+  --green-ink: #06210f;
+  --pe: #9967d1;                          /* PhonePe's own light purple */
+  --pe-tint: rgba(153, 103, 209, 0.18);
+  --pe-ink: #150a22;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+:root.dark body {
+  background: linear-gradient(180deg, #12110f 0%, #1a1815 54%, #100f0e 100%);
+  background-attachment: fixed;
+}
+.wrap { max-width: 560px; margin: 0 auto; padding: 16px 14px var(--navclear); }
+/* The screen used all day, one-handed. Reaching the tick must never mean
+   scrolling, so it takes the viewport's real height — dvh, which excludes the
+   browser's own chrome — and the keypad absorbs whatever is left over. */
+.wrap.fit { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.wrap.fit .card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wrap.fit .datenav,
+.wrap.fit .amtshow,
+.wrap.fit .dirrow,
+.wrap.fit .advrow,
+.wrap.fit .editbanner,
+.wrap.fit .closebox { flex: none; }
+.wrap.fit .pad { flex: 1; min-height: 0; }
+.wrap.fit .padkeys { flex: 1; min-height: 0; grid-template-rows: repeat(4, minmax(0, 1fr)); }
+.wrap.fit .padkey { height: auto; min-height: 0; }
+.wrap.fit .tickbar { flex: none; }
+
+/* Everything above the pad gives up height first, so the keys stay large. */
+.wrap.fit .amtshow { padding: clamp(8px, 1.6dvh, 16px) 14px; margin-bottom: clamp(6px, 1.2dvh, 12px); }
+.wrap.fit .amtnum { font-size: clamp(26px, 4.6dvh, 38px); }
+.wrap.fit .amtnum.s { font-size: clamp(22px, 3.8dvh, 31px); }
+.wrap.fit .amtnum.xs { font-size: clamp(18px, 3.1dvh, 25px); }
+.wrap.fit .dirbtn { padding: clamp(9px, 1.7dvh, 14px) 8px; }
+.wrap.fit .modebtn { padding: clamp(9px, 1.7dvh, 14px) 8px; }
+.wrap.fit .dirrow { margin-bottom: clamp(6px, 1.2dvh, 12px); }
+.wrap.fit .advrow { margin-bottom: clamp(4px, 0.9dvh, 8px); }
+.wrap.fit .advrow input { padding: clamp(8px, 1.4dvh, 11px) 12px; }
+.wrap.fit .datenav { margin-bottom: clamp(6px, 1.2dvh, 12px); }
+.wrap.fit .closebox { margin-top: clamp(8px, 1.6dvh, 18px); padding-top: clamp(8px, 1.4dvh, 14px); }
+.wrap.fit .padkeys { min-height: 176px; }   /* 40px keys is the floor */
+.wrap.fit .dirbtn, .wrap.fit .modebtn { padding: clamp(8px, 1.5dvh, 14px) 8px; }
+/* Below the floor the pad would be unusable, so the card gives up and scrolls
+   rather than shipping keys too small to hit. */
+.wrap.fit.entry .card { overflow-y: auto; }
+.wrap.fit .allbtn { margin-top: 0; padding: clamp(9px, 1.7dvh, 13px); }
+
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.brandrow { display: flex; align-items: center; gap: 10px; }
+.logo { width: 40px; height: 40px; object-fit: contain; border-radius: 10px; background: #fff; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+.brand { font-weight: 800; letter-spacing: 0.01em; font-size: 20px; line-height: 1.1; }
+.sub { color: var(--muted); font-size: 12px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.2em; }
+.headbtns { display: flex; align-items: center; gap: 8px; }
+.themebtn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); display: inline-flex; align-items: center; justify-content: center; }
+.themebtn:active { background: var(--card2); }
+
+/* Sync state, in the header. Grey means the phone is on its own, which is a
+   normal working state here, not an error — the queue is safe either way. */
+.syncbtn { position: relative; }
+.syncbtn.ok { color: var(--green); }
+.syncbtn.pending { color: var(--amber); }
+.syncbtn.off { color: var(--muted); }
+.syncbtn.busy { color: var(--brass); }
+.syncbtn.busy svg { animation: syncpulse 1.1s ease-in-out infinite; }
+@keyframes syncpulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
+.syncdot {
+  position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 999px; background: var(--amber); color: #fff;
+  font-size: 11px; font-weight: 900; line-height: 18px; text-align: center;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+@media (prefers-reduced-motion: reduce) { .syncbtn.busy svg { animation: none } }
+
+/* Bottom navigation — the floating glass pill GradeX uses on a phone, in this
+   app's brass palette. The material is four stacked things, not one blur: a
+   translucent tinted base, a backdrop blur + saturate, a specular sheen on the
+   top edge, and a grain layer that stops a large flat blur from banding. */
+:root {
+  --navh: clamp(56px, 15vw, 60px);
+  --navclear: calc(var(--navh) + max(16px, env(safe-area-inset-bottom, 0px)) + 18px);
+}
+.tabbar {
+  position: fixed;
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;                                  /* under .modal, which is 50 */
+  width: min(calc(var(--navcount, 5) * 84px), calc(100vw - 28px));
+  height: var(--navh);
+  display: grid;
+  grid-template-columns: repeat(var(--navcount, 5), minmax(0, 1fr));
+  align-items: center;
+  border-radius: calc(var(--navh) / 2);
+  background-color: var(--glass);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--hairline), var(--navdrop);
+  overflow: hidden;
+  isolation: isolate;
+}
+/* Absolutely positioned so they stay out of flow and never become grid items
+   of the bar they decorate; z-index -1 against the parent's isolation puts them
+   over the bar's background but under every button. */
+.tabbar::before, .tabbar::after {
+  content: ''; position: absolute; inset: 0;
+  pointer-events: none; border-radius: inherit; z-index: -1;
+}
+.tabbar::before { background: linear-gradient(180deg, var(--sheen) 0, var(--sheen-mid) 1px, transparent 58%); }
+.tabbar::after {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+  background-size: 140px 140px;
+  opacity: var(--grain);
+  mix-blend-mode: overlay;
+}
+/* No backdrop-filter: go opaque rather than ship a washed-out translucent bar. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabbar { background-color: var(--card); }
+  .tabbar::before, .tabbar::after { display: none; }
+}
+
+.tabitem {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; width: 100%; height: 100%; min-width: 0;
+  padding: 0; border: none; background: transparent; color: var(--muted);
+  font: inherit; line-height: 1;
+  transition: transform 0.15s ease, color 0.2s ease;
+}
+.tabitem:active { transform: scale(0.92); }
+.tabitem[data-on] { color: var(--brass); }
+/* The whole icon fills, then everything after the silhouette is re-stroked in
+   the ink colour so the detail knocks out of the fill instead of vanishing. */
+.tabitem[data-on] svg { fill: currentColor; }
+.tabitem[data-on] svg > *:not(:first-child) { stroke: var(--brass-ink); }
+.tablabel {
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.02em; opacity: 0.75;
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tabitem[data-on] .tablabel { font-weight: 700; opacity: 1; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.fitcard { padding: clamp(10px, 1.6dvh, 14px); }
+
+.datenav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.datenav.solo { justify-content: center; }
+/* Holds the arrow's place so the date stays centred when there is none. */
+.navspace { width: 46px; flex: none; }
+.datenav > button { width: 46px; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 26px; line-height: 1; }
+.datenav > button:active { filter: brightness(0.96); }
+.datenav > button:disabled { opacity: 0.28; pointer-events: none; }
+.dcenter { text-align: center; }
+.dbig { font-size: 18px; font-weight: 800; }
+.daysub { color: var(--muted); font-size: 12px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.14em; }
+/* Went missing when the entry screen lost its stepper, which left this looking
+   like a default grey browser button on the totals page. */
+.todaybtn { margin-top: 4px; background: transparent; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+
+.segb.sel.p { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+.segb.sel.n { background: var(--red); color: #fff; border-color: var(--red); }
+.segb.sel.h { background: var(--amber); color: #fff; border-color: var(--amber); }
+
+.allbtn { margin-top: 12px; width: 100%; padding: 13px; border-radius: 12px; border: none; background: var(--brass); color: var(--brass-ink); font-weight: 800; font-size: 15px; }
+.allbtn:active { filter: brightness(0.96); }
+.allbtn.ghost { background: transparent; border: 1px solid var(--line); color: var(--fg); }
+.allbtn.danger { background: var(--red); color: #fff; }
+.quickrow .allbtn { flex: 1; }
+.savednote { text-align: center; color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+.muted { color: var(--muted); } .center { text-align: center; padding: 24px; }
+.mgttl { font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 10px; }
+
+/* Password modal */
+.modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); }
+.modal.top { align-items: flex-start; padding: 12px; }
+.sheet { width: 100%; max-width: 340px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+.sheetlock { width: 46px; height: 46px; margin: 0 auto 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--card2); color: var(--brass); border: 1px solid var(--line); }
+.sheettitle { font-weight: 800; font-size: 17px; }
+.sheetsub { color: var(--muted); font-size: 13px; margin: 4px 0 16px; }
+.sheet input { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 18px; text-align: center; letter-spacing: 0.3em; }
+.sheet input:focus { outline: none; border-color: var(--brass); }
+.sheet input.err { border-color: var(--red); }
+.sheet input.plain { letter-spacing: normal; font-size: 17px; }
+.closesheet .closediff { margin: 10px 0 0; }
+.closesheet {
+  max-width: 460px;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);   /* shrinks with the keyboard where supported */
+  overflow-y: auto;
+}
+/* Counting the drawer: one row per denomination, the subtotal appearing as the
+   count is typed so the cashier can check a stack without adding anything up. */
+.denoms { margin: 14px 0 4px; display: flex; flex-direction: column; gap: 7px; }
+.denom { display: grid; grid-template-columns: 52px 12px 1fr 86px; align-items: center; gap: 9px; }
+.denom.plain { grid-template-columns: 90px 12px 1fr; }
+.denom.plain .dv { text-align: left; letter-spacing: 0.01em; }
+.denom .dv { font-size: 15px; font-weight: 800; text-align: right; color: var(--muted); }
+.denom.has .dv { color: var(--fg); }
+.denom .dx { font-size: 12px; color: var(--muted); text-align: center; }
+.denom input {
+  width: 100%; padding: 11px 6px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); font-size: 17px; font-weight: 800; text-align: center;
+}
+.denom input:focus { outline: none; border-color: var(--brass); }
+.denom input::-webkit-outer-spin-button, .denom input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.denom .dsub { font-size: 14px; font-weight: 700; text-align: right; color: var(--brass); font-variant-numeric: tabular-nums; }
+
+.counttotal {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);
+}
+.counttotal b { font-size: 26px; font-weight: 900; }
+.counttotal b.s { font-size: 21px; }
+.counttotal b.xs { font-size: 17px; }
+.sheeterr { color: var(--red); font-size: 13px; margin-top: 8px; }
+.sheetbtns { display: flex; gap: 10px; margin-top: 16px; }
+.sheetbtns button { flex: 1; padding: 12px; border-radius: 12px; font-weight: 800; font-size: 15px; border: 1px solid var(--line); }
+.sheetbtns button:disabled { opacity: 0.55; }
+.ghostbtn { background: transparent; color: var(--fg); }
+.primbtn { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+.primbtn:disabled { background: var(--card2); color: var(--muted); border-color: var(--line); }
+.delbtn { background: var(--red); color: #fff; border-color: var(--red); }
+.lineamt { font-size: 30px; font-weight: 900; letter-spacing: -0.01em; }
+
+.motcard { margin-top: 14px; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: linear-gradient(160deg, var(--card2), var(--card)); text-align: center; }
+.motlabel { font-size: 13px; color: var(--muted); font-weight: 600; }
+.motnet { font-size: 34px; font-weight: 900; letter-spacing: 0.01em; color: var(--brass); margin: 2px 0 10px; white-space: nowrap; }
+.motnet.s { font-size: 28px; }
+.motnet.xs { font-size: 22px; letter-spacing: 0; }
+
+.paygrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 14px; text-align: left; }
+.paygrid > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding-bottom: 4px; }
+.paygrid > div.netrow { grid-column: 1 / -1; border-bottom: none; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
+.pk { font-size: 12px; color: var(--muted); }
+.pv { font-size: 14px; font-weight: 700; }
+.pv.neg { color: var(--red); } .pv.strong { color: var(--brass); font-weight: 900; font-size: 16px; }
+.advrow { display: flex; gap: 8px; margin-bottom: 8px; }
+.advrow input { flex: 1; min-width: 0; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 15px; }
+.advrow input:focus { outline: none; border-color: var(--brass); }
+/* Centred and bold, so the typed line sits the same way the placeholder does. */
+.noteinput { text-align: center; font-weight: 800; letter-spacing: 0.06em; }
+.noteinput::placeholder { font-weight: 800; letter-spacing: 0.14em; color: var(--muted); opacity: 0.7; }
+.histchip { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
+
+@media (max-width: 360px) { .tablabel { font-size: 10px; } }
+
+/* Totals and Edit.
+   Each colour is declared twice: a flat fallback first, then the mixed version.
+   A phone too old for color-mix gets the plain one instead of nothing. */
+.totbox { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.totbox .paygrid { margin-top: 8px; }
+
+/* The two figures worth looking up for: what came in, and what is carried into
+   tomorrow. Both get the full-width treatment; everything else supports them. */
+.hero {
+  margin-top: 14px; padding: 20px 16px; border-radius: 20px; text-align: center;
+  border: 1px solid var(--line);
+  background: linear-gradient(165deg, var(--card2), var(--card));
+}
+.hero.green { border-color: rgba(26,122,74,0.3); border-color: color-mix(in srgb, var(--green) 32%, var(--line)); }
+.hero.green { background: linear-gradient(165deg, var(--card2), var(--card)); }
+@supports (background: color-mix(in srgb, red 10%, transparent)) {
+  .hero.green {
+    background:
+      radial-gradient(130% 100% at 50% 0%, color-mix(in srgb, var(--green) 15%, transparent), transparent 68%),
+      linear-gradient(165deg, var(--card2), var(--card));
+  }
+  .hero.gold {
+    background:
+      radial-gradient(130% 100% at 50% 0%, color-mix(in srgb, var(--brass) 20%, transparent), transparent 68%),
+      linear-gradient(165deg, var(--card2), var(--card));
+  }
+}
+.hero.gold { border-color: rgba(185,146,75,0.4); border-color: color-mix(in srgb, var(--brass) 40%, var(--line)); }
+
+.herolabel { font-size: 11px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.heronum { font-size: 42px; font-weight: 900; line-height: 1.04; letter-spacing: -0.01em; margin-top: 6px; white-space: nowrap; }
+.heronum.s { font-size: 34px; }
+.heronum.xs { font-size: 27px; letter-spacing: -0.02em; }
+.hero.green .heronum { color: var(--green); }
+.hero.gold .heronum { color: var(--brass); }
+
+.herodelta {
+  display: inline-block; margin-top: 10px; padding: 5px 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.01em;
+}
+.herodelta.up { color: var(--green); background: rgba(26,122,74,0.13); background: color-mix(in srgb, var(--green) 14%, transparent); }
+.herodelta.down { color: var(--red); background: rgba(159,29,32,0.11); background: color-mix(in srgb, var(--red) 12%, transparent); }
+.herodelta.flat { color: var(--muted); background: rgba(120,113,108,0.14); }
+
+/* Seven days behind today. The bars are read as a shape, not as values, so they
+   are scaled against the week's own best rather than any fixed rupee figure. */
+.week { display: flex; gap: 6px; margin-top: 16px; }
+.weekcol { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.weekbarwrap { width: 100%; height: 44px; display: flex; align-items: flex-end; }
+.weekbar {
+  width: 100%; min-height: 3px; border-radius: 5px;
+  background: rgba(26,122,74,0.22); background: color-mix(in srgb, var(--green) 24%, transparent);
+  transition: height 0.3s ease;
+}
+.weekbar.today { background: var(--green); }
+.weekcol span { font-size: 10px; font-weight: 700; color: var(--muted); }
+.weekcol.now span { color: var(--green); font-weight: 900; }
+
+.herosplit { display: flex; justify-content: center; gap: 16px; margin-top: 16px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.hs { display: inline-flex; align-items: center; gap: 6px; }
+.hs i { width: 8px; height: 8px; border-radius: 50%; }
+.hs.cash i { background: var(--green); }
+.hs.online i { background: var(--pe); }
+
+.paidline { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; padding: 0 4px; }
+.paidline b { font-size: 15px; font-weight: 900; color: var(--red); }
+.paidline em { font-style: normal; font-size: 11.5px; color: var(--muted); margin-left: auto; }
+
+/* The one figure a cashier checks all day, so it is the one card that fills
+   rather than tints — nothing else on the page competes with it. */
+.hero.drawer { background: var(--green); border-color: var(--green); color: var(--green-ink); }
+.hero.drawer .herolabel { color: var(--green-ink); opacity: 0.72; }
+.hero.drawer .heronum { color: var(--green-ink); }
+.hero.drawer .herofoot { color: var(--green-ink); opacity: 0.66; }
+.drawerrow {
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px;
+  font-size: 12.5px; font-weight: 700; color: var(--green-ink); opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+.drawerrow .off { opacity: 1; padding: 1px 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.16); }
+
+.hero .baltiles { margin-top: 16px; }
+.hero.gold .baltile { background: var(--card); }
+.herofoot { margin-top: 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); opacity: 0.8; }
+
+.baltiles { display: flex; gap: 8px; }
+.baltile {
+  flex: 1; min-width: 0; padding: 12px 10px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--card2); text-align: center;
+}
+.baltile b { display: block; font-size: 22px; font-weight: 900; margin-top: 3px; white-space: nowrap; }
+.baltile b.s { font-size: 18px; }
+.baltile b.xs { font-size: 15px; }
+.baltile i { display: block; font-style: normal; font-size: 10.5px; color: var(--muted); margin-top: 3px; opacity: 0.85; }
+.baltile.cash { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
+.baltile.cash b { color: var(--green); }
+.baltile.online { border-color: color-mix(in srgb, var(--pe) 45%, var(--line)); }
+.baltile.online b { color: var(--pe); }
+
+/* One labelled amount box per side, sitting where the Cash / Online pair sits
+   on the entry screen so the two read as the same pair of things. */
+.balfield {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px;
+  padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2);
+}
+.balfield > span {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.assistbtn {
+  flex: none; width: 24px; height: 20px; border-radius: 6px; padding: 0;
+  border: 1px solid var(--line); background: var(--card); color: inherit;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.assistbtn:active { background: var(--card2); }
+.balfield input { width: 100%; border: none; background: transparent; color: var(--fg); font-size: 20px; font-weight: 900; padding: 0; }
+.balfield input:focus { outline: none; }
+.balfield.cash { border-color: color-mix(in srgb, var(--green) 40%, var(--line)); }
+.balfield.cash > span { color: var(--green); }
+.balfield.online { border-color: color-mix(in srgb, var(--pe) 40%, var(--line)); }
+.balfield.online > span { color: var(--pe); }
+
+/* The openings already set. Same coloured-dot vocabulary as the totals page,
+   so cash and online read the same way wherever they are paired. */
+.openlist { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.openrow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); }
+.openrow.sel { border-color: var(--brass); }
+.openmain {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
+  padding: 4px 2px; border: none; background: transparent; color: var(--fg); text-align: left;
+}
+.opendate { flex: 0 0 auto; font-size: 14px; font-weight: 800; }
+.openvals { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 14px; }
+.ov { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; white-space: nowrap; }
+.ov i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ov.cash { color: var(--green); }
+.ov.cash i { background: var(--green); }
+.ov.online { color: var(--pe); }
+.ov.online i { background: var(--pe); }
+.openx {
+  flex: none; width: 32px; height: 32px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.openx:active { background: var(--card2); }
+
+/* Today's drawer and today's lines, at the head of the report so the usual
+   reason to open this screen — what did I just write — is answered first. */
+.todayblock { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.todayblock .cashtotals { margin-top: 0; }
+
+/* The amount is a readout, not an input: the pad at the bottom of the screen
+   types it, so the phone keyboard never covers the register mid-entry. */
+.amtshow {
+  display: flex; align-items: baseline; justify-content: center; gap: 6px;
+  padding: 16px 14px; margin-bottom: 12px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--card2);
+}
+.amtcur { font-size: 22px; font-weight: 800; color: var(--muted); }
+.amtnum { font-size: 38px; font-weight: 900; line-height: 1; letter-spacing: 0.01em; white-space: nowrap; }
+.amtnum.s { font-size: 31px; }
+.amtnum.xs { font-size: 25px; letter-spacing: 0; }
+.amtshow.empty .amtnum, .amtshow.empty .amtcur { color: var(--muted); opacity: 0.4; }
+
+/* Twelve digit keys, then the two action keys on their own row underneath:
+   backspace left, tick right, each taking half the width. */
+/* The confirm sits above the pad, full width, right under the note it completes
+   — so the thumb never travels past the digits to finish an entry. */
+.tickbar {
+  width: 100%; margin-bottom: 8px; border-radius: 14px; border: 1px solid var(--green);
+  background: var(--green); color: var(--green-ink);
+  font-size: 26px; font-weight: 800; line-height: 1;
+  height: clamp(42px, 6.4dvh, 52px);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.12s ease;
+}
+.tickbar:active { transform: scale(0.98); }
+.tickbar:disabled { background: var(--card2); color: var(--muted); border-color: var(--line); opacity: 0.55; }
+
+.pad { display: flex; flex-direction: column; }
+.padkeys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.padkey {
+  height: 54px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--card2); color: var(--fg);
+  font-size: 22px; font-weight: 800; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.12s ease, background 0.15s ease;
+}
+.padkey:active { transform: scale(0.94); background: var(--card); }
+.padkey.back { font-size: 18px; color: var(--muted); }
+
+.dirrow { display: flex; gap: 8px; margin-bottom: 12px; }
+.dirbtn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 14px 8px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--card2); color: var(--muted); font-weight: 800; font-size: 15px;
+}
+/* Same idea as the Cash / Online pair below: the arrow carries its colour while
+   the button is still unpicked, then follows the filled button once chosen. */
+.dirbtn svg { flex: none; }
+.dirbtn.in svg { color: var(--green); }
+.dirbtn.out svg { color: var(--red); }
+.dirbtn.sel svg { color: inherit; }
+.dirbtn .diramt { font-size: 17px; margin-right: 4px; }
+.dirbtn.in.sel { background: var(--green); color: var(--green-ink); border-color: var(--green); }
+.dirbtn.out.sel { background: var(--red); color: #fff; border-color: var(--red); }
+
+.allbtn:disabled { background: var(--card2); color: var(--muted); border: 1px solid var(--line); }
+.editbanner {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: rgba(180,112,22,0.14); color: var(--amber); border: 1px solid rgba(180,112,22,0.34);
+  padding: 8px 8px 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 700; margin-bottom: 12px;
+}
+.editbanner button { border: none; background: transparent; color: var(--amber); font-weight: 800; text-decoration: underline; font-size: 13px; }
+
+.cashtotals { display: flex; gap: 8px; margin: 14px 0 12px; }
+.cashtotals .ct {
+  flex: 1; text-align: center; padding: 9px 4px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--card2);
+}
+.cashtotals .ct b { display: block; font-size: 15px; font-weight: 900; margin-top: 2px; }
+.cashtotals .ct b.in { color: var(--brass); }
+.cashtotals .ct b.out { color: var(--red); }
+
+.celist { display: flex; flex-direction: column; gap: 8px; }
+.cerow {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 8px 9px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2);
+  border-left-width: 4px;
+}
+.cerow.in { border-left-color: var(--brass); }
+.cerow.out { border-left-color: var(--red); }
+.cemain { min-width: 0; }
+.ceamt { font-size: 16px; font-weight: 900; }
+.ceamt.in { color: var(--brass); }
+.ceamt.out { color: var(--red); }
+.cemeta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.cemeta em { font-style: normal; opacity: 0.8; }
+.cebtns { display: flex; gap: 4px; flex: none; }
+.cebtns button {
+  width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--card); color: var(--muted); display: inline-flex; align-items: center; justify-content: center;
+}
+.cebtns button:active { filter: brightness(0.96); }
+
+.repbtns { display: flex; gap: 8px; margin-top: 14px; }
+.repbtn {
+  flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 13px 10px; text-align: left;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--card2); color: var(--fg);
+}
+.repbtn .repk { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+.repbtn .repv { font-size: 21px; font-weight: 900; }
+.repbtn .repn { font-size: 11px; color: var(--muted); }
+.repbtn.in .repv { color: var(--brass); }
+.repbtn.out .repv { color: var(--red); }
+.repbtn.in.sel { border-color: var(--brass); background: rgba(185,146,75,0.14); }
+.repbtn.out.sel { border-color: var(--red); background: rgba(159,29,32,0.10); }
+
+.repopen { margin-top: 14px; }
+.repbreak { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.repday { border: 1px solid var(--line); border-radius: 12px; background: var(--card2); padding: 9px 12px; margin-bottom: 8px; }
+.repdayhdr { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; color: var(--muted); border-bottom: 1px dashed var(--line); padding-bottom: 5px; margin-bottom: 5px; }
+.repdayhdr .in { color: var(--brass); }
+.repdayhdr .out { color: var(--red); }
+.reprow { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
+.repcat { color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repamt { font-weight: 800; flex: none; }
+.repamt.in { color: var(--brass); }
+.repamt.out { color: var(--red); }
+
+/* Cash — mode, transfers, day close */
+.modebtn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 14px 8px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--card2); color: var(--muted); font-weight: 800; font-size: 15px;
+}
+/* The icon keeps its colour even unselected, so the two are told apart at a
+   glance; selecting one brings that colour up into the whole button. */
+.modebtn svg { flex: none; }
+.modebtn.cash svg { color: var(--green); }
+.modebtn.online svg { color: var(--pe); }
+.modebtn.cash.sel { background: var(--green); color: var(--green-ink); border-color: var(--green); }
+.modebtn.online.sel { background: var(--pe); color: var(--pe-ink); border-color: var(--pe); }
+.modebtn.sel svg { color: inherit; }
+
+.cashtotals .ct i { display: block; font-style: normal; font-size: 10.5px; color: var(--muted); margin-top: 2px; opacity: 0.85; }
+.cashtotals .ct b.on { color: var(--pe); }
+.cashtotals .ct b { white-space: nowrap; }
+.cashtotals .ct b.s { font-size: 17px; }
+.cashtotals .ct b.xs { font-size: 14px; }
+.cashsub { text-align: center; font-size: 12px; color: var(--muted); margin: -4px 0 12px; }
+.cashsub .in { color: var(--brass); font-weight: 700; }
+.cashsub .out { color: var(--red); font-weight: 700; }
+
+.modebadge {
+  display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
+  text-transform: uppercase; padding: 2px 6px; border-radius: 5px; margin-right: 6px;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted); font-style: normal;
+}
+.modebadge.online { color: var(--pe); border-color: var(--pe-tint); background: var(--pe-tint); }
+.reprow .modebadge { margin-left: 6px; margin-right: 0; }
+
+.closebox { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.closediff { text-align: center; font-size: 14px; font-weight: 800; color: var(--red); margin: 2px 0 10px; }
+.closediff.ok { color: var(--brass); }
+.closebox.done .paygrid { margin-top: 8px; }
+
+.filterrow { display: flex; gap: 6px; margin-bottom: 4px; }
+.filterrow button {
+  flex: 1; padding: 8px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card2); color: var(--muted); font-weight: 700; font-size: 12.5px;
+}
+.filterrow button.on { border-color: var(--brass); background: rgba(185,146,75,0.18); color: var(--brass); }
+
+.offbox { margin-top: 18px; padding: 12px; border: 1px solid rgba(159,29,32,0.4); border-radius: 14px; background: rgba(159,29,32,0.07); }
+.offbox .mgttl { color: var(--red); margin-bottom: 8px; }
+
+/* ── The register page ──────────────────────────────────────────────────────
+   The copy, set in type. Rules are drawn per line rather than as a repeating
+   background, so a line and its rule can never drift apart at any font size. */
+.page {
+  /* A sheet, in both themes and on paper. */
+  --paper: #ffffff;
+  --rule: rgba(40, 70, 130, 0.14);
+  --margin: rgba(190, 60, 70, 0.45);
+  --ink: #1f2a44;                         /* blue-black pen */
+  --ink-red: #9f1d20;
+  --marker: rgba(95, 37, 159, 0.14);      /* the highlighter, in PhonePe purple */
+  --marker-ink: #5f259f;
+  --ink-green: #1a7a4a;
+
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  margin-top: 12px;
+  padding: clamp(10px, 2.6cqw, 15px);
+  aspect-ratio: 210 / 297;                /* A4, and it grows past it if the day is long */
+  border-radius: 6px;
+  border: 1px solid rgba(28, 25, 23, 0.16);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+.pagetop { flex: none; display: flex; justify-content: flex-end; margin-bottom: clamp(4px, 1.4cqw, 8px); }
+.printbar {
+  width: 100%; margin-top: 12px; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--card2); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-weight: 800; font-size: 14px;
+}
+.printbar:active { background: var(--card); }
+.pagestamp {
+  padding: 4px 9px;
+  border: 1px solid var(--margin); border-radius: 4px; text-align: center; line-height: 1.25;
+}
+.pagestamp span { display: block; font-size: clamp(6.5px, 1.8cqw, 8.5px); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--margin); }
+.pagestamp b { font-size: clamp(9px, 2.5cqw, 12.5px); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* Two columns, received left and paid right, with the rule drawn on the row so
+   it runs unbroken across both — the way a ruled page does, whichever column
+   happens to have more lines on it. */
+.pagehdr {
+  flex: none;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  border-bottom: 1.5px solid var(--ink); padding-bottom: 3px; margin-bottom: 2px;
+}
+.pagehdr span { font-size: clamp(7px, 1.9cqw, 9px); font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.55; }
+.pagehdr span:last-child { padding-left: 10px; color: var(--ink-red); opacity: 0.75; }
+
+/* No rule between the lines, and the lines sit close — the page has to hold a
+   full day inside A4. */
+.pagerow {
+  flex: none;
+  display: grid; grid-template-columns: 1fr 1fr;
+  min-height: clamp(13px, 3.4cqw, 19px);
+}
+.pcell { display: flex; align-items: center; min-width: 0; padding-right: 4px; }
+.pcell:last-child { padding-left: 10px; border-left: 1px solid var(--rule); }
+
+.pentry {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: clamp(4px, 1.2cqw, 7px);
+  height: 100%; padding: 0; border: none; background: transparent;
+  color: inherit; font: inherit; font-size: clamp(9px, 2.5cqw, 13.5px); text-align: left;
+  line-height: 1.15;
+}
+.pamt { flex: none; min-width: clamp(38px, 11cqw, 62px); text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.peq { flex: none; opacity: 0.4; }
+.pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pname.ob { font-weight: 800; letter-spacing: 0.04em; }
+
+/* Money out is written in red, the way a register is kept. */
+.pentry.out { color: var(--ink-red); }
+/* What the highlighter used to mark by hand. */
+.pentry.on { background: var(--marker); }
+
+/* The block at the foot of the page: figures stacked, a rule, then the answer. */
+.tally { flex: none; margin: auto 0 0 auto; padding-top: clamp(8px, 2.4cqw, 14px); width: min(52cqw, 268px, 100%); }
+.tline { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; height: clamp(15px, 3.7cqw, 22px); font-size: clamp(9px, 2.5cqw, 13.5px); }
+.tline span { opacity: 0.6; }
+.tline b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.tline.rule { border-bottom: 1.5px solid var(--ink); padding-bottom: 2px; margin-bottom: 3px; }
+.tline.out b, .tline.out span { color: var(--ink-red); font-weight: 800; opacity: 1; }
+.tline.out.ok b, .tline.out.ok span { color: var(--ink-green); }
+/* Below the rule so it stays out of the count, but in full strength — it is a
+   real figure, not a footnote. */
+.tline.online { margin-top: clamp(4px, 1.4cqw, 8px); }
+.tline.online b, .tline.online span { color: var(--marker-ink); font-weight: 800; opacity: 1; }
+
+
+/* W/B goes in so often it is worth a key of its own. */
+.wbbtn {
+  flex: 0 0 auto; padding: 0 14px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--card2);
+  color: var(--muted); font-weight: 800; font-size: 13px; letter-spacing: 0.04em;
+}
+.wbbtn.sel { border-color: var(--brass); background: rgba(185,146,75,0.18); color: var(--brass); }
+
+/* ── Fitting the other screens ──────────────────────────────────────────────
+   Same rule as the entry screen: the page itself never scrolls. Where a screen
+   holds something genuinely unbounded — a long day's register, a list of every
+   opening ever set — that one element scrolls inside its card and everything
+   framing it stays put. */
+
+/* Totals: three stacked figures. They give up size together rather than one
+   of them being cut off. */
+.wrap.fit.totals .card { overflow-y: auto; }
+.wrap.fit.totals .hero { padding: clamp(10px, 2dvh, 16px) 16px; margin-top: clamp(8px, 1.4dvh, 12px); }
+.wrap.fit.totals .heronum { font-size: clamp(23px, 4.4dvh, 36px); margin-top: clamp(2px, 0.6dvh, 5px); }
+.wrap.fit.totals .heronum.s { font-size: clamp(19px, 3.6dvh, 29px); }
+.wrap.fit.totals .heronum.xs { font-size: clamp(16px, 2.9dvh, 23px); }
+.wrap.fit.totals .herodelta { margin-top: clamp(5px, 1dvh, 8px); padding: clamp(3px, 0.6dvh, 4px) 12px; }
+.wrap.fit.totals .week { margin-top: clamp(8px, 1.5dvh, 13px); }
+.wrap.fit.totals .weekbarwrap { height: clamp(20px, 4.2dvh, 34px); }
+.wrap.fit.totals .herosplit { margin-top: clamp(7px, 1.4dvh, 12px); }
+.wrap.fit.totals .baltiles { margin-top: clamp(8px, 1.8dvh, 16px); }
+.wrap.fit.totals .baltile { padding: clamp(7px, 1.4dvh, 12px) 10px; }
+.wrap.fit.totals .baltile b { font-size: clamp(15px, 2.6dvh, 22px); }
+.wrap.fit.totals .drawerrow { margin-top: clamp(5px, 1.2dvh, 10px); }
+.wrap.fit.totals .herofoot { margin-top: clamp(6px, 1.1dvh, 9px); }
+.wrap.fit.totals .paidline { margin-top: clamp(8px, 1.3dvh, 11px); }
+.wrap.fit.totals .allbtn { margin-top: clamp(8px, 1.4dvh, 12px); }
+
+/* Register: an A4 sheet cannot be sized off the width or it grows taller than
+   the phone. It takes the height that is left and its width follows from the
+   ratio, so the whole page is visible however short the screen. */
+.wrap.fit.report .card { display: flex; flex-direction: column; min-height: 0; }
+.wrap.fit.report .datenav, .wrap.fit.report .printbar { flex: none; }
+.wrap.fit.report .page {
+  flex: 1 1 auto; min-height: 0;
+  align-self: center;          /* without this, stretch forces width:100% */
+  width: auto; max-width: 100%;
+  margin: 12px 0 0;
+  aspect-ratio: 210 / 297;
+}
+.wrap.fit.report .printbar { margin-top: 10px; }
+
+/* Edit: the form is fixed, the list of openings is the part that can run on. */
+.wrap.fit.edit .card { display: flex; flex-direction: column; min-height: 0; }
+.wrap.fit.edit .totbox { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wrap.fit.edit .openlist { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* ── Short phones ───────────────────────────────────────────────────────────
+   Under about 700px of viewport there is not room for a full-size keypad and
+   everything above it, so the chrome around the pad gives way: the subtitle
+   goes, the padding tightens, and the nav pill's clearance drops to what the
+   pill actually occupies. The keys keep their size — they are what gets used. */
+/* On a short phone the two motivational footers are the first thing to go —
+   the figures they sit under are the point. */
+@media (max-height: 700px) {
+  .wrap.fit.totals .herofoot { display: none; }
+  .wrap.fit.totals .hero { margin-top: 7px; padding: 9px 14px; }
+  .wrap.fit.totals .heronum { font-size: clamp(21px, 4dvh, 28px); }
+  .wrap.fit.totals .herolabel { font-size: 10px; }
+  .wrap.fit.totals .weekbarwrap { height: clamp(18px, 4dvh, 30px); }
+  .wrap.fit.totals .paidline { margin-top: 8px; }
+}
+
+@media (max-height: 700px) {
+  /* The pill shrinks too, which takes height off both it and the clearance
+     every screen leaves for it. */
+  :root { --navh: clamp(48px, 13vw, 52px); }
+  .wrap.fit { padding-top: 8px; padding-bottom: calc(var(--navh) + max(10px, env(safe-area-inset-bottom, 0px)) + 6px); }
+  .wrap.fit .daysub { display: none; }
+  /* The shop name is on every other screen; here the space is the keypad's. */
+  .wrap.fit .brandrow { display: none; }
+  .wrap.fit .top { margin-bottom: 8px; justify-content: flex-end; }
+  .wrap.fit .themebtn { width: 36px; height: 36px; }
+  .wrap.fit .datenav > button { width: 38px; height: 38px; }
+  .wrap.fit .dbig { font-size: 16px; }
+  .wrap.fit .fitcard { padding: 8px; }
+  .wrap.fit .amtshow { padding: 7px 12px; }
+  .wrap.fit .amtnum { font-size: clamp(22px, 4dvh, 30px); }
+  .wrap.fit .dirbtn, .wrap.fit .modebtn { padding: 7px 8px; font-size: 14px; }
+  .wrap.fit .dirrow { margin-bottom: 7px; }
+  .wrap.fit .advrow input { padding: 7px 10px; }
+  .wrap.fit .advrow { margin-bottom: 6px; }
+  .wrap.fit .datenav { margin-bottom: 7px; }
+  .wrap.fit .pad { gap: 6px; }
+  .wrap.fit .padkeys { gap: 6px; }
+}
+@media (max-height: 580px) {
+  .wrap.fit .amtshow { padding: 4px 10px; margin-bottom: 6px; }
+  .wrap.fit .amtnum { font-size: 22px; }
+  .wrap.fit .padkeys { min-height: 148px; }
+  .wrap.fit .padkey { font-size: 19px; }
+}
+
+/* ── Change history ─────────────────────────────────────────────────────────
+   The record of who changed what. Read-only by design — there is no way to
+   edit or clear it from the app. */
+.histsheet { max-width: 420px; text-align: left; }
+.histsheet .sheettitle, .histsheet .sheetsub { text-align: center; }
+.histlist { max-height: 58vh; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.histrow { padding: 9px 11px; border-radius: 11px; border: 1px solid var(--line); background: var(--card2); border-left-width: 3px; }
+.histrow.add { border-left-color: var(--green); }
+/* An edit is the one change that leaves no trace on the page afterwards — the
+   line still looks ordinary, only the figure moved — so it is the one worth
+   spotting from across the list. Red carries the border, the label and, most of
+   all, the before-and-after. */
+.histrow.edit { border-left-color: var(--red); background: rgba(159, 29, 32, 0.05); }
+.histrow.edit .histkind { color: var(--red); }
+.histrow.edit .histchange { color: var(--red); font-weight: 700; }
+/* A deletion shows itself by absence, so it keeps the red edge but strikes the
+   line through instead of shouting. */
+.histrow.delete { border-left-color: var(--red); }
+.histrow.delete .histwhat { text-decoration: line-through; opacity: 0.75; }
+.histrow.close, .histrow.reopen { border-left-color: var(--pe); }
+.histrow.opening, .histrow[class*="opening-off"] { border-left-color: var(--amber); }
+.histtop { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.histkind { font-size: 10.5px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.histwhen { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.histwhat { font-size: 13.5px; font-weight: 700; margin-top: 3px; }
+.histchange { font-size: 12px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.histfoot { display: flex; gap: 8px; justify-content: space-between; margin-top: 6px; font-size: 10.5px; color: var(--muted); opacity: 0.8; }
+.histdev { text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Printing ───────────────────────────────────────────────────────────────
+   Only the register page goes on the sheet: the app around it is furniture.
+   Backgrounds have to be forced, or the highlighter and the red margin rule
+   are dropped by the browser's default "don't print backgrounds". */
+@media print {
+  @page { size: A4 portrait; margin: 14mm; }
+  /* Written twice, because the dark theme sets its own gradient on body with
+     more specificity than a bare element selector. */
+  html, body, #root, .wrap, .card { background: #fff !important; }
+  :root.dark body { background: #fff !important; }
+  html, body, #root { height: auto !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .wrap { max-width: none; margin: 0; padding: 0; }
+  .top, .tabbar, .datenav, .printbar { display: none !important; }
+  .card { border: none; padding: 0; box-shadow: none; border-radius: 0; }
+  .page {
+    container-type: normal;
+    aspect-ratio: auto;
+    /* A4 less its margins, so the sheet fills the paper and the tally is
+       pushed to the foot of it rather than sitting under the last entry. */
+    min-height: 269mm;
+    margin: 0; padding: 0;
+    border: none; border-radius: 0; box-shadow: none;
+  }
+  .pagerow { min-height: 5.4mm; break-inside: avoid; }
+  .pentry { font-size: 10pt; gap: 2mm; }
+  .pamt { min-width: 20mm; }
+  .pagehdr span { font-size: 7pt; }
+  .pagestamp span { font-size: 6.5pt; }
+  .pagestamp b { font-size: 9.5pt; }
+  .tally { width: 62mm; margin: auto 0 0 auto; padding-top: 5mm; break-inside: avoid; }
+  .tline { height: 6mm; font-size: 10pt; }
+}

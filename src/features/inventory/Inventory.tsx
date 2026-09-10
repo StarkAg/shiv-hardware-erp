@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, IndianRupee, Package, Plus, Trash2, X } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import type { CatalogField, ProductCategory } from '../../lib/types'
+import { CATEGORY_META } from '../../lib/types'
 import { RateManager } from '../rates/RateManager'
 
 const fieldUid = () => Math.random().toString(36).slice(2, 10)
@@ -266,9 +268,20 @@ function CatalogCard({
 
 export function Inventory() {
   const { hardwareCatalog, setHardwareCatalog, customCatalog, addCustomEntry, updateCustomEntry, removeCustomEntry } = useStore()
-  const [tab, setTab] = useState<'catalog' | 'rates'>('catalog')
-  const [openCat, setOpenCat] = useState<ProductCategory | null>('hinge')
-  const [openCustomId, setOpenCustomId] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const params = useParams<{ tab?: string; openId?: string }>()
+  const tab: 'catalog' | 'rates' = params.tab === 'rates' ? 'rates' : 'catalog'
+  // The open row is the third path segment. A hardware row is keyed by its
+  // category; anything else is a custom entry id, so the two can share a slot.
+  const openId = params.openId ?? null
+  const isHardware = !!openId && openId in CATEGORY_META
+  const openCat = (isHardware ? openId : null) as ProductCategory | null
+  const openCustomId = isHardware ? null : openId
+  const setTab = (t: 'catalog' | 'rates') => navigate(`/inventory/${t}`)
+  const setOpenCat = (cat: ProductCategory | null) =>
+    navigate(cat ? `/inventory/${tab}/${cat}` : `/inventory/${tab}`)
+  const setOpenCustomId = (id: string | null) =>
+    navigate(id ? `/inventory/${tab}/${id}` : `/inventory/${tab}`)
   const [addingNew, setAddingNew] = useState(false)
   const [newName, setNewName] = useState('')
 
@@ -310,7 +323,7 @@ export function Inventory() {
         </button>
       </div>
 
-      {tab === 'rates' && <RateManager />}
+      {tab === 'rates' && <RateManager basePath="/inventory/rates" />}
 
       {tab === 'catalog' && (
         <div className="mx-auto max-w-2xl space-y-3 px-4 pb-24 pt-4">

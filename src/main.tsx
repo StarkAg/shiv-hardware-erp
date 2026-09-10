@@ -18,14 +18,15 @@ import { BillSelectPage } from './features/guarantee/BillSelectPage'
 import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
 import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
-import { DeliverPage } from './features/transport/DeliverPage'
+import { Ledger } from './features/ledger/Ledger'
+import { LedgersPage } from './features/ledger/LedgersPage'
 import { BillBuilder } from './features/bills/BillBuilder'
+import { BillTrash } from './features/bills/BillTrash'
 import { PrinterQueue } from './features/print/PrinterQueue'
 import { PdfViewer } from './features/pdf/PdfViewer'
+import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
-import { getPrintServerUrl, pullBillsFromServer, pullCatalogFromServer, pullGuaranteesFromServer } from './lib/printServer'
 import { useStore } from './lib/store'
-import { subscribeSyncStream } from './lib/syncStream'
 import { convexEnabled, pushBillsToConvex, pushCatalogToConvex } from './lib/convexSync'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
@@ -49,90 +50,27 @@ function disableMobileZoom() {
 disableMobileZoom()
 startOfflineSync()
 
-// ── Startup: pull print-server snapshots (local Wi-Fi) ─────────────────────
-pullCatalogFromServer().then((snapshot) => {
-  if (!snapshot) return
-  const { setHardwareCatalog, setCustomCatalog, setSets } = useStore.getState()
-  if (snapshot.hardwareCatalog) setHardwareCatalog(snapshot.hardwareCatalog)
-  if (snapshot.customCatalog)   setCustomCatalog(snapshot.customCatalog)
-  if (snapshot.sets?.length)    setSets(snapshot.sets)
-}).catch(() => { /* print server offline — no-op */ })
+// ── Startup ────────────────────────────────────────────────────────────────
+// The panel used to open by asking a print server on the shop's Wi-Fi for the
+// bills, the catalogue and the guarantee cards, and to hold an SSE stream open
+// for changes. Convex carries all three now, live, from anywhere — so the
+// panel no longer needs anything on the local network to start, and does not
+// go looking for it. With the server switched off that search was four rounds
+// of refused connections and a thousand-address subnet scan, every load.
+//
+// Printing goes through the browser. The print server still exists for the
+// thermal printer, but nothing reaches for it on its own any more.
 
-pullBillsFromServer().then((serverBills) => {
-  if (!serverBills?.length) return
-  const local = useStore.getState().bills
-  if (serverBills.length >= local.length) {
-    // saveBillsSnapshot also pushes to Convex — populates cloud on first run
-    useStore.getState().saveBillsSnapshot(serverBills)
-  }
-}).catch(() => { /* print server offline — no-op */ })
-
-// Pull the saved guarantee cards from the print-server so QR scans work offline too.
-pullGuaranteesFromServer().then((serverGuarantees) => {
-  if (!serverGuarantees?.length) return
-  const local = useStore.getState().guarantees
-  if (serverGuarantees.length >= local.length) {
-    const remoteSeq = serverGuarantees.reduce((m, g) => {
-      const match = /^GC-\d{4}-(\d{4,})$/.exec(g.number)
-      const n = match ? Number(match[1]) : 0
-      return Number.isFinite(n) ? Math.max(m, n) : m
-    }, 0)
-    useStore.getState().syncGuaranteesFromRemote(serverGuarantees, remoteSeq)
-  }
-}).catch(() => { /* print server offline — no-op */ })
-
-// ── Convex startup push — populate cloud from localStorage ─────────────────
-// Runs regardless of print-server state. Safe because all mutations are upserts.
-// Delayed 3 s so the print-server pulls above can update the store first.
+// First run on a device that has bills locally but has never pushed them up.
 if (convexEnabled()) {
   setTimeout(() => {
     const s = useStore.getState()
-    void pushCatalogToConvex({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
+    if (s.hardwareCatalog || s.customCatalog?.length || s.sets?.length) {
+      void pushCatalogToConvex({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
+    }
     if (s.bills.length) void pushBillsToConvex(s.bills, s.billSeq)
   }, 3000)
 }
-
-// ── SSE: subscribe to real-time changes from the print server ───────────────
-// Once the server URL is confirmed, open an EventSource for live push.
-// When another device saves bills or catalog, we re-pull and sync locally
-// using the loop-safe syncXxxFromRemote actions.
-getPrintServerUrl().then((serverUrl) => {
-  if (!serverUrl) return
-  subscribeSyncStream(serverUrl, {
-    onBills: () => {
-      pullBillsFromServer().then((bills) => {
-        if (!bills?.length) return
-        const s = useStore.getState()
-        if (bills.length >= s.bills.length) {
-          s.syncBillsFromRemote(bills, bills.reduce((m, b) => {
-            const n = Number(b.number)
-            return Number.isFinite(n) ? Math.max(m, n) : m
-          }, 0))
-        }
-      }).catch(() => {})
-    },
-    onCatalog: () => {
-      pullCatalogFromServer().then((snap) => {
-        if (!snap?.hardwareCatalog) return
-        useStore.getState().syncCatalogFromRemote(snap)
-      }).catch(() => {})
-    },
-    onGuarantees: () => {
-      pullGuaranteesFromServer().then((guarantees) => {
-        if (!guarantees?.length) return
-        const s = useStore.getState()
-        if (guarantees.length >= s.guarantees.length) {
-          const remoteSeq = guarantees.reduce((m, g) => {
-            const match = /^GC-\d{4}-(\d{4,})$/.exec(g.number)
-            const n = match ? Number(match[1]) : 0
-            return Number.isFinite(n) ? Math.max(m, n) : m
-          }, 0)
-          s.syncGuaranteesFromRemote(guarantees, remoteSeq)
-        }
-      }).catch(() => {})
-    },
-  })
-}).catch(() => { /* print server offline — no SSE */ })
 
 // ── Convex ─────────────────────────────────────────────────────────────────
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
@@ -143,6 +81,7 @@ const router = createHashRouter([
   {
     path: '/',
     element: <AppLayout />,
+    errorElement: <AppError />,
     children: [
       { index: true, element: <Navigate to="/quote-options" replace /> },
       { path: 'quote-options',  element: <QuotationOptions /> },
@@ -150,34 +89,55 @@ const router = createHashRouter([
       { path: 'quote/:id',      element: <QuotationBuilder /> },
       { path: 'product/:category', element: <QuotationBuilder /> },
       { path: 'history',        element: <QuoteHistory /> },
+      { path: 'history/:id',    element: <QuoteHistory /> },
       { path: 'guarantee/card',        element: <GuaranteeBuilder layout="card" /> },
       { path: 'guarantee/a4',          element: <GuaranteeBuilder layout="a4" /> },
       { path: 'guarantee/history',     element: <GuaranteeHistory /> },
+      { path: 'guarantee/history/:id', element: <GuaranteeHistory /> },
       { path: 'guarantee/select-bill',  element: <BillSelectPage /> },
       { path: 'guarantee/bill/:billId', element: <BillBrandCardsPage /> },
       { path: 'scan',           element: <BillScanner /> },
       { path: 'rates',          element: <RateManager /> },
+      { path: 'rates/:category', element: <RateManager /> },
       { path: 'inventory',      element: <Inventory /> },
+      { path: 'inventory/:tab', element: <Inventory /> },
+      { path: 'inventory/:tab/:openId', element: <Inventory /> },
       { path: 'customers',      element: <Customers /> },
       { path: 'transport',      element: <Transport /> },
-      { path: 'transport/deliver/:deliveryId', element: <DeliverPage /> },
+      { path: 'transport/:view', element: <Transport /> },
+      { path: 'ledgers',        element: <LedgersPage /> },
+      { path: 'ledgers/:tab',   element: <LedgersPage /> },
+      { path: 'ledger',         element: <Ledger /> },
+      { path: 'ledger/:tab',    element: <Ledger /> },
+      { path: 'ledger/:tab/:partyId', element: <Ledger /> },
       { path: 'bills',          element: <BillBuilder /> },
+      // Editing a voucher that has no bill behind it — the ledger's own
+      // entries and the ones approved from a photograph.
+      { path: 'bills/voucher/:voucherId', element: <BillBuilder /> },
       { path: 'bills/:id',      element: <BillBuilder /> },
+      { path: 'trash',          element: <BillTrash /> },
       { path: 'printer-queue',  element: <PrinterQueue /> },
+      // Links from older versions of the panel, kept working rather than 404.
+      { path: 'voucher/:kind',  element: <VoucherRedirect /> },
       { path: 'pdf-viewer',     element: <PdfViewer /> },
+      { path: '*',              element: <NotFound /> },
     ],
   },
   { path: '/demo', element: <PrintDemo /> },
-])
+], {
+  // Opt in early to what v7 does by default, which also silences the warnings
+  // it prints on every start.
+  future: { v7_relativeSplatPath: true },
+})
 
 const app = convex
   ? (
     <ConvexProvider client={convex}>
       <ConvexSync />
-      <RouterProvider router={router} />
+      <RouterProvider router={router} future={{ v7_startTransition: true }} />
     </ConvexProvider>
   )
-  : <RouterProvider router={router} />
+  : <RouterProvider router={router} future={{ v7_startTransition: true }} />
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -1,77 +1,90 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Truck, Plus, X, Trash2, Navigation } from 'lucide-react'
+import { Truck, Plus, X } from 'lucide-react'
 import { Button, Input } from '../../components/ui'
-import { PRINT_SERVER_URL } from '../../lib/printServer'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useStore } from '../../lib/store'
+import { VEHICLE_LABEL } from '../../lib/types'
+import type { VehicleType } from '../../lib/types'
+import { CallRound, VehicleBadge } from '../toto/CallRound'
 
-interface Driver {
-  id: string
-  name: string
-  phone: string
-}
-
+/**
+ * Transport: the shop's hired-vehicle contacts and the call round for an order.
+ * Toto (electric rickshaw) is one vehicle type among several — the list is not
+ * toto-only, it just happens to be mostly totos today.
+ *
+ * Opening the section offers one thing: New Order. That starts a call round,
+ * and the staff works down the list ringing totos until one takes the job.
+ * Finishing — or simply refreshing — ends the round and returns the button,
+ * because "who did I already ring" only means anything within one order.
+ */
 export function Transport() {
+  const { totoDrivers, addTotoDriver } = useStore()
+
+  // Per-order state, deliberately not persisted: a refresh starts a clean round.
   const navigate = useNavigate()
-  const [drivers, setDrivers] = useState<Driver[]>([])
+  const { view } = useParams<{ view?: string }>()
+  const orderOpen = view === 'order'
+  const setOrderOpen = (open: boolean) => navigate(open ? '/transport/order' : '/transport')
+  const [called, setCalled] = useState<string[]>([])
+
   const [showModal, setShowModal] = useState(false)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
-  const [startingId, setStartingId] = useState<string | null>(null)
+  const [vehicle, setVehicle] = useState<VehicleType>('toto')
 
   const addDriver = () => {
     if (!name.trim() || phone.length !== 10) return
-
-    setDrivers([...drivers, {
-      id: Math.random().toString(36).slice(2, 10),
-      name: name.trim(),
-      phone,
-    }])
-
+    addTotoDriver(name, phone, vehicle)
     setName('')
     setPhone('')
     setShowModal(false)
   }
 
-  const removeDriver = (id: string) => {
-    setDrivers(drivers.filter((d) => d.id !== id))
-  }
-
-  const startDelivery = async (driver: Driver) => {
-    setStartingId(driver.id)
-    try {
-      const res = await fetch(`${PRINT_SERVER_URL}/delivery/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ driverName: driver.name }),
-      })
-      if (!res.ok) throw new Error('Server error')
-      const { id } = await res.json()
-      navigate(`/transport/deliver/${id}`, { state: { driverName: driver.name } })
-    } catch {
-      alert('Could not connect to print server. Make sure it is running.')
-    } finally {
-      setStartingId(null)
-    }
-  }
+  const markCalled = (id: string) =>
+    setCalled((c) => (c.includes(id) ? c : [...c, id]))
 
   return (
     <div className="flex flex-col gap-4 p-4 md:p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-stone-950 dark:text-white flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-stone-950 dark:text-white">
           <Truck size={28} className="text-shiv-green" />
-          Drivers
+          Transport
         </h1>
         <Button onClick={() => setShowModal(true)} className="flex items-center gap-2">
-          <Plus size={18} /> Add Driver
+          <Plus size={18} /> Add Vehicle
         </Button>
       </div>
 
-      {/* Modal */}
+      {orderOpen ? (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-stone-500 dark:text-stone-400">
+              {called.length} of {totoDrivers.length} called
+            </span>
+            <Button variant="ghost" onClick={() => setOrderOpen(false)}>Finish order</Button>
+          </div>
+          <CallRound called={called} onCalled={markCalled} />
+        </>
+      ) : (
+        // The only thing this screen asks for, so it gets the whole space.
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5">
+          <Button
+            onClick={() => { setCalled([]); setOrderOpen(true) }}
+            className="w-full max-w-sm rounded-2xl px-10 py-8 text-2xl font-bold shadow-lg"
+          >
+            New Order
+          </Button>
+          <p className="text-sm text-stone-400 dark:text-stone-500">
+            {totoDrivers.length} vehicles · starts a fresh call round
+          </p>
+        </div>
+      )}
+
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="rounded-xl bg-white p-6 shadow-lg dark:bg-stone-900 w-full max-w-md mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-stone-950 dark:text-white">Add Driver</h2>
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg dark:bg-stone-900">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-stone-950 dark:text-white">Add Vehicle</h2>
               <button
                 onClick={() => setShowModal(false)}
                 className="text-stone-500 hover:text-stone-950 dark:text-stone-400 dark:hover:text-white"
@@ -79,95 +92,35 @@ export function Transport() {
                 <X size={20} />
               </button>
             </div>
-
-            <div className="space-y-4">
+            <div className="space-y-3">
+              <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
               <Input
-                label="Driver Name"
-                placeholder="Enter driver name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addDriver()}
+                placeholder="10-digit mobile"
+                inputMode="numeric"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               />
-
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">
-                  Phone Number (10 digits)
-                </span>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  placeholder="Enter 10-digit phone"
-                  value={phone}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, '').slice(0, 10)
-                    setPhone(value)
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && addDriver()}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 transition ${
-                    phone.length === 10
-                      ? 'border-green-500 bg-green-50 focus:border-green-600 focus:ring-green-600/20 dark:border-green-600 dark:bg-green-950/30'
-                      : 'border-stone-300 bg-stone-50 focus:border-shiv-green focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950'
-                  } dark:text-stone-100`}
-                />
-              </label>
-
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={addDriver}
-                  disabled={!name.trim() || phone.length !== 10}
-                  className="flex-1"
-                >
-                  Add Driver
-                </Button>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(VEHICLE_LABEL) as VehicleType[]).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setVehicle(v)}
+                    className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm ${
+                      vehicle === v
+                        ? 'border-shiv-green bg-shiv-green/15 text-stone-900 dark:text-white'
+                        : 'border-stone-200 text-stone-500 dark:border-white/10 dark:text-stone-400'
+                    }`}
+                  >
+                    <VehicleBadge vehicle={v} size={14} />
+                    {VEHICLE_LABEL[v]}
+                  </button>
+                ))}
               </div>
+              <Button onClick={addDriver} disabled={!name.trim() || phone.length !== 10} className="w-full">
+                Save
+              </Button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Drivers List */}
-      {drivers.length === 0 ? (
-        <div className="rounded-xl border border-stone-200/90 bg-stone-50 p-12 text-center dark:border-white/10 dark:bg-stone-900/90">
-          <Truck size={48} className="mx-auto mb-4 text-stone-300 dark:text-stone-600" />
-          <p className="text-stone-600 dark:text-stone-300">No drivers added yet</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {drivers.map((driver) => (
-            <div
-              key={driver.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-stone-200/90 bg-stone-50 p-4 dark:border-white/10 dark:bg-stone-900/90"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-stone-950 dark:text-white">{driver.name}</p>
-                <p className="text-sm text-stone-500 dark:text-stone-400">{driver.phone}</p>
-              </div>
-
-              <button
-                onClick={() => startDelivery(driver)}
-                disabled={startingId === driver.id}
-                className="flex items-center gap-1.5 rounded-lg bg-shiv-green px-3 py-2 text-xs font-bold text-stone-950 shadow-sm disabled:opacity-60"
-              >
-                <Navigation size={14} />
-                {startingId === driver.id ? 'Starting…' : 'Deliver'}
-              </button>
-
-              <button
-                onClick={() => removeDriver(driver.id)}
-                className="rounded-lg p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
-          ))}
         </div>
       )}
     </div>

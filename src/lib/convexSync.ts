@@ -7,7 +7,7 @@
  */
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../../convex/_generated/api'
-import type { Bill, BrandSet, CustomCatalogEntry, HardwareCatalog } from './types'
+import type { Bill, BrandSet, CustomCatalogEntry, HardwareCatalog, TotoDriver } from './types'
 
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
 
@@ -31,7 +31,34 @@ export async function pushBillsToConvex(bills: Bill[], billSeq: number): Promise
   }
 }
 
+/**
+ * Deleting a bill, properly: it goes to the trash and takes its ledger voucher
+ * with it. Not fire-and-forget — the caller wants to know, because a delete
+ * that only happened on this device is how a bill comes back tomorrow.
+ */
+export async function removeBillFromConvex(id: string): Promise<boolean> {
+  const c = client()
+  if (!c) return false
+  try {
+    const res = await c.mutation(api.bills.remove, { id })
+    return Boolean((res as { removed?: boolean } | null)?.removed)
+  } catch {
+    return false
+  }
+}
+
 /** Push the full catalog to Convex. Fire-and-forget. */
+/** Toto contacts + availability tags — one snapshot row, same as the catalog. */
+export async function pushTotoToConvex(drivers: TotoDriver[]): Promise<void> {
+  const c = client()
+  if (!c) return
+  try {
+    await c.mutation(api.toto.save, { drivers })
+  } catch {
+    // Offline — silently ignore
+  }
+}
+
 export async function pushCatalogToConvex(catalog: {
   hardwareCatalog: HardwareCatalog
   customCatalog: CustomCatalogEntry[]

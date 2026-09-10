@@ -28,7 +28,27 @@ body {
 a, button, [role="button"], select, input, label,
 .mobile-bottom-nav a, .mobile-bottom-nav button {
   touch-action: manipulation;   /* eliminates 300ms tap delay */
-  -webkit-touch-callout: none;
+}
+
+/*
+ * Everything on screen can be selected and copied.
+ *
+ * The rule above used to carry `user-select: none` and `-webkit-touch-callout:
+ * none` as well, which meant a customer's name, a phone number or an amount
+ * could not be picked up — a party's name in the day book is a <button>, and
+ * an <input> that refuses selection cannot even have its value copied out.
+ * A figure on a screen is worth copying, and this is a shop's books.
+ */
+body {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Except the bottom navigation, where a long press should not select the
+   labels of the bar you are trying to tap. */
+.mobile-bottom-nav,
+.mobile-bottom-nav a,
+.mobile-bottom-nav button {
   user-select: none;
   -webkit-user-select: none;
 }
@@ -83,6 +103,38 @@ input[type='number'] { -moz-appearance: textfield; }
   overflow-y: auto;
 }
 
+/*
+ * Two children now: the back bar and the page. `main` is a fixed-height box
+ * that hides its overflow, so a second child given `height: 100%` by the rule
+ * above would push the first one out of sight entirely — which is exactly what
+ * happened when the back bar was added. Column layout, and the bar is only as
+ * tall as its own content.
+ */
+.mobile-main {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * A fixed height, because two screens size themselves against the viewport and
+ * have to subtract this. A bar that grew with its font would put those screens
+ * out by however much it grew.
+ */
+.mobile-main > .back-bar {
+  flex: 0 0 auto;
+  height: var(--back-bar-height);
+  display: flex;
+  align-items: center;
+  overflow: visible;
+}
+
+.mobile-main > .page-area {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .mobile-bottom-nav {
   bottom: var(--mobile-bottom-nav-offset);
   padding-bottom: 0.25rem;
@@ -110,8 +162,23 @@ input[type='number'] { -moz-appearance: textfield; }
   background: rgb(12 10 9 / 0.95);
 }
 
+/*
+ * Screens that fill the window rather than scrolling: the quotation picker and
+ * the guarantee card. They subtract the back bar where there is one — the
+ * landing page has none, so the variable is 0 there.
+ */
+:root {
+  --back-bar-height: 44px;
+}
+
 .mobile-panel-screen {
-  height: calc(100dvh - var(--mobile-topbar-height) - var(--mobile-bottom-nav-space));
+  height: calc(
+    100dvh - var(--mobile-topbar-height) - var(--mobile-bottom-nav-space) - var(--page-back-bar, 0px)
+  );
+}
+
+.mobile-main:has(> .back-bar) .mobile-panel-screen {
+  --page-back-bar: var(--back-bar-height);
 }
 
 @media (min-width: 768px) {
@@ -123,7 +190,7 @@ input[type='number'] { -moz-appearance: textfield; }
   }
 
   .mobile-panel-screen {
-    height: 100vh;
+    height: calc(100vh - var(--page-back-bar, 0px));
   }
 }
 
@@ -171,3 +238,7 @@ input[type='number'] { -moz-appearance: textfield; }
   .preview-scale { transform: none !important; width: auto !important; height: auto !important; }
   .a4-page { box-shadow: none !important; margin: 0 !important; page-break-after: always; }
 }
+
+/* Text selection — the browser default is a hard blue that fights both themes. */
+::selection { background: rgba(180, 145, 80, .35); }
+:root.dark ::selection { background: rgba(196, 160, 92, .40); color: #fff; }

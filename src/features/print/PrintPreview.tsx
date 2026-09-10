@@ -1,47 +1,18 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Printer, X } from 'lucide-react'
-import { printOnServer, type ServerPrintPayload } from '../../lib/printServer'
-import { CLOUD_API_URL, createCloudPrintJob, getCloudPrintJob, type CloudPrintJob } from '../../lib/cloudApi'
+import type { ServerPrintPayload } from '../../lib/printServer'
 
 // A4 in CSS px at 96dpi.
 const A4_W = 794
 const A4_H = 1123
-const CLOUD_PRINT_POLL_MS = 2_000
-const CLOUD_PRINT_WATCH_MS = 2 * 60_000
-
-function wait(ms: number) {
-  return new Promise(resolve => window.setTimeout(resolve, ms))
-}
-
-function describeCloudPrintJob(job: CloudPrintJob) {
-  switch (job.status) {
-    case 'pending':
-      return 'Shop print queued. Waiting for shop printer...'
-    case 'claimed':
-      return `Shop printer picked it up${job.claimedBy ? ` (${job.claimedBy})` : ''}.`
-    case 'printing':
-      return 'Printing at shop...'
-    case 'printed':
-      return 'Printed at shop.'
-    case 'failed':
-      return `Shop print failed${job.error ? `: ${job.error}` : '.'}`
-    case 'cancelled':
-      return 'Shop print cancelled.'
-    default:
-      return `Shop print status: ${job.status}`
-  }
-}
-
-function isFinalCloudPrintStatus(status: CloudPrintJob['status']) {
-  return status === 'printed' || status === 'failed' || status === 'cancelled'
-}
-
 // Full-screen preview overlay. The A4 sheet is scaled to fit the screen (no
 // scrolling); printing still uses the true A4 size via @media print rules.
 export function PrintPreview({
   title,
   onClose,
-  serverPrint,
+  // Accepted and ignored: callers still describe what they are printing, and
+  // it costs nothing to keep the shape for when a printer path needs it again.
+  serverPrint: _serverPrint,
   children,
 }: {
   title: string
@@ -54,8 +25,6 @@ export function PrintPreview({
   const [printing, setPrinting] = useState(false)
   const [printStatus, setPrintStatus] = useState('')
   const [printStatusTone, setPrintStatusTone] = useState<'success' | 'error' | 'info'>('success')
-  const cloudStatusWatchId = useRef(0)
-  const canCloudPrint = Boolean(CLOUD_API_URL && serverPrint)
 
   useLayoutEffect(() => {
     const el = areaRef.current
@@ -91,44 +60,11 @@ export function PrintPreview({
     }
   }, [])
 
-  useEffect(() => {
-    return () => {
-      cloudStatusWatchId.current += 1
-    }
-  }, [])
-
-  async function watchCloudPrintJob(id: string) {
-    const watchId = ++cloudStatusWatchId.current
-    const deadline = Date.now() + CLOUD_PRINT_WATCH_MS
-
-    setPrintStatusTone('info')
-    setPrintStatus(`Shop print queued (${id}). Waiting for shop printer...`)
-
-    while (Date.now() < deadline) {
-      await wait(CLOUD_PRINT_POLL_MS)
-      if (cloudStatusWatchId.current !== watchId) return
-
-      try {
-        const { job } = await getCloudPrintJob(id)
-        if (cloudStatusWatchId.current !== watchId) return
-
-        setPrintStatusTone(job.status === 'failed' || job.status === 'cancelled' ? 'error' : 'success')
-        setPrintStatus(`${describeCloudPrintJob(job)} (${id})`)
-        if (isFinalCloudPrintStatus(job.status)) return
-      } catch (err) {
-        setPrintStatusTone('error')
-        setPrintStatus(`Shop print queued (${id}), but status check failed: ${err instanceof Error ? err.message : String(err)}`)
-      }
-    }
-
-    if (cloudStatusWatchId.current === watchId) {
-      setPrintStatusTone('info')
-      setPrintStatus(`Shop print queued (${id}). No final status yet.`)
-    }
-  }
-
   async function print() {
-    if (!window.shivDesktop?.printCurrentPage && !serverPrint) {
+    // The browser prints, and nothing on the shop's Wi-Fi has to be switched on
+    // for it to work. The packaged desktop app keeps its own path because it
+    // drives the printer directly rather than through a server.
+    if (!window.shivDesktop?.printCurrentPage) {
       window.print()
       return
     }
@@ -137,35 +73,12 @@ export function PrintPreview({
     setPrintStatus('')
     setPrintStatusTone('success')
     try {
-      if (window.shivDesktop?.printCurrentPage) {
-        await window.shivDesktop.printCurrentPage({ copies: 1 })
-      } else if (serverPrint) {
-        const result = await printOnServer(serverPrint)
-        setPrintStatusTone('success')
-        setPrintStatus(`Sent to ${result.printer}${result.jobId ? ` (${result.jobId})` : ''}.`)
-      }
+      await window.shivDesktop.printCurrentPage({ copies: 1 })
     } catch (err) {
-      if (serverPrint && canCloudPrint) {
-        try {
-          const result = serverPrint.kind === 'quotation'
-            ? await createCloudPrintJob({ kind: 'quotation', quote: serverPrint.quote, source: 'web' })
-            : serverPrint.kind === 'guarantee'
-              ? await createCloudPrintJob({
-                  kind: 'guarantee',
-                  document: serverPrint.document,
-                  layout: serverPrint.layout,
-                  source: 'web',
-                })
-              : await createCloudPrintJob({ kind: 'quotation', quote: serverPrint.bill as never, source: 'web' })
-          void watchCloudPrintJob(result.id)
-          return
-        } catch (cloudErr) {
-          alert(`Print failed locally and cloud queue failed: ${cloudErr instanceof Error ? cloudErr.message : String(cloudErr)}`)
-          return
-        }
-      }
-
-      alert(`Print failed: ${err instanceof Error ? err.message : String(err)}`)
+      // Fall back to the browser rather than leaving the shop with nothing.
+      setPrintStatusTone('error')
+      setPrintStatus(`Desktop print failed: ${err instanceof Error ? err.message : String(err)} — printing through the browser.`)
+      window.print()
     } finally {
       setPrinting(false)
     }

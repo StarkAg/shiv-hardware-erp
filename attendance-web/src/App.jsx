@@ -406,12 +406,7 @@ export default function App() {
         </div>
       </header>
 
-      <div className="tabs">
-        <button className={mode === 'day' ? 'on' : ''} onClick={() => setMode('day')}>Daily</button>
-        <button className={mode === 'month' ? 'on' : ''} onClick={() => setMode('month')}>Month</button>
-        <button className={mode === 'stats' ? 'on' : ''} onClick={() => setMode('stats')}>Stats</button>
-        <button className={mode === 'pay' ? 'on' : ''} onClick={() => setMode('pay')}>Pay</button>
-      </div>
+      <TabBar mode={mode} setMode={setMode} />
 
       {mode === 'day' ? (
         <DailyView
@@ -468,7 +463,9 @@ export default function App() {
         />
       )}
 
-      {pw.open && <PasswordModal error={pw.error} onSubmit={submitPw} onClose={closePw} />}
+      {pw.open && (
+        <PasswordModal error={pw.error} onSubmit={submitPw} onClose={closePw} />
+      )}
       {historyOpen && <HistoryModal log={log} onClose={() => setHistoryOpen(false)} />}
       {openingsOpen && <OpeningLogModal openings={openings} onClose={() => setOpeningsOpen(false)} />}
       {locationSetupOpen && (
@@ -923,15 +920,15 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, o
   )
 }
 
-function PasswordModal({ error, onSubmit, onClose }) {
+function PasswordModal({ error, onSubmit, onClose, title, sub }) {
   const [value, setValue] = useState('')
   const submit = () => onSubmit(value)
   return (
     <div className="modal" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheetlock"><LockIcon /></div>
-        <div className="sheettitle">This day is locked</div>
-        <div className="sheetsub">Enter the password to edit past attendance</div>
+        <div className="sheettitle">{title || 'This day is locked'}</div>
+        <div className="sheetsub">{sub || 'Enter the password to edit past attendance'}</div>
         <input
           autoFocus
           type="password"
@@ -1067,6 +1064,69 @@ function OpeningLogModal({ openings, onClose }) {
         <div className="sheetbtns"><button className="primbtn" onClick={onClose}>Close</button></div>
       </div>
     </div>
+  )
+}
+
+// ── Bottom navigation ───────────────────────────────────────────────────────
+// A floating glass pill, the way GradeX carries its mobile nav: fixed above the
+// content rather than scrolling with it, so the five destinations stay under
+// the thumb on a phone that is being held one-handed at the counter.
+//
+// Every icon's FIRST child is a closed shape. That is what makes the active
+// state work: the whole svg gets fill="currentColor", the first child becomes a
+// solid brass silhouette, and the children after it are re-stroked in the page
+// colour so they read as knocked out of it instead of vanishing into the fill.
+const NAV_ICONS = {
+  day: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <path d="M8 12.4l2.6 2.6L16 9.6" />
+    </svg>
+  ),
+  month: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="17" rx="4" />
+      <path d="M3 9.5h18" />
+      <path d="M8 14h.01M12 14h.01M16 14h.01M8 17.5h.01M12 17.5h.01" />
+    </svg>
+  ),
+  stats: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 13.5h3.5V21H4zM10.25 8h3.5v13h-3.5zM16.5 3.5H20V21h-3.5z" />
+    </svg>
+  ),
+  pay: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 8.5A3.5 3.5 0 0 1 6 5h12a3.5 3.5 0 0 1 3.5 3.5v7A3.5 3.5 0 0 1 18 19H6a3.5 3.5 0 0 1-3.5-3.5z" />
+      <path d="M9.5 9.5h5M9.5 12h4" />
+      <path d="M13 9.6c0 2.4-1.4 2.4-3.5 2.4l3.6 3.5" />
+    </svg>
+  ),
+}
+
+const NAV_ITEMS = [
+  { id: 'day', label: 'Daily' },
+  { id: 'month', label: 'Month' },
+  { id: 'stats', label: 'Stats' },
+  { id: 'pay', label: 'Pay' },
+]
+
+function TabBar({ mode, setMode }) {
+  return (
+    <nav className="tabbar" aria-label="Sections" style={{ '--navcount': NAV_ITEMS.length }}>
+      {NAV_ITEMS.map((item) => (
+        <button
+          key={item.id}
+          className="tabitem"
+          data-on={mode === item.id ? 'true' : undefined}
+          aria-current={mode === item.id ? 'page' : undefined}
+          onClick={() => setMode(item.id)}
+        >
+          {NAV_ICONS[item.id]}
+          <span className="tablabel">{item.label}</span>
+        </button>
+      ))}
+    </nav>
   )
 }
 

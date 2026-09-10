@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { Card, Input, PageHeader } from '../../components/ui'
 
 export function Customers() {
   const { customers } = useStore()
-  const [q, setQ] = useState('')
+  const [params, setParams] = useSearchParams()
+  const q = params.get('q') ?? ''
+  const setQ = (value: string) => setParams(value ? { q: value } : {}, { replace: true })
   const filtered = customers.filter(
     (c) => c.name.toLowerCase().includes(q.toLowerCase()) || c.mobile.includes(q),
   )

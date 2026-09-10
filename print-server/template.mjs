@@ -522,7 +522,23 @@ async function buildAluminiumHtml(quote) {
 // ── Bill HTML ─────────────────────────────────────────────────────────────────
 // Mirrors BillPrint.tsx exactly — same 148×210mm notepad layout, same columns.
 export function buildBillHtml(bill) {
-  const items = Array.isArray(bill.items) ? bill.items : []
+  // A fare or round-off is not one of the goods: it is a charge on the whole
+  // bill and prints just above the total. Mirrors billLines()/billCharges()
+  // in src/lib/types.ts. Half-typed rows are not lines of the bill.
+  const AMOUNT_ONLY_NAMES = /^(fare|cartage|freight|labour|labor|transport)$/i
+  const isRoundup = i => !!(i.isRoundup || i.isDiscount)
+  const isAmountOnly = i =>
+    !!i.amountOnly || AMOUNT_ONLY_NAMES.test(String(i.description ?? '').trim())
+  const isCharge = i => isRoundup(i) || isAmountOnly(i)
+
+  const allLines = Array.isArray(bill.items) ? bill.items : []
+  const items = allLines.filter(
+    i => (String(i.description ?? '').trim() || Number(i.amount)) && !isCharge(i),
+  )
+  const charges = allLines
+    .filter(i => isCharge(i) && Number(i.amount))
+    .sort((a, b) => Number(isRoundup(a)) - Number(isRoundup(b)))
+
   const PAGE_ITEMS = 14
   const pages = []
   for (let i = 0; i < items.length; i += PAGE_ITEMS) pages.push(items.slice(i, i + PAGE_ITEMS))
@@ -554,6 +570,12 @@ export function buildBillHtml(bill) {
     return String(s ?? '').replace(/\b\w/g, c => c.toUpperCase())
   }
 
+  // Mirrors formatItemDescription in src/lib/billHtml.ts.
+  function formatItemDescription(s) {
+    return toProperCase(s).replace(/(\d+(?:\.\d+)?)\s*[x\u00d7]\s*(\d+(?:\.\d+)?)/gi, '$1 X $2')
+  }
+
+
   function fmt(n) {
     return Number(n || 0).toLocaleString('en-IN')
   }
@@ -576,7 +598,7 @@ export function buildBillHtml(bill) {
         <span>B/f (p.${pageIdx})</span><span style="font-weight:700">${fmt(prevTotal)}</span>
       </div>` : ''
 
-    const CELL = 'vertical-align:middle;padding-top:1.5mm;padding-bottom:1.5mm'
+    const CELL = 'vertical-align:middle;padding-top:0.8mm;padding-bottom:0.8mm'
     const itemAttrs = item => {
       const attrs = []
       if (item.brandName) attrs.push(shortenBrand(item.brandName))
@@ -589,20 +611,30 @@ export function buildBillHtml(bill) {
       const attrs = itemAttrs(item)
       if (attrs.length === 0) return ''
       const cells = attrs
-        .map(a => `<span style="flex:1;min-width:0;text-align:center;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a)}</span>`)
+        .map(a => `<span style="min-width:0;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a)}</span>`)
         .join('')
-      return `<div style="display:flex;align-items:center;gap:1.5mm">${cells}</div>`
+      return `<div style="display:flex;align-items:center;gap:3mm">${cells}</div>`
     }
     const rows = pageItems.map(item => {
       const isCatalog = !!item.category
       const productCols = isCatalog ? `
         <td style="${CELL};line-height:1.3">${esc(BILL_LABEL[item.category] ?? item.category)}</td>
-        <td style="${CELL};padding-left:3mm">${attrCell(item)}</td>
-      ` : `<td colspan="2" style="${CELL};line-height:1.3">${esc(item.description) || '<span style="color:#ccc">—</span>'}</td>`
+        <td style="${CELL};padding-left:2mm">${attrCell(item)}</td>
+      ` : isRoundup(item)
+        ? `<td colspan="2" style="${CELL};line-height:1.3"></td>`
+        : `<td colspan="2" style="${CELL};line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${
+            String(item.description ?? '').trim()
+              ? esc(formatItemDescription(item.description))
+              : '<span style="color:#ccc">—</span>'
+          }</td>`
       return `<tr>
         <td style="${CELL};color:#888;line-height:1.3">✕</td>
         ${productCols}
-        <td style="${CELL};padding-left:4mm;color:#555;white-space:nowrap">${esc(item.qty)} ${esc(item.unit)}</td>
+        <td style="${CELL};padding-left:4mm;color:#555;white-space:nowrap">${
+          isRoundup(item) || isAmountOnly(item) || !Number(item.qty)
+            ? ''
+            : `${esc(item.qty)} ${esc(item.unit)}`
+        }</td>
         <td style="${CELL};padding-left:4mm;text-align:right;font-weight:600;white-space:nowrap">${item.amount ? fmt(item.amount) : ''}</td>
       </tr>`
     }).join('')
@@ -620,6 +652,16 @@ export function buildBillHtml(bill) {
         <div style="font-size:12pt;font-weight:900;border-top:1.5px solid #111;border-bottom:3px double #111;padding-top:1mm;padding-bottom:1mm;min-width:24mm">${fmt(bill.total)}</div>
       </div>` : `<div style="font-size:10pt;font-weight:700">${fmt(runningTotal)}</div>`
 
+    // Fare and round-off read just above the total rule: a charge on the bill,
+    // next to the figure it changes, not buried among the goods.
+    const chargeLines = isLast
+      ? charges.map(c => `
+          <div style="display:flex;justify-content:flex-end;align-items:baseline;gap:4mm;font-size:10pt;margin-bottom:1.5mm">
+            <span style="color:#555">${esc(formatItemDescription(c.description))}</span>
+            <span style="font-weight:600;min-width:24mm;text-align:right${Number(c.amount) < 0 ? ';color:#b00' : ''}">${fmt(Number(c.amount))}</span>
+          </div>`).join('')
+      : ''
+
     const breakStyle = isLast ? '' : 'page-break-after:always;'
 
     return `
@@ -634,14 +676,21 @@ export function buildBillHtml(bill) {
       ${carryForward}
       <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:10pt;border:none">
         <colgroup>
-          <col style="width:6mm"><col style="width:34mm"><col style="width:40mm">
-          <col style="width:16mm"><col style="width:18mm">
+          <!-- The widths the bill has always been drawn at. They were written as
+               millimetres summing to 114 of the table's 134, and the browser shared
+               the missing 20mm out in proportion — so these percentages are those
+               same drawn widths, stated outright rather than left to arithmetic. -->
+          <col style="width:5.3%"><col style="width:29.8%"><col style="width:35.1%">
+          <col style="width:14%"><col style="width:15.8%">
         </colgroup>
         <tbody>${rows}${blankRows}</tbody>
       </table>
-      <div style="position:absolute;bottom:10mm;left:7mm;right:7mm;border-top:1.5px solid #333;padding-top:2mm;display:flex;justify-content:space-between;align-items:flex-end">
-        ${bottomLeft}
-        ${bottomRight}
+      <div style="position:absolute;bottom:10mm;left:7mm;right:7mm">
+        ${chargeLines}
+        <div style="border-top:1.5px solid #333;padding-top:2mm;display:flex;justify-content:space-between;align-items:flex-end">
+          ${bottomLeft}
+          ${bottomRight}
+        </div>
       </div>
     </div>`
   }).join('')

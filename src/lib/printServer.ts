@@ -173,9 +173,24 @@ async function discoverPrintServer() {
   return null
 }
 
-export async function getPrintServerUrl() {
-  if (cachedServerUrl) return cachedServerUrl
+/**
+ * One search at a time, and not again straight away when it fails.
+ *
+ * Four things ask for the print server the moment the panel opens — bills,
+ * catalogue, guarantees, and the sync check. Each used to run its own search,
+ * so with the server switched off the browser made four rounds of failed
+ * requests and then four brute-force subnet scans, a thousand refused
+ * connections deep. The shop saw a console full of red and a slow start.
+ *
+ * So: concurrent callers share one search, and a search that found nothing is
+ * remembered briefly, because a print server that was off a second ago is
+ * almost certainly still off.
+ */
+let inFlight: Promise<string | null> | null = null
+let searchedAt = 0
+const RETRY_AFTER_MS = 30_000
 
+async function search(scan: boolean) {
   // 1. High-confidence hosts (configured + last-saved + page host) get a generous
   //    timeout so a sleeping Wi-Fi radio's first slow response doesn't drop us to a scan.
   for (const url of candidatePrintServerUrls()) {
@@ -188,13 +203,40 @@ export async function getPrintServerUrl() {
 
   // 2. Cloud-assisted exact-IP lookup and brute-force subnet scan run together; take
   //    whichever finds the server first. The cloud is bounded so it can never stall.
-  const discovered = await firstTruthy([discoverViaCloud(), discoverPrintServer()])
+  //    A thousand-address scan is only worth it when someone is waiting on a
+  //    print — never for a background refresh nobody asked for.
+  const discovered = scan
+    ? await firstTruthy([discoverViaCloud(), discoverPrintServer()])
+    : await discoverViaCloud()
   if (discovered) cachedServerUrl = discovered
   return discovered
 }
 
-export async function fetchPrintServer(path: string, init?: RequestInit, timeoutMs = 60_000) {
-  const url = await getPrintServerUrl()
+/**
+ * The print server's address, or null.
+ *
+ * `background` marks a caller that nobody is waiting on: it skips the subnet
+ * scan and honours the retry window, so a refresh cannot turn into a scan.
+ */
+export async function getPrintServerUrl({ background = false } = {}) {
+  if (cachedServerUrl) return cachedServerUrl
+  if (inFlight) return inFlight
+  if (background && Date.now() - searchedAt < RETRY_AFTER_MS) return null
+
+  inFlight = search(!background).finally(() => {
+    inFlight = null
+    searchedAt = Date.now()
+  })
+  return inFlight
+}
+
+export async function fetchPrintServer(
+  path: string,
+  init?: RequestInit,
+  timeoutMs = 60_000,
+  { background = false } = {},
+) {
+  const url = await getPrintServerUrl({ background })
   if (!url) {
     throw new Error('Cannot find Shiv Print Server. Start it on the shop computer and use the same Wi-Fi.')
   }
@@ -302,7 +344,7 @@ export async function pushCatalogToServer(snapshot: CatalogSnapshot): Promise<vo
 /** Pull the catalog snapshot from the print server. Returns null if unreachable or no data. */
 export async function pullCatalogFromServer(): Promise<CatalogSnapshot | null> {
   try {
-    const res = await fetchPrintServer('/catalog', undefined, 5000)
+    const res = await fetchPrintServer('/catalog', undefined, 5000, { background: true })
     const json = await res.json().catch(() => null)
     if (!json?.ok || !json.catalog) return null
     return json.catalog as CatalogSnapshot
@@ -329,7 +371,7 @@ export async function pushBillsToServer(bills: Bill[]): Promise<void> {
 /** Pull bills snapshot from the print server. Returns null if unreachable or empty. */
 export async function pullBillsFromServer(): Promise<Bill[] | null> {
   try {
-    const res = await fetchPrintServer('/bills-store', undefined, 5000)
+    const res = await fetchPrintServer('/bills-store', undefined, 5000, { background: true })
     const json = await res.json().catch(() => null)
     if (!json?.ok || !Array.isArray(json.bills) || json.bills.length === 0) return null
     return json.bills as Bill[]
@@ -356,7 +398,7 @@ export async function pushGuaranteesToServer(guarantees: GuaranteeDocument[]): P
 /** Pull guarantees snapshot from the print server. Returns null if unreachable or empty. */
 export async function pullGuaranteesFromServer(): Promise<GuaranteeDocument[] | null> {
   try {
-    const res = await fetchPrintServer('/guarantees-store', undefined, 5000)
+    const res = await fetchPrintServer('/guarantees-store', undefined, 5000, { background: true })
     const json = await res.json().catch(() => null)
     if (!json?.ok || !Array.isArray(json.guarantees) || json.guarantees.length === 0) return null
     return json.guarantees as GuaranteeDocument[]

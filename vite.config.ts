@@ -14,11 +14,15 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
-  plugins: [react(), basicSsl()],
+  // HTTPS is opt-in (VITE_HTTPS=1). The self-signed cert covers localhost, not
+  // the LAN IP, so on a phone the page loads after the warning but the HMR
+  // websocket is refused — changes then need a manual refresh. Plain HTTP over
+  // the LAN keeps hot reload working.
+  plugins: [react(), ...(process.env.VITE_HTTPS === '1' ? [basicSsl()] : [])],
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },
-  server: { port: 5180, host: '0.0.0.0', open: false },
+  server: { port: 5180, host: '0.0.0.0', open: false, hmr: { clientPort: 5180 } },
   build: {
     target: 'esnext',
     minify: 'esbuild',

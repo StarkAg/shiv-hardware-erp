@@ -1,27 +1,33 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useShortcuts } from '../lib/useShortcuts'
 import { isDarkMode, toggleTheme } from '../lib/theme'
 import { assetPath } from '../lib/assets'
 import {
   AppWindow,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   CreditCard,
   DoorClosed,
   FileText,
-  FileType,
   History,
   Layers,
   Moon,
   Package,
+  Trash2,
+  Users,
+  NotebookPen,
   Plus,
-  Printer,
   ReceiptText,
   ShieldCheck,
   Sun,
-  Truck,
   Wrench,
   type LucideIcon,
+  CarTaxiFront,
+  PanelLeft,
+  PanelLeftClose,
+  BookOpen,
 } from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
 import { UpdateBanner } from './UpdateBanner'
@@ -40,22 +46,84 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
   }`
 
+// Each lands on the side of the books its voucher belongs to, so closing the
+// form leaves you among the right accounts rather than somewhere unrelated.
+// Straight into the bill builder, which writes any of the four and takes the
+// bill photograph itself. There was a chooser here — quick entry against the
+// full bill format — and once the builder could hold the photo too there was
+// nothing left to choose between.
+const VOUCHERS = [
+  { to: '/bills?new=payment',  label: 'Payment',  key: 'F5', kind: 'payment' },
+  { to: '/bills?new=receipt',  label: 'Receipt',  key: 'F6', kind: 'receipt' },
+  { to: '/bills?new=sale',     label: 'Sales',    key: 'F8', kind: 'sale' },
+  { to: '/bills?new=purchase', label: 'Purchase', key: 'F9', kind: 'purchase' },
+] as const
+
 const MOBILE_NAV_ITEMS = [
   { to: '/quote-options', label: 'New Quotation', icon: FileText, match: ['/quote', '/product'] },
   { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck, match: ['/guarantee'] },
-  { to: '/bills', label: 'Bills', icon: ReceiptText, match: ['/bills'] },
-  { to: '/transport', label: 'Transport', icon: Truck, match: ['/transport'] },
+  { to: '/bills', label: 'Day Book', icon: ReceiptText, match: ['/bills'] },
+  { to: '/transport', label: 'Toto', icon: CarTaxiFront, match: ['/transport'] },
+  { to: '/ledger', label: 'Ledger', icon: BookOpen, match: ['/ledger'] },
   { to: '/inventory', label: 'Inventory', icon: Package, match: ['/inventory', '/rates'] },
 ] as const
 
+/**
+ * One back button for every page, rather than one written into each.
+ *
+ * `navigate(-1)` alone is not safe here: the panel is opened on deep links —
+ * a bill sent to the other counter, a party's ledger from the phone — and
+ * there is nothing behind those. React Router keeps an index in the history
+ * state, so when this is the first page of the session the button goes to the
+ * shop's home screen instead of stepping out of the app.
+ */
+function BackBar() {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+
+  // Nothing to go back from on the landing page.
+  if (pathname === '/' || pathname === '/quote-options') return null
+
+  const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0
+
+  return (
+    <div className="back-bar no-print px-3 sm:px-4 md:px-6">
+      <button
+        onClick={() => (idx > 0 ? navigate(-1) : navigate('/quote-options'))}
+        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-white/10 dark:hover:text-white"
+      >
+        <ChevronLeft size={15} /> Back
+      </button>
+    </div>
+  )
+}
+
 export function AppLayout() {
   const location = useLocation()
+  const navigate = useNavigate()
+
+  // The keys printed beside the menu, working from anywhere in the panel —
+  // the hook allows a function key through even with the cursor in a field.
+  useShortcuts(
+    Object.fromEntries(VOUCHERS.map((v) => [v.key, () => navigate(v.to)])),
+  )
   const [open, setOpen] = useState(
     location.pathname.startsWith('/quote') || location.pathname.startsWith('/product'),
   )
   const [guaranteeOpen, setGuaranteeOpen] = useState(location.pathname.startsWith('/guarantee'))
   // dark: just a re-render trigger — the real source of truth is the DOM class.
   const [dark, setDark] = useState(isDarkMode)
+  // Desktop sidebar collapse, remembered so the shop's laptop keeps its choice.
+  const [railed, setRailed] = useState(() => {
+    try { return localStorage.getItem('shiv-panel:sidebar') === 'closed' } catch { return false }
+  })
+  const toggleRail = () => {
+    setRailed((v) => {
+      const next = !v
+      try { localStorage.setItem('shiv-panel:sidebar', next ? 'closed' : 'open') } catch { /* ignore */ }
+      return next
+    })
+  }
 
   useEffect(() => {
     if (location.pathname.startsWith('/quote') || location.pathname.startsWith('/product')) setOpen(true)
@@ -64,19 +132,26 @@ export function AppLayout() {
 
   const sidebar = (
     <>
-      <div className="border-b border-stone-200/80 px-5 py-5 dark:border-white/10">
+      <div className={`border-b border-stone-200/80 py-5 dark:border-white/10 ${railed ? "px-2" : "px-5"}`}>
         <div className="flex items-center gap-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-white shadow-inner shadow-stone-400/30">
+          <button
+            onClick={toggleRail}
+            aria-label={railed ? 'Open sidebar' : 'Collapse sidebar'}
+            className={`rounded-lg p-1.5 text-stone-400 hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto' : 'ml-auto order-last'}`}
+          >
+            {railed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
+          </button>
+          <div className={`h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-white shadow-inner shadow-stone-400/30 ${railed ? 'hidden' : 'flex'}`}>
             <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 object-contain" />
           </div>
-          <div>
+          <div className={railed ? 'hidden' : ''}>
             <div className="font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware Store</div>
             <div className="text-xs font-medium text-shiv-green">Panel</div>
           </div>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+      <nav className={`flex-1 overflow-y-auto py-3 space-y-1 ${railed ? "px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "px-3"}`}>
         {/* New Quotation (expandable) */}
         <div>
           <button
@@ -191,32 +266,73 @@ export function AppLayout() {
           )}
         </div>
 
-        <NavLink to="/bills" className={linkClass}>
-          <ReceiptText size={18} /> Bills
-        </NavLink>
-        <NavLink to="/inventory" className={linkClass}>
-          <Package size={18} /> Inventory
-        </NavLink>
         <NavLink to="/transport" className={linkClass}>
-          <Truck size={18} /> Transport
+          <CarTaxiFront size={18} /> Toto
         </NavLink>
-        <NavLink to="/printer-queue" className={linkClass}>
-          <Printer size={18} /> Printer Queue
-        </NavLink>
-        <NavLink to="/pdf-viewer" className={linkClass}>
-          <FileType size={18} /> PDF Viewer
-        </NavLink>
+
+        {/* The shop's own working pages, kept together at the foot of the menu
+            and away from the customer-facing quotation and guarantee flow. */}
+        <div className={`mt-2 border-t border-stone-200/80 pt-2 space-y-1 dark:border-white/10 ${railed ? '' : '-mx-3 px-3'}`}>
+          <NavLink to="/bills" className={linkClass}>
+            <ReceiptText size={18} /> Day Book
+          </NavLink>
+
+          {/* Vouchers, the way Tally lists them — same names, same F-keys,
+              which work from anywhere in the ledger, not just from this menu.
+              Always open: four entries are not worth a fold. */}
+          <div>
+            <div
+              className={`flex items-center gap-3 py-2 text-sm font-medium text-stone-600 dark:text-stone-300 ${
+                railed ? 'justify-center px-0' : 'px-3'
+              }`}
+            >
+              <NotebookPen size={18} /> {!railed && 'Vouchers'}
+            </div>
+
+            {!railed && (
+              <div className="ml-3 space-y-0.5 border-l border-stone-200 pl-2 py-1 dark:border-white/10">
+                {VOUCHERS.map((v) => (
+                  <NavLink
+                    key={v.to}
+                    to={v.to}
+                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-400 dark:hover:bg-white/10 dark:hover:text-white"
+                  >
+                    <span className="flex items-center gap-2"><Plus size={13} /> {v.label}</span>
+                    <span className="text-[10px] font-semibold text-stone-400 dark:text-stone-600">{v.key}</span>
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <NavLink to="/ledger" className={linkClass}>
+            <BookOpen size={18} /> Ledger
+          </NavLink>
+          {/* The accounts themselves, as against the books they hold. */}
+          <NavLink to="/ledgers" className={linkClass}>
+            <Users size={18} /> Ledgers
+          </NavLink>
+          <NavLink to="/inventory" className={linkClass}>
+            <Package size={18} /> Inventory
+          </NavLink>
+          <NavLink to="/trash" className={linkClass}>
+            <Trash2 size={18} /> Trash
+          </NavLink>
+        </div>
       </nav>
 
-      <div className="border-t border-stone-200/80 p-3 dark:border-white/10 space-y-2">
+      <div className={`border-t border-stone-200/80 py-3 dark:border-white/10 space-y-2 ${railed ? "px-2" : "px-3"}`}>
         <button
           onClick={() => setDark(toggleTheme())}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition"
+          title={dark ? 'Light mode' : 'Dark mode'}
+          className={`flex w-full items-center rounded-lg py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition ${
+            railed ? 'justify-center px-0' : 'gap-2 px-3'
+          }`}
         >
           {dark ? <Sun size={16} /> : <Moon size={16} />}
-          {dark ? 'Light mode' : 'Dark mode'}
+          {!railed && (dark ? 'Light mode' : 'Dark mode')}
         </button>
-        <div className="flex items-center justify-between px-3">
+        <div className={`items-center justify-between px-3 ${railed ? 'hidden' : 'flex'}`}>
           <a
             href="https://www.linkedin.com/in/harshxagarwal"
             target="_blank"
@@ -245,14 +361,26 @@ export function AppLayout() {
             <div className="text-xs font-medium text-shiv-green">Panel</div>
           </div>
         </div>
+        {/* The sidebar's theme toggle is desktop-only (hidden md:flex), so the
+            phone header carries its own. */}
+        <button
+          onClick={() => setDark(toggleTheme())}
+          aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="ml-auto rounded-lg p-2 text-stone-500 hover:bg-stone-200/70 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition"
+        >
+          {dark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
       </div>
 
-      <aside className="no-print sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-stone-200/80 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100 md:flex">
+      <aside className={`no-print sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-stone-200/80 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 transition-[width] duration-200 dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100 md:flex ${railed ? "w-16 [&_nav_a]:!mx-auto [&_nav_a]:!w-11 [&_nav_a]:!justify-center [&_nav_a]:!gap-0 [&_nav_a]:!px-0 [&_nav_a]:text-[0px] [&_nav_button]:!mx-auto [&_nav_button]:!w-11 [&_nav_button]:!justify-center [&_nav_button]:!gap-0 [&_nav_button]:!px-0 [&_nav_button]:text-[0px] [&_nav_button>span]:!gap-0 [&_nav>div>button>svg:last-child]:hidden [&_nav_div]:!ml-0 [&_nav_div]:!pl-0 [&_nav_div]:!border-l-0" : "w-64"}`}>
         {sidebar}
       </aside>
 
       <main className="mobile-main min-w-0 flex-1 bg-transparent">
-        <Outlet />
+        <BackBar />
+        <div className="page-area">
+          <Outlet />
+        </div>
       </main>
 
       <nav

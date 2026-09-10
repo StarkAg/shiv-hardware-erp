@@ -242,6 +242,17 @@ export const CATEGORY_META: Record<
 
 export type BillPaymentMode = 'cash' | 'online' | 'upi'
 
+/** The four vouchers the bill builder can write. */
+export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment'
+
+/** What each one is called, and what the party on it is called. */
+export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: string }> = {
+  sale:     { title: 'Bill',     party: 'Customer', ref: 'Ref' },
+  purchase: { title: 'Purchase', party: 'Supplier', ref: 'Bill no.' },
+  receipt:  { title: 'Receipt',  party: 'Customer', ref: 'Receipt no.' },
+  payment:  { title: 'Payment',  party: 'Supplier', ref: 'Voucher no.' },
+}
+
 export interface BillItem {
   id: string
   /** Free-text label (always set; auto-generated for catalog items) */
@@ -256,6 +267,22 @@ export interface BillItem {
   sizeIn?: string
   /** Selected values for user-defined custom catalog fields, keyed by field label. */
   fieldValues?: Record<string, string>
+  /**
+   * A round-off line. It carries a negative amount and reduces the total, but
+   * prints without a description — the shop shows the customer the adjustment
+   * in the figures, not as a line item announcing itself.
+   */
+  isRoundup?: boolean
+  /** @deprecated bills saved before the rename carry this instead. Read it
+   *  through `isRoundupLine()`, never directly. */
+  isDiscount?: boolean
+  /**
+   * A charge that is a figure, not a quantity of something — fare, cartage,
+   * labour. It has an amount and nothing else: a rate and a piece count on a
+   * delivery fare would be meaningless. Unlike a roundup it keeps its label,
+   * because the customer should see what they are being charged for.
+   */
+  amountOnly?: boolean
   heightIn?: number
   widthIn?: number
   /** Rate per sqft (₹) — drives amount = rateSqft × (H×W/144) × qty */
@@ -264,6 +291,44 @@ export interface BillItem {
   customEntryId?: string
 }
 
+/**
+ * Charges the shop writes as a bare figure. A line typed by hand as "Fare"
+ * behaves exactly like one picked from the item list — the counter should not
+ * have to remember which way it was entered.
+ */
+const AMOUNT_ONLY_NAMES = /^(fare|cartage|freight|labour|labor|transport)$/i
+
+export const isAmountOnlyLine = (i: Pick<BillItem, 'amountOnly' | 'description'>) =>
+  !!i.amountOnly || AMOUNT_ONLY_NAMES.test((i.description ?? '').trim())
+
+/**
+ * Bills written before the rename stored this line as `isDiscount`. Every read
+ * goes through here so old bills keep printing and totalling correctly.
+ */
+export const isRoundupLine = (i: Pick<BillItem, 'isRoundup' | 'isDiscount'>) =>
+  !!(i.isRoundup || i.isDiscount)
+
+/**
+ * The goods on a bill — the numbered lines. A fare or a round-off is not one
+ * of them: it is a charge on the whole bill, and it prints down by the total.
+ *
+ * Half-typed rows are dropped here: they are not lines of the bill.
+ */
+export function billLines(items: BillItem[] = []): BillItem[] {
+  return items.filter(
+    (i) => (i.description?.trim() || Number(i.amount)) && !isChargeLine(i),
+  )
+}
+
+/** Charges that sit above the total: the fare first, then the round-off. */
+export function billCharges(items: BillItem[] = []): BillItem[] {
+  return items
+    .filter((i) => isChargeLine(i) && Number(i.amount))
+    .sort((a, b) => Number(isRoundupLine(a)) - Number(isRoundupLine(b)))
+}
+
+const isChargeLine = (i: BillItem) => isRoundupLine(i) || isAmountOnlyLine(i)
+
 export interface Bill {
   id: string
   number: string        // sequential shop number e.g. "34", "35"
@@ -271,14 +336,46 @@ export interface Bill {
   customerName: string
   customerPhone?: string
   customerUid?: string
+  /** Optional free-text reference — PO number, site name, "via Ramesh" … */
+  ref?: string
+  /** The customer's account in the books, opened when the bill is saved. */
+  ledgerId?: string
+  /**
+   * Which voucher this bill posts as. The builder started out writing sales
+   * only, so a bill without one is a sale — every bill written before this
+   * existed, and every bill written at the counter since.
+   */
+  kind?: BillKind
+  /**
+   * The voucher this bill writes to, when it was opened from the books rather
+   * than written at the counter. Saving rewrites that voucher instead of
+   * posting a second one beside it.
+   */
+  voucherId?: string
+  /**
+   * Photographs filed with this bill — the supplier's own bill, a slip, a
+   * photo sent in from the phone. Held as storage ids so the bill and the
+   * voucher it posts point at the same files rather than two copies.
+   */
+  attachments?: { storageId: string; kind: 'bill' | 'challan' | 'estimate' | 'receipt' | 'other' }[]
   items: BillItem[]
   total: number
   paid: boolean
   paymentMode?: BillPaymentMode
   upiRef?: string       // UPI/phone used for payment
   notes?: string
-  /** True while the bill is still being filled — cleared on Save or Print. */
+  /**
+   * @deprecated There are no drafts. A bill is written and saved, or it is not
+   * a bill — Tally has no half-written voucher either. Bills stored before
+   * this still carry the flag; nothing reads it.
+   */
   isDraft?: boolean
+  /**
+   * When this bill last changed on any device. Two counters can have the same
+   * bill open; on sync the newer copy of each bill wins, so whoever typed most
+   * recently keeps their work instead of one machine overwriting the other.
+   */
+  updatedAt?: number
 }
 
 // ---- Hardware catalog (managed via Inventory page) ------------------------
@@ -289,16 +386,12 @@ export interface CatalogField { id: string; label: string; values: string[] }
 export interface HardwareCatalogEntry { sizes: string[]; brands: string[]; fields?: CatalogField[]; rate?: number }
 export type HardwareCatalog = Partial<Record<ProductCategory, HardwareCatalogEntry>>
 
-export const DEFAULT_HARDWARE_CATALOG: HardwareCatalog = {
-  hinge:   { sizes: ['3"','4"','5"','6"'],                               brands: ['Acer Jazz','Norya Jazi','GI','SS'] },
-  screw:   { sizes: ['½"','¾"','1"','1¼"','1½"','2"','2½"','3"'],        brands: ['SS (+)','SS (-)','GI','Plain'] },
-  aldrop:  { sizes: ['6"','8"','10"','12"'],                             brands: ['Marla B/G','Mona B/n','GI'] },
-  handle:  { sizes: ['4"','6"','8"','10"','12"'],                        brands: ['Mona B/n','Norta B/n','B/n'] },
-  tb:      { sizes: ['6"','8"','10"','12"'],                             brands: ['Mona B/n','B/n'] },
-  fevicol: { sizes: [],                                                  brands: ['SH','Marine','HeatX','SR','SpeedX','Probond','Hi-per Star'] },
-  mica:    { sizes: [],                                                  brands: [] },
-  tape:    { sizes: [],                                                  brands: [] },
-}
+/**
+ * No seeded hardware. The shop builds its own list from what it actually bills,
+ * so an empty panel stays empty rather than refilling itself with Hinges,
+ * Screw, Aldrop and the rest on the next load.
+ */
+export const DEFAULT_HARDWARE_CATALOG: HardwareCatalog = {}
 
 // ---- Custom hardware catalog (user-defined extra items) -------------------
 
@@ -308,7 +401,14 @@ export interface CustomCatalogEntry {
   sizes: string[]
   brands: string[]
   fields?: CatalogField[]
+  /** The rate used most recently — what a fresh line starts with. */
   rate?: number
+  /**
+   * Every distinct rate this item has been billed at, newest first. One item
+   * genuinely sells at several prices — trade vs retail, old stock vs new — so
+   * the previous figures are offered rather than overwritten.
+   */
+  rates?: number[]
 }
 
 // ---------------------------------------------------------------------------
@@ -330,3 +430,33 @@ export const CATEGORY_ORDER: ProductCategory[] = [
   'upvc-door',
   'wpc-door-frame',
 ]
+
+// ---- Toto drivers (call list for arranging a delivery) --------------------
+
+/** green = free now, orange = maybe, red = not available. */
+export type TotoAvailability = 'green' | 'orange' | 'red'
+
+/** Toto is one vehicle type the shop hires; others get added as they're used. */
+export type VehicleType = 'toto' | 'tempo' | 'pickup' | 'truck'
+
+export const VEHICLE_LABEL: Record<VehicleType, string> = {
+  toto: 'Toto', tempo: 'Tempo', pickup: 'Pickup', truck: 'Truck',
+}
+
+export interface TotoDriver {
+  id: string
+  name: string
+  phone: string
+  availability: TotoAvailability
+  /** Defaults to toto for the contacts seeded from the shop's paper list. */
+  vehicle?: VehicleType
+}
+
+/** The shop's toto contacts, as kept on paper. */
+export const TOTO_SEED: TotoDriver[] = [
+  ['Ravi', '8521654821'], ['Rashid', '7004416864'], ['Adil', '7564939041'],
+  ['Alim', '6201866831'], ['Arun Raj', '8582090406'], ['Deepak', '9113385575'],
+  ['Hari', '7546850693'], ['Kanhaiya', '9709224361'], ['Kundan', '6287950658'],
+  ['Lucky', '7903341200'], ['Mukesh Soni', '9507194752'], ['Seeman', '6301780010'],
+  ['Sanjay', '6205743589'], ['Shekhar', '9835762143'], ['Sunil', '7461980838'],
+].map(([name, phone], i) => ({ id: `toto-${i + 1}`, name, phone, availability: 'green' as const, vehicle: 'toto' as const }))
