@@ -4,9 +4,25 @@
 import { readFile } from 'fs/promises'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import QRCode from 'qrcode'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const ASSETS = resolve(__dir, '../public/assets')
+
+// Inline SVG QR for the guarantee card's online view. Returns '' if there's no
+// URL to encode (so the layout simply omits the QR rather than breaking).
+async function qrSvg(value, sizeMm) {
+  if (!value) return ''
+  try {
+    const svg = await QRCode.toString(String(value), {
+      type: 'svg', margin: 0, errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#ffffff' },
+    })
+    return `<div style="width:${sizeMm}mm;height:${sizeMm}mm;line-height:0">${svg}</div>`
+  } catch {
+    return ''
+  }
+}
 
 async function b64(file) {
   const buf = await readFile(resolve(ASSETS, file))
@@ -330,6 +346,7 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
         </div>`
     }).join('')
 
+    const cardQr = await qrSvg(document.qrUrl, 12)
     return cardPage(`
         <div style="position:relative;width:54mm;height:86mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
           <div style="position:absolute;left:3mm;top:4mm;right:3mm;font-size:7pt;font-weight:600;line-height:1.18">
@@ -341,11 +358,13 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
           ${itemRows}
           ${totalAmount ? `
           <div style="position:absolute;right:3mm;top:76.8mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
+          ${cardQr ? `<div style="position:absolute;left:3mm;top:71mm">${cardQr}</div>` : ''}
         </div>
       `)
   }
 
   const letterhead = await b64('letterhead/shiv-letterhead.png')
+  const a4Qr = await qrSvg(document.qrUrl, 30)
   const rows = guaranteedRows.length
     ? guaranteedRows.map(item => `<tr>
         <td class="bold">${esc(item.brandName)}</td>
@@ -379,7 +398,11 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
         </div>
         ${seal ? `<img src="${seal}" style="width:34mm;height:34mm;object-fit:contain"/>` : ''}
       </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:14mm">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:14mm">
+        <div style="text-align:center;font-size:9px">
+          ${a4Qr}
+          ${a4Qr ? `<div style="margin-top:1mm;color:#555">Scan to verify</div>` : ''}
+        </div>
         <div style="text-align:center;font-size:12px">
           <div style="font-weight:700;margin-bottom:14mm">For Shiv Hardware Store</div>
           <div style="border-top:1px solid #000;padding:1mm 6mm 0">Proprietor</div>

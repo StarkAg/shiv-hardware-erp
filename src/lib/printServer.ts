@@ -418,6 +418,54 @@ export function guaranteeOnlineUrl(number: string, baseUrl?: string): string {
   return `${base}/g/${encodeURIComponent(number)}`
 }
 
+export type WhatsAppWebStatus = {
+  /** starting | qr | ready | reconnecting | logged_out | error | disabled */
+  status: string
+  qrDataUrl: string | null
+  readyAt?: string | null
+  lastError?: { at: string; error: string } | null
+}
+
+/** Read the shop WhatsApp connection status (+ QR data URL when re-login is needed). */
+export async function fetchWhatsAppStatus(): Promise<WhatsAppWebStatus> {
+  const res = await fetchPrintServer('/whatsapp-web/status', undefined, 8000)
+  const json = await res.json().catch(() => null)
+  if (!json || typeof json.status !== 'string') throw new Error('Could not read WhatsApp status from the print server')
+  return json as WhatsAppWebStatus
+}
+
+/** True if the error from a WhatsApp send means the account needs (re-)login. */
+export function isWhatsAppNotConnectedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  return /not connected|logged.?out|logged out|status:\s*(qr|logged_out|reconnecting|starting|error|disabled)/i.test(msg)
+}
+
+/**
+ * Ask the print server to WhatsApp the guarantee-ready message to a customer's
+ * mobile, using the same account that hosts the shop's WhatsApp auto-print.
+ * Resolves with the JID it sent to; throws with a user-facing message on failure.
+ */
+export async function sendGuaranteeWhatsApp(mobile: string, name = ''): Promise<{ ok: true; jid: string; message: string; skipped?: boolean }> {
+  try {
+    const res = await fetchPrintServer('/whatsapp-notify-customer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobile, name }),
+    }, 25_000)
+    const json = await res.json().catch(() => null)
+    if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Print server returned HTTP ${res.status}`)
+    return json as { ok: true; jid: string; message: string; skipped?: boolean }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(`Print server timed out at ${PRINT_SERVER_URL}`)
+    }
+    if (err instanceof TypeError) {
+      throw new Error(`Cannot reach print server at ${PRINT_SERVER_URL}. Start it on the computer and use the same Wi-Fi.`)
+    }
+    throw err
+  }
+}
+
 export async function printOnServer(payload: ServerPrintPayload, copies = 1, printer?: string): Promise<ServerPrintResult> {
   try {
     const res = await fetchPrintServer('/print', {
