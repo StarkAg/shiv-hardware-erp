@@ -1707,7 +1707,24 @@ function CashAnalytics({ todayKey, store, closes, viewing, setViewing, base }) {
   }, [monthStr])
   const prev = useMemo(() => tally(store[prevMonthStr]), [store, prevMonthStr])
 
-  // All time, straight off every month the book holds.
+  // Turnover per day, so a month reads as a shape rather than a number. A day
+  // the shop was shut is drawn as a gap, not a zero-height bar, so a holiday
+  // does not look like a day that traded nothing.
+  const daily = useMemo(() => {
+    const dim = daysInMonth(monthStr)
+    const rows = (store[monthStr] || [])
+    const out = []
+    for (let n = 1; n <= dim; n++) {
+      const key = `${monthStr}-${pad(n)}`
+      let sum = 0
+      for (const e of rows) if (e.date === key && e.kind === 'in') sum += Number(e.amount || 0)
+      out.push({ n, key, sum, shut: isShutDay(closes, store, todayKey, key), future: key > todayKey })
+    }
+    return out
+  }, [store, closes, todayKey, monthStr])
+  const dailyMax = Math.max(1, ...daily.map((d) => d.sum))
+
+
   /**
    * Run rate — the month-end turnover the shop is on pace for.
    *
@@ -1742,22 +1759,6 @@ function CashAnalytics({ todayKey, store, closes, viewing, setViewing, base }) {
     return { ...all, days: days.size }
   }, [store])
 
-  // Turnover per day, so a month reads as a shape rather than a number. A day
-  // the shop was shut is drawn as a gap, not a zero-height bar, so a holiday
-  // does not look like a day that traded nothing.
-  const daily = useMemo(() => {
-    const dim = daysInMonth(monthStr)
-    const rows = (store[monthStr] || [])
-    const out = []
-    for (let n = 1; n <= dim; n++) {
-      const key = `${monthStr}-${pad(n)}`
-      let sum = 0
-      for (const e of rows) if (e.date === key && e.kind === 'in') sum += Number(e.amount || 0)
-      out.push({ n, key, sum, shut: isShutDay(closes, store, todayKey, key), future: key > todayKey })
-    }
-    return out
-  }, [store, closes, todayKey, monthStr])
-  const dailyMax = Math.max(1, ...daily.map((d) => d.sum))
 
   // The last six months up to the one being viewed, including empty ones — a
   // gap in trade is itself worth seeing.
