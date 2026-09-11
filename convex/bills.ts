@@ -3,6 +3,8 @@ import { mutation, query } from './_generated/server'
 import { api } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { requirePin } from './lib/pin'
+import { linkTrashRows } from './lib/trashLinks'
+import { record } from './lib/history'
 
 /**
  * Saves what a device has, without ever deleting what it hasn't.
@@ -88,13 +90,16 @@ export const remove = mutation({
      * books exactly as they were.
      */
     const voucher = candidate?.refNo === ref ? candidate : null
-    if (voucher) await ctx.runMutation(api.vouchers.remove, { id: voucher._id })
+    const voucherTrashId = voucher
+      ? await ctx.runMutation(api.vouchers.remove, { id: voucher._id })
+      : null
 
     await ctx.db.insert('billsTrash', {
       billId: id,
       bill,
       deletedAt: Date.now(),
       ...(voucher ? { voucherRef: ref } : {}),
+      ...(voucherTrashId ? { voucherTrashId } : {}),
     })
     await ctx.db.patch(store!._id, {
       bills: (store!.bills ?? []).filter((b: any) => b?.id !== id),
@@ -112,21 +117,38 @@ export const trashList = query({
 })
 
 /**
- * Puts a bill back. The voucher is not re-posted here — saving the restored
- * bill does that, and does it with whatever the bill says now rather than
- * with a copy of what it said when it was deleted.
+ * Restore the bill and its original accounting lines in the same transaction.
+ * Restoring must not depend on somebody opening the editor and saving again.
  */
 export const restore = mutation({
   args: { id: v.id('billsTrash') },
   handler: async (ctx, { id }) => {
     const row = await ctx.db.get(id)
     if (!row) return null
+    const [deletedBills, deletedVouchers] = await Promise.all([
+      ctx.db.query('billsTrash').collect(), ctx.db.query('trash').collect(),
+    ])
+    const voucherTrashId = linkTrashRows(deletedBills, deletedVouchers).get(id)
+    if (row.voucherRef && !voucherTrashId) {
+      // It may already have been restored through the old ledger trash screen.
+      const live = await ctx.db.query('vouchers')
+        .filter(q => q.eq(q.field('refNo'), row.voucherRef)).collect()
+      if (live.length !== 1
+        || (row.bill?.ledgerId && live[0].partyLedgerId !== row.bill.ledgerId)
+        || (row.bill?.date && live[0].date !== new Date(row.bill.date).getTime())
+        || (typeof row.bill?.total === 'number' && live[0].amount !== row.bill.total)) {
+        throw new Error('The linked accounting voucher is missing or ambiguous. Review it before restoring this bill.')
+      }
+    }
+    if (voucherTrashId) await ctx.runMutation(api.trash.restore, { id: voucherTrashId })
+    const bill = { ...row.bill, updatedAt: Date.now() }
     const store = await ctx.db.query('billsStore').first()
     const bills = (store?.bills ?? []).filter((b: any) => b?.id !== row.billId)
-    if (store) await ctx.db.patch(store._id, { bills: [...bills, row.bill], savedAt: Date.now() })
-    else await ctx.db.insert('billsStore', { bills: [row.bill], billSeq: 0, savedAt: Date.now() })
+    if (store) await ctx.db.patch(store._id, { bills: [...bills, bill], savedAt: Date.now() })
+    else await ctx.db.insert('billsStore', { bills: [bill], billSeq: Number(bill.number) || 0, savedAt: Date.now() })
     await ctx.db.delete(id)
-    return row.bill
+    await record(ctx, 'bill.restore', `Restored bill ${bill.number}`, { entity: 'bill', entityId: row.billId })
+    return bill
   },
 })
 
@@ -135,6 +157,14 @@ export const purge = mutation({
   args: { id: v.id('billsTrash'), pin: v.string() },
   handler: async (ctx, { id, pin }) => {
     requirePin(pin)
+    const row = await ctx.db.get(id)
+    if (!row) return
+    const [deletedBills, deletedVouchers] = await Promise.all([
+      ctx.db.query('billsTrash').collect(), ctx.db.query('trash').collect(),
+    ])
+    const voucherTrashId = linkTrashRows(deletedBills, deletedVouchers).get(id)
+    if (voucherTrashId) await ctx.runMutation(api.trash.purge, { id: voucherTrashId, pin })
     await ctx.db.delete(id)
+    await record(ctx, 'bill.purge', `Permanently deleted bill ${row.bill?.number ?? ''}`)
   },
 })

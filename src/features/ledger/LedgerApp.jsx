@@ -6,7 +6,6 @@ import Parties from './components/Parties';
 import LedgerView from './components/LedgerView';
 import Bills, { needsYou } from './components/Bills';
 import TrialBalance from './components/TrialBalance';
-import Trash from './components/Trash';
 import History from './components/History';
 import Capture from './components/Capture';
 import VoucherForm from './components/VoucherForm';
@@ -19,7 +18,6 @@ const TABS = [
   ['customers', 'Customers'],
   ['bills', 'Bills'],
   ['trial', 'Trial Balance'],
-  ['trash', 'Trash'],
 ];
 
 /**
@@ -102,14 +100,12 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew }) {
 
   const masters = useLive(api.masters.all, {}, 'masters');
   const pending = useLive(api.reports.pendingBills, {}, 'pending');
-  const trash = useLive(api.trash.list, {}, 'trash');
 
   const ledgers = masters?.ledgers ?? [];
   const counts = useLive(api.review.counts, {}, 'review:counts') ?? {
     ready: 0, reading: 0, failed: 0, doubt: 0, unread: 0,
   };
   const billsCount = needsYou(counts);
-  const trashCount = trash?.length ?? 0;
   const groupOf = (id) => ledgers.find((l) => l._id === id)?.groupName;
   const onCustomers = tab === 'customers';
 
@@ -228,7 +224,6 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew }) {
           >
             {label}
             {id === 'bills' && billsCount > 0 && <span className="pill">{billsCount}</span>}
-            {id === 'trash' && trashCount > 0 && <span className="pill">{trashCount}</span>}
           </button>
         ))}
       </nav>
@@ -282,7 +277,6 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew }) {
 
       {tab === 'trial' && <TrialBalance />}
 
-      {tab === 'trash' && <Trash onViewBill={setViewing} />}
 
       {form && (
         <VoucherForm

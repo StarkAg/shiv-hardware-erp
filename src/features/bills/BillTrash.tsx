@@ -1,105 +1,90 @@
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
-import { rupees } from '../ledger/lib/format'
+import { rupees, shortDate } from '../ledger/lib/format'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
+import Confirm from '../ledger/components/Confirm'
+import BillViewer from '../ledger/components/BillViewer'
+import { TableSkeleton } from '../ledger/components/Skeleton'
 import '../ledger/ledger.css'
 
-/**
- * What has been deleted, and how to get it back.
- *
- * On its own screen rather than folded into the day book: the day book is what
- * the shop did, and a bin sitting in the middle of it makes the day read as
- * though the deleted things were part of it.
- *
- * Deleting a bill puts it here whole and sends its ledger voucher to the
- * ledger's own trash, so the books stop showing an amount with no bill behind
- * it. Putting it back opens the bill; saving it re-posts the voucher.
- */
+type TrashRow = NonNullable<ReturnType<typeof useQuery<typeof api.trash.all>>>[number]
+
+/** The panel and ledger share one bin; linked bills and vouchers appear once. */
 export function BillTrash() {
   const dark = useLedgerTheme()
-  const navigate = useNavigate()
-  const rows = useQuery(api.bills.trashList, {}) as any[] | undefined
-  const restore = useMutation(api.bills.restore)
-  const purge = useMutation(api.bills.purge)
-
-  const when = (at: number) =>
-    new Date(at).toLocaleString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
+  const rows = useQuery(api.trash.all, {})
+  const restoreBill = useMutation(api.bills.restore)
+  const restoreVoucher = useMutation(api.trash.restore)
+  const purgeBill = useMutation(api.bills.purge)
+  const [search, setSearch] = useState('')
+  const [restoring, setRestoring] = useState<TrashRow | null>(null)
+  const [viewing, setViewing] = useState<TrashRow | null>(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    return (rows ?? []).filter(row => [row.label, row.party, row.refNo, row.type]
+      .some(value => value.toLowerCase().includes(needle)))
+  }, [rows, search])
 
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
       <div className="app">
+        <h1 className="mb-2 text-xl font-semibold">Trash</h1>
+        <p className="hint mb-4">Deleted bills and vouchers. A bill and its linked accounting entry are restored together.</p>
         <div className="toolbar">
-          <div className="count">
-            {rows === undefined ? 'Loading…' : `${rows.length} deleted ${rows.length === 1 ? 'bill' : 'bills'}`}
-          </div>
+          <input aria-label="Search trash" placeholder="Search party, bill or voucher" value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="count">{rows === undefined ? 'Loading…' : `${filtered.length} deleted entries`}</div>
         </div>
-
-        {rows !== undefined && rows.length === 0 ? (
-          <div className="empty">Nothing has been deleted.</div>
+        {error && <p className="error" role="alert">{error}</p>}
+        {rows === undefined ? <TableSkeleton cols={7} rows={5} wide={3} /> : !filtered.length ? (
+          <div className="empty">{search ? 'No deleted entries match.' : 'Nothing has been deleted.'}</div>
         ) : (
-          <div className="table-wrap">
-            <div className="scroller">
-              <table className="ledger">
-                <thead>
-                  <tr>
-                    <th className="w-no">Bill</th>
-                    <th>Party</th>
-                    <th>Deleted</th>
-                    <th className="num">Amount</th>
-                    <th className="w-acts" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {(rows ?? []).map((r) => (
-                    <tr key={r._id}>
-                      <td className="mono entryno" data-label="Bill">
-                        {r.bill?.number ? `#${r.bill.number}` : '—'}
-                        <div className="ref">{(r.bill?.items ?? []).length} lines</div>
-                      </td>
-                      <td className="particulars" data-label="Party">
-                        {r.bill?.customerName || '—'}
-                        {r.voucherRef && (
-                          <div className="ref">{r.voucherRef} went to the ledger's trash</div>
-                        )}
-                      </td>
-                      <td className="ref" data-label="Deleted">{when(r.deletedAt)}</td>
-                      <td className="num" data-label="Amount">{rupees(r.bill?.total ?? 0)}</td>
-                      <td className="rowacts" data-label="">
-                        <button
-                          className="xbtn"
-                          aria-label="Put it back"
-                          title="Put it back"
-                          onClick={async () => {
-                            const bill = await restore({ id: r._id })
-                            // Opened straight away: a restored bill has to be
-                            // saved again to put its voucher back in the books.
-                            if (bill?.id) navigate(`/bills/${bill.id}`)
-                          }}
-                        >
-                          ↩
-                        </button>
-                        <button
-                          className="xbtn del"
-                          aria-label="Delete for good"
-                          title="Delete for good"
-                          onClick={() => {
-                            const pin = window.prompt('Delete this bill for good? Enter the code.')
-                            if (pin) void purge({ id: r._id, pin })
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <div className="table-wrap"><div className="scroller">
+            <table className="ledger">
+              <thead><tr><th>Date</th><th>Document</th><th>Party</th><th className="num">Amount</th><th>Deleted</th><th>Photos</th><th>Actions</th></tr></thead>
+              <tbody>{filtered.map(row => (
+                <tr key={row._id}>
+                  <td className="mono" data-label="Date">{shortDate(row.date)}</td>
+                  <td className="mono entryno" data-label="Document">
+                    {row.label}<div className="ref">{row.type}</div>
+                    {row.linkedVoucher && <div className="ref">Includes {row.linkedVoucher}</div>}
+                  </td>
+                  <td className="particulars" data-label="Party">{row.party}<div className="ref">{row.refNo}</div></td>
+                  <td className="num" data-label="Amount">{row.status === 'pending' ? 'Unpriced' : rupees(row.amount ?? 0)}</td>
+                  <td className="ref" data-label="Deleted">{new Date(row.deletedAt).toLocaleString('en-GB')}</td>
+                  <td data-label="Photos">{row.attachmentUrls.length > 0 && <button className="clip" aria-label={`View photos for ${row.label}`} onClick={() => setViewing(row)}>▣</button>}</td>
+                  <td className="rowacts" data-label="Actions">
+                    <button className="btn small" disabled={busy !== null} onClick={() => setRestoring(row)}>Restore</button>
+                    {row.source === 'bill' && <button className="xbtn del" disabled={busy !== null} aria-label={`Permanently delete ${row.label}`} title="Delete for good" onClick={async () => {
+                      const pin = window.prompt('Permanently delete this bill and its linked voucher? Enter the code.')
+                      if (!pin) return
+                      setBusy(row._id); setError('')
+                      try { await purgeBill({ id: row._id, pin }) }
+                      catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+                      finally { setBusy(null) }
+                    }}>✕</button>}
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div></div>
         )}
+        {restoring && <Confirm
+          title={`Restore ${restoring.label}?`}
+          body={restoring.linkedVoucher ? 'The bill and its accounting voucher will return together, including the original ledger entries.' : 'The deleted document will return. Any saved accounting entries will affect the balances again.'}
+          requireText={restoring.party}
+          requireLabel="Type the party name to restore"
+          confirmLabel="Restore"
+          danger={false}
+          onConfirm={async () => {
+            if (restoring.source === 'bill') await restoreBill({ id: restoring._id })
+            else await restoreVoucher({ id: restoring._id })
+          }}
+          onClose={() => setRestoring(null)}
+        />}
+        {viewing && <BillViewer voucher={{ ...viewing, vchLabel: viewing.label }} onClose={() => setViewing(null)} />}
       </div>
     </div>
   )

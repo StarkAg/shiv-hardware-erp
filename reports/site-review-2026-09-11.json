@@ -1,0 +1,257 @@
+{
+  "date": "2026-09-11",
+  "mode": "Read-only browser checks; transaction/action requests blocked during broad route sweep",
+  "routeChecks": [
+    {
+      "route": "/quote-options",
+      "finalRoute": "#/quote-options",
+      "visibleTextLength": 687,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/quote",
+      "finalRoute": "#/quote",
+      "visibleTextLength": 1250,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/history",
+      "finalRoute": "#/history",
+      "visibleTextLength": 331,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/guarantee/card",
+      "finalRoute": "#/guarantee/card",
+      "visibleTextLength": 477,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/guarantee/a4",
+      "finalRoute": "#/guarantee/a4",
+      "visibleTextLength": 411,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/guarantee/history",
+      "finalRoute": "#/guarantee/history",
+      "visibleTextLength": 351,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/guarantee/select-bill",
+      "finalRoute": "#/guarantee/select-bill",
+      "visibleTextLength": 356,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/scan",
+      "finalRoute": "#/scan",
+      "visibleTextLength": 374,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/rates",
+      "finalRoute": "#/rates",
+      "visibleTextLength": 985,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/inventory",
+      "finalRoute": "#/inventory",
+      "visibleTextLength": 687,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/customers",
+      "finalRoute": "#/customers",
+      "visibleTextLength": 360,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/transport",
+      "finalRoute": "#/transport",
+      "visibleTextLength": 321,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/ledgers/customers",
+      "finalRoute": "#/ledgers/customers",
+      "visibleTextLength": 303,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/ledgers/suppliers",
+      "finalRoute": "#/ledgers/suppliers",
+      "visibleTextLength": 303,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/ledger/suppliers",
+      "finalRoute": "#/ledger/suppliers",
+      "visibleTextLength": 296,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/ledger/customers",
+      "finalRoute": "#/ledger/customers",
+      "visibleTextLength": 296,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/ledger/bills",
+      "finalRoute": "#/ledger/bills",
+      "visibleTextLength": 520,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/ledger/trial",
+      "finalRoute": "#/ledger/trial",
+      "visibleTextLength": 296,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/bills",
+      "finalRoute": "#/bills",
+      "visibleTextLength": 288,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/printer-queue",
+      "finalRoute": "#/printer-queue",
+      "visibleTextLength": 334,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    },
+    {
+      "route": "/pdf-viewer",
+      "finalRoute": "#/pdf-viewer",
+      "visibleTextLength": 339,
+      "errorScreen": false,
+      "pageOverflows": false,
+      "blockedWrites": 0,
+      "errors": []
+    }
+  ],
+  "accountingDataChecks": [
+    {
+      "route": "/ledger/customers",
+      "finalRoute": "#/ledger/customers",
+      "rows": 37,
+      "loading": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/ledger/suppliers",
+      "finalRoute": "#/ledger/suppliers",
+      "rows": 15,
+      "loading": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/ledger/trial",
+      "finalRoute": "#/ledger/trial",
+      "rows": 42,
+      "loading": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/ledgers/suppliers",
+      "finalRoute": "#/ledgers/suppliers",
+      "rows": 14,
+      "loading": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/bills",
+      "finalRoute": "#/bills",
+      "rows": 233,
+      "loading": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/trash",
+      "finalRoute": "#/trash",
+      "rows": 19,
+      "loading": false,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "route": "/ledger/trash",
+      "finalRoute": "#/trash",
+      "rows": 19,
+      "loading": false,
+      "overflow": false,
+      "errors": []
+    }
+  ],
+  "mobileTrash": {
+    "width": 390,
+    "pageOverflow": false
+  }
+}

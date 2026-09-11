@@ -27,6 +27,7 @@ import type * as ledgerViews from "../ledgerViews.js";
 import type * as lib_history from "../lib/history.js";
 import type * as lib_money from "../lib/money.js";
 import type * as lib_pin from "../lib/pin.js";
+import type * as lib_trashLinks from "../lib/trashLinks.js";
 import type * as masters from "../masters.js";
 import type * as migrateLedger from "../migrateLedger.js";
 import type * as photos from "../photos.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   "lib/history": typeof lib_history;
   "lib/money": typeof lib_money;
   "lib/pin": typeof lib_pin;
+  "lib/trashLinks": typeof lib_trashLinks;
   masters: typeof masters;
   migrateLedger: typeof migrateLedger;
   photos: typeof photos;

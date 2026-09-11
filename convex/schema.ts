@@ -53,6 +53,7 @@ export default defineSchema({
     // The ledger voucher that went with it, so a restore can say what happened
     // to the books as well as to the bill.
     voucherRef: v.optional(v.string()),
+    voucherTrashId: v.optional(v.id('trash')),
   }).index('by_bill', ['billId']),
 
   // ── Soft locks: who is currently typing which bill ────────────────────────

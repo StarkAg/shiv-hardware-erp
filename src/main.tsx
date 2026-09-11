@@ -108,6 +108,7 @@ const router = createHashRouter([
       { path: 'ledgers',        element: <LedgersPage /> },
       { path: 'ledgers/:tab',   element: <LedgersPage /> },
       { path: 'ledger',         element: <Ledger /> },
+      { path: 'ledger/trash',   element: <Navigate to="/trash" replace /> },
       { path: 'ledger/:tab',    element: <Ledger /> },
       { path: 'ledger/:tab/:partyId', element: <Ledger /> },
       { path: 'bills',          element: <BillBuilder /> },
