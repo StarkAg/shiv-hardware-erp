@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { record, money } from "./lib/history";
+import { round2 } from "./lib/money";
 import { requirePin } from "./lib/pin";
 import { fold } from "./lib/parties";
 
@@ -356,5 +357,148 @@ export const mergePlaceIntoName = mutation({
       );
     }
     return { dryRun: Boolean(dryRun), changed, skipped };
+  },
+});
+
+/**
+ * One party, one account.
+ *
+ * The books opened accounts by two doors — the account form, which wrote "M/s"
+ * in front of a firm's name, and a name typed straight onto a bill, which did
+ * not. The two never recognised each other, so a firm could end up with
+ * "Pappu Jee", "Pappu Jee, Naisarai" and "M/s Pappu Jee, Naisarai" and its
+ * balance split three ways.
+ *
+ * `fold` now ignores the courtesy, so no more of these will be made. This
+ * gathers up the ones already there: everything that points at a duplicate is
+ * repointed at the survivor, and the emptied accounts are removed.
+ *
+ * Run with `dryRun: true` first. Merging accounts moves entries between them
+ * and is not a thing to do twice by accident.
+ */
+/** The opening balance as one signed figure, so two can be added together. */
+const signedOpening = (l: { openingSide: "Dr" | "Cr"; openingBalance: number }) =>
+  l.openingSide === "Cr" ? -l.openingBalance : l.openingBalance;
+
+export const mergeDuplicateParties = mutation({
+  args: { dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, { dryRun }) => {
+    const groups = await ctx.db.query("groups").collect();
+    const partyGroupIds = new Set(
+      groups.filter((g) => PARTY_GROUPS.includes(g.name)).map((g) => g._id as string),
+    );
+    const ledgers = (await ctx.db.query("ledgers").collect())
+      .filter((l) => partyGroupIds.has(l.groupId as string));
+
+    // Same name, and never across the two sides of the books: a customer and a
+    // supplier of one name are two accounts on purpose.
+    const families = new Map<string, typeof ledgers>();
+    for (const l of ledgers) {
+      const key = `${l.groupId}::${fold(l.name)}`;
+      families.set(key, [...(families.get(key) ?? []), l]);
+    }
+
+    const entries = await ctx.db.query("voucherEntries").collect();
+    const vouchers = await ctx.db.query("vouchers").collect();
+    const papers = await ctx.db.query("papers").collect();
+    const billLines = await ctx.db.query("billLines").collect();
+    const cashEntries = await ctx.db.query("cashEntries").collect();
+    const lessons = await ctx.db.query("lessons").collect();
+
+    /** Which account each removed one was folded into. */
+    const remap = new Map<string, string>();
+    const merged: {
+      kept: string; absorbed: string[]; movedEntries: number; movedVouchers: number;
+    }[] = [];
+
+    for (const family of families.values()) {
+      if (family.length < 2) continue;
+
+      // The account with the most history wins, so the fewest references move.
+      // A tie goes to the one already written the shop's way.
+      const weight = (l: (typeof family)[number]) =>
+        entries.filter((e) => e.ledgerId === l._id).length;
+      const survivor = [...family].sort(
+        (a, b) =>
+          weight(b) - weight(a) ||
+          Number(/^m\/s/i.test(b.name)) - Number(/^m\/s/i.test(a.name)) ||
+          b.name.length - a.name.length,
+      )[0];
+      const losers = family.filter((l) => l._id !== survivor._id);
+
+      let movedEntries = 0;
+      let movedVouchers = 0;
+      let opening = signedOpening(survivor);
+
+      for (const loser of losers) {
+        remap.set(loser._id as string, survivor._id as string);
+
+        for (const e of entries.filter((e) => e.ledgerId === loser._id)) {
+          movedEntries++;
+          if (!dryRun) await ctx.db.patch(e._id, { ledgerId: survivor._id });
+        }
+        for (const v0 of vouchers.filter((v) => v.partyLedgerId === loser._id)) {
+          movedVouchers++;
+          if (!dryRun) await ctx.db.patch(v0._id, { partyLedgerId: survivor._id });
+        }
+        for (const row of papers.filter((r) => r.ledgerId === loser._id)) {
+          if (!dryRun) await ctx.db.patch(row._id, { ledgerId: survivor._id });
+        }
+        for (const row of billLines.filter((r) => r.partyLedgerId === loser._id)) {
+          if (!dryRun) await ctx.db.patch(row._id, { partyLedgerId: survivor._id });
+        }
+        for (const row of cashEntries.filter((r: any) => r.ledgerId === loser._id)) {
+          if (!dryRun) await ctx.db.patch(row._id, { ledgerId: survivor._id } as any);
+        }
+        for (const row of lessons.filter((r: any) => r.ledgerId === loser._id)) {
+          if (!dryRun) await ctx.db.patch(row._id, { ledgerId: survivor._id } as any);
+        }
+
+        // An opening balance on a duplicate is still the party's money.
+        opening += signedOpening(loser);
+        // Keep a phone the survivor never had.
+        if (loser.phone && !survivor.phone && !dryRun) {
+          await ctx.db.patch(survivor._id, { phone: loser.phone });
+        }
+        if (!dryRun) await ctx.db.delete(loser._id);
+      }
+
+      if (!dryRun) {
+        await ctx.db.patch(survivor._id, {
+          openingBalance: Math.abs(round2(opening)),
+          openingSide: opening < 0 ? ("Cr" as const) : ("Dr" as const),
+          updatedAt: Date.now(),
+        });
+      }
+
+      merged.push({
+        kept: survivor.name,
+        absorbed: losers.map((l) => l.name),
+        movedEntries,
+        movedVouchers,
+      });
+    }
+
+    // The counter's own copy of a bill remembers the account it posted to, so
+    // it has to follow — otherwise reopening it would point at nothing.
+    if (!dryRun && remap.size) {
+      const store = await ctx.db.query("billsStore").first();
+      if (store) {
+        const bills = (store.bills ?? []).map((b: any) =>
+          b?.ledgerId && remap.has(b.ledgerId)
+            ? { ...b, ledgerId: remap.get(b.ledgerId) }
+            : b,
+        );
+        await ctx.db.patch(store._id, { bills });
+      }
+      await record(
+        ctx,
+        "ledger.merge-duplicates",
+        `Merged ${remap.size} duplicate account(s) into ${merged.length} party account(s)`,
+        {},
+      );
+    }
+
+    return { dryRun: Boolean(dryRun), merged };
   },
 });

@@ -10,8 +10,21 @@
 import type { MutationCtx, QueryCtx } from '../_generated/server'
 import type { Doc, Id } from '../_generated/dataModel'
 
-/** The form two spellings of one name have to agree on. */
-export const fold = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ')
+/**
+ * The form two spellings of one name have to agree on.
+ *
+ * The "M/s" goes too. It is a courtesy the shop writes on firms, not part of
+ * anybody's name, and only one of the two ways into the books was adding it —
+ * the account form did, a name typed onto a bill did not. So "Pappu Jee,
+ * Naisarai" and "M/s Pappu Jee, Naisarai" became two accounts with the balance
+ * split between them, which is the whole thing this fold exists to stop.
+ */
+export const fold = (name: string) =>
+  String(name ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^m\/s\.?\s+/, '')
+    .replace(/\s+/g, ' ')
 
 /**
  * The shop writes a party as "Santosh Singh Ji, Purnimandap" — who they are,
@@ -106,10 +119,23 @@ export async function openParty(
   if (!under) throw new Error(`The "${groupName}" group is missing — set up the account masters first.`)
 
   const now = Date.now()
-  // Filed under the whole line as typed — "Santosh Singh Ji, Purnimandap" is
-  // one name in this shop's books, not a name and a separate village.
+  /**
+   * Filed under the whole line as typed — "Santosh Singh Ji, Purnimandap" is
+   * one name in this shop's books, not a name and a separate village — and
+   * under the same courtesy the account form uses.
+   *
+   * The form applied "M/s" and this did not, so the same firm ended up with
+   * two accounts depending on which door it came in by. One door now.
+   */
+  // The same test masters.withCourtesy uses, to the character. A looser one
+  // here would file "Ms Priya" differently from the account form and open the
+  // second account this whole change exists to prevent.
+  const courtesy = /^m\/s\b/i.test(clean) ? clean : `M/s ${clean}`
+  const filedAs = groupName === 'Sundry Creditors' || groupName === 'Sundry Debtors'
+    ? courtesy
+    : clean
   return await ctx.db.insert('ledgers', {
-    name: clean,
+    name: filedAs,
     groupId: under._id,
     ...(opts.phone ? { phone: opts.phone } : {}),
     openingBalance: 0,

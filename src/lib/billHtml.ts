@@ -42,11 +42,22 @@ function formatDate(iso: string) {
  * courtesy belongs to the document, not to the account.
  */
 export function withoutCourtesy(name: string): string {
-  return String(name ?? '').replace(/^\s*m\/?s\.?\s+/i, '').trim()
+  return String(name ?? '').replace(/^\s*m\/s\.?\s+/i, '').trim()
 }
 
+/**
+ * Proper case, and nothing else — the length never changes, so it can run on
+ * every keystroke without the caret moving.
+ *
+ * An apostrophe is a word boundary as far as `\b` is concerned, which turned
+ * "Louver's" into "Louver'S" and made the small s impossible to type. A letter
+ * after an apostrophe only starts a word when a word follows it: O'Brien does,
+ * the possessive in "Louver's" and the contraction in "don't" do not.
+ */
 export function toProperCase(s: string) {
-  return s.replace(/\b\w/g, c => c.toUpperCase())
+  return s
+    .replace(/(^|[^A-Za-z0-9'’])([a-z])/g, (_, before, ch) => before + ch.toUpperCase())
+    .replace(/(['’])([a-z])([a-z]+)/g, (_, quote, first, rest) => quote + first.toUpperCase() + rest)
 }
 
 /**

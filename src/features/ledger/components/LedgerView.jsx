@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Paperclip, Pencil, X } from 'lucide-react'
+import { ChevronLeft, Paperclip, Pencil, ReceiptText, X } from 'lucide-react'
+import { useStore } from '../../../lib/store'
+import VoucherBillPreview from './VoucherBillPreview'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
@@ -15,6 +17,19 @@ import TagDots from './TagDots';
 
 /** One supplier's account, laid out the way their own statement is. */
 export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPrint, onAddVoucher }) {
+  /**
+   * The shop's own bills, so a line in the ledger can show the bill it posted.
+   * A voucher and its bill find each other by `BILL-n`, which is the reference
+   * the posting writes and the operator cannot overwrite.
+   */
+  const bills = useStore((st) => st.bills);
+  const [previewing, setPreviewing] = useState(null);
+  const billFor = (row) => {
+    const ref = String(row?.refNo ?? '');
+    if (!ref.startsWith('BILL-')) return null;
+    const number = ref.slice(5);
+    return bills.find((b) => String(b.number) === number) ?? null;
+  };
   const [pricing, setPricing] = useState(null);
   const [editing, setEditing] = useState(null);
 
@@ -255,6 +270,18 @@ export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPr
                           <Paperclip size={13} aria-hidden="true" /> {item.p.attachmentUrls.length > 1 ? item.p.attachmentUrls.length : ''}
                         </button>
                       )}
+                      {/* The bill this line posted, drawn from the voucher
+                          rather than stored as a picture of it. */}
+                      {billFor(item.p) && (
+                        <button
+                          className="clip"
+                          onClick={() => setPreviewing(billFor(item.p))}
+                          aria-label="Show the bill"
+                          title="Show the bill"
+                        >
+                          <ReceiptText size={13} aria-hidden="true" />
+                        </button>
+                      )}
                     </td>
                     <td className="rowacts" data-label="">
                       <button className="xbtn" onClick={() => openEdit(item.p)} aria-label="Edit">
@@ -295,6 +322,18 @@ export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPr
                           aria-label="Bill photo"
                         >
                           <Paperclip size={13} aria-hidden="true" /> {item.r.attachmentUrls.length > 1 ? item.r.attachmentUrls.length : ''}
+                        </button>
+                      )}
+                      {/* The bill this line posted, drawn from the voucher
+                          rather than stored as a picture of it. */}
+                      {billFor(item.r) && (
+                        <button
+                          className="clip"
+                          onClick={() => setPreviewing(billFor(item.r))}
+                          aria-label="Show the bill"
+                          title="Show the bill"
+                        >
+                          <ReceiptText size={13} aria-hidden="true" />
                         </button>
                       )}
                     </td>
@@ -360,6 +399,10 @@ export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPr
           onConfirm={() => removeVoucher({ id: deleting.voucherId ?? deleting._id })}
           onClose={() => setDeleting(null)}
         />
+      )}
+
+      {previewing && (
+        <VoucherBillPreview bill={previewing} onClose={() => setPreviewing(null)} />
       )}
 
       {pricing && (

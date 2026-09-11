@@ -1076,3 +1076,27 @@ to{opacity: 0}}
 @media (max-width: 560px){
   .ledger-root .outlook-hero{font-size: 32px;}
 }
+
+/* ── The bill behind a ledger line ────────────────────────────────────────
+ * Opened from the line rather than stored against it: the bill is drawn from
+ * the voucher each time, so it cannot fall out of step with the books. Its own
+ * class, because `.sheet` here already means a printed A4 page.
+ */
+.ledger-root .billpeek{position: fixed; inset: 0; z-index: 60; display: flex;
+  flex-direction: column; background: var(--bg);}
+.ledger-root .billpeek-head{display: flex; align-items: center; gap: 12px;
+  justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--line);
+  background: var(--card);}
+.ledger-root .billpeek-head h2{margin: 0; font-size: 14px; font-weight: 800;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+.ledger-root .billpeek-acts{display: flex; align-items: center; gap: 8px; flex: none;}
+.ledger-root .billpeek-acts .btn{display: inline-flex; align-items: center; gap: 6px;}
+.ledger-root .billpeek-body{flex: 1; min-height: 0; overflow: auto; padding: 14px;
+  display: flex; justify-content: center; align-items: flex-start;}
+/* 148mm x 210mm at 96dpi, the size buildBillHtml draws to. */
+.ledger-root .billframe{width: 559px; height: 793px; border: 1px solid var(--line);
+  background: #fff; box-shadow: var(--lift); flex: none;}
+@media (max-width: 600px){
+  .ledger-root .billpeek-body{padding: 8px;}
+  .ledger-root .billframe{width: 100%; max-width: 559px; height: 70vh;}
+}

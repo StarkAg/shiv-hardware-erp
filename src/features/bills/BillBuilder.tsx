@@ -1944,7 +1944,7 @@ export function BillBuilder() {
   function pickCustomer(c: typeof liveCustomers[number]) {
     setDraft((d) => ({
       ...d,
-      customerName: toProperCase(c.name),
+      customerName: toProperCase(withoutCourtesy(c.name)),
       customerPhone: c.mobile,
       customerUid: c.uid ?? '',
     }))
@@ -1973,10 +1973,12 @@ export function BillBuilder() {
     {},
   )
   const partyBalance = useMemo(() => {
-    const name = (draft.customerName ?? '').trim().toLowerCase()
+    // Past the courtesy on both sides: the box holds the bare name now, while
+    // the books file the account with "M/s" in front of it.
+    const name = withoutCourtesy(draft.customerName ?? '').toLowerCase()
     if (!name) return null
     const row = (partyBook?.rows ?? []).find(
-      (r: any) => String(r.ledger?.name ?? '').trim().toLowerCase() === name,
+      (r: any) => withoutCourtesy(String(r.ledger?.name ?? '')).toLowerCase() === name,
     )
     if (!row) return null
     return { amount: Number(row.closing) || 0, side: String(row.closingSide ?? 'Dr') }
@@ -2140,6 +2142,22 @@ export function BillBuilder() {
   // What the paperwork on this kind of voucher is called, and how much of it
   // is already on the bill — counted here so the button can say so while shut.
   const isMoneyVoucher = (draft.kind ?? 'sale') === 'receipt' || (draft.kind ?? 'sale') === 'payment'
+  /** Written against a supplier: a purchase or a payment. */
+  const isSupplierVoucher = PARTY_SIDE[draft.kind ?? 'sale'] === 'supplier'
+
+  /**
+   * The box after the date, whichever boxes this voucher actually shows.
+   *
+   * A purchase has no phone or UID on it, so reaching for them by name would
+   * land the cursor nowhere and strand the operator on the date.
+   */
+  const nextAfterDate = () => {
+    for (const sel of ['[data-bill-phone]', '[data-bill-uid]', '[data-bill-ref]']) {
+      const box = document.querySelector<HTMLInputElement>(sel)
+      if (box) { box.focus(); box.select?.(); return }
+    }
+    moveBillFocus(1)
+  }
   const photoLabel = isMoneyVoucher ? 'Receipt photo' : 'Bill photo'
   const photoCount = (draft.attachments?.length ?? 0) + photoFiles.length + photoPicked.length
   const claimLock = useMutation(api.billLocks.claim)
@@ -2604,7 +2622,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
-                    document.querySelector<HTMLInputElement>('[data-bill-phone]')?.focus()
+                    nextAfterDate()
                     return
                   }
                   billArrowKeys(e)
@@ -2626,7 +2644,12 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             <div className="relative">
             {/* The bill prints "M/s <name>", so the voucher shows it too —
                 drawn beside the box rather than typed into it. Storing it would
-                put it on the party's account in the books and print it twice. */}
+                put it on the party's account in the books and print it twice.
+
+                In its own box: the wrapper below also holds the balance line
+                and the dropdown, so centring on that put the "M/s" under the
+                name instead of beside it. */}
+            <div className="relative">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted">
               M/s
             </span>
@@ -2670,11 +2693,16 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                    once per customer and never again. */
                 const dateBox = document.querySelector<HTMLInputElement>('[data-bill-date]')
                 if (dateBox) { dateBox.focus(); dateBox.select?.(); return }
-                document.querySelector<HTMLInputElement>('[data-bill-phone]')?.focus()
+                nextAfterDate()
               }}
               onChange={(e) => {
                 // Proper case as they type. Only letter case changes, never the
                 // length, so the caret stays exactly where it was.
+                // Nothing here may change the length: `withoutCourtesy` trims,
+                // so calling it on every keystroke ate the space the moment it
+                // was typed and "KM Traders" could never be written. The "M/s"
+                // is taken off on the way out instead, where the caret has
+                // already gone.
                 const name = toProperCase(e.target.value)
                 const match = liveCustomers.find(c => c.name.toLowerCase() === name.toLowerCase())
                 setShowCust(true)
@@ -2687,6 +2715,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               }}
               className="w-full rounded-lg border border-stone-200 bg-white py-2 pl-11 pr-3 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
             />
+            </div>
             {/* What this account already stands at, and which ledger the
                 voucher posts against — the two lines Tally puts here, so the
                 counter can see the position without leaving the voucher. */}
@@ -2695,7 +2724,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                  lands on the box's right edge, so it sits in the same place on
                  every voucher instead of wandering with the label's width.
                  Tabular digits keep the columns of a figure lined up. */
-              <div className="mt-1 flex items-baseline justify-between gap-3 px-1 text-xs">
+              <div className="mt-1 flex items-baseline gap-2 pl-11 text-xs">
                 <span className="italic text-muted">Current balance</span>
                 <span className="font-semibold tabular-nums text-stone-700 dark:text-stone-300">
                   {balanceText(partyBalance.amount, partyBalance.side)}
@@ -2723,6 +2752,11 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             )}
             </div>
           </div>
+          {/* A supplier is a firm the shop buys from, reached on the number in
+              the purchase book — not a customer on credit whose phone and
+              Aadhaar are taken so they can be chased. Asking for them on a
+              purchase is two boxes to tab past on every voucher. */}
+          {!isSupplierVoucher && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">Phone (optional)</label>
             <input
@@ -2737,7 +2771,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { billArrowKeys(e); return }
                 if (e.key !== 'Enter') return
                 e.preventDefault()
-                document.querySelector<HTMLInputElement>('[data-bill-uid]')?.focus()
+                const uid = document.querySelector<HTMLInputElement>('[data-bill-uid]')
+                ;(uid ?? document.querySelector<HTMLInputElement>('[data-bill-ref]'))?.focus()
               }}
               value={draft.customerPhone ?? ''}
               onChange={(e) => {
@@ -2751,6 +2786,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               }`}
             />
           </div>
+          )}
+          {!isSupplierVoucher && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">UID (optional)</label>
             <input
@@ -2779,6 +2816,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               }`}
             />
           </div>
+          )}
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">Ref (optional)</label>
             <input
@@ -2792,8 +2830,13 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { billArrowKeys(e); return }
                 if (e.key !== 'Enter') return
                 e.preventDefault()
-                // Last customer field — hand off to the first item row.
-                document.querySelector<HTMLInputElement>('[data-bill-item-desc]')?.focus()
+                // Last of the head — hand off to where entry actually starts.
+                // A receipt has no item rows, so reaching for one by name would
+                // leave the cursor stranded here.
+                const start = document.querySelector<HTMLInputElement>('[data-bill-item-desc]')
+                  ?? document.querySelector<HTMLInputElement>('[data-bill-money]')
+                if (start) { start.focus(); start.select?.(); return }
+                moveBillFocus(1)
               }}
               className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
             />
@@ -2815,7 +2858,10 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                     type="number"
                     inputMode="decimal"
                     min={0}
-                    autoFocus
+                    /* No autoFocus: opening a voucher puts the cursor on the
+                       party's name, and this stole it for the 50ms before that
+                       effect ran — the cursor visibly jumped. */
+                    data-bill-money="1"
                     data-bill-nav="1"
                     onKeyDown={billArrowKeys}
                     value={draft.moneyAmount ?? ''}

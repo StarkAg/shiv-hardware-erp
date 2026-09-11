@@ -48,6 +48,17 @@ const aBill = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+/**
+ * What the counter types, and what the books file it under.
+ *
+ * A firm is written "M/s" on every document, and both doors into the books now
+ * add it — the account form always did, and a name typed onto a bill does too.
+ * They disagreed before, which is how one firm ended up with two accounts and
+ * its balance split between them.
+ */
+const TYPED = 'Ramesh Kumar'
+const FILED = 'M/s Ramesh Kumar'
+
 const lines = (t: ReturnType<typeof convexTest>) =>
   t.run(ctx => ctx.db.query('voucherEntries').collect())
 const vouchers = (t: ReturnType<typeof convexTest>) =>
@@ -253,7 +264,7 @@ describe('deletions between devices', () => {
     const [current] = await stored(t)
 
     await t.mutation(api.bills.save, { bills: [{ ...current, customerName: 'Stale PC', updatedAt: 1 }], billSeq: 1 })
-    expect((await stored(t))[0].customerName).toBe('Ramesh Kumar')
+    expect((await stored(t))[0].customerName).toBe(TYPED)
 
     await t.mutation(api.bills.save, { bills: [{ ...current, customerName: 'Newer PC', updatedAt: Date.now() + 1000 }], billSeq: 1 })
     expect((await stored(t))[0].customerName).toBe('Newer PC')
@@ -290,7 +301,7 @@ describe('money taken against a bill', () => {
       byLedger.set(name, (byLedger.get(name) ?? 0) + (e.side === 'Dr' ? e.amount : -e.amount))
     }
 
-    expect(byLedger.get('Ramesh Kumar')).toBe(6000)
+    expect(byLedger.get(FILED)).toBe(6000)
     expect(byLedger.get('Cash')).toBe(4000)
     expect(byLedger.get('Sales')).toBe(-10000)
     expect([...byLedger.values()].reduce((a, b) => a + b, 0)).toBe(0)
@@ -302,7 +313,7 @@ describe('money taken against a bill', () => {
     const t = await shop()
     await t.mutation(api.billLedger.postBill, { bill: aBill({ total: 500, paidAmount: 500 }) })
     const names = await t.run(ctx => ctx.db.query('ledgers').collect())
-    const party = names.find(l => l.name === 'Ramesh Kumar')!
+    const party = names.find(l => l.name === FILED)!
     expect((await lines(t)).filter(e => e.ledgerId === party._id)).toHaveLength(0)
   })
 
@@ -369,7 +380,7 @@ describe('a discount given at settlement', () => {
   it('clears the party for the money and the discount together', async () => {
     const { byLedger } = await settled()
     // Credited the whole 30,080, so the account is square rather than 250 short.
-    expect(byLedger.get('Ramesh Kumar')).toBe(-30080)
+    expect(byLedger.get(FILED)).toBe(-30080)
   })
 
   it('puts only the money in the drawer', async () => {
@@ -398,7 +409,7 @@ describe('a discount given at settlement', () => {
     const { byLedger } = await settled({ discount: 0 })
     expect(byLedger.get('Discount Allowed') ?? 0).toBe(0)
     expect(byLedger.get('Cash')).toBe(30080)
-    expect(byLedger.get('Ramesh Kumar')).toBe(-30080)
+    expect(byLedger.get(FILED)).toBe(-30080)
   })
 
   it('never discounts more than the voucher settles', async () => {
@@ -425,5 +436,65 @@ describe('a discount given at settlement', () => {
     const cash = names.find(l => l.name === 'Cash')!
     expect((await lines(t)).find(e => e.ledgerId === cash._id)?.amount).toBe(400)
     expect((await lines(t)).reduce((n, l) => n + (l.side === 'Dr' ? l.amount : -l.amount), 0)).toBe(0)
+  })
+})
+
+describe('one party, one account', () => {
+  /**
+   * The bug this pins: the account form wrote "M/s" in front of a firm and a
+   * name typed onto a bill did not, and neither recognised the other — so one
+   * firm got two accounts with the balance split between them.
+   */
+  const partiesOf = async (t: ReturnType<typeof convexTest>) => {
+    const groups = await t.run(ctx => ctx.db.query('groups').collect())
+    const debtors = groups.find(g => g.name === 'Sundry Debtors')!
+    const all = await t.run(ctx => ctx.db.query('ledgers').collect())
+    return all.filter(l => l.groupId === debtors._id)
+  }
+
+  it('files a bill-opened account under the courtesy, like the account form', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ customerName: TYPED }) })
+    expect((await partiesOf(t)).map(l => l.name)).toEqual([FILED])
+  })
+
+  it('does not open a second account when the courtesy is typed as well', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ id: 'b1', customerName: TYPED }) })
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ id: 'b2', customerName: FILED }) })
+    expect(await partiesOf(t)).toHaveLength(1)
+  })
+
+  it('does not open a second account for a different spelling of the courtesy', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ id: 'b1', customerName: TYPED }) })
+    for (const spelling of ['M/S Ramesh Kumar', 'm/s ramesh kumar', '  Ramesh   Kumar ']) {
+      await t.mutation(api.billLedger.postBill, { bill: aBill({ id: `b-${spelling}`, customerName: spelling }) })
+    }
+    expect(await partiesOf(t)).toHaveLength(1)
+  })
+
+  it('keeps both bills on the one account, so the balance is not split', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ id: 'b1', customerName: TYPED, total: 1000 }) })
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ id: 'b2', customerName: FILED, total: 500 }) })
+    const party = (await partiesOf(t))[0]
+    const owed = (await lines(t))
+      .filter(e => e.ledgerId === party._id)
+      .reduce((n, e) => n + (e.side === 'Dr' ? e.amount : -e.amount), 0)
+    expect(owed).toBe(1500)
+  })
+
+  it('leaves a woman\'s title alone — "Ms Priya" is not the firm courtesy', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ customerName: 'Ms Priya' }) })
+    expect((await partiesOf(t)).map(l => l.name)).toEqual(['M/s Ms Priya'])
+  })
+
+  it('keeps two different parties apart', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ id: 'b1', customerName: 'Ramesh Kumar, Kundru' }) })
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ id: 'b2', customerName: 'Ramesh Kumar, Naisarai' }) })
+    expect(await partiesOf(t)).toHaveLength(2)
   })
 })
