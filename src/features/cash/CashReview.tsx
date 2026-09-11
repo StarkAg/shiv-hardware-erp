@@ -24,6 +24,7 @@ export function CashReview() {
   const [choice, setChoice] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [said, setSaid] = useState('')
 
   const parties = useMemo(
     () => [...(masters?.ledgers ?? [])].sort((a: any, b: any) => a.name.localeCompare(b.name)),
@@ -31,7 +32,7 @@ export function CashReview() {
   )
 
   async function run(entryId: string, work: () => Promise<unknown>) {
-    setBusy(entryId); setError('')
+    setBusy(entryId); setError(''); setSaid('')
     try { await work() }
     catch (err) { setError(err instanceof Error ? err.message : String(err)) }
     finally { setBusy(null) }
@@ -51,7 +52,7 @@ export function CashReview() {
               disabled={busy !== null}
               onClick={() => run('backlog', async () => {
                 const res = await postBacklog({})
-                if (!res.posted && res.waiting) setError(`${res.waiting} still need an account.`)
+                setSaid(`${res.posted} posted, ${res.waiting} still need an account.`)
               })}
             >
               Post what can post
@@ -60,6 +61,7 @@ export function CashReview() {
         </div>
 
         {error && <p className="error" role="alert">{error}</p>}
+        {said && <p className="hint" role="status">{said}</p>}
 
         {rows === undefined ? <TableSkeleton cols={6} rows={5} wide={2} /> : !rows.length ? (
           <div className="empty">Every drawer note is in the books.</div>
