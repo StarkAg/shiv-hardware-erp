@@ -2,8 +2,10 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { round2, balanced, signed, fyOf } from "./lib/money";
+import { round2, fyOf } from "./lib/money";
 import { record, money, day } from "./lib/history";
+import { nextVoucherNo, voucherCounterName } from "./lib/numbering";
+import { writeLines, clearLines } from "./lib/entries";
 import { requirePin } from "./lib/pin";
 
 const attachmentKind = v.union(
@@ -21,8 +23,6 @@ const attachmentDoc = v.object({
 });
 
 const attachmentsArg = v.optional(v.array(attachmentDoc));
-
-type Line = { ledgerId: Id<"ledgers">; side: "Dr" | "Cr"; amount: number };
 
 /** How a voucher is named in the history: "PUR-0035 · Mahadev Sales · 1,580.00". */
 async function describe(
@@ -44,25 +44,6 @@ async function describeVoucher(ctx: MutationCtx, id: Id<"vouchers">) {
   return describe(ctx, type?.abbr ?? "VCH", voucher.voucherNo, voucher.partyLedgerId, voucher.amount);
 }
 
-async function nextVoucherNo(
-  ctx: MutationCtx,
-  abbr: string,
-  fy: string
-): Promise<number> {
-  const name = `vno:${abbr}:${fy}`;
-  const counter = await ctx.db
-    .query("counters")
-    .withIndex("by_name", (q) => q.eq("name", name))
-    .unique();
-  if (!counter) {
-    await ctx.db.insert("counters", { name, value: 1 });
-    return 1;
-  }
-  const next = counter.value + 1;
-  await ctx.db.patch(counter._id, { value: next });
-  return next;
-}
-
 async function typeByName(ctx: MutationCtx, name: string) {
   const type = await ctx.db
     .query("voucherTypes")
@@ -70,38 +51,6 @@ async function typeByName(ctx: MutationCtx, name: string) {
     .unique();
   if (!type) throw new Error(`Voucher type "${name}" is not set up`);
   return type;
-}
-
-/** Writes the Dr/Cr lines, refusing anything that does not balance. */
-async function writeLines(
-  ctx: MutationCtx,
-  voucherId: Id<"vouchers">,
-  date: number,
-  lines: Line[]
-) {
-  const total = lines.reduce((t, l) => t + signed(l.side, round2(l.amount)), 0);
-  if (!balanced(total)) {
-    throw new Error(
-      `Voucher does not balance — debits and credits differ by ${round2(total)}`
-    );
-  }
-  for (const line of lines) {
-    await ctx.db.insert("voucherEntries", {
-      voucherId,
-      ledgerId: line.ledgerId,
-      side: line.side,
-      amount: round2(line.amount),
-      date,
-    });
-  }
-}
-
-async function clearLines(ctx: MutationCtx, voucherId: Id<"vouchers">) {
-  const existing = await ctx.db
-    .query("voucherEntries")
-    .withIndex("by_voucher", (q) => q.eq("voucherId", voucherId))
-    .collect();
-  for (const line of existing) await ctx.db.delete(line._id);
 }
 
 /**
@@ -125,7 +74,7 @@ export const createPurchase = mutation({
     const type = await typeByName(ctx, "Purchase");
     const fy = fyOf(args.date);
     const now = Date.now();
-    const voucherNo = await nextVoucherNo(ctx, type.abbr, fy);
+    const voucherNo = await nextVoucherNo(ctx, type, fy);
     const pending = args.amount === undefined || args.amount === null;
 
     const voucherId = await ctx.db.insert("vouchers", {
@@ -175,7 +124,7 @@ export const createPayment = mutation({
     const type = await typeByName(ctx, "Payment");
     const fy = fyOf(args.date);
     const now = Date.now();
-    const voucherNo = await nextVoucherNo(ctx, type.abbr, fy);
+    const voucherNo = await nextVoucherNo(ctx, type, fy);
 
     const voucherId = await ctx.db.insert("vouchers", {
       typeId: type._id,
@@ -232,7 +181,7 @@ export const createSale = mutation({
     const type = await typeByName(ctx, "Sale");
     const fy = fyOf(args.date);
     const now = Date.now();
-    const voucherNo = await nextVoucherNo(ctx, type.abbr, fy);
+    const voucherNo = await nextVoucherNo(ctx, type, fy);
 
     const voucherId = await ctx.db.insert("vouchers", {
       typeId: type._id,
@@ -281,7 +230,7 @@ export const createReceipt = mutation({
     const type = await typeByName(ctx, "Receipt");
     const fy = fyOf(args.date);
     const now = Date.now();
-    const voucherNo = await nextVoucherNo(ctx, type.abbr, fy);
+    const voucherNo = await nextVoucherNo(ctx, type, fy);
 
     const voucherId = await ctx.db.insert("vouchers", {
       typeId: type._id,
@@ -740,7 +689,7 @@ export const retype = mutation({
 
     await ctx.db.patch(id, {
       typeId: type._id,
-      voucherNo: await nextVoucherNo(ctx, type.abbr, voucher.fy),
+      voucherNo: await nextVoucherNo(ctx, type, voucher.fy),
       updatedAt: Date.now(),
     });
 
@@ -770,7 +719,7 @@ export const createGoodsReturn = mutation({
     const type = await typeByName(ctx, args.typeName ?? "Goods Return");
     const fy = fyOf(args.date);
     const now = Date.now();
-    const voucherNo = await nextVoucherNo(ctx, type.abbr, fy);
+    const voucherNo = await nextVoucherNo(ctx, type, fy);
 
     const voucherId = await ctx.db.insert("vouchers", {
       typeId: type._id,
@@ -903,7 +852,7 @@ export const renumberSeries = mutation({
       if (row.voucherNo !== no) await ctx.db.patch(row._id, { voucherNo: no });
     }
 
-    const name = `vno:${type.abbr}:${fy}`;
+    const name = voucherCounterName(type.abbr, fy);
     const counter = await ctx.db
       .query("counters")
       .withIndex("by_name", (q) => q.eq("name", name))

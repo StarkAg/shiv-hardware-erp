@@ -361,6 +361,14 @@ export interface Bill {
   items: BillItem[]
   total: number
   paid: boolean
+  /**
+   * Money taken at the counter against this bill, which may be none of it, a
+   * part of it or all of it. It posts as a line of the bill's own voucher —
+   * the customer is debited for what is still owed and the drawer for the
+   * rest — so a part-paid bill reads the same in the party's account, the
+   * day book and the trial balance.
+   */
+  paidAmount?: number
   paymentMode?: BillPaymentMode
   upiRef?: string       // UPI/phone used for payment
   notes?: string
@@ -376,6 +384,19 @@ export interface Bill {
    * recently keeps their work instead of one machine overwriting the other.
    */
   updatedAt?: number
+  /**
+   * When the books took this bill. The server writes it in the same
+   * transaction as the voucher, so it is the one honest answer to "is this in
+   * the accounts?" — bills written before this existed have no stamp and are
+   * taken as posted, because that is what they were.
+   */
+  postedAt?: number
+  /**
+   * Why the last save did not reach the books. A bill carrying this is on this
+   * device only: it is not pushed to the server, it shows as unposted in the
+   * list, and it stays that way until a retry succeeds.
+   */
+  postError?: string
 }
 
 // ---- Hardware catalog (managed via Inventory page) ------------------------

@@ -22,6 +22,7 @@ import { Ledger } from './features/ledger/Ledger'
 import { LedgersPage } from './features/ledger/LedgersPage'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { BillTrash } from './features/bills/BillTrash'
+import { CashReview } from './features/cash/CashReview'
 import { PrinterQueue } from './features/print/PrinterQueue'
 import { PdfViewer } from './features/pdf/PdfViewer'
 import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
@@ -116,6 +117,7 @@ const router = createHashRouter([
       // entries and the ones approved from a photograph.
       { path: 'bills/voucher/:voucherId', element: <BillBuilder /> },
       { path: 'bills/:id',      element: <BillBuilder /> },
+      { path: 'cash-review',    element: <CashReview /> },
       { path: 'trash',          element: <BillTrash /> },
       { path: 'printer-queue',  element: <PrinterQueue /> },
       // Links from older versions of the panel, kept working rather than 404.

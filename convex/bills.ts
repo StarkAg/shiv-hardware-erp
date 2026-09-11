@@ -34,15 +34,27 @@ export const save = mutation({
       return { kept: 0, written: args.bills.length }
     }
 
-    const deleted = new Set(
-      (await ctx.db.query('billsTrash').collect()).map((row) => row.billId),
-    )
+    const [inTrash, tombstones] = await Promise.all([
+      ctx.db.query('billsTrash').collect(),
+      ctx.db.query('billTombstones').collect(),
+    ])
+    // A deletion outlives the copy in the bin: emptying the bin used to make
+    // the bill eligible to come back from any device that still had it.
+    const deleted = new Set([
+      ...inTrash.map((row) => row.billId),
+      ...tombstones.map((row) => row.billId),
+    ])
     const byId = new Map<string, any>()
     for (const bill of existing.bills ?? []) if (bill?.id) byId.set(bill.id, bill)
 
     let written = 0
     for (const bill of args.bills) {
       if (!bill?.id || deleted.has(bill.id)) continue
+      // Newer wins. This took whatever it was handed, so a PC that had been
+      // off for a week would overwrite today's edits with its own stale copy
+      // the moment it reconnected.
+      const mine = byId.get(bill.id)
+      if (mine && (mine.updatedAt ?? 0) > (bill.updatedAt ?? 0)) continue
       byId.set(bill.id, bill)
       written++
     }
@@ -94,10 +106,23 @@ export const remove = mutation({
       ? await ctx.runMutation(api.vouchers.remove, { id: voucher._id })
       : null
 
+    const deletedAt = Date.now()
+    const tombstone = await ctx.db
+      .query('billTombstones')
+      .withIndex('by_bill', (q) => q.eq('billId', id))
+      .unique()
+    if (!tombstone) {
+      await ctx.db.insert('billTombstones', {
+        billId: id,
+        number: bill.number ? String(bill.number) : undefined,
+        deletedAt,
+      })
+    }
+
     await ctx.db.insert('billsTrash', {
       billId: id,
       bill,
-      deletedAt: Date.now(),
+      deletedAt,
       ...(voucher ? { voucherRef: ref } : {}),
       ...(voucherTrashId ? { voucherTrashId } : {}),
     })
@@ -114,6 +139,18 @@ export const trashList = query({
   args: {},
   handler: async (ctx) =>
     (await ctx.db.query('billsTrash').collect()).sort((a, b) => b.deletedAt - a.deletedAt),
+})
+
+/**
+ * Which bills have been deleted, for devices that still hold a copy.
+ *
+ * Merging on its own only ever adds; a bill deleted on one PC stayed on the
+ * other until its storage was cleared. This is the list the panel subscribes
+ * to so a deletion travels the way a save does.
+ */
+export const deletedIds = query({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query('billTombstones').collect()).map((row) => row.billId),
 })
 
 /**
@@ -141,6 +178,12 @@ export const restore = mutation({
       }
     }
     if (voucherTrashId) await ctx.runMutation(api.trash.restore, { id: voucherTrashId })
+    // It is back on the books, so it is no longer deleted anywhere.
+    const tombstone = await ctx.db
+      .query('billTombstones')
+      .withIndex('by_bill', (q) => q.eq('billId', row.billId))
+      .unique()
+    if (tombstone) await ctx.db.delete(tombstone._id)
     const bill = { ...row.bill, updatedAt: Date.now() }
     const store = await ctx.db.query('billsStore').first()
     const bills = (store?.bills ?? []).filter((b: any) => b?.id !== row.billId)

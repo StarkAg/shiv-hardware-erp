@@ -35,15 +35,22 @@ export async function pushBillsToConvex(bills: Bill[], billSeq: number): Promise
  * Deleting a bill, properly: it goes to the trash and takes its ledger voucher
  * with it. Not fire-and-forget — the caller wants to know, because a delete
  * that only happened on this device is how a bill comes back tomorrow.
+ *
+ * The three answers are different things, and the caller has to tell them
+ * apart: the server deleted it, the server never had it (a bill typed here and
+ * never posted, or no Convex at all — deleting locally is the whole job), or
+ * the server could not be reached, where deleting locally would be a lie.
  */
-export async function removeBillFromConvex(id: string): Promise<boolean> {
+export type BillRemoval = 'removed' | 'absent' | 'unreachable'
+
+export async function removeBillFromConvex(id: string): Promise<BillRemoval> {
   const c = client()
-  if (!c) return false
+  if (!c) return 'absent'
   try {
     const res = await c.mutation(api.bills.remove, { id })
-    return Boolean((res as { removed?: boolean } | null)?.removed)
+    return (res as { removed?: boolean } | null)?.removed ? 'removed' : 'absent'
   } catch {
-    return false
+    return 'unreachable'
   }
 }
 

@@ -14,11 +14,13 @@ import type { Bill, BrandSet, CustomCatalogEntry, HardwareCatalog } from '../lib
 export function ConvexSync() {
   const serverBills   = useQuery(api.bills.get,   {})
   const serverCatalog = useQuery(api.catalog.get, {})
+  const deletedIds    = useQuery(api.bills.deletedIds, {})
 
   const {
     bills, billSeq,
     syncBillsFromRemote,
     syncCatalogFromRemote,
+    dropBills,
   } = useStore()
 
   // Sync bills. The old rule only accepted a snapshot with MORE bills or a
@@ -28,7 +30,9 @@ export function ConvexSync() {
   // would overwrite the operator's in-progress line.
   const lastApplied = useRef(0)
   useEffect(() => {
-    if (!serverBills?.bills?.length) return
+    // No snapshot row at all is "nothing to say"; a row with no bills in it is
+    // a real answer, and once deletions travel it is a possible one.
+    if (!serverBills?.bills) return
     const savedAt = (serverBills.savedAt as number) ?? 0
     const remoteBillSeq = (serverBills.billSeq as number) ?? 0
     const newer = savedAt > lastApplied.current
@@ -43,6 +47,13 @@ export function ConvexSync() {
     syncBillsFromRemote(serverBills.bills as Bill[], Math.max(remoteBillSeq, billSeq))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverBills])
+
+  // Deletions travel on their own. Merging only ever adds, so a bill deleted
+  // at one counter used to stay on the other for good.
+  useEffect(() => {
+    if (deletedIds?.length) dropBills(deletedIds as string[])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deletedIds])
 
   // Sync catalog: apply whenever Convex has a catalog snapshot
   useEffect(() => {

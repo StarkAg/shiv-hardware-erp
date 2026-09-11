@@ -25,7 +25,14 @@ function scheduleConvexBillsPush(get: () => AppState) {
   if (_convexBillsTimer) clearTimeout(_convexBillsTimer)
   _convexBillsTimer = setTimeout(() => {
     const s = get()
-    void pushBillsToConvex(s.bills, s.billSeq)
+    /**
+     * A bill whose posting failed is not pushed. Sending it would put a bill
+     * on the server that the books have never heard of — the exact drift the
+     * single posting transaction exists to prevent. It waits here, marked, for
+     * a retry. Bills written before any of this have no stamp and are pushed
+     * as they always were.
+     */
+    void pushBillsToConvex(s.bills.filter((b) => !b.postError), s.billSeq)
   }, 5000)   // a watching screen is at most this far behind
 }
 
@@ -80,7 +87,8 @@ interface AppState {
   // bills
   nextBillNumber: () => string
   saveBill: (b: Bill) => void
-  deleteBill: (id: string) => void
+  /** Deletes everywhere or nowhere. False means the server never agreed. */
+  deleteBill: (id: string) => Promise<boolean>
   /** Bulk-restore all bills from a server snapshot (startup only — DOES push to remotes). */
   saveBillsSnapshot: (bills: Bill[]) => void
   /**
@@ -88,6 +96,8 @@ interface AppState {
    * Saves to localStorage only — does NOT push back to any remote, preventing sync loops.
    */
   syncBillsFromRemote: (bills: Bill[], remoteBillSeq: number) => void
+  /** Drop bills deleted elsewhere. Local only — the server already knows. */
+  dropBills: (ids: string[]) => void
   /**
    * Apply a catalog update that arrived from a remote (Convex real-time).
    * Saves to localStorage only.
@@ -297,8 +307,11 @@ export const useStore = create<AppState>((set, get) => ({
      * twice by a path nobody had thought about — and once it is in this list
      * it syncs, shows in the day book beside the voucher it is a copy of, and
      * can be "deleted" in a way that reaches the books.
+     *
+     * The test is the `vch-` id it is filed under, not the voucher it points
+     * at: every posted bill carries a voucherId now.
      */
-    if (bill.voucherId || String(bill.id).startsWith('vch-')) return
+    if (String(bill.id).startsWith('vch-')) return
     const b = { ...bill, updatedAt: Date.now() }
     set((st) => {
       const i = st.bills.findIndex((x) => x.id === b.id)
@@ -315,14 +328,23 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get)
   },
 
-  deleteBill: (id) => {
+  deleteBill: async (id) => {
     // The server is told to delete rather than left to infer it from a shorter
     // list: it moves the bill to the trash and takes the ledger voucher with
     // it. Inferring deletion from absence is what let an empty device wipe
     // every bill the shop had.
-    void removeBillFromConvex(id)
+    //
+    // And it is told first. Taking the bill off this screen before the server
+    // agrees means a delete that happened nowhere else: the next sync hands
+    // the bill straight back, its voucher still in the books, and the operator
+    // believes they deleted it.
+    const outcome = await removeBillFromConvex(id)
+    // A bill the server never had — typed here and never posted — is this
+    // device's to delete. One it could not reach is not.
+    if (outcome === 'unreachable') return false
     set((st) => ({ bills: st.bills.filter((b) => b.id !== id) }))
     persist(get)
+    return true
   },
 
   saveBillsSnapshot: (bills) => {
@@ -350,6 +372,23 @@ export const useStore = create<AppState>((set, get) => ({
       return { bills, billSeq: Math.max(st.billSeq, remoteBillSeq) }
     })
     // Save to localStorage only — no remote push to avoid sync loops
+    const s = get()
+    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+  },
+
+  dropBills: (ids) => {
+    // A delete travels as a fact now, not as a shorter list: the server keeps
+    // a tombstone and this takes the bill off the device that still had it.
+    // Without it, a bill deleted at one counter sat on the other until its
+    // browser storage was cleared.
+    const gone = new Set(ids)
+    let removed = 0
+    set((st) => {
+      const bills = st.bills.filter((b) => !gone.has(b.id))
+      removed = st.bills.length - bills.length
+      return removed ? { bills } : {}
+    })
+    if (!removed) return
     const s = get()
     db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
   },

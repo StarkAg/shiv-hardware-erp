@@ -2,9 +2,14 @@ import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
+import { fyOf, round2 } from './lib/money'
+import { openParty } from './lib/parties'
+import { nextVoucherNo, nextBillNo } from './lib/numbering'
+import { writeLines, clearLines } from './lib/entries'
+import { record, money, day } from './lib/history'
 
 /**
- * Bills posting into the books.
+ * Saving a bill, in one piece.
  *
  * A bill and a ledger account for the same customer are the same real-world
  * thing recorded twice, so saving a bill opens the customer's account if they
@@ -13,160 +18,180 @@ import type { Id } from './_generated/dataModel'
  *     Dr  <customer>        (Sundry Debtors — they owe us)
  *     Cr  Sales Accounts    (income)
  *
+ * This used to be two operations with the bill saved either way: the builder
+ * posted the voucher, and whether that worked or not it went on to save the
+ * bill. A shop cannot work like that. A counter that sees "saved" has to be
+ * able to believe the books were updated, so the voucher, its Dr/Cr lines and
+ * the bill itself are written here in one transaction — all of it, or none of
+ * it and an error the operator can act on.
+ *
  * Re-saving rewrites that bill's voucher rather than adding a second one, so
- * editing a bill can't quietly double the customer's balance.
+ * editing a bill — or retrying one that failed — can't quietly double the
+ * customer's balance.
  */
-
-/** Indian financial year: April to March, written "2026-27". */
-function financialYear(at: number): string {
-  const d = new Date(at)
-  const y = d.getFullYear()
-  const start = d.getMonth() >= 3 ? y : y - 1
-  return `${start}-${String((start + 1) % 100).padStart(2, '0')}`
-}
-
-async function nextVoucherNo(ctx: MutationCtx, typeId: string, fy: string) {
-  const key = `voucher:${typeId}:${fy}`
-  const row = await ctx.db.query('counters').filter((q) => q.eq(q.field('name'), key)).first()
-  const value = (row?.value ?? 0) + 1
-  if (row) await ctx.db.patch(row._id, { value })
-  else await ctx.db.insert('counters', { name: key, value })
-  return value
-}
 
 /**
  * A bill written in the builder can be any of the four vouchers, so what the
  * builder posts is described here rather than hard-coded to a sale: which
  * account takes the other side, which group the party is opened under, and
  * which way round the two sides go.
- *
- * A receipt or payment posts against Bank because that is where the shop's
- * money moves; the counter can retype the account on the voucher afterwards.
  */
 const KINDS = {
-  sale:     { type: 'Sale',     account: 'Sales',     group: 'Sundry Debtors',   party: 'Dr', other: 'Cr' },
-  purchase: { type: 'Purchase', account: 'Purchases', group: 'Sundry Creditors', party: 'Cr', other: 'Dr' },
-  receipt:  { type: 'Receipt',  account: 'Bank',      group: 'Sundry Debtors',   party: 'Cr', other: 'Dr' },
-  payment:  { type: 'Payment',  account: 'Bank',      group: 'Sundry Creditors', party: 'Dr', other: 'Cr' },
+  sale:     { type: 'Sale',     account: 'Sales',     group: 'Sundry Debtors',   party: 'Dr', other: 'Cr', settles: false },
+  purchase: { type: 'Purchase', account: 'Purchases', group: 'Sundry Creditors', party: 'Cr', other: 'Dr', settles: false },
+  // A receipt or a payment is the money moving and nothing else, so the
+  // account on the other side is the drawer or the bank itself.
+  receipt:  { type: 'Receipt',  account: 'Cash',      group: 'Sundry Debtors',   party: 'Cr', other: 'Dr', settles: true },
+  payment:  { type: 'Payment',  account: 'Cash',      group: 'Sundry Creditors', party: 'Dr', other: 'Cr', settles: true },
 } as const
 
 export type BillKind = keyof typeof KINDS
 
-/** The party's account, opened under the group this kind belongs to. */
-async function partyLedger(ctx: MutationCtx, name: string, phone?: string, group = 'Sundry Debtors') {
-  const clean = name.trim()
-  if (!clean) return null
+const attachmentDoc = v.object({
+  storageId: v.id('_storage'),
+  kind: v.union(
+    v.literal('bill'), v.literal('challan'), v.literal('estimate'),
+    v.literal('receipt'), v.literal('other'),
+  ),
+})
 
-  /**
-   * Matched without regard to case or spacing.
-   *
-   * This compared names exactly, so "M/S Vishal Prasad Ji" and "M/s Vishal
-   * Prasad Ji" were two different customers to it — and saving a bill under
-   * the second spelling silently opened a second account and posted the sale
-   * there, splitting one person's balance across both. One shop, one spelling
-   * of a name: whichever is already in the books wins.
-   */
-  const fold = (n: string) => n.trim().toLowerCase().replace(/\s+/g, ' ')
-  const wanted = fold(clean)
-  const existing = (await ctx.db.query('ledgers').collect())
-    .find((l) => fold(l.name) === wanted)
-  if (existing) {
-    // Fill in a phone we didn't have, but never overwrite one already there.
-    if (phone && !existing.phone) await ctx.db.patch(existing._id, { phone, updatedAt: Date.now() })
-    return existing._id
+/** The bill's date as milliseconds, whatever form it was typed in. */
+function whenOf(date: unknown): number {
+  const ms = typeof date === 'number' ? date : Date.parse(String(date ?? ''))
+  if (!Number.isFinite(ms)) throw new Error('This bill has no usable date.')
+  return ms
+}
+
+/**
+ * The number this bill keeps.
+ *
+ * Numbers come from the server now, but a bill written offline arrives with
+ * one the device made up, and another PC may have taken it in the meantime.
+ * A number already worn by a different bill — live or in the trash, since a
+ * deleted bill can come back — is given up and a fresh one issued.
+ */
+async function billNumberFor(ctx: MutationCtx, bill: any): Promise<string> {
+  const wanted = String(bill?.number ?? '').trim()
+  if (wanted) {
+    const store = await ctx.db.query('billsStore').first()
+    const clash = (store?.bills ?? []).some((b: any) => b?.id !== bill.id && String(b?.number) === wanted)
+      || (await ctx.db.query('billsTrash').collect())
+        .some((row) => row.billId !== bill.id && String(row.bill?.number) === wanted)
+    if (!clash) return wanted
   }
-
-  const under = await ctx.db
-    .query('groups')
-    .filter((q) => q.eq(q.field('name'), group))
-    .first()
-  if (!under) return null
-
-  const now = Date.now()
-  return await ctx.db.insert('ledgers', {
-    name: clean,
-    groupId: under._id,
-    ...(phone ? { phone } : {}),
-    openingBalance: 0,
-    openingSide: group === 'Sundry Creditors' ? ('Cr' as const) : ('Dr' as const),
-    openingAsOf: now,
-    active: true,
-    createdAt: now,
-    updatedAt: now,
-  })
+  return String(await nextBillNo(ctx))
 }
 
 export const ensureParty = mutation({
   args: { name: v.string(), phone: v.optional(v.string()) },
-  handler: async (ctx, { name, phone }) => partyLedger(ctx, name, phone),
+  handler: async (ctx, { name, phone }) => openParty(ctx, name, { phone }),
 })
 
 export const postBill = mutation({
   args: {
-    billNumber: v.string(),
-    date: v.number(),
-    customerName: v.string(),
-    phone: v.optional(v.string()),
-    total: v.number(),
-    // Absent on every bill written before the builder could write anything but
-    // a sale, so that is what absent means.
-    kind: v.optional(v.union(
-      v.literal('sale'), v.literal('purchase'), v.literal('receipt'), v.literal('payment'),
-    )),
-    // Photographs of the paper this bill was written from — a supplier's own
-    // bill, a slip, whatever was in hand. Stored on the voucher, where the
-    // ledger already knows how to show them.
-    // Editing a voucher that already exists — one opened from the ledger or
-    // the day book. Without it a saved edit would post a second voucher and
-    // leave the original standing, doubling the party's balance.
-    voucherId: v.optional(v.id('vouchers')),
-    // The voucher's own reference and wording, kept when it has them: a
-    // supplier's bill number is not "BILL-12" and must not become it.
-    refNo: v.optional(v.string()),
-    narration: v.optional(v.string()),
-    attachments: v.optional(v.array(v.object({
-      storageId: v.id('_storage'),
-      kind: v.union(
-        v.literal('bill'), v.literal('challan'), v.literal('estimate'),
-        v.literal('receipt'), v.literal('other'),
-      ),
-    }))),
+    // The bill as the counter holds it. `billsStore` keeps bills whole, so the
+    // shape stays the panel's rather than being flattened into arguments here.
+    bill: v.any(),
+    attachments: v.optional(v.array(attachmentDoc)),
+    /**
+     * A voucher opened from the books and edited in the builder borrows the
+     * builder's screen; it is not one of the shop's own bills and must not
+     * join their list, or it shows twice in the day book — once as the voucher
+     * and once as a bill of the same thing.
+     */
+    keepAsBill: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    if (!args.customerName.trim() || !args.total) return null
+    const bill = args.bill ?? {}
+    // A borrowed voucher row is filed under `vch-<id>`, which is how the panel
+    // has always told the two apart. A bill that has been posted before also
+    // carries a voucherId, so that cannot be the test.
+    const keepAsBill = args.keepAsBill
+      ?? (Boolean(bill.id) && !String(bill.id).startsWith('vch-'))
 
-    const spec = KINDS[args.kind ?? 'sale']
+    const customerName = String(bill.customerName ?? '').trim()
+    if (!customerName) throw new Error('This bill has no customer name, so there is no account to post it to.')
 
-    const ledgerId = await partyLedger(ctx, args.customerName, args.phone, spec.group)
-    if (!ledgerId) return null
+    const total = round2(Number(bill.total) || 0)
+    if (!total) throw new Error('This bill has no amount, so there is nothing to post.')
+
+    const date = whenOf(bill.date)
+    const spec = KINDS[(bill.kind ?? 'sale') as BillKind] ?? KINDS.sale
+
+    /**
+     * Where the money itself went. Receipts and payments used to post to Bank
+     * whatever the counter had actually done with the note, which made the
+     * drawer and the bank account both wrong.
+     */
+    const drawer = bill.paymentMode === 'online' || bill.paymentMode === 'upi' ? 'Bank' : 'Cash'
+    const accountName = spec.settles ? drawer : spec.account
+
+    /**
+     * Part payment against a bill, taken at the counter.
+     *
+     * It goes in as a line of the same voucher rather than a receipt beside
+     * it: ₹10,000 sold with ₹4,000 in hand is Dr Customer 6,000, Dr Cash
+     * 4,000, Cr Sales 10,000 — the customer owes what they owe, the drawer
+     * holds what it holds, and there is one document to edit, delete or
+     * restore instead of two that can come apart.
+     */
+    const asked = Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0
+    const received = spec.settles ? 0 : round2(Math.min(Math.max(asked, 0), Number(bill.total) || 0))
+
+    // A bill deleted on another PC must not be quietly written back by a
+    // device that still had it open.
+    if (keepAsBill && bill.id) {
+      const deleted = (await ctx.db.query('billsTrash').collect())
+        .some((row) => row.billId === bill.id)
+      if (deleted) throw new Error('This bill was deleted on another device. Restore it from Trash before saving again.')
+    }
 
     const type = await ctx.db
       .query('voucherTypes')
-      .filter((q) => q.eq(q.field('name'), spec.type))
-      .first()
+      .withIndex('by_name', (q) => q.eq('name', spec.type))
+      .unique()
+    if (!type) throw new Error(`The "${spec.type}" voucher type is not set up.`)
+
     // "Sales Accounts" is the group; the account itself is the "Sales" ledger
-    // inside it. Crediting the group would have left the voucher unbalanced.
-    const account = await ctx.db
+    // inside it. Crediting the group would leave the voucher unbalanced.
+    const byName = async (name: string) => await ctx.db
       .query('ledgers')
-      .filter((q) => q.eq(q.field('name'), spec.account))
+      .filter((q) => q.eq(q.field('name'), name))
       .first()
-    // Without both sides this would post a half-entry and skew the books, so
-    // it refuses rather than writing something that doesn't balance.
-    if (!type || !account) return { ledgerId, voucherId: null as Id<'vouchers'> | null }
 
+    const account = await byName(accountName)
+    if (!account) throw new Error(`The "${accountName}" account is missing — set it up in Account Masters before saving this bill.`)
+
+    const settlement = received > 0 ? await byName(drawer) : null
+    if (received > 0 && !settlement) {
+      throw new Error(`The "${drawer}" account is missing — set it up in Account Masters before taking money against this bill.`)
+    }
+
+    const ledgerId = await openParty(ctx, customerName, {
+      phone: bill.customerPhone || undefined,
+      group: spec.group,
+    })
+
+    const number = keepAsBill ? await billNumberFor(ctx, bill) : String(bill.number ?? '')
     const now = Date.now()
-    const fy = financialYear(args.date)
-    const ref = `BILL-${args.billNumber}`
+    const fy = fyOf(date)
+    const ref = `BILL-${number}`
+    const attachments = args.attachments ?? []
 
-    // One voucher per bill: the one being edited if this came from the books,
-    // else this bill's own by its reference — so an edited bill updates rather
-    // than posts twice.
-    const existing = args.voucherId
-      ? await ctx.db.get(args.voucherId)
+    /**
+     * One voucher per bill: the one being edited if this came from the books,
+     * else this bill's own by its reference — so an edited bill, or a retry
+     * after a failed save, updates rather than posts twice.
+     */
+    const existing = bill.voucherId
+      ? await ctx.db.get(bill.voucherId as Id<'vouchers'>)
       : await ctx.db
           .query('vouchers')
           .filter((q) => q.eq(q.field('refNo'), ref))
           .first()
+    if (bill.voucherId && !existing) {
+      throw new Error('The voucher this bill was opened from is no longer in the books.')
+    }
 
     let voucherId: Id<'vouchers'>
     if (existing) {
@@ -174,50 +199,84 @@ export const postBill = mutation({
       // ledger side must survive the bill being saved again.
       const already = new Set((existing.attachments ?? []).map((a: any) =>
         typeof a === 'string' ? a : a.storageId))
-      const added = (args.attachments ?? []).filter((a) => !already.has(a.storageId))
+      const added = attachments.filter((a) => !already.has(a.storageId))
       await ctx.db.patch(existing._id, {
         typeId: type._id,
-        date: args.date, partyLedgerId: ledgerId, amount: args.total, updatedAt: now,
+        date, partyLedgerId: ledgerId, amount: total, updatedAt: now,
         // A voucher written in the books keeps its own reference and wording
         // unless the bill says otherwise; one posted from a bill keeps BILL-n.
-        ...(args.refNo !== undefined ? { refNo: args.refNo || undefined } : {}),
-        ...(args.narration !== undefined ? { narration: args.narration || undefined } : {}),
+        ...(bill.ref !== undefined ? { refNo: String(bill.ref) || undefined } : {}),
+        ...(bill.notes !== undefined ? { narration: String(bill.notes) || undefined } : {}),
         // An amount typed onto a voucher that was filed without one makes it
         // final, and it starts affecting the balances.
-        ...(existing.status === 'pending' && args.total ? { status: 'final' as const } : {}),
+        ...(existing.status === 'pending' ? { status: 'final' as const } : {}),
         ...(added.length ? { attachments: [...(existing.attachments ?? []), ...added] } : {}),
       })
       voucherId = existing._id
-      for (const e of await ctx.db
-        .query('voucherEntries')
-        .withIndex('by_voucher', (q) => q.eq('voucherId', existing._id))
-        .collect()) {
-        await ctx.db.delete(e._id)
-      }
+      await clearLines(ctx, voucherId)
     } else {
       voucherId = await ctx.db.insert('vouchers', {
         typeId: type._id,
-        voucherNo: await nextVoucherNo(ctx, type._id, fy),
+        voucherNo: await nextVoucherNo(ctx, type, fy),
         fy,
-        date: args.date,
+        date,
         partyLedgerId: ledgerId,
-        refNo: args.refNo ?? ref,
-        narration: args.narration || `${spec.type} ${args.billNumber}`,
+        refNo: bill.ref ? String(bill.ref) : ref,
+        narration: bill.notes ? String(bill.notes) : `${spec.type} ${number}`,
         status: 'final' as const,
-        amount: args.total,
-        attachments: args.attachments ?? [],
+        amount: total,
+        attachments,
         createdAt: now,
         updatedAt: now,
       })
     }
 
-    // The two sides that make it balance, which way round depending on the kind.
-    await ctx.db.insert('voucherEntries', {
-      voucherId, ledgerId, side: spec.party, amount: args.total, date: args.date,
-    })
-    await ctx.db.insert('voucherEntries', {
-      voucherId, ledgerId: account._id, side: spec.other, amount: args.total, date: args.date,
-    })
-    return { ledgerId, voucherId }
+    /**
+     * The sides that make it balance, which way round depending on the kind.
+     * Money taken now sits on the party's own side — a customer who paid part
+     * of a sale is debited for less, and the drawer is debited for the rest.
+     * Written through the same checked writer the ledger uses, so an
+     * unbalanced set is refused here too.
+     */
+    await writeLines(ctx, voucherId, date, [
+      { ledgerId, side: spec.party, amount: round2(total - received) },
+      ...(settlement ? [{ ledgerId: settlement._id, side: spec.party, amount: received }] : []),
+      { ledgerId: account._id, side: spec.other, amount: total },
+    ].filter((line) => line.amount > 0))
+
+    /**
+     * The bill itself, in the same transaction as the voucher it posted. This
+     * is the whole point: there is no longer a state where the counter's list
+     * has a bill the books have never heard of.
+     */
+    let stored: any = null
+    if (keepAsBill && bill.id) {
+      stored = {
+        ...bill,
+        number,
+        total,
+        ledgerId,
+        voucherId,
+        attachments,
+        postedAt: now,
+        updatedAt: now,
+      }
+      // A bill that posted has no failure to remember.
+      delete stored.postError
+      const store = await ctx.db.query('billsStore').first()
+      const kept = (store?.bills ?? []).filter((b: any) => b?.id !== bill.id)
+      const billSeq = Math.max(store?.billSeq ?? 0, Number(number) || 0)
+      if (store) await ctx.db.patch(store._id, { bills: [...kept, stored], billSeq, savedAt: now })
+      else await ctx.db.insert('billsStore', { bills: [stored], billSeq, savedAt: now })
+    }
+
+    await record(
+      ctx,
+      existing ? 'bill.repost' : 'bill.post',
+      `${spec.type} ${number || ref} · ${customerName} · ${money(total)} on ${day(date)}`,
+      { entity: 'voucher', entityId: voucherId },
+    )
+
+    return { ledgerId, voucherId, number, bill: stored }
   },
 })

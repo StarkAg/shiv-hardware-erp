@@ -56,6 +56,20 @@ export default defineSchema({
     voucherTrashId: v.optional(v.id('trash')),
   }).index('by_bill', ['billId']),
 
+  /**
+   * Bills that were deleted, as a fact that outlives the copy.
+   *
+   * `billsTrash` holds the bill so it can be restored; emptying the bin throws
+   * that row away, and with it the only evidence the bill was ever deleted —
+   * after which any device still holding a copy pushes it straight back in.
+   * A tombstone is small, permanent, and the thing every sync checks against.
+   */
+  billTombstones: defineTable({
+    billId: v.string(),
+    number: v.optional(v.string()),
+    deletedAt: v.number(),
+  }).index('by_bill', ['billId']),
+
   // ── Soft locks: who is currently typing which bill ────────────────────────
   billLocks: defineTable({
     billId: v.string(),
@@ -222,6 +236,16 @@ export default defineSchema({
     updatedAt: v.number(),
     deleted: v.optional(v.boolean()),
     dealer: v.optional(v.boolean()),   // a payment to a supplier, marked on the page
+    /**
+     * The books' side of this note. The drawer used to be a second, separate
+     * record of the shop's money: cash came in here and nowhere else, so Cash
+     * in the trial balance could only ever be half a story. An entry that
+     * names a party the books know posts its Receipt or Payment at once; one
+     * that doesn't waits in the review queue for somebody to say whose it is,
+     * rather than having an account invented for it.
+     */
+    ledgerId: v.optional(v.id('ledgers')),
+    voucherId: v.optional(v.id('vouchers')),
   })
     .index('by_entry_id', ['entryId'])
     .index('by_date', ['date'])

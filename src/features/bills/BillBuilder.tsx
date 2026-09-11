@@ -14,6 +14,7 @@ import {
   Lock,
   Undo2,
   Redo2,
+  RefreshCw,
   Minus,
   Truck,
 } from 'lucide-react'
@@ -25,6 +26,15 @@ import { useShortcuts } from '../../lib/useShortcuts'
 import BillDropUntyped from '../ledger/components/BillDrop'
 import BillViewerUntyped from '../ledger/components/BillViewer'
 import { useUploader } from '../ledger/lib/upload'
+
+/**
+ * A bill as plain data, for handing to the server.
+ *
+ * The store's bills carry keys whose value is `undefined` — a kind never set,
+ * a phone never typed — and undefined is not something that survives the wire.
+ * A round trip through JSON drops them and leaves exactly the bill.
+ */
+const plain = (bill: unknown) => JSON.parse(JSON.stringify(bill))
 
 /** The picker is plain JSX; this states the props it actually takes. */
 const BillDrop = BillDropUntyped as unknown as (props: {
@@ -1992,9 +2002,13 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     'mod+q': () => cancel(),
     'alt+d': () => {
       if (!confirm(`Delete bill ${draft.number}?`)) return
-      deleteBill(draft.id)
-      setView('list')
-      navigate('/bills', { replace: true })
+      void deleteBill(draft.id).then((gone) => {
+        // A delete the server never agreed to is not a delete: the bill would
+        // be back on the next sync, with its voucher still in the books.
+        if (!gone) { alert('Could not reach the books, so the bill was not deleted.'); return }
+        setView('list')
+        navigate('/bills', { replace: true })
+      })
     },
     Escape: () => {
       // A dropdown swallows Esc first; reaching here means nothing is open.
@@ -2004,10 +2018,44 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     },
   }, { enabled: view === 'form' })
 
-  async function save() {
-    if (readOnly) { alert(`This bill is open on ${lockedBy}.`); return }
-    committedRef.current = true
+  /**
+   * Post a bill and keep what the server made of it.
+   *
+   * One call. It either writes the voucher, its Dr/Cr lines and the bill in a
+   * single transaction, or it throws and nothing was written — there is no
+   * longer a middle state where the counter's list has a bill the books have
+   * never heard of. A failure keeps the typing on this PC, marked unposted and
+   * held back from sync, so it can be retried rather than retyped.
+   */
+  async function postStored(
+    bill: Bill & { total: number },
+    keepAsBill: boolean,
+  ): Promise<{ bill: Bill & { total: number }; ledgerId?: string } | null> {
+    try {
+      const res = await postToLedger({
+        bill: plain(bill) as never,
+        attachments: (bill.attachments ?? []) as never,
+        keepAsBill,
+      })
+      const stored = { ...bill, ...((res?.bill as Bill) ?? {}) } as Bill & { total: number }
+      // Whatever went wrong last time is over; the mark has to go with it, or
+      // a bill that posted on the retry would stay flagged and unsynced.
+      delete stored.postError
+      // The number, the voucher and the party account are the server's answer
+      // now; adopting them is what keeps two PCs from arguing about them.
+      if (keepAsBill) saveBill(stored)
+      return { bill: stored, ledgerId: (res?.ledgerId as string) ?? undefined }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[ledger] posting failed', err)
+      if (keepAsBill) saveBill({ ...bill, postError: message })
+      alert(`Not saved to the books:\n${message}\n\nThe bill is kept on this PC as unposted. Fix it and save again.`)
+      return null
+    }
+  }
 
+  /** The open bill: photographs up first, then the one posting call. */
+  async function postDraft() {
     // The photographs go up first: a bill that saved without them would leave
     // the paper it was written from nowhere, and the ledger showing a voucher
     // with no document against it.
@@ -2029,55 +2077,29 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       setPhotoPicked([])
     } catch (err) {
       alert(`Could not attach the photos:\n${err instanceof Error ? err.message : String(err)}`)
-      return
+      return null
     }
 
-    const billToSave = { ...draft, total, attachments }
     // A voucher opened from the books is edited here, but it is not one of the
     // shop's own bills and must not join their list — it would show twice in
     // the day book, once as the voucher and once as a bill of the same thing.
-    const isVoucherEdit = Boolean(draft.voucherId)
+    // The `vch-` id is the test, not the voucherId: every posted bill has one.
+    const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
+    return postStored({ ...draft, total, attachments }, !borrowed)
+  }
 
-    // Open the customer's account if they haven't got one, and post the sale
-    // against it. Failing here must not cost the shop the bill, so the bill is
-    // saved either way and the books can be reconciled later.
-    let ledgerId: string | undefined
-    try {
-      const res = await postToLedger({
-        billNumber: billToSave.number,
-        date: new Date(billToSave.date).getTime(),
-        customerName: billToSave.customerName ?? '',
-        phone: billToSave.customerPhone || undefined,
-        total,
-        kind: billToSave.kind ?? 'sale',
-        attachments: attachments as never,
-        ...(billToSave.voucherId
-          ? {
-              voucherId: billToSave.voucherId as never,
-              refNo: billToSave.ref ?? '',
-              narration: billToSave.notes ?? '',
-            }
-          : {}),
-      })
-      ledgerId = (res?.ledgerId as string) ?? undefined
-      if (!res) {
-        alert(!billToSave.customerName?.trim()
-          ? 'No ledger posted — the bill has no customer name.'
-          : !total
-            ? 'No ledger posted — the bill total is zero.'
-            : 'No ledger posted — the Sale voucher type or Sales account is missing.')
-      }
-    } catch (err) {
-      // The bill still saves — but a silent failure here means the books
-      // quietly drift from the bills, which is worse than an interruption.
-      console.error('[ledger] posting failed', err)
-      alert(`Saved the bill, but posting to the ledger failed:\n${err instanceof Error ? err.message : String(err)}`)
-    }
+  async function save() {
+    if (readOnly) { alert(`This bill is open on ${lockedBy}.`); return }
+    committedRef.current = true
 
-    if (!isVoucherEdit) saveBill({ ...billToSave, ...(ledgerId ? { ledgerId } : {}) })
+    const done = await postDraft()
+    // Stay on the bill when the books refused it. Walking away to a screen
+    // that looks like success is exactly what made the books drift.
+    if (!done) return
+
     setView('list')
     // Straight to the customer's account, which is what you want to see next.
-    navigate(ledgerId ? '/ledger' : '/bills', { replace: true })
+    navigate(done.ledgerId ? '/ledger' : '/bills', { replace: true })
   }
 
   function cancel() {
@@ -2118,12 +2140,23 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     frame.srcdoc = buildBillHtml(bill)
   }
 
-  function handlePrint() {
+  async function handlePrint() {
     if (readOnly) { alert(`This bill is open on ${lockedBy}.`); return }
     committedRef.current = true
-    const billToSave = { ...draft, total }
-    if (!draft.voucherId) saveBill(billToSave)
-    doPrint(billToSave)
+
+    /**
+     * Printing saves. Paper carries a number, and a number handed to a
+     * customer that the books never issued is the drift this path exists to
+     * stop — the bill is posted first and what comes out of the printer is
+     * what the server filed.
+     *
+     * A bill that is already posted still prints when the save cannot go
+     * through: that is the shop reprinting an old bill with the internet down,
+     * and nothing new is being claimed.
+     */
+    const done = await postDraft()
+    if (done) { doPrint(done.bill); return }
+    if (draft.postedAt) doPrint({ ...draft, total })
   }
 
   // ---- FORM VIEW -----------------------------------------------------------
@@ -2374,8 +2407,59 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             <Plus size={13} /> Add Item
           </button>
 
-          {/* Running total */}
-          <div className="mt-3 flex justify-end">
+          {/* Running total, and what was taken against it */}
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+            {/* A receipt or a payment is the money itself, so it asks only
+                where it went. A sale or a purchase asks how much of it was
+                settled now — that amount posts as a line of this same
+                voucher, against the drawer or the bank. */}
+            {!isMoneyVoucher && (
+              <div className="flex items-center gap-1.5 rounded-xl bg-stone-100 px-3 py-2 dark:bg-stone-800">
+                <span className="text-sm text-stone-500 dark:text-stone-400">
+                  {(draft.kind ?? 'sale') === 'purchase' ? 'Paid' : 'Received'}
+                </span>
+                <span className="text-sm text-stone-400">₹</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={total || undefined}
+                  data-bill-nav="1"
+                  value={draft.paidAmount ?? ''}
+                  onChange={(e) => setDraft((d) => ({
+                    ...d,
+                    paidAmount: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
+                    paid: Number(e.target.value) >= total && total > 0,
+                  }))}
+                  className="w-24 rounded-lg border border-stone-200 bg-white px-2 py-1 text-right text-sm dark:border-white/10 dark:bg-stone-900 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setDraft((d) => ({ ...d, paidAmount: total, paid: true }))}
+                  className="rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 hover:bg-stone-200 dark:text-stone-400 dark:hover:bg-white/10"
+                >
+                  Full
+                </button>
+              </div>
+            )}
+            {(isMoneyVoucher || (draft.paidAmount ?? 0) > 0) && (
+              <div className="flex items-center gap-1 rounded-xl bg-stone-100 p-1 dark:bg-stone-800">
+                {(['cash', 'online'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setDraft((d) => ({ ...d, paymentMode: mode }))}
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold capitalize ${
+                      (draft.paymentMode ?? 'cash') === mode
+                        ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-white'
+                        : 'text-stone-500 dark:text-stone-400'
+                    }`}
+                  >
+                    {mode === 'cash' ? 'Cash' : 'Bank'}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="rounded-xl bg-stone-100 px-5 py-2 dark:bg-stone-800">
               <span className="text-sm text-stone-500 dark:text-stone-400">Total </span>
               <span className="text-lg font-bold text-stone-900 dark:text-white">₹{total.toLocaleString('en-IN')}</span>
@@ -2474,6 +2558,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       bills={bills}
       onNew={startNew}
       onDelete={deleteBill}
+      onRetry={(bill) => { void postStored({ ...bill, total: bill.total }, true) }}
     />
   )
 }
@@ -2542,12 +2627,16 @@ type DayRow = {
   billId?: string
   draft?: boolean
   onDelete?: () => void
+  /** Why the books refused this bill, and how to ask them again. */
+  problem?: string
+  onRetry?: () => void
 }
 
-function BillDayBook({ bills, onNew, onDelete }: {
+function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   bills: Bill[]
   onNew: (kind?: BillKind) => void
-  onDelete: (id: string) => void
+  onDelete: (id: string) => Promise<boolean>
+  onRetry: (bill: Bill & { total: number }) => void
 }) {
   const dark = useLedgerTheme()
   const navigate = useNavigate()
@@ -2609,18 +2698,25 @@ function BillDayBook({ bills, onNew, onDelete }: {
         partyId: b.ledgerId,
         ref: b.ref || '',
         side: sideOf(billLabel(b)),
-        account: 'Not posted',
+        account: b.postError ? `Not posted — ${b.postError}` : 'Not posted',
         amount: b.total,
         photos: [],
         billId: b.id,
-        onDelete: () => { if (confirm(`Delete bill #${b.number}?`)) onDelete(b.id) },
+        problem: b.postError,
+        onRetry: b.postError ? () => onRetry({ ...b, total: b.total }) : undefined,
+        onDelete: () => {
+          if (!confirm(`Delete bill #${b.number}?`)) return
+          void onDelete(b.id).then((gone) => {
+            if (!gone) alert('Could not reach the books, so the bill was not deleted.')
+          })
+        },
       })
     }
 
     // Newest first: this is the screen you open to see what just happened, and
     // ascending order buries today under two hundred rows.
     return list.sort((a, b) => b.date - a.date || b.label.localeCompare(a.label))
-  }, [vouchers, finished, from, to, bills, onDelete])
+  }, [vouchers, finished, from, to, bills, onDelete, onRetry])
 
   const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0)
 
@@ -2701,7 +2797,7 @@ function BillDayBook({ bills, onNew, onDelete }: {
                         <td colSpan={2} />
                       </tr>
                       {day.rows.map((r) => (
-                    <tr key={r.key} className={r.amount === null ? 'unpriced' : undefined}>
+                    <tr key={r.key} className={r.problem ? 'unposted' : r.amount === null ? 'unpriced' : undefined}>
                       <td className="mono entryno" data-label="Vch">{r.label}</td>
                       <td className="particulars" data-label="Party">
                         {/* The name is the account: it opens their ledger,
@@ -2720,7 +2816,9 @@ function BillDayBook({ bills, onNew, onDelete }: {
                         )}
                       </td>
                       <td className="ref mono" data-label="Ref">{r.ref || '—'}</td>
-                      <td className="particulars" data-label="Particulars">{r.account || '—'}</td>
+                      <td className="particulars" data-label="Particulars">
+                        {r.problem ? <span className="warn">{r.account}</span> : (r.account || '—')}
+                      </td>
                       <td className="num" data-label="Amount">
                         {r.amount === null ? <span className="warn">awaiting amount</span> : rupees(r.amount)}
                       </td>
@@ -2749,6 +2847,11 @@ function BillDayBook({ bills, onNew, onDelete }: {
                         >
                           ✎
                         </button>
+                        {r.onRetry && (
+                          <button className="xbtn" aria-label="Post to the books" title="Post to the books" onClick={r.onRetry}>
+                            <RefreshCw size={14} aria-hidden="true" />
+                          </button>
+                        )}
                         {r.onDelete && (
                           <button className="xbtn del" aria-label="Delete" onClick={r.onDelete}>✕</button>
                         )}

@@ -28,6 +28,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   BookOpen,
+  Wallet,
 } from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
 import { UpdateBanner } from './UpdateBanner'
@@ -314,6 +315,10 @@ export function AppLayout() {
           </NavLink>
           <NavLink to="/inventory" className={linkClass}>
             <Package size={18} /> Inventory
+          </NavLink>
+          {/* Drawer notes the books could not take on their own. */}
+          <NavLink to="/cash-review" className={linkClass}>
+            <Wallet size={18} /> Cash review
           </NavLink>
           <NavLink to="/trash" className={linkClass}>
             <Trash2 size={18} /> Trash
