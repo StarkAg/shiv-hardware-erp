@@ -34,6 +34,17 @@ function formatDate(iso: string) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 
+/**
+ * The name without the "M/s" the shop writes in front of it.
+ *
+ * Every document prints "M/s" itself, and many accounts were opened with it
+ * already in the name — so the two ran together as "M/s M/s Pappu Jee". The
+ * courtesy belongs to the document, not to the account.
+ */
+export function withoutCourtesy(name: string): string {
+  return String(name ?? '').replace(/^\s*m\/?s\.?\s+/i, '').trim()
+}
+
 export function toProperCase(s: string) {
   return s.replace(/\b\w/g, c => c.toUpperCase())
 }
@@ -133,7 +144,104 @@ function attrCell(item: Bill['items'][number]): string {
   return attrCellFrom(itemAttrs(item))
 }
 
+/** ₹29,830 as "Twenty Nine Thousand Eight Hundred Thirty Rupees Only". */
+const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
+const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+
+function twoDigits(n: number): string {
+  if (n < 20) return ONES[n]
+  return `${TENS[Math.floor(n / 10)]}${n % 10 ? ` ${ONES[n % 10]}` : ''}`
+}
+
+/** Indian grouping: crore, lakh, thousand, hundred — not millions. */
+export function rupeesInWords(amount: number): string {
+  const n = Math.floor(Math.abs(Number(amount) || 0))
+  if (n === 0) return 'Zero Rupees Only'
+  const parts: string[] = []
+  const crore = Math.floor(n / 10000000)
+  const lakh = Math.floor((n % 10000000) / 100000)
+  const thousand = Math.floor((n % 100000) / 1000)
+  const hundred = Math.floor((n % 1000) / 100)
+  const rest = n % 100
+  if (crore) parts.push(`${twoDigits(crore)} Crore`)
+  if (lakh) parts.push(`${twoDigits(lakh)} Lakh`)
+  if (thousand) parts.push(`${twoDigits(thousand)} Thousand`)
+  if (hundred) parts.push(`${ONES[hundred]} Hundred`)
+  if (rest) parts.push(twoDigits(rest))
+  return `${parts.join(' ')} Rupees Only`
+}
+
+/**
+ * A receipt is not a bill.
+ *
+ * It has no goods on it and nothing to add up — it acknowledges money, so it
+ * prints as an acknowledgement: who paid, how much, in words, how it was paid
+ * and what it settles. Printing it through the estimate's item table produced
+ * a bill with one odd line on it and a total that read as a demand for money
+ * already in the drawer.
+ */
+function buildReceiptHtml(bill: Bill): string {
+  const paying = bill.kind === 'payment'
+  const discount = Math.max(0, Number(bill.discount) || 0)
+  const settled = Number(bill.total) || 0
+  const money = Math.max(0, settled - discount)
+  const mode = bill.paymentMode === 'online' || bill.paymentMode === 'upi' ? 'Bank' : 'Cash'
+
+  const row = (label: string, value: string) => `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6mm;padding:1.4mm 0;border-bottom:0.5px dotted #bbb">
+      <span style="color:#555;font-size:9.5pt">${esc(label)}</span>
+      <span style="font-weight:700;font-size:10.5pt">${value}</span>
+    </div>`
+
+  return `<div style="position:relative;width:148mm;min-height:210mm;margin:0 auto;padding:10mm 9mm;box-sizing:border-box;background:#fff">
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;letter-spacing:5px;color:#888;text-transform:uppercase;padding-bottom:1.5mm;border-bottom:0.5px solid #bbb">
+      <span>${paying ? 'Payment Voucher' : 'Receipt'}</span>
+      <span>${esc(bill.number)}</span>
+    </div>
+
+    <div style="margin-top:8mm;font-size:10pt;line-height:1.9">
+      <span style="color:#555">${paying ? 'Paid to' : 'Received with thanks from'}</span>
+      <div style="font-weight:700;font-size:12.5pt;margin-top:1mm">M/s&nbsp;${esc(toProperCase(withoutCourtesy(bill.customerName) || '—'))}</div>
+      ${bill.customerPhone ? `<div style="font-size:9pt;color:#555">${esc(bill.customerPhone)}</div>` : ''}
+    </div>
+
+    <div style="margin-top:6mm;padding:4mm 5mm;border:1px solid #111;border-radius:1mm">
+      <div style="font-size:9pt;color:#555;letter-spacing:1px;text-transform:uppercase">the sum of</div>
+      <div style="font-size:16pt;font-weight:900;margin-top:1.5mm">₹${fmt(money)}</div>
+      <div style="font-size:9.5pt;font-style:italic;color:#333;margin-top:1.5mm;line-height:1.5">
+        ${esc(rupeesInWords(money))}
+      </div>
+    </div>
+
+    <div style="margin-top:6mm">
+      ${row(`By ${mode}`, `₹${fmt(money)}`)}
+      ${discount > 0 ? row(paying ? 'Discount received' : 'Discount allowed', `₹${fmt(discount)}`) : ''}
+      ${discount > 0 ? row('Settled against account', `₹${fmt(settled)}`) : ''}
+      ${bill.ref ? row('Against', bill.ref) : ''}
+      ${row('Date', formatDate(bill.paidDate || bill.date))}
+    </div>
+
+    ${bill.notes ? `<div style="margin-top:5mm;font-size:9.5pt;color:#444;line-height:1.6">${esc(bill.notes)}</div>` : ''}
+
+    <div style="position:absolute;bottom:14mm;right:9mm;text-align:center">
+      <div style="width:46mm;border-top:0.5px solid #111;padding-top:1.5mm;font-size:9pt;color:#555">
+        For Shiv Hardware Store
+      </div>
+    </div>
+  </div>`
+}
+
 export function buildBillHtml(bill: Bill): string {
+  // A receipt and a payment are money, not goods, and print as their own
+  // document — one page, no item table, no running total.
+  const pagesHtml = (bill.kind === 'receipt' || bill.kind === 'payment')
+    ? buildReceiptHtml(bill)
+    : buildEstimatePages(bill)
+  return wrapPages(pagesHtml)
+}
+
+function buildEstimatePages(bill: Bill): string {
   const items = billLines(bill.items)
   const charges = billCharges(bill.items)
   const PAGE_ITEMS = 14
@@ -152,7 +260,7 @@ export function buildBillHtml(bill: Bill): string {
     const hasCustomerInfo = !!(bill.customerName || bill.customerPhone || bill.customerUid || bill.ref)
     const customerBlock = pageIdx === 0 && hasCustomerInfo
       ? `<div style="flex:1;min-width:0">
-          ${bill.customerName ? `<div style="font-weight:700;font-size:10.5pt">M/s&nbsp;${esc(toProperCase(bill.customerName))}</div>` : ''}
+          ${bill.customerName ? `<div style="font-weight:700;font-size:10.5pt">M/s&nbsp;${esc(toProperCase(withoutCourtesy(bill.customerName)))}</div>` : ''}
           ${bill.customerPhone ? `<div style="font-weight:400;font-size:9pt;color:#555;margin-top:0.5mm">${esc(bill.customerPhone)}</div>` : ''}
           ${bill.customerUid ? `<div style="font-weight:400;font-size:8.5pt;color:#777;margin-top:0.5mm">UID - ${esc(bill.customerUid)}</div>` : ''}
           ${bill.ref ? `<div style="font-weight:400;font-size:8.5pt;color:#777;margin-top:0.5mm">Ref - ${esc(bill.ref)}</div>` : ''}
@@ -202,10 +310,30 @@ export function buildBillHtml(bill: Bill): string {
       ? `<div style="font-size:9pt;color:#444">${esc(formatDate(bill.date))}</div>`
       : `<span style="font-style:italic;font-weight:700;font-size:9.5pt;color:#444">P.T.O</span>`
 
+    // Money taken against the bill, and what is still owed after it. A receipt
+    // or a payment is the money itself, so there is nothing to take off it.
+    const isMoneyVoucher = bill.kind === 'receipt' || bill.kind === 'payment'
+    const received = isMoneyVoucher
+      ? 0
+      : Math.min(Math.max(Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0, 0), Number(bill.total) || 0)
+    const balance = (Number(bill.total) || 0) - received
+    const receivedLabel = `${bill.kind === 'purchase' ? 'Paid' : 'Received'}${
+      bill.paidDate && bill.paidDate !== bill.date ? ` ${formatDate(bill.paidDate)}` : ''
+    }`
+
     const bottomRight = isLast
       ? `<div style="text-align:right">
           ${prevTotal > 0 ? `<div style="font-size:9.5pt;color:#555;margin-bottom:0.5mm">${fmt(runningTotal)}</div>` : ''}
-          <div style="font-size:12pt;font-weight:900;border-top:1.5px solid #111;border-bottom:3px double #111;padding-top:1mm;padding-bottom:1mm;min-width:24mm">${fmt(bill.total)}</div>
+          <div style="font-size:12pt;font-weight:900;border-top:1.5px solid #111;${
+            received > 0 ? '' : 'border-bottom:3px double #111;'
+          }padding-top:1mm;padding-bottom:1mm;min-width:24mm">${fmt(bill.total)}</div>
+          ${received > 0 ? `
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:9.5pt;color:#555;padding-top:1mm">
+              <span>Less ${esc(receivedLabel)}</span><span style="font-weight:600">${fmt(received)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:11pt;font-weight:900;border-top:1.5px solid #111;border-bottom:3px double #111;padding-top:1mm;padding-bottom:1mm;margin-top:1mm">
+              <span>Balance</span><span>${fmt(balance)}</span>
+            </div>` : ''}
         </div>`
       : `<div style="font-size:10pt;font-weight:700">${fmt(runningTotal)}</div>`
 
@@ -254,6 +382,10 @@ export function buildBillHtml(bill: Bill): string {
     </div>`
   }).join('')
 
+  return pagesHtml
+}
+
+function wrapPages(pagesHtml: string): string {
   return `<!doctype html><html><head><meta charset="utf-8">
 <style>
   @page { size: 148mm 210mm; margin: 0; }

@@ -369,6 +369,25 @@ export interface Bill {
    * day book and the trial balance.
    */
   paidAmount?: number
+  /**
+   * A receipt or a payment is the money itself, so it carries its own amount
+   * rather than adding up item lines — the lines on one are a note of what it
+   * settles, and summing them counted the same money twice.
+   */
+  moneyAmount?: number
+  /**
+   * Taken off at settlement: a discount allowed on a receipt, one received on
+   * a payment. The party's account is cleared for the money and the discount
+   * together, so a bill of ₹30,080 settled by ₹29,830 with ₹250 off leaves
+   * nothing outstanding rather than ₹250 that will never be paid.
+   */
+  discount?: number
+  /**
+   * The day the money was taken, when that is not the day of the bill — a
+   * customer who settles part of last week's bill today. Blank means the money
+   * came in with the bill, which is the usual counter sale.
+   */
+  paidDate?: string
   paymentMode?: BillPaymentMode
   upiRef?: string       // UPI/phone used for payment
   notes?: string
@@ -404,7 +423,14 @@ export interface Bill {
 /** A user-defined labeled chip group (e.g. "Colors", "Widths") on a catalog item. */
 export interface CatalogField { id: string; label: string; values: string[] }
 
-export interface HardwareCatalogEntry { sizes: string[]; brands: string[]; fields?: CatalogField[]; rate?: number }
+export interface HardwareCatalogEntry {
+  sizes: string[]
+  brands: string[]
+  fields?: CatalogField[]
+  rate?: number
+  /** The unit normally used when this hardware item is added to a bill. */
+  unit?: string
+}
 export type HardwareCatalog = Partial<Record<ProductCategory, HardwareCatalogEntry>>
 
 /**
@@ -424,6 +450,8 @@ export interface CustomCatalogEntry {
   fields?: CatalogField[]
   /** The rate used most recently — what a fresh line starts with. */
   rate?: number
+  /** The unit used most recently — what a fresh line starts with. */
+  unit?: string
   /**
    * Every distinct rate this item has been billed at, newest first. One item
    * genuinely sells at several prices — trade vs retail, old stock vs new — so

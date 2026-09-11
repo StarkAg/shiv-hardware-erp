@@ -1028,3 +1028,51 @@ to{opacity: 0}}
 @media (max-width: 900px){
   .ledger-root .home-charts{grid-template-columns: minmax(0, 1fr);}
 }
+
+/* ── Outlook ──────────────────────────────────────────────────────────────
+ * The projection is the same series as the billed months, so it wears the same
+ * hue: a second colour would say it was a second thing. What separates it is
+ * the dash, the hollow marker and the band — and the band is a 10% wash, never
+ * a fill, because it is a spread rather than a quantity.
+ */
+.ledger-root .outlook-line{fill: none; stroke: var(--series-sale); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;}
+.ledger-root .outlook-line.is-projected{stroke-dasharray: 5 4;}
+.ledger-root .outlook-band{fill: var(--series-sale); opacity: 0.1;}
+/* The 2px ring is the surface showing through, so the dot stays legible where
+   it sits on the line it belongs to. */
+.ledger-root .outlook-dot{fill: var(--series-sale); stroke: var(--card); stroke-width: 2;}
+.ledger-root .outlook-dot.is-projected{fill: var(--card); stroke: var(--series-sale);}
+.ledger-root .crosshair{stroke: var(--fg); stroke-width: 1; opacity: 0.25;}
+.ledger-root .outlook-endlabel{fill: var(--fg); font-size: 12px; font-weight: 800;}
+
+/* A dashed key for the projected series: a plain square would claim it is a
+   different colour, which is the one thing it is not. */
+.ledger-root .key-projected{background: repeating-linear-gradient(90deg,
+  var(--series-sale) 0 4px, transparent 4px 7px); border-radius: 0; height: 3px;
+  width: 14px; align-self: center;}
+
+.ledger-root .outlook-lede{display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 2px 0 14px;}
+.ledger-root .outlook-figure{display: grid; gap: 2px;}
+.ledger-root .outlook-label{font-size: 12px; font-weight: 700; color: var(--muted);}
+/* Proportional figures, not tabular: at this size equal-width digits read loose.
+   The hero wears the body sans, like everything else. */
+.ledger-root .outlook-hero{font-size: 40px; font-weight: 800; line-height: 1.05;
+  color: var(--fg); letter-spacing: -0.02em;}
+.ledger-root .outlook-range{font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums;}
+.ledger-root .outlook-chip{display: grid; gap: 1px; justify-items: end; text-align: right;
+  padding: 7px 11px; border-radius: 11px; background: var(--card2);
+  border: 1px solid var(--line); font-size: 13px;}
+.ledger-root .outlook-chip b{font-size: 15px; font-weight: 800;}
+.ledger-root .outlook-chip small{font-size: 11px; color: var(--muted);}
+.ledger-root .outlook-chip.is-up b{color: var(--green-text);}
+.ledger-root .outlook-chip.is-down b{color: var(--red);}
+
+.ledger-root .chart-note{margin: 10px 0 2px; font-size: 11.5px; line-height: 1.5;
+  color: var(--muted); max-width: 62ch;}
+
+@media (max-width: 560px){
+  .ledger-root .outlook-hero{font-size: 32px;}
+}

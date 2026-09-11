@@ -13,7 +13,39 @@ import type { Doc, Id } from '../_generated/dataModel'
 /** The form two spellings of one name have to agree on. */
 export const fold = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ')
 
-/** The party's account, if the books already have one under any spelling. */
+/**
+ * The shop writes a party as "Santosh Singh Ji, Purnimandap" — who they are,
+ * then where they are. The books keep those apart, as `name` and `place`, so
+ * two Santoshes in two villages stay two accounts and a place can be printed
+ * on a bill or left off it.
+ *
+ * Split on the last comma: a name may well carry one of its own ("Sharma & Co,
+ * Prop. Ramesh, Kundru"), and it is the tail that is the village.
+ */
+export function splitPlace(full: string): { name: string; place?: string } {
+  const text = String(full ?? '').trim().replace(/\s+/g, ' ')
+  const at = text.lastIndexOf(',')
+  if (at < 0) return { name: text }
+  const name = text.slice(0, at).trim()
+  const place = text.slice(at + 1).trim()
+  // "Ramesh," or ", Kundru" is a typo, not a split.
+  if (!name || !place) return { name: text }
+  return { name, place }
+}
+
+/** Every spelling that names this account: the bare name, and name with place. */
+const spellingsOf = (l: Doc<'ledgers'>) =>
+  l.place ? [fold(l.name), fold(`${l.name}, ${l.place}`)] : [fold(l.name)]
+
+/**
+ * The party's account, if the books already have one under any spelling.
+ *
+ * Written this way so that splitting a name into name and place does not
+ * quietly open a second account the next time somebody types the old full
+ * spelling: an account answers to both, and to the bare name only when no
+ * other account answers to it too. Two Ramesh in two villages must not merge
+ * because one of them was typed without a village.
+ */
 export async function findParty(
   ctx: QueryCtx,
   name: string,
@@ -21,7 +53,24 @@ export async function findParty(
   const wanted = fold(name)
   if (!wanted) return null
   const all = await ctx.db.query('ledgers').collect()
-  return all.find((l) => fold(l.name) === wanted) ?? null
+
+  const exact = all.filter((l) => spellingsOf(l).includes(wanted))
+  if (exact.length === 1) return exact[0]
+  // Several answer to it — prefer the one whose full spelling was asked for.
+  if (exact.length > 1) {
+    return exact.find((l) => l.place && fold(`${l.name}, ${l.place}`) === wanted) ?? exact[0]
+  }
+
+  // Asked for "Santosh Singh Ji, Purnimandap" while the books hold the two
+  // halves separately, or the other way about.
+  const split = splitPlace(name)
+  if (split.place) {
+    const both = all.find(
+      (l) => fold(l.name) === fold(split.name) && fold(l.place ?? '') === fold(split.place!),
+    )
+    if (both) return both
+  }
+  return null
 }
 
 /**
@@ -57,6 +106,8 @@ export async function openParty(
   if (!under) throw new Error(`The "${groupName}" group is missing — set up the account masters first.`)
 
   const now = Date.now()
+  // Filed under the whole line as typed — "Santosh Singh Ji, Purnimandap" is
+  // one name in this shop's books, not a name and a separate village.
   return await ctx.db.insert('ledgers', {
     name: clean,
     groupId: under._id,

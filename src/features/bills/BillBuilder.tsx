@@ -1,5 +1,5 @@
 import { useState, useRef, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType, useParams, useSearchParams } from 'react-router-dom'
 import { Camera, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
@@ -36,7 +36,7 @@ const BillViewer = BillViewerUntyped as unknown as (props: {
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
 import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, BILL_KINDS } from '../../lib/types'
 import type { BillKind } from '../../lib/types'
-import { buildBillHtml, formatItemDescription, toProperCase } from '../../lib/billHtml'
+import { buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
 import { deviceId, deviceName } from '../../lib/device'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
@@ -90,15 +90,116 @@ function moveBillRow(dir: 1 | -1) {
   if (target instanceof HTMLInputElement) target.select?.()
 }
 
+/**
+ * Terminal-style recall: the last few values typed into each column.
+ *
+ * Kept per column rather than per box, because the useful history of an Amount
+ * is every amount recently typed, not the ones typed on this row. It lives for
+ * the life of the page — long enough to finish a bill, gone by the next one, so
+ * nothing is stored about what the shop sells.
+ */
+const HISTORY_CAP = 20
+const fieldHistory = new Map<string, string[]>()
+/** How far back each box has walked, so a second Up goes further rather than nowhere. */
+const recallAt = new WeakMap<HTMLElement, number>()
+
+const historyKeyOf = (el: HTMLElement) =>
+  el.getAttribute('data-bill-hist') ?? el.getAttribute('data-bill-col')
+
+function rememberField(key: string, value: string) {
+  const past = fieldHistory.get(key) ?? []
+  fieldHistory.set(key, [value, ...past.filter((v) => v !== value)].slice(0, HISTORY_CAP))
+}
+
+/**
+ * Write through the input's own setter so React's onChange fires and the row's
+ * state moves with the box, rather than only the box.
+ */
+function setFieldValue(input: HTMLInputElement, value: string) {
+  const proto = Object.getPrototypeOf(input) as object
+  Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+/**
+ * Up walks back through what was typed in this column, Down walks forward out
+ * of it. Offered on an empty box only — exactly where a terminal offers it —
+ * so Up keeps moving between rows whenever there is something in the box to
+ * move away from.
+ *
+ * Returns true when the key was spent on history rather than movement.
+ */
+function recallHistory(el: HTMLInputElement, older: boolean): boolean {
+  const key = historyKeyOf(el)
+  if (!key) return false
+  const past = fieldHistory.get(key) ?? []
+  if (!past.length) return false
+
+  const walked = recallAt.get(el)
+  if (walked === undefined) {
+    if (!older || el.value !== '') return false
+    recallAt.set(el, 0)
+    setFieldValue(el, past[0])
+    el.select()
+    return true
+  }
+
+  const next = walked + (older ? 1 : -1)
+  // Past the newest is the empty box the walk started from.
+  if (next < 0) {
+    recallAt.delete(el)
+    setFieldValue(el, '')
+    return true
+  }
+  // At the oldest it stops rather than wrapping, so the end is findable.
+  if (next >= past.length) return true
+  recallAt.set(el, next)
+  setFieldValue(el, past[next])
+  el.select()
+  return true
+}
+
 function billArrowKeys(e: React.KeyboardEvent) {
+  // Typing anything else ends the walk: what is in the box is now the
+  // operator's, not a row lifted out of history.
+  if (e.target instanceof HTMLInputElement
+      && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+    recallAt.delete(e.target)
+  }
   if (e.key === 'Enter') {
     e.preventDefault()
     moveBillFocus(1)
     return
   }
+  /**
+   * Backspace on an empty field steps back a box, and Esc empties the box you
+   * are in — Tally's two ways out of a field you landed on by mistake. Once
+   * there is something typed, Backspace is the ordinary delete key again: it
+   * has to erase the figure before it will walk off the field.
+   */
+  if (e.key === 'Backspace' || e.key === 'Escape') {
+    const el = e.target as HTMLElement
+    const input = el instanceof HTMLInputElement ? el : null
+    if (e.key === 'Escape') {
+      if (!input || input.value === '') return
+      e.preventDefault()
+      // Written through the input's own setter so React's onChange fires and
+      // the row's state clears with the box, rather than only the box.
+      const proto = Object.getPrototypeOf(input) as object
+      Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(input, '')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      return
+    }
+    if (!input || input.value !== '') return
+    e.preventDefault()
+    moveBillFocus(-1)
+    return
+  }
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     // Number inputs treat Up/Down as increment — take the key before they do.
     e.preventDefault()
+    if (e.target instanceof HTMLInputElement
+        && recallHistory(e.target, e.key === 'ArrowUp')) return
     moveBillRow(e.key === 'ArrowDown' ? 1 : -1)
     return
   }
@@ -131,6 +232,17 @@ function moveBillFocus(dir: 1 | -1) {
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const today = () => new Date().toISOString().slice(0, 10)
+
+/** The financial year a date falls in, written the way Tally's title bar does. */
+function fyLabel(date: string): string {
+  const d = new Date(date || today())
+  const start = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
+  return `${start}-${String((start + 1) % 100).padStart(2, '0')}`
+}
+
+/** A balance the way the books state it: "90,293.48 Dr". */
+const balanceText = (amount: number, side: string) =>
+  `${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${side}`
 
 
 // --- Smart catalog item helpers -------------------------------------------
@@ -187,10 +299,12 @@ interface SmartItemRowProps {
   onRemove: (id: string) => void
   /** Enter on the last field of the row: open the next line, adding one if needed. */
   onRowDone: (idx: number) => void
+  /** Enter on an untouched row: discard it and finish entering lines. */
+  onBlankRowDone: (id: string) => void
   disabled?: boolean
 }
 
-function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: SmartItemRowProps) {
+function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, disabled }: SmartItemRowProps) {
   const { sets, hardwareCatalog, setHardwareCatalog, customCatalog, addCustomEntry, updateCustomEntry, units, addUnit } = useStore()
 
   /** Stored units plus an "add" row, so the list only holds what the shop uses. */
@@ -198,12 +312,30 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
     () => [...units.map(u => ({ value: u, label: u })), { value: '__add__', label: '+ Add unit…' }],
     [units],
   )
-  /** Returns the unit to store — a new one is prompted for, then remembered. */
+  /** Returns the canonical unit to store — a new one is remembered. */
   function pickUnit(v: string): string | null {
     if (!v || v === '__add__') return null
-    // A unit typed into the field is new by definition — remember it.
-    if (!units.some((u) => u.toLowerCase() === v.toLowerCase())) addUnit(v)
-    return v
+    const typed = v.trim()
+    const saved = units.find((u) => u.toLowerCase() === typed.toLowerCase())
+    if (saved) return saved
+    addUnit(typed)
+    return typed
+  }
+
+  /**
+   * A unit belongs to both this bill line and its catalogue item. Reopening the
+   * item therefore starts with the unit the counter actually uses for it.
+   */
+  function handleUnitPick(v: string) {
+    const unit = pickUnit(v)
+    if (!unit) return
+    onUpdate(item.id, { unit })
+    if (item.customEntryId) {
+      updateCustomEntry(item.customEntryId, { unit })
+    } else if (item.category && HARDWARE_CATS.includes(item.category)) {
+      const current = hardwareCatalog[item.category] ?? { sizes: [], brands: [] }
+      setHardwareCatalog({ ...hardwareCatalog, [item.category]: { ...current, unit } })
+    }
   }
   const activeSet = sets[0]
   const catSizes  = (cat: ProductCategory) => hardwareCatalog[cat]?.sizes ?? []
@@ -418,7 +550,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
         rateSqft: savedRate || undefined,
         amount: savedRate ? Math.round(savedRate * 1) : 0,
         description: [opt.label, defaultSize, defaultBrand, fieldStr].filter(Boolean).join(' '),
-        unit: HARDWARE_DEFAULT_UNIT[opt.category] ?? 'Pc',
+        unit: hardwareCatalog[opt.category]?.unit ?? HARDWARE_DEFAULT_UNIT[opt.category] ?? 'Pc',
       })
       return
     }
@@ -506,7 +638,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
   }
 
   // ── Custom entry helpers ─────────────────────────────────────────────────
-  function selectCustomEntry(entry: { id: string; name: string; sizes: string[]; brands: string[]; rate?: number }) {
+  function selectCustomEntry(entry: { id: string; name: string; sizes: string[]; brands: string[]; rate?: number; unit?: string }) {
     const same = item.customEntryId === entry.id
     const name = formatItemDescription(entry.name)
     setSearch(name)
@@ -523,7 +655,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
       amount:    same ? item.amount : (entry.rate ? Math.round(entry.rate * item.qty) : 0),
       heightIn:  undefined,
       widthIn:   undefined,
-      unit: item.unit || 'Pc',
+      unit: same ? item.unit : (entry.unit || 'Pc'),
     })
   }
 
@@ -688,6 +820,13 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                   }
                   if (e.key !== 'Enter') return
                   e.preventDefault()
+                  // A blank stock-item field is Tally's signal that item entry
+                  // is over. Do not create a made-up line or make the operator
+                  // erase it manually before finishing the bill.
+                  if (!search.trim() && !isCatalog) {
+                    onBlankRowDone(item.id)
+                    return
+                  }
                   const pick = showDrop ? navOptions[highlight] : undefined
                   if (pick) {
                     // Take the highlighted row — first result unless arrowed away.
@@ -715,7 +854,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                 }`}
               />
               {showDrop && (filtered.length > 0 || customFiltered.length > 0 || search.trim()) && (
-                <div ref={dropRef} className="absolute top-full left-0 right-0 z-20 mt-0.5 max-h-72 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl dark:border-white/10 dark:bg-stone-800 lg:hidden">
+                <div ref={dropRef} className="absolute top-full left-0 right-0 z-20 mt-0.5 max-h-72 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl dark:border-white/10 dark:bg-stone-800">
 
                   {/* ── Standard product options ── */}
                   {filtered.length > 0 && (
@@ -1060,7 +1199,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                   <UnitField
                     value={item.unit}
                     options={unitOptions}
-                    onPick={(u) => { const picked = pickUnit(u); if (picked) onUpdate(item.id, { unit: picked }) }}
+                    onPick={handleUnitPick}
                     onNavKey={billArrowKeys}
                     onCommit={() => moveBillFocus(1)}
                   />
@@ -1081,7 +1220,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                   </div>
                 </div>
               )}
-              {/* qty · unit · rate → amount */}
+              {/* qty · unit · amount · rate — the total is read before its rate. */}
               {isCustomEntry && !amountOnly && (
                 <div className="flex items-center gap-1.5 shrink-0">
                   <input
@@ -1103,15 +1242,39 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                   <UnitField
                     value={item.unit}
                     options={unitOptions}
-                    onPick={(u) => { const picked = pickUnit(u); if (picked) onUpdate(item.id, { unit: picked }) }}
+                    onPick={handleUnitPick}
                     onNavKey={billArrowKeys}
                     onCommit={() => moveBillFocus(1)}
                   />
-                  <div className="relative shrink-0 w-[4.5rem]">
+                  <div className="relative w-24 shrink-0">
+                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
+                    <input
+                      type="number"
+                      placeholder="Amt"
+                      data-bill-row={idx} data-bill-col="amt"
+                      data-bill-nav="1"
+                      onKeyDown={billArrowKeys}
+                      value={item.amount || ''}
+                      onFocus={(e) => e.target.select()}
+                      /* Typing a total works backwards to the rate, so a haggled
+                         price can be entered as the figure actually agreed. */
+                      onChange={(e) => {
+                        const amount = Number(e.target.value)
+                        const qty = item.qty || 1
+                        onUpdate(item.id, { amount, rateSqft: qty ? Math.round((amount / qty) * 100) / 100 : amount })
+                      }}
+                      className={`w-full rounded-lg border border-stone-200 py-1.5 pl-6 pr-1.5 text-sm font-bold dark:border-white/10 ${(item.amount || 0) < 0 ? "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300" : "bg-shiv-green/10 dark:bg-shiv-green/15 dark:text-white"}`}
+                    />
+                  </div>
+                  <div className="relative ml-auto shrink-0 w-[4.5rem]">
                     <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                     <input
                       ref={amountRef}
-                      type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate" onKeyDown={billArrowKeys}
+                      type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); onRowDone(idx); return }
+                        billArrowKeys(e)
+                      }}
                       value={item.rateSqft || ''}
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => {
@@ -1123,29 +1286,6 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                         if (rate && item.customEntryId) saveCustomEntryRate(item.customEntryId, rate)
                       }}
                       className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-6 pr-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                    />
-                  </div>
-                  <div className="relative ml-auto w-24 shrink-0">
-                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
-                    <input
-                      type="number"
-                      placeholder="Amt"
-                      data-bill-row={idx} data-bill-col="amt"
-                      data-bill-nav="1"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') { e.preventDefault(); onRowDone(idx); return }
-                        billArrowKeys(e)
-                      }}
-                      value={item.amount || ''}
-                      onFocus={(e) => e.target.select()}
-                      /* Typing a total works backwards to the rate, so a haggled
-                         price can be entered as the figure actually agreed. */
-                      onChange={(e) => {
-                        const amount = Number(e.target.value)
-                        const qty = item.qty || 1
-                        onUpdate(item.id, { amount, rateSqft: qty ? Math.round((amount / qty) * 100) / 100 : amount })
-                      }}
-                      className={`w-full rounded-lg border border-stone-200 py-1.5 pl-6 pr-1.5 text-sm font-bold dark:border-white/10 ${(item.amount || 0) < 0 ? "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300" : "bg-shiv-green/10 dark:bg-shiv-green/15 dark:text-white"}`}
                     />
                   </div>
                 </div>
@@ -1176,10 +1316,32 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                     placeholder="1"
                   />
                   <span className="text-xs text-muted">Pc</span>
+                  <div className="relative shrink-0 w-24">
+                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
+                    <input
+                      type="number"
+                      placeholder="Amt"
+                      data-bill-row={idx} data-bill-col="amt"
+                      data-bill-nav="1"
+                      onKeyDown={billArrowKeys}
+                      value={item.amount || ''}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const amount = Number(e.target.value)
+                        const qty = item.qty || 1
+                        onUpdate(item.id, { amount, rateSqft: qty ? Math.round((amount / qty) * 100) / 100 : amount })
+                      }}
+                      className={`w-full rounded-lg border border-stone-200 py-1.5 pl-6 pr-1.5 text-sm font-bold dark:border-white/10 ${(item.amount || 0) < 0 ? "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300" : "bg-shiv-green/10 dark:bg-shiv-green/15 dark:text-white"}`}
+                    />
+                  </div>
                   <div className="relative ml-auto shrink-0 w-[4.75rem]">
                     <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                     <input
-                      type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate" onKeyDown={billArrowKeys}
+                      type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); onRowDone(idx); return }
+                        billArrowKeys(e)
+                      }}
                       value={item.rateSqft || ''}
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => handleRate(Number(e.target.value))}
@@ -1187,24 +1349,6 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                       title="Rate per sqft"
                     />
                   </div>
-                  <div className="relative shrink-0 w-24 shrink-0">
-                                      <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
-                                      <input
-                                        type="number"
-                                        placeholder="Amt"
-                                        data-bill-row={idx} data-bill-col="amt"
-                                        data-bill-nav="1"
-                                        onKeyDown={billArrowKeys}
-                                        value={item.amount || ''}
-                                        onFocus={(e) => e.target.select()}
-                                        onChange={(e) => {
-                                          const amount = Number(e.target.value)
-                                          const qty = item.qty || 1
-                                          onUpdate(item.id, { amount, rateSqft: qty ? Math.round((amount / qty) * 100) / 100 : amount })
-                                        }}
-                                        className={`w-full rounded-lg border border-stone-200 py-1.5 pl-6 pr-1.5 text-sm font-bold dark:border-white/10 ${(item.amount || 0) < 0 ? "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300" : "bg-shiv-green/10 dark:bg-shiv-green/15 dark:text-white"}`}
-                                      />
-                                    </div>
                 </div>
               )}
           </div>
@@ -1260,7 +1404,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                   ))}
                 </div>
               )}
-              {/* qty · unit · rate input → computed amount pill */}
+              {/* qty · unit · amount · rate */}
               <div className="flex items-center gap-2">
                 <input
                   type="number" min={1} placeholder="Qty" data-bill-nav="1" data-bill-row={idx} data-bill-col="qty" onKeyDown={billArrowKeys}
@@ -1278,31 +1422,11 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                 <UnitField
                     value={item.unit}
                     options={unitOptions}
-                    onPick={(u) => { const picked = pickUnit(u); if (picked) onUpdate(item.id, { unit: picked }) }}
+                    onPick={handleUnitPick}
                     onNavKey={billArrowKeys}
                     onCommit={() => moveBillFocus(1)}
                   />
-                <div className="relative shrink-0 w-[4.5rem]">
-                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
-                  <input
-                    ref={amountRef}
-                    type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate" onKeyDown={billArrowKeys}
-                    value={item.rateSqft || ''}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => {
-                      const rate = Number(e.target.value)
-                      onUpdate(item.id, { rateSqft: rate, amount: Math.round(rate * (item.qty || 1)) })
-                    }}
-                    onBlur={(e) => {
-                      const rate = Number(e.target.value)
-                      if (rate && item.category && HARDWARE_CATS.includes(item.category)) {
-                        saveRateToCatalog(item.category, rate)
-                      }
-                    }}
-                    className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-6 pr-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
-                  />
-                </div>
-                <div className="relative ml-auto w-24 shrink-0">
+                <div className="relative w-24 shrink-0">
                                   <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                                   <input
                                     type="number"
@@ -1320,6 +1444,30 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                                     className={`w-full rounded-lg border border-stone-200 py-1.5 pl-6 pr-1.5 text-sm font-bold dark:border-white/10 ${(item.amount || 0) < 0 ? "bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-300" : "bg-shiv-green/10 dark:bg-shiv-green/15 dark:text-white"}`}
                                   />
                                 </div>
+                <div className="relative ml-auto shrink-0 w-[4.5rem]">
+                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
+                  <input
+                    ref={amountRef}
+                    type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); onRowDone(idx); return }
+                      billArrowKeys(e)
+                    }}
+                    value={item.rateSqft || ''}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const rate = Number(e.target.value)
+                      onUpdate(item.id, { rateSqft: rate, amount: Math.round(rate * (item.qty || 1)) })
+                    }}
+                    onBlur={(e) => {
+                      const rate = Number(e.target.value)
+                      if (rate && item.category && HARDWARE_CATS.includes(item.category)) {
+                        saveRateToCatalog(item.category, rate)
+                      }
+                    }}
+                    className="w-full rounded-lg border border-stone-200 bg-stone-50 py-1.5 pl-6 pr-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -1456,9 +1604,23 @@ function UnitField({ value, options, onPick, onNavKey, onCommit }: {
   useEffect(() => { setText(value) }, [value])
 
   const real = options.filter((o) => o.value !== '__add__')
-  const matches = text.trim()
-    ? real.filter((o) => o.label.toLowerCase().includes(text.trim().toLowerCase()))
-    : real
+  /**
+   * Ranked the way a counter expects: what the typing starts, before what
+   * merely contains it. Typing "s" must offer Set before Bags, or the first
+   * row — the one Enter takes — is the wrong unit.
+   */
+  const matches = useMemo(() => {
+    const q = text.trim().toLowerCase()
+    if (!q) return real
+    const hit = real.filter((o) => o.label.toLowerCase().includes(q))
+    return hit.sort((a, b) => {
+      const rank = (o: { label: string }) => {
+        const l = o.label.toLowerCase()
+        return l === q ? 0 : l.startsWith(q) ? 1 : 2
+      }
+      return rank(a) - rank(b)
+    })
+  }, [options, text])
   const exact = real.some((o) => o.label.toLowerCase() === text.trim().toLowerCase())
 
   useEffect(() => { setHl(0) }, [text])
@@ -1487,17 +1649,36 @@ function UnitField({ value, options, onPick, onNavKey, onCommit }: {
 
   const rows = [...matches, ...(text.trim() && !exact ? [{ value: '__new__', label: text.trim() }] : [])]
 
+  // Leaving the field after a unique prefix should make the same choice as
+  // Enter on the visible list. It prevents a partial "s" being stored when
+  // the only matching unit is "Set".
+  function resolveTypedUnit(typed: string) {
+    const trimmed = typed.trim()
+    const direct = real.find((o) => o.value.toLowerCase() === trimmed.toLowerCase())
+    // A part-typed unit is not a unit. "s" with Set on the list is Set, the
+    // same row Enter would have taken — storing the "s" put a unit on the bill
+    // the shop does not use. Only text that matches nothing is kept as typed,
+    // which is how a genuinely new unit gets created.
+    return direct?.value ?? matches[0]?.value ?? trimmed
+  }
+
   return (
+    /* The list sits under the box it belongs to. It is published to the
+       right-hand panel as well, but that panel is the width of the screen away
+       from a unit field on a wide monitor — too far to read while typing,
+       which is the whole job of a picker. */
+    <div className="relative w-16 shrink-0">
     <input
       type="text"
       data-bill-nav="1"
+      data-bill-hist="unit"
       value={text}
       placeholder="Unit"
       /* Typed like the item name: the list filters as you go and Enter takes
          the highlighted row, or keeps what you typed if nothing matches. */
       onChange={(e) => { setText(e.target.value); setOpen(!!e.target.value.trim()) }}
       onFocus={(e) => e.target.select()}
-      onBlur={() => { setOpen(false); if (text.trim() && text.trim() !== value) commit(text) }}
+      onBlur={() => { setTimeout(() => setOpen(false), 120); if (text.trim() && text.trim() !== value) commit(resolveTypedUnit(text)) }}
       onKeyDown={(e) => {
         if (open && rows.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
           e.preventDefault()
@@ -1507,18 +1688,40 @@ function UnitField({ value, options, onPick, onNavKey, onCommit }: {
         if (open && (e.key === 'Home' || e.key === 'End')) {
           e.preventDefault(); setHl(e.key === 'Home' ? 0 : rows.length - 1); return
         }
-        if (e.key === 'Escape') { setOpen(false); setText(value); return }
+        // Esc closes the list first; pressed again, with no list in the way,
+        // it empties the box like it does in every other field on the bill.
+        if (e.key === 'Escape') { e.preventDefault(); if (open) setOpen(false); else setText(''); return }
         if (e.key === 'Enter') {
           e.preventDefault()
           const pick = open ? rows[hl] : undefined
-          commit(pick ? (pick.value === '__new__' ? text.trim() : pick.value) : text)
+          commit(pick ? (pick.value === '__new__' ? text.trim() : pick.value) : resolveTypedUnit(text))
           onCommit()
           return
         }
         onNavKey(e)
       }}
-      className="w-16 shrink-0 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+      className="w-full rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
     />
+    {open && rows.length > 0 && (
+      /* Wider than the 4rem box so "Set" and "Sqft" are not clipped, and it
+         opens leftwards because the unit sits mid-row with the amount to its
+         right. */
+      <div className="absolute top-full left-0 z-30 mt-0.5 max-h-56 w-24 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl dark:border-white/10 dark:bg-stone-800">
+        {rows.map((r, i) => (
+          <button
+            key={r.value + i}
+            type="button"
+            data-hl={hl === i ? '1' : undefined}
+            onMouseDown={(e) => { e.preventDefault(); commit(r.value === '__new__' ? text.trim() : r.value); onCommit() }}
+            onMouseEnter={() => setHl(i)}
+            className={`block w-full truncate px-2.5 py-1.5 text-left text-sm text-stone-700 dark:text-stone-200 ${hl === i ? 'bg-stone-100 dark:bg-white/10' : ''}`}
+          >
+            {r.value === '__new__' ? `Add "${r.label}"` : r.label}
+          </button>
+        ))}
+      </div>
+    )}
+    </div>
   )
 }
 
@@ -1534,6 +1737,20 @@ type PartyOption = {
   uid?: string
   /** True when this name is an account in the books, not just a name on a bill. */
   account?: boolean
+}
+
+/**
+ * Which side of the books each voucher is written on. A sale and a receipt are
+ * both the customer's; a purchase and a payment are both the supplier's.
+ */
+/** The two vouchers that are money and nothing else. */
+const MONEY_KINDS: BillKind[] = ['receipt', 'payment']
+
+const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier'> = {
+  sale: 'customer',
+  receipt: 'customer',
+  purchase: 'supplier',
+  payment: 'supplier',
 }
 
 function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
@@ -1747,6 +1964,25 @@ export function BillBuilder() {
   const [asking, setAsking] = useState<null | 'delete' | 'leave'>(null)
 
   /**
+   * What the party's account stands at, shown under their name the way Tally's
+   * voucher screen shows it — the counter needs to know a customer is already
+   * ninety thousand down before writing them another bill.
+   */
+  const partyBook = useQuery(
+    partyGroup === 'Sundry Creditors' ? api.reports.outstanding : api.reports.receivables,
+    {},
+  )
+  const partyBalance = useMemo(() => {
+    const name = (draft.customerName ?? '').trim().toLowerCase()
+    if (!name) return null
+    const row = (partyBook?.rows ?? []).find(
+      (r: any) => String(r.ledger?.name ?? '').trim().toLowerCase() === name,
+    )
+    if (!row) return null
+    return { amount: Number(row.closing) || 0, side: String(row.closingSide ?? 'Dr') }
+  }, [partyBook, draft.customerName])
+
+  /**
    * `/bills/voucher/<id>` — editing a voucher that has no bill behind it: one
    * written on the ledger's own form, or approved from a photograph. It opens
    * here as a bill with no lines and the photograph attached, because there is
@@ -1772,12 +2008,20 @@ export function BillBuilder() {
       customerName: voucher.partyName ?? '',
       ref: voucher.refNo ?? '',
       notes: voucher.narration ?? '',
-      // No lines: nobody wrote any. The amount is the voucher's, on a line
-      // that is a figure and nothing else, so the total still adds up and can
-      // be replaced by real lines whenever someone types them.
-      items: voucher.amount
+      // No lines: nobody wrote any. On a sale or a purchase the amount goes on
+      // a line that is a figure and nothing else, so the total still adds up
+      // and can be replaced by real lines whenever someone types them. A
+      // receipt or a payment has nowhere to put a line — the amount is the
+      // voucher — so it fills the money box instead.
+      items: voucher.amount && !MONEY_KINDS.includes(kindOf[voucher.kind] ?? 'sale')
         ? [{ ...emptyItem(), description: voucher.narration || 'On account', amountOnly: true, qty: 1, unit: 'Pc', amount: voucher.amount }]
         : [emptyItem()],
+      // The split between money and discount is not recorded on the voucher's
+      // head, so it reopens as all money — which is what it was unless someone
+      // says otherwise.
+      ...(MONEY_KINDS.includes(kindOf[voucher.kind] ?? 'sale')
+        ? { moneyAmount: voucher.amount ?? 0 }
+        : {}),
       total: voucher.amount ?? 0,
       attachments: (voucher.attachments ?? []).map((a: any) => ({
         storageId: a.storageId, kind: a.kind ?? 'bill',
@@ -1793,13 +2037,77 @@ export function BillBuilder() {
   // is open — the link would go unread on a second press.
   const [pageParams, setPageParams] = useSearchParams()
   const newKind = pageParams.get('new')
+  // `&party=` comes from the account screens, where the voucher is being
+  // written against an account already open — so the name is filled in rather
+  // than typed again.
+  const newParty = pageParams.get('party')
   useEffect(() => {
     if (!newKind) return
     setPageParams({}, { replace: true })
-    setDraft(emptyBill(nextBillNumber(), newKind as BillKind))
+    const kind = newKind as BillKind
+    /**
+     * Changing the voucher type partway through keeps the typing.
+     *
+     * The counter reaches for another type having already written the name and
+     * half the lines — most often because the voucher was started as the wrong
+     * one. Handing back a blank form throws that away and is the reason it felt
+     * safer to finish the wrong voucher and fix it afterwards.
+     *
+     * The party is the one thing that does not always carry: a supplier has no
+     * business on a sale, so a switch across sides drops the name and takes the
+     * account with it. Within a side — a sale becoming a receipt — it stays.
+     */
+    setDraft((d) => {
+      const started = view === 'form' && hasMeaningfulContent({ ...d, total: calcTotal(d.items) })
+      if (!started) {
+        const fresh = emptyBill(nextBillNumber(), kind)
+        return newParty ? { ...fresh, customerName: toProperCase(newParty) } : fresh
+      }
+      const crossed = PARTY_SIDE[d.kind ?? 'sale'] !== PARTY_SIDE[kind]
+      return {
+        ...d,
+        kind,
+        ...(newParty
+          ? { customerName: toProperCase(newParty) }
+          : crossed
+            ? { customerName: '', customerPhone: '', customerUid: '', ledgerId: undefined }
+            : {}),
+      }
+    })
     setView('form')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newKind])
+
+  /**
+   * "Day Book" in the sidebar goes to /bills, which is this same component —
+   * so navigating there with a bill open left the builder on screen and the
+   * day book unreachable. The view has to be put back by hand.
+   *
+   * Keyed on the path actually changing, not on the id being absent: starting
+   * a new bill switches to the form without moving the URL, and spending the
+   * `?new=` parameter rewrites the query on the spot. Either of those would
+   * bounce straight back to the list if absence of an id were the test.
+   */
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const lastKey = useRef(location.key)
+  /**
+   * Going to /bills when a voucher is open means the day book — the sidebar's
+   * Day Book is that same address, so the builder has to stand aside for it.
+   *
+   * Keyed on the navigation rather than the path: starting a voucher never
+   * moves the URL, so waiting for the path to change would never fire. The two
+   * navigations that are not departures are excluded by what they are, not by
+   * counting them — opening `?new=sale` is a push carrying that parameter, and
+   * spending it a moment later is a replace. A replace is the screen rewriting
+   * its own address and never means the operator left it.
+   */
+  useEffect(() => {
+    if (location.key === lastKey.current) return
+    lastKey.current = location.key
+    if (navigationType === 'REPLACE' || newKind) return
+    if (location.pathname === '/bills' && !id && !voucherId) setView('list')
+  }, [location.key, location.pathname, navigationType, newKind, id, voucherId])
 
   // The store can fill in after this mounts: a cold open on a shared link, or
   // a Convex sync landing a moment later. Once per id, so typing is never
@@ -1856,6 +2164,25 @@ export function BillBuilder() {
   }, [view, draft.id, claimLock, releaseLock])
 
   const readOnly = lockedBy !== null
+
+  /**
+   * Everything typed into a column, kept for Up to walk back through.
+   *
+   * Recorded here rather than on each box's own onBlur: there are a dozen of
+   * them across four row layouts, and one delegated listener cannot be
+   * forgotten on the next one added.
+   */
+  useEffect(() => {
+    const onLeave = (e: FocusEvent) => {
+      const el = e.target
+      if (!(el instanceof HTMLInputElement)) return
+      recallAt.delete(el)
+      const key = historyKeyOf(el)
+      if (key && el.value.trim()) rememberField(key, el.value.trim())
+    }
+    document.addEventListener('focusout', onLeave)
+    return () => document.removeEventListener('focusout', onLeave)
+  }, [])
 
   // Opening a bill puts the cursor where entry starts, so the whole voucher can
   // be typed without reaching for the mouse first.
@@ -1929,7 +2256,17 @@ export function BillBuilder() {
   // and half of one is not a bill.
 
   // -- helpers
-  const total = calcTotal(draft.items)
+  /**
+   * A receipt or a payment is the money itself, so its total is the money plus
+   * whatever was knocked off — not a sum of item lines. Writing "Bill 30,080 /
+   * Roundup -250 / Cash 29,830" on one used to total ₹59,660, because the same
+   * money was counted once as the bill and again as the cash.
+   *
+   * A sale or a purchase is still the sum of what is on it.
+   */
+  const money = Math.max(0, Number(draft.moneyAmount) || 0)
+  const discount = Math.max(0, Number(draft.discount) || 0)
+  const total = isMoneyVoucher ? money + discount : calcTotal(draft.items)
 
   function startNew(kind: BillKind = 'sale') {
     setDraft(emptyBill(nextBillNumber(), kind))
@@ -1955,6 +2292,20 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     requestAnimationFrame(() => {
       const rows = document.querySelectorAll<HTMLInputElement>('[data-bill-item-desc]')
       rows[idx + 1]?.focus()
+    })
+  }
+
+  function finishItemEntry(itemId: string) {
+    setDraft((d) => ({
+      ...d,
+      // Keep the first empty row on a brand-new bill, but discard a trailing
+      // placeholder after real lines. It must not show up in the preview.
+      items: d.items.length > 1
+        ? d.items.filter((i) => i.id !== itemId)
+        : d.items,
+    }))
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>('[data-bill-save]')?.focus()
     })
   }
 
@@ -2077,8 +2428,18 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     if (!done) return
 
     setView('list')
-    // Straight to the customer's account, which is what you want to see next.
-    navigate(done.ledgerId ? '/ledger' : '/bills', { replace: true })
+    /**
+     * Straight to the party's own account, which is what you want to see next:
+     * the voucher just written, and what they stand at now that it is in. The
+     * side follows the voucher — a purchase lands on the supplier's account,
+     * a sale on the customer's — and a bill the books never gave an account to
+     * falls back to the day book.
+     */
+    const partyTab = partyGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
+    navigate(
+      done.ledgerId ? `/ledger/${partyTab}/${done.ledgerId}` : '/bills',
+      { replace: true },
+    )
   }
 
   function cancel() {
@@ -2210,42 +2571,84 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             <span>Being edited on <b>{lockedBy}</b> — read only until they finish.</span>
           </div>
         )}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <ReceiptText size={22} className="text-shiv-green" />
-            <h1 className="text-xl font-bold text-stone-900 dark:text-white">
-              {existing ? 'Edit ' : ''}{BILL_KINDS[draft.kind ?? 'sale'].title} #{draft.number}
-            </h1>
-
+        {/* Tally's voucher chrome: what screen this is on the left, whose books
+            on the right, then the voucher's own type and number under it. The
+            colours are the panel's brass and parchment, not Tally's blue. */}
+        <div className="overflow-hidden rounded-xl border border-stone-300 dark:border-white/15">
+          <div className="flex items-center justify-between gap-3 bg-shiv-green px-3 py-1.5 text-stone-950">
+            <span className="truncate text-[13px] font-bold">
+              Accounting Voucher {existing ? 'Alteration' : 'Creation'}
+            </span>
+            <span className="truncate text-[13px] font-bold">
+              M/S Shiv Hardware Store — {fyLabel(draft.date)}
+            </span>
           </div>
-          <input
-            type="date"
-            value={draft.date}
-            onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))}
-            data-bill-nav="1"
-            onKeyDown={billArrowKeys}
-            /* color-scheme makes the browser's own calendar popup and its icon
-               follow the theme — without it both stay light-on-light in dark
-               mode, which is why the picker looked broken. */
-            className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm text-stone-700 accent-shiv-green dark:border-white/10 dark:bg-stone-800 dark:text-stone-200 dark:[color-scheme:dark]"
-          />
+          <div className="flex items-center gap-3 bg-stone-100 px-3 py-2 dark:bg-white/5">
+            <span className="rounded bg-shiv-green/20 px-2 py-0.5 text-sm font-bold text-stone-900 dark:text-white">
+              {BILL_KINDS[draft.kind ?? 'sale'].title}
+            </span>
+            <span className="text-sm text-muted">No.</span>
+            <span className="text-sm font-bold text-stone-900 dark:text-white">{draft.number}</span>
+            <div className="ml-auto flex items-center gap-2">
+              <ReceiptText size={16} className="text-shiv-green" />
+              <input
+                type="date"
+                value={draft.date}
+                onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))}
+                data-bill-date="1"
+                data-bill-nav="1"
+                /* The date sits in the voucher's head, above the party block,
+                   so plain field order would send Enter back down to the name
+                   it just came from. The head is written name, date, phone —
+                   so the date hands on to the phone by name, not by position. */
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    document.querySelector<HTMLInputElement>('[data-bill-phone]')?.focus()
+                    return
+                  }
+                  billArrowKeys(e)
+                }}
+                /* color-scheme makes the browser's own calendar popup and its icon
+                   follow the theme — without it both stay light-on-light in dark
+                   mode, which is why the picker looked broken. */
+                className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-sm text-stone-700 accent-shiv-green dark:border-white/10 dark:bg-stone-800 dark:text-stone-200 dark:[color-scheme:dark]"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="space-y-2">
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">
-              {BILL_KINDS[draft.kind ?? 'sale'].party} Name
+              {BILL_KINDS[draft.kind ?? 'sale'].party} A/c name
             </label>
             <div className="relative">
+            {/* The bill prints "M/s <name>", so the voucher shows it too —
+                drawn beside the box rather than typed into it. Storing it would
+                put it on the party's account in the books and print it twice. */}
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted">
+              M/s
+            </span>
             <input
               type="text"
               autoComplete="off"
               placeholder="e.g. Rajesh Kumar ji"
               data-bill-customer="1"
+              data-bill-hist="party"
               data-bill-nav="1"
               value={draft.customerName}
               onFocus={() => { /* list opens on typing, not on arrival */ }}
-              onBlur={() => setTimeout(() => setShowCust(false), 150)}
+              onBlur={() => {
+                setTimeout(() => setShowCust(false), 150)
+                // The screen and every printed document supply the "M/s"
+                // themselves, so one typed into the box would be stored on the
+                // account and come back out doubled.
+                const bare = withoutCourtesy(draft.customerName ?? '')
+                if (bare !== (draft.customerName ?? '').trim()) {
+                  setDraft((d) => ({ ...d, customerName: bare }))
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                   if (!showCust || !custMatches.length) { billArrowKeys(e); return }
@@ -2262,6 +2665,11 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 // Enter takes the highlighted match first, then moves on.
                 const pick = showCust ? custMatches[custHl] : undefined
                 if (pick && (draft.customerName ?? '').trim()) { pickCustomer(pick); return }
+                /* Tally asks the date next, not the phone: the name and the
+                   day are what every voucher needs, and the phone is filled in
+                   once per customer and never again. */
+                const dateBox = document.querySelector<HTMLInputElement>('[data-bill-date]')
+                if (dateBox) { dateBox.focus(); dateBox.select?.(); return }
                 document.querySelector<HTMLInputElement>('[data-bill-phone]')?.focus()
               }}
               onChange={(e) => {
@@ -2277,10 +2685,25 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                   customerUid: match ? (match.uid ?? '') : d.customerUid,
                 }))
               }}
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+              className="w-full rounded-lg border border-stone-200 bg-white py-2 pl-11 pr-3 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
             />
+            {/* What this account already stands at, and which ledger the
+                voucher posts against — the two lines Tally puts here, so the
+                counter can see the position without leaving the voucher. */}
+            {partyBalance && (
+              /* Spans the field rather than trailing its own label: the figure
+                 lands on the box's right edge, so it sits in the same place on
+                 every voucher instead of wandering with the label's width.
+                 Tabular digits keep the columns of a figure lined up. */
+              <div className="mt-1 flex items-baseline justify-between gap-3 px-1 text-xs">
+                <span className="italic text-muted">Current balance</span>
+                <span className="font-semibold tabular-nums text-stone-700 dark:text-stone-300">
+                  {balanceText(partyBalance.amount, partyBalance.side)}
+                </span>
+              </div>
+            )}
             {showCust && custMatches.length > 0 && (draft.customerName ?? '').trim() && (
-              <div className="absolute top-full left-0 right-0 z-30 mt-0.5 max-h-64 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl dark:border-white/10 dark:bg-stone-800 lg:hidden">
+              <div className="absolute top-full left-0 right-0 z-30 mt-0.5 max-h-64 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl dark:border-white/10 dark:bg-stone-800">
                 {custMatches.map((c, i) => (
                   <button
                     key={c.id}
@@ -2377,8 +2800,74 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           </div>
         </div>
 
+        {/* The money, on a voucher that is nothing but money. It comes first
+            because it is the whole entry — everything below it is a note. */}
+        {isMoneyVoucher && (
+          <div className="rounded-xl border border-stone-300 p-3 dark:border-white/15">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex-1 min-w-[9rem]">
+                <span className="mb-1 block text-xs font-semibold text-muted">
+                  Amount {(draft.kind ?? 'sale') === 'payment' ? 'paid' : 'received'}
+                </span>
+                <div className="relative">
+                  <IndianRupee size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    autoFocus
+                    data-bill-nav="1"
+                    onKeyDown={billArrowKeys}
+                    value={draft.moneyAmount ?? ''}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setDraft((d) => ({
+                      ...d,
+                      moneyAmount: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
+                    }))}
+                    className="w-full rounded-lg border border-stone-200 bg-shiv-green/10 py-2 pl-7 pr-2 text-sm font-bold dark:border-white/10 dark:bg-shiv-green/15 dark:text-white"
+                  />
+                </div>
+              </label>
+
+              {/* What the party was let off. It is not money, so it never
+                  reaches the drawer — it clears the rest of their account. */}
+              <label className="flex-1 min-w-[9rem]">
+                <span className="mb-1 block text-xs font-semibold text-muted">
+                  Discount {(draft.kind ?? 'sale') === 'payment' ? 'received' : 'allowed'}
+                </span>
+                <div className="relative">
+                  <IndianRupee size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    data-bill-nav="1"
+                    onKeyDown={billArrowKeys}
+                    value={draft.discount ?? ''}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setDraft((d) => ({
+                      ...d,
+                      discount: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
+                    }))}
+                    className="w-full rounded-lg border border-stone-200 bg-stone-50 py-2 pl-7 pr-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                  />
+                </div>
+              </label>
+            </div>
+
+            {discount > 0 && (
+              <p className="mt-2 text-xs text-muted">
+                Clears <b className="text-stone-700 dark:text-stone-300">₹{total.toLocaleString('en-IN')}</b> off
+                the account — ₹{money.toLocaleString('en-IN')} in hand
+                and ₹{discount.toLocaleString('en-IN')} allowed.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Items */}
         <div>
+          {!isMoneyVoucher && (<>
           {/* Ledger head — Tally's voucher grid: a ruled band of column names,
               then one line per item, no cards. */}
           {/* No overflow-hidden here: the item and unit dropdowns are absolutely
@@ -2392,8 +2881,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               <span className="flex shrink-0 items-center gap-1.5">
                 <span className="w-12 text-center">Qty</span>
                 <span className="w-16 text-center">Unit</span>
-                <span className="w-[4.5rem] text-center">Rate</span>
                 <span className="w-24 text-right">Amount</span>
+                <span className="w-[4.5rem] text-center">Rate</span>
               </span>
               <span className="w-9 shrink-0" />
             </div>
@@ -2407,6 +2896,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 onUpdate={updateItem}
                 onRemove={removeItem}
                 onRowDone={rowDone}
+                onBlankRowDone={finishItemEntry}
                 disabled={draft.items.length === 1}
               />
             ))}
@@ -2419,6 +2909,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           >
             <Plus size={13} /> Add Item
           </button>
+          </>)}
 
           {/* Running total, and what was taken against it */}
           <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
@@ -2453,6 +2944,19 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 >
                   Full
                 </button>
+                {/* When the money came in. Blank is the usual counter sale —
+                    paid with the bill — so it only asks once there is money to
+                    date, and it defaults to the bill's own day. */}
+                {(draft.paidAmount ?? 0) > 0 && (
+                  <input
+                    type="date"
+                    data-bill-nav="1"
+                    title="Date the money was received"
+                    value={draft.paidDate ?? draft.date}
+                    onChange={(e) => setDraft((d) => ({ ...d, paidDate: e.target.value || undefined }))}
+                    className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-stone-900 dark:text-white"
+                  />
+                )}
               </div>
             )}
             {(isMoneyVoucher || (draft.paidAmount ?? 0) > 0) && (
@@ -2480,6 +2984,22 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           </div>
         </div>
 
+        {/* Narration — Tally's last field before the voucher is accepted. It is
+            the voucher's own wording, so it posts as the narration rather than
+            living only on the bill. */}
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-muted">Narration</label>
+          <input
+            type="text"
+            data-bill-nav="1"
+            onKeyDown={billArrowKeys}
+            value={draft.notes ?? ''}
+            onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+            placeholder="e.g. goods sent by tempo"
+            className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+          />
+        </div>
+
         {/* Actions */}
         <div className="flex items-center gap-3">
           {/* Cancel — intentionally small to avoid accidental taps */}
@@ -2493,6 +3013,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           {/* Save + Print */}
           <div className="flex flex-1 gap-2">
             <button
+              data-bill-save="1"
               onClick={save}
               className="flex-1 rounded-xl bg-shiv-green py-3 text-sm font-bold text-stone-950 hover:bg-[#c6a15a]"
             >
@@ -2560,6 +3081,28 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
         {/* Live print preview — scaled to fit phone width */}
         <BillPreview bill={{ ...draft, total }} />
 
+      </div>
+
+      {/* Tally's key bar. The shortcuts it names are the ones the screen
+          already answers to, so it is a reminder of the keys rather than a
+          second set of buttons. */}
+      <div className="no-print fixed bottom-0 left-0 right-0 z-20 hidden border-t border-stone-300 bg-stone-100 dark:border-white/15 dark:bg-stone-900 lg:flex lg:pr-[21rem] xl:pr-[25rem]">
+        {[
+          { key: 'Q', label: 'Quit', onClick: cancel },
+          { key: 'A', label: 'Accept', onClick: save },
+          { key: 'D', label: 'Delete', onClick: () => setAsking('delete') },
+          { key: 'X', label: 'Cancel Vch', onClick: cancel },
+        ].map((k) => (
+          <button
+            key={k.key}
+            type="button"
+            onClick={k.onClick}
+            className="flex-1 border-r border-stone-300 px-3 py-1.5 text-left text-xs text-stone-700 last:border-r-0 hover:bg-stone-200 dark:border-white/15 dark:text-stone-300 dark:hover:bg-white/10"
+          >
+            <span className="font-bold text-shiv-green underline">{k.key}</span>
+            <span>: {k.label}</span>
+          </button>
+        ))}
       </div>
       </ListPanelContext.Provider>
     )

@@ -545,6 +545,9 @@ async function buildAluminiumHtml(quote) {
 // ── Bill HTML ─────────────────────────────────────────────────────────────────
 // Mirrors BillPrint.tsx exactly — same 148×210mm notepad layout, same columns.
 export function buildBillHtml(bill) {
+  // A receipt and a payment are money, not goods, and print as their own
+  // document — one page, no item table, no running total.
+  if (bill.kind === 'receipt' || bill.kind === 'payment') return buildReceiptHtml(bill)
   // A fare or round-off is not one of the goods: it is a charge on the whole
   // bill and prints just above the total. Mirrors billLines()/billCharges()
   // in src/lib/types.ts. Half-typed rows are not lines of the bill.
@@ -669,10 +672,30 @@ export function buildBillHtml(bill) {
       ? `<div style="font-size:9pt;color:#444">${esc(formatDate(bill.date))}</div>`
       : `<span style="font-style:italic;font-weight:700;font-size:9.5pt;color:#444">P.T.O</span>`
 
+    // Money taken against the bill, and what is still owed after it. A receipt
+    // or a payment is the money itself, so there is nothing to take off it.
+    const isMoneyVoucher = bill.kind === 'receipt' || bill.kind === 'payment'
+    const received = isMoneyVoucher
+      ? 0
+      : Math.min(Math.max(Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0, 0), Number(bill.total) || 0)
+    const balance = (Number(bill.total) || 0) - received
+    const receivedLabel = `${bill.kind === 'purchase' ? 'Paid' : 'Received'}${
+      bill.paidDate && bill.paidDate !== bill.date ? ` ${formatDate(bill.paidDate)}` : ''
+    }`
+
     const bottomRight = isLast ? `
       <div style="text-align:right">
         ${prevTotal > 0 ? `<div style="font-size:9.5pt;color:#555;margin-bottom:0.5mm">${fmt(runningTotal)}</div>` : ''}
-        <div style="font-size:12pt;font-weight:900;border-top:1.5px solid #111;border-bottom:3px double #111;padding-top:1mm;padding-bottom:1mm;min-width:24mm">${fmt(bill.total)}</div>
+        <div style="font-size:12pt;font-weight:900;border-top:1.5px solid #111;${
+          received > 0 ? '' : 'border-bottom:3px double #111;'
+        }padding-top:1mm;padding-bottom:1mm;min-width:24mm">${fmt(bill.total)}</div>
+        ${received > 0 ? `
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:9.5pt;color:#555;padding-top:1mm">
+            <span>Less ${esc(receivedLabel)}</span><span style="font-weight:600">${fmt(received)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:11pt;font-weight:900;border-top:1.5px solid #111;border-bottom:3px double #111;padding-top:1mm;padding-bottom:1mm;margin-top:1mm">
+            <span>Balance</span><span>${fmt(balance)}</span>
+          </div>` : ''}
       </div>` : `<div style="font-size:10pt;font-weight:700">${fmt(runningTotal)}</div>`
 
     // Fare and round-off read just above the total rule: a charge on the bill,
@@ -730,5 +753,114 @@ export function buildBillHtml(bill) {
   </style>
 </head>
 <body>${pagesHtml}</body>
+</html>`
+}
+
+/**
+ * A receipt is not a bill — identical to buildReceiptHtml in src/lib/billHtml.ts.
+ *
+ * It has no goods on it and nothing to add up, so it prints as an
+ * acknowledgement of money rather than through the estimate's item table,
+ * which produced a bill with one odd line and a total that read as a demand
+ * for money already in the drawer.
+ */
+const RCT_ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
+const RCT_TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+
+function rctTwo(n) {
+  if (n < 20) return RCT_ONES[n]
+  return `${RCT_TENS[Math.floor(n / 10)]}${n % 10 ? ` ${RCT_ONES[n % 10]}` : ''}`
+}
+
+/** Indian grouping: crore, lakh, thousand, hundred — not millions. */
+export function rupeesInWords(amount) {
+  const n = Math.floor(Math.abs(Number(amount) || 0))
+  if (n === 0) return 'Zero Rupees Only'
+  const parts = []
+  const crore = Math.floor(n / 10000000)
+  const lakh = Math.floor((n % 10000000) / 100000)
+  const thousand = Math.floor((n % 100000) / 1000)
+  const hundred = Math.floor((n % 1000) / 100)
+  const rest = n % 100
+  if (crore) parts.push(`${rctTwo(crore)} Crore`)
+  if (lakh) parts.push(`${rctTwo(lakh)} Lakh`)
+  if (thousand) parts.push(`${rctTwo(thousand)} Thousand`)
+  if (hundred) parts.push(`${RCT_ONES[hundred]} Hundred`)
+  if (rest) parts.push(rctTwo(rest))
+  return `${parts.join(' ')} Rupees Only`
+}
+
+export function buildReceiptHtml(bill) {
+  const esc = v => String(v ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const fmt = n => Number(n || 0).toLocaleString('en-IN')
+  const proper = s => String(s ?? '').replace(/\b\w/g, c => c.toUpperCase())
+  const when = iso => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  }
+
+  const paying = bill.kind === 'payment'
+  const discount = Math.max(0, Number(bill.discount) || 0)
+  const settled = Number(bill.total) || 0
+  const money = Math.max(0, settled - discount)
+  const mode = bill.paymentMode === 'online' || bill.paymentMode === 'upi' ? 'Bank' : 'Cash'
+
+  const row = (label, value) => `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6mm;padding:1.4mm 0;border-bottom:0.5px dotted #bbb">
+      <span style="color:#555;font-size:9.5pt">${esc(label)}</span>
+      <span style="font-weight:700;font-size:10.5pt">${value}</span>
+    </div>`
+
+  const body = `<div style="position:relative;width:148mm;min-height:210mm;margin:0 auto;padding:10mm 9mm;box-sizing:border-box;background:#fff">
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;letter-spacing:5px;color:#888;text-transform:uppercase;padding-bottom:1.5mm;border-bottom:0.5px solid #bbb">
+      <span>${paying ? 'Payment Voucher' : 'Receipt'}</span>
+      <span>${esc(bill.number)}</span>
+    </div>
+
+    <div style="margin-top:8mm;font-size:10pt;line-height:1.9">
+      <span style="color:#555">${paying ? 'Paid to' : 'Received with thanks from'}</span>
+      <div style="font-weight:700;font-size:12.5pt;margin-top:1mm">M/s&nbsp;${esc(proper(bill.customerName || '—'))}</div>
+      ${bill.customerPhone ? `<div style="font-size:9pt;color:#555">${esc(bill.customerPhone)}</div>` : ''}
+    </div>
+
+    <div style="margin-top:6mm;padding:4mm 5mm;border:1px solid #111;border-radius:1mm">
+      <div style="font-size:9pt;color:#555;letter-spacing:1px;text-transform:uppercase">the sum of</div>
+      <div style="font-size:16pt;font-weight:900;margin-top:1.5mm">₹${fmt(money)}</div>
+      <div style="font-size:9.5pt;font-style:italic;color:#333;margin-top:1.5mm;line-height:1.5">
+        ${esc(rupeesInWords(money))}
+      </div>
+    </div>
+
+    <div style="margin-top:6mm">
+      ${row(`By ${mode}`, `₹${fmt(money)}`)}
+      ${discount > 0 ? row(paying ? 'Discount received' : 'Discount allowed', `₹${fmt(discount)}`) : ''}
+      ${discount > 0 ? row('Settled against account', `₹${fmt(settled)}`) : ''}
+      ${bill.ref ? row('Against', bill.ref) : ''}
+      ${row('Date', when(bill.paidDate || bill.date))}
+    </div>
+
+    ${bill.notes ? `<div style="margin-top:5mm;font-size:9.5pt;color:#444;line-height:1.6">${esc(bill.notes)}</div>` : ''}
+
+    <div style="position:absolute;bottom:14mm;right:9mm;text-align:center">
+      <div style="width:46mm;border-top:0.5px solid #111;padding-top:1.5mm;font-size:9pt;color:#555">
+        For Shiv Hardware Store
+      </div>
+    </div>
+  </div>`
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page { size: 148mm 210mm; margin: 0; }
+    html, body { margin: 0; padding: 0; width: 148mm; background: white; font-family: Arial, sans-serif; color: #111; }
+  </style>
+</head>
+<body>${body}</body>
 </html>`
 }

@@ -61,7 +61,7 @@ function launchIntent() {
   return intent;
 }
 
-export default function App({ route, onRoute, newVoucher, onConsumeNew }) {
+export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVoucher }) {
   const [intent] = useState(launchIntent);
 
   // The phone opens straight onto the camera; nothing else on that screen.
@@ -128,6 +128,18 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew }) {
     setForm({ kind, partyId: keep, amount: keep ? amount : undefined });
   };
 
+  /**
+   * The buttons on an account head for the panel's own voucher screen, taking
+   * the account with them. Same test as `startForm`: the party rides along only
+   * when the voucher is on their side of the books.
+   */
+  const addVoucher = (kind) => {
+    const keep = partyId && groupOf(partyId) === PARTY_GROUP[kind] ? partyId : null;
+    const name = keep ? ledgers.find((l) => l._id === keep)?.name : undefined;
+    if (onOpenVoucher) onOpenVoucher(kind, name);
+    else startForm(kind);
+  };
+
   // A voucher asked for by link (?new=sale) opens once, then the link is spent.
   useEffect(() => {
     if (!newVoucher || !KINDS.includes(newVoucher)) return;
@@ -175,7 +187,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew }) {
       onBack={() => setPartyId(null)}
       onViewBill={setViewing}
       onPrint={(payload) => setPrinting(payload)}
-      onAddVoucher={startForm}
+      onAddVoucher={addVoucher}
     />
   );
 

@@ -82,13 +82,15 @@ describe('posting a bill', () => {
     expect(await stored(t)).toHaveLength(0)
   })
 
-  it('names the missing piece rather than saving a bill with no amount or party', async () => {
+  it('requires a customer, but files an unpriced bill as pending', async () => {
     const t = await shop()
     await expect(t.mutation(api.billLedger.postBill, { bill: aBill({ customerName: '  ' }) }))
       .rejects.toThrow('no customer name')
-    await expect(t.mutation(api.billLedger.postBill, { bill: aBill({ total: 0 }) }))
-      .rejects.toThrow('no amount')
-    expect(await stored(t)).toHaveLength(0)
+    const pending = await t.mutation(api.billLedger.postBill, { bill: aBill({ total: 0 }) })
+    expect((await vouchers(t))[0]).toMatchObject({ status: 'pending' })
+    expect((await vouchers(t))[0].amount).toBeUndefined()
+    expect(await lines(t)).toHaveLength(0)
+    expect((await stored(t))[0]).toMatchObject({ id: 'bill-a', voucherId: pending.voucherId, total: 0 })
   })
 
   it('retries onto the same voucher instead of posting a second one', async () => {
@@ -336,5 +338,92 @@ describe('money taken against a bill', () => {
     await expect(t.mutation(api.billLedger.postBill, { bill: aBill({ paidAmount: 100 }) }))
       .rejects.toThrow('"Cash" account is missing')
     expect(await vouchers(t)).toHaveLength(0)
+  })
+})
+
+describe('a discount given at settlement', () => {
+  /** The counter's case: a ₹30,080 bill settled by ₹29,830 with ₹250 knocked off. */
+  const settled = async (over: Record<string, unknown> = {}) => {
+    const t = await shop()
+    await t.run(async ctx => {
+      const income = (await ctx.db.query('groups').collect())
+        .find(g => g.name === 'Sales Accounts')!
+      await ctx.db.insert('ledgers', {
+        name: 'Discount Allowed', groupId: income._id,
+        openingBalance: 0, openingSide: 'Dr' as const, openingAsOf: 1,
+        active: true, createdAt: 1, updatedAt: 1,
+      })
+    })
+    await t.mutation(api.billLedger.postBill, {
+      bill: aBill({ kind: 'receipt', total: 30080, discount: 250, paymentMode: 'cash', ...over }),
+    })
+    const names = await t.run(ctx => ctx.db.query('ledgers').collect())
+    const byLedger = new Map<string, number>()
+    for (const e of await lines(t)) {
+      const name = names.find(l => l._id === e.ledgerId)!.name
+      byLedger.set(name, (byLedger.get(name) ?? 0) + (e.side === 'Dr' ? e.amount : -e.amount))
+    }
+    return { t, byLedger }
+  }
+
+  it('clears the party for the money and the discount together', async () => {
+    const { byLedger } = await settled()
+    // Credited the whole 30,080, so the account is square rather than 250 short.
+    expect(byLedger.get('Ramesh Kumar')).toBe(-30080)
+  })
+
+  it('puts only the money in the drawer', async () => {
+    const { byLedger } = await settled()
+    expect(byLedger.get('Cash')).toBe(29830)
+  })
+
+  it('puts the discount on its own account, not the drawer', async () => {
+    const { byLedger } = await settled()
+    expect(byLedger.get('Discount Allowed')).toBe(250)
+  })
+
+  it('balances', async () => {
+    const { byLedger } = await settled()
+    expect([...byLedger.values()].reduce((a, b) => a + b, 0)).toBe(0)
+  })
+
+  it('sends the money to the bank when it was paid online, discount unchanged', async () => {
+    const { byLedger } = await settled({ paymentMode: 'online' })
+    expect(byLedger.get('Bank')).toBe(29830)
+    expect(byLedger.get('Discount Allowed')).toBe(250)
+    expect(byLedger.get('Cash') ?? 0).toBe(0)
+  })
+
+  it('writes no discount line when none was given', async () => {
+    const { byLedger } = await settled({ discount: 0 })
+    expect(byLedger.get('Discount Allowed') ?? 0).toBe(0)
+    expect(byLedger.get('Cash')).toBe(30080)
+    expect(byLedger.get('Ramesh Kumar')).toBe(-30080)
+  })
+
+  it('never discounts more than the voucher settles', async () => {
+    const { byLedger } = await settled({ discount: 99999 })
+    expect(byLedger.get('Discount Allowed')).toBe(30080)
+    expect(byLedger.get('Cash') ?? 0).toBe(0)
+    expect([...byLedger.values()].reduce((a, b) => a + b, 0)).toBe(0)
+  })
+
+  it('says which account is missing rather than posting a one-sided entry', async () => {
+    const t = await shop()
+    await expect(t.mutation(api.billLedger.postBill, {
+      bill: aBill({ kind: 'receipt', total: 30080, discount: 250 }),
+    })).rejects.toThrow('"Discount Allowed" account is missing')
+    expect(await vouchers(t)).toHaveLength(0)
+  })
+
+  it('leaves a sale alone — a discount there is a line on the bill, not a settlement', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, {
+      bill: aBill({ total: 1000, paidAmount: 400, discount: 250 }),
+    })
+    const names = await t.run(ctx => ctx.db.query('ledgers').collect())
+    const cash = names.find(l => l.name === 'Cash')!
+    expect((await lines(t)).find(e => e.ledgerId === cash._id)?.amount).toBe(400)
+    expect((await lines(t)).reduce((n, l) => n + (l.side === 'Dr' ? l.amount : -l.amount), 0)).toBe(0)
   })
 })

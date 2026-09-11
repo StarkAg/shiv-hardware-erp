@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { record, money } from "./lib/history";
 import { requirePin } from "./lib/pin";
+import { fold } from "./lib/parties";
 
 /** The groups whose ledgers are people the shop deals with. */
 const PARTY_GROUPS = ["Sundry Creditors", "Sundry Debtors"];
@@ -285,5 +286,75 @@ export const toggleTag = mutation({
     const tags = held.includes(tag) ? held.filter((t) => t !== tag) : [...held, tag];
     await ctx.db.patch(id, { tags, updatedAt: Date.now() });
     return tags;
+  },
+});
+
+/**
+ * Put the address back into the name, which is how this shop writes a party:
+ * "Santosh Singh Ji, Purnimandap" — who, then where, as one name.
+ *
+ * Most accounts are already written that way. The ones that are not were filed
+ * with the village in its own `place` field, so the two halves print and read
+ * differently from every other account in the books. This merges them.
+ *
+ * Run it with `dryRun: true` first: it reports exactly what it would rewrite
+ * and changes nothing. Renaming an account is not a small thing — a bill names
+ * its party in free text, so the rename has to leave every old spelling still
+ * finding the account, which `findParty` now handles.
+ */
+const PLACEHOLDER = /^(—|-|–|n\/?a|na|nil|none|\.)$/i
+
+export const mergePlaceIntoName = mutation({
+  args: { dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, { dryRun }) => {
+    const ledgers = await ctx.db.query("ledgers").collect();
+    const changed: { from: string; to: string }[] = [];
+    const skipped: { name: string; why: string }[] = [];
+
+    for (const l of ledgers) {
+      const place = String(l.place ?? "").trim();
+      if (!place) continue;
+
+      // A dash typed to mean "no address" is not an address.
+      if (PLACEHOLDER.test(place)) {
+        skipped.push({ name: l.name, why: `place is a placeholder (${place})` });
+        if (!dryRun) await ctx.db.patch(l._id, { place: undefined, updatedAt: Date.now() });
+        continue;
+      }
+
+      // Already written the shop's way; just let the duplicate field go.
+      if (l.name.toLowerCase().includes(place.toLowerCase())) {
+        skipped.push({ name: l.name, why: "name already carries the address" });
+        if (!dryRun) await ctx.db.patch(l._id, { place: undefined, updatedAt: Date.now() });
+        continue;
+      }
+
+      const merged = `${l.name.trim().replace(/,\s*$/, "")}, ${place}`;
+
+      // Never merge onto a name another account already answers to — that
+      // would be two accounts with one name and a balance split between them.
+      const clash = ledgers.find(
+        (o) => o._id !== l._id && fold(o.name) === fold(merged),
+      );
+      if (clash) {
+        skipped.push({ name: l.name, why: `"${merged}" is already another account` });
+        continue;
+      }
+
+      changed.push({ from: l.name, to: merged });
+      if (!dryRun) {
+        await ctx.db.patch(l._id, { name: merged, place: undefined, updatedAt: Date.now() });
+      }
+    }
+
+    if (!dryRun && changed.length) {
+      await record(
+        ctx,
+        "ledger.merge-place",
+        `Merged the address into the name on ${changed.length} account(s)`,
+        {},
+      );
+    }
+    return { dryRun: Boolean(dryRun), changed, skipped };
   },
 });

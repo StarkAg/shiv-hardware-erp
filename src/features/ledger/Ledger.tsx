@@ -45,6 +45,17 @@ export function Ledger() {
     setParams({}, { replace: true })
   }, [setParams])
 
+  /**
+   * "+ Sale" and "+ Receipt" on an account open the voucher screen the rest of
+   * the panel writes on, with the account already filled in — not the ledger's
+   * own cut-down form in a modal. One voucher screen, wherever it is reached
+   * from, which is the same rule the function keys already follow.
+   */
+  const openVoucher = useCallback((kind: string, party?: string) => {
+    const query = new URLSearchParams({ new: kind, ...(party ? { party } : {}) })
+    navigate(`/bills?${query}`)
+  }, [navigate])
+
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
       <LedgerApp
@@ -52,6 +63,7 @@ export function Ledger() {
         onRoute={onRoute}
         newVoucher={newVoucher}
         onConsumeNew={consumeNew}
+        onOpenVoucher={openVoucher}
       />
     </div>
   )

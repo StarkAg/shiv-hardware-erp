@@ -116,7 +116,10 @@ export const postBill = mutation({
     if (!customerName) throw new Error('This bill has no customer name, so there is no account to post it to.')
 
     const total = round2(Number(bill.total) || 0)
-    if (!total) throw new Error('This bill has no amount, so there is nothing to post.')
+    // A bill photograph or an unpriced delivery can be filed before its amount
+    // is known. It becomes a pending voucher with no entries, so no balance is
+    // changed until a real amount is entered later.
+    const hasAmount = total > 0
 
     const date = whenOf(bill.date)
     const spec = KINDS[(bill.kind ?? 'sale') as BillKind] ?? KINDS.sale
@@ -141,6 +144,20 @@ export const postBill = mutation({
     const asked = Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0
     const received = spec.settles ? 0 : round2(Math.min(Math.max(asked, 0), Number(bill.total) || 0))
 
+    /**
+     * Discount given up at settlement — allowed on a receipt, received on a
+     * payment.
+     *
+     * The party is cleared for the money and the discount together, so a bill
+     * of ₹30,080 settled by ₹29,830 with ₹250 off leaves the account square
+     * rather than ₹250 short for ever. The ₹250 is not money and must not
+     * reach the drawer: it goes to its own account, which is where the shop
+     * can later see what a year of rounding off actually cost.
+     */
+    const discount = spec.settles
+      ? round2(Math.min(Math.max(Number(bill.discount) || 0, 0), total))
+      : 0
+
     // A bill deleted on another PC must not be quietly written back by a
     // device that still had it open.
     if (keepAsBill && bill.id) {
@@ -162,12 +179,20 @@ export const postBill = mutation({
       .filter((q) => q.eq(q.field('name'), name))
       .first()
 
-    const account = await byName(accountName)
-    if (!account) throw new Error(`The "${accountName}" account is missing — set it up in Account Masters before saving this bill.`)
+    const account = hasAmount ? await byName(accountName) : null
+    if (hasAmount && !account) throw new Error(`The "${accountName}" account is missing — set it up in Account Masters before saving this bill.`)
 
     const settlement = received > 0 ? await byName(drawer) : null
     if (received > 0 && !settlement) {
       throw new Error(`The "${drawer}" account is missing — set it up in Account Masters before taking money against this bill.`)
+    }
+
+    // Allowed on a receipt, received on a payment — which side it lands on
+    // follows the party's side, same as every other line on the voucher.
+    const discountAccountName = spec.party === 'Cr' ? 'Discount Allowed' : 'Discount Received'
+    const discountAccount = discount > 0 ? await byName(discountAccountName) : null
+    if (discount > 0 && !discountAccount) {
+      throw new Error(`The "${discountAccountName}" account is missing — set it up in Account Masters before taking a discount on this voucher.`)
     }
 
     const ledgerId = await openParty(ctx, customerName, {
@@ -205,7 +230,8 @@ export const postBill = mutation({
       const added = attachments.filter((a) => !already.has(a.storageId))
       await ctx.db.patch(existing._id, {
         typeId: type._id,
-        date, partyLedgerId: ledgerId, amount: total, updatedAt: now,
+        date, partyLedgerId: ledgerId, updatedAt: now,
+        ...(hasAmount ? { amount: total, status: 'final' as const } : { amount: undefined, status: 'pending' as const }),
         /**
          * `BILL-n` is how a bill and its voucher find each other, so it is not
          * the operator's to overwrite. Typing "07" in the bill's Ref box used
@@ -216,9 +242,6 @@ export const postBill = mutation({
          */
         ...(borrowed && bill.ref !== undefined ? { refNo: String(bill.ref) || undefined } : {}),
         ...(bill.notes !== undefined ? { narration: String(bill.notes) || undefined } : {}),
-        // An amount typed onto a voucher that was filed without one makes it
-        // final, and it starts affecting the balances.
-        ...(existing.status === 'pending' ? { status: 'final' as const } : {}),
         ...(added.length ? { attachments: [...(existing.attachments ?? []), ...added] } : {}),
       })
       voucherId = existing._id
@@ -232,8 +255,8 @@ export const postBill = mutation({
         partyLedgerId: ledgerId,
         refNo: ref,
         narration: bill.notes ? String(bill.notes) : `${spec.type} ${number}`,
-        status: 'final' as const,
-        amount: total,
+        status: hasAmount ? 'final' as const : 'pending' as const,
+        ...(hasAmount ? { amount: total } : {}),
         attachments,
         createdAt: now,
         updatedAt: now,
@@ -247,11 +270,18 @@ export const postBill = mutation({
      * Written through the same checked writer the ledger uses, so an
      * unbalanced set is refused here too.
      */
-    await writeLines(ctx, voucherId, date, [
-      { ledgerId, side: spec.party, amount: round2(total - received) },
-      ...(settlement ? [{ ledgerId: settlement._id, side: spec.party, amount: received }] : []),
-      { ledgerId: account._id, side: spec.other, amount: total },
-    ].filter((line) => line.amount > 0))
+    if (hasAmount) {
+      await writeLines(ctx, voucherId, date, [
+        { ledgerId, side: spec.party, amount: round2(total - received) },
+        ...(settlement ? [{ ledgerId: settlement._id, side: spec.party, amount: received }] : []),
+        // The drawer takes only what was actually handed over; the rest of
+        // what the party was cleared for is the discount, on its own account.
+        { ledgerId: account!._id, side: spec.other, amount: round2(total - discount) },
+        ...(discountAccount
+          ? [{ ledgerId: discountAccount._id, side: spec.other, amount: discount }]
+          : []),
+      ].filter((line) => line.amount > 0))
+    }
 
     /**
      * The bill itself, in the same transaction as the voucher it posted. This

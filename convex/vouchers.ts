@@ -801,6 +801,9 @@ export const setUpReturns = mutation({
       ["Fare & Cartage", "Indirect Expenses"],
       ["Shop Expenses", "Indirect Expenses"],
       ["Purchase Return", "Purchase Accounts"],
+      // The other half of a settlement discount: what a supplier knocked off
+      // when the shop paid them. Credit side, like a purchase return.
+      ["Discount Received", "Purchase Accounts"],
     ] as const) {
       if (ledgers.some((l) => l.name === name)) continue;
       const group = groups.find((g) => g.name === groupName);

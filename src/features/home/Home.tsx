@@ -6,7 +6,7 @@ import { convexEnabled } from '../../lib/convexSync'
 import { rupees } from '../ledger/lib/format'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import { Bar } from '../ledger/components/Skeleton'
-import { TradeByMonth, TopBalances } from './Charts'
+import { TradeByMonth, TopBalances, TurnoverOutlook, NetTrade } from './Charts'
 import '../ledger/ledger.css'
 
 /**
@@ -109,13 +109,25 @@ function FromTheBooks() {
       )}
 
       {!loading && (
-        <div className="home-charts">
-          <TradeByMonth months={data.months} />
-          <div className="home-stack">
-            <TopBalances title="Owes the shop most" rows={data.topOwing} side="customers" tone="sale" />
-            <TopBalances title="Shop owes most" rows={data.topOwed} side="suppliers" tone="purchase" />
+        <>
+          {/* The outlook leads: the day's figures above say what happened, and
+              this is the one thing on the page about what happens next. */}
+          <div style={{ marginTop: 12 }}>
+            <TurnoverOutlook months={data.months} />
           </div>
-        </div>
+
+          <div className="home-charts">
+            <TradeByMonth months={data.months} />
+            <div className="home-stack">
+              <TopBalances title="Owes the shop most" rows={data.topOwing} side="customers" tone="sale" />
+              <TopBalances title="Shop owes most" rows={data.topOwed} side="suppliers" tone="purchase" />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <NetTrade months={data.months} />
+          </div>
+        </>
       )}
     </>
   )
