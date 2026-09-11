@@ -1669,12 +1669,13 @@ export function BillBuilder() {
   const liveCustomers = useMemo<PartyOption[]>(() => {
     const byName = new Map<string, PartyOption>()
 
-    for (const l of ((masters as any)?.ledgers ?? []) as any[]) {
+    for (const l of masters?.ledgers ?? []) {
       if (l.groupName !== partyGroup) continue
       byName.set(String(l.name).trim().toLowerCase(), {
         id: l._id,
         name: l.name,
         mobile: l.phone ?? '',
+        uid: l.aadhaar ?? '',
         account: true,
       })
     }
@@ -1732,8 +1733,8 @@ export function BillBuilder() {
     setDraft((d) => ({
       ...d,
       customerName: toProperCase(c.name),
-      customerPhone: c.mobile ?? d.customerPhone,
-      customerUid: c.uid ?? d.customerUid,
+      customerPhone: c.mobile,
+      customerUid: c.uid ?? '',
     }))
     setShowCust(false)
   }
@@ -2226,8 +2227,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 setDraft((d) => ({
                   ...d,
                   customerName: name,
-                  customerPhone: match?.mobile ?? d.customerPhone,
-                  customerUid: match?.uid ?? d.customerUid,
+                  customerPhone: match ? match.mobile : d.customerPhone,
+                  customerUid: match ? (match.uid ?? '') : d.customerUid,
                 }))
               }}
               className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
