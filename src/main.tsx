@@ -16,15 +16,15 @@ import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
 import { GuaranteeHistory } from './features/guarantee/GuaranteeHistory'
 import { BillSelectPage } from './features/guarantee/BillSelectPage'
 import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
-import { BillScanner } from './features/scan/BillScanner'
 import { Transport } from './features/transport/Transport'
 import { Ledger } from './features/ledger/Ledger'
 import { LedgersPage } from './features/ledger/LedgersPage'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { BillTrash } from './features/bills/BillTrash'
+import { BillScanner } from './features/scan/BillScanner'
+import { PrinterQueue } from './features/print/PrinterQueue'
 import { CashReview } from './features/cash/CashReview'
 import { Home } from './features/home/Home'
-import { PrinterQueue } from './features/print/PrinterQueue'
 import { PdfViewer } from './features/pdf/PdfViewer'
 import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
@@ -99,6 +99,14 @@ const router = createHashRouter([
       { path: 'guarantee/history/:id', element: <GuaranteeHistory /> },
       { path: 'guarantee/select-bill',  element: <BillSelectPage /> },
       { path: 'guarantee/bill/:billId', element: <BillBrandCardsPage /> },
+      /**
+       * Shop-machine tools, kept out of the counter's daily menu.
+       *
+       * Both talk to the print server on the shop's own network rather than to
+       * Convex: the scanner reads a photographed bill through it, and the queue
+       * shows what it is printing. Nothing in the panel puts a job in that
+       * queue yet, so they live under Settings until the shop PC runs them.
+       */
       { path: 'scan',           element: <BillScanner /> },
       { path: 'rates',          element: <RateManager /> },
       { path: 'rates/:category', element: <RateManager /> },

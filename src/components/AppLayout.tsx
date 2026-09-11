@@ -29,9 +29,9 @@ import {
   Wallet,
   LayoutDashboard,
   ScanLine,
+  Printer,
   Scale,
   IndianRupee,
-  Printer,
 } from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
 import { UpdateBanner } from './UpdateBanner'
@@ -95,7 +95,6 @@ const AREAS: { label: string; items: NavItem[] }[] = [
       { to: '/bills?new=purchase', label: 'Purchase', icon: Package, key: 'F9' },
       { to: '/bills?new=receipt', label: 'Receipt', icon: IndianRupee, key: 'F6' },
       { to: '/bills?new=payment', label: 'Payment', icon: CreditCard, key: 'F5' },
-      { to: '/scan', label: 'Bill Scanner', icon: ScanLine },
       { to: '/cash-review', label: 'Cash Review', icon: Wallet },
     ],
   },
@@ -129,8 +128,11 @@ const AREAS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Settings',
     items: [
-      { to: '/printer-queue', label: 'Printer Queue', icon: Printer },
       { to: '/trash', label: 'Trash', icon: Trash2 },
+      // Shop-machine tools. Both need the print server on the shop's own
+      // network, so they sit here rather than in the counter's daily areas.
+      { to: '/scan', label: 'Bill Scanner', icon: ScanLine },
+      { to: '/printer-queue', label: 'Printer Queue', icon: Printer },
     ],
   },
 ]
@@ -154,7 +156,7 @@ const VOUCHERS = [
  */
 const MOBILE_NAV_ITEMS = [
   { to: '/home', label: 'Home', icon: LayoutDashboard, match: ['/home'] },
-  { to: '/bills', label: 'Day Book', icon: ReceiptText, match: ['/bills', '/scan', '/cash-review'] },
+  { to: '/bills', label: 'Day Book', icon: ReceiptText, match: ['/bills', '/cash-review'] },
   { to: '/ledger', label: 'Accounts', icon: BookOpen, match: ['/ledger', '/ledgers'] },
   { to: '/inventory', label: 'Stock', icon: Package, match: ['/inventory', '/rates'] },
   { to: '/quote-options', label: 'Documents', icon: FileText, match: ['/quote', '/product', '/guarantee', '/history', '/transport'] },

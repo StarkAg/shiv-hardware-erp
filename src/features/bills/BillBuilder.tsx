@@ -2149,34 +2149,35 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   if (view === 'form') {
     return (
       <ListPanelContext.Provider value={setPanelList}>
-      <div className="mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-4 md:pt-6 lg:max-w-none lg:pl-8 lg:pr-[21rem] xl:pr-[25rem]">
         <TallyListPanel list={panelList} />
 
-        {asking === 'delete' && (
-          <Confirm
-            title={`Delete bill ${draft.number}?`}
-            confirmLabel="Delete"
-            danger
-            onConfirm={async () => {
-              const gone = await deleteBill(draft.id)
-              // A delete the server never agreed to is not a delete: the bill
-              // would be back on the next sync, its voucher still in the books.
-              if (!gone) throw new Error('Could not reach the books, so the bill was not deleted.')
-              leave()
-            }}
-            onClose={() => setAsking(null)}
-          />
-        )}
-        {asking === 'leave' && (
-          <Confirm
-            title="Leave without saving?"
-            body="This bill will not be kept."
-            confirmLabel="Leave"
-            danger
-            onConfirm={leave}
-            onClose={() => setAsking(null)}
-          />
-        )}
+      {asking === 'delete' && (
+        <Confirm
+          title={`Delete bill ${draft.number}?`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={async () => {
+            const gone = await deleteBill(draft.id)
+            // A delete the server never agreed to is not a delete: the bill
+            // would be back on the next sync, its voucher still in the books.
+            if (!gone) throw new Error('Could not reach the books, so the bill was not deleted.')
+            leave()
+          }}
+          onClose={() => setAsking(null)}
+        />
+      )}
+      {asking === 'leave' && (
+        <Confirm
+          title="Leave without saving?"
+          body="This bill will not be kept."
+          confirmLabel="Leave"
+          danger
+          onConfirm={leave}
+          onClose={() => setAsking(null)}
+        />
+      )}
+
+      <div className="mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-1 md:pt-2 lg:max-w-none lg:pl-8 lg:pr-[21rem] xl:pr-[25rem]">
 
         <div className="flex items-center gap-1">
           <Button
