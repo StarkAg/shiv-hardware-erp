@@ -24,6 +24,11 @@
 /* Amounts are read by running an eye down the column, which only works if the
    digits are all one width. */
 .ledger-root .num, .ledger-root .mono, .ledger-root .bal{font-variant-numeric: tabular-nums;}
+/* Every screen says what it is. The two account screens look alike — both a
+   table of parties — and neither carried a name, so which one you were on had
+   to be worked out from the columns. */
+.ledger-root .pagetitle{font-size: 19px; font-weight: 800; margin: 0 0 12px; letter-spacing: -0.01em;}
+.ledger-root .topbar .pagetitle{margin: 0;}
 .ledger-root .topbar{display: flex; align-items: center; justify-content: space-between;
   gap: 14px; flex-wrap: wrap; margin-bottom: 18px;}
 .ledger-root .brandrow{display: flex; align-items: center; gap: 11px;}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Paperclip, Pencil, X } from 'lucide-react'
+import { ChevronLeft, Paperclip, Pencil, X } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
@@ -8,18 +8,7 @@ import PriceDialog from './PriceDialog';
 import Confirm from './Confirm';
 import { Bar, TableSkeleton } from './Skeleton';
 
-const BackIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path
-      d="M15 5l-7 7 7 7"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
+const BackIcon = () => <ChevronLeft size={18} aria-hidden="true" />;
 import VoucherEditor from './VoucherEditor';
 import LedgerForm from './LedgerForm';
 import TagDots from './TagDots';

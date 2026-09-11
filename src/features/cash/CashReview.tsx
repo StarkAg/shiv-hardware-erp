@@ -41,7 +41,7 @@ export function CashReview() {
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
       <div className="app">
-        <h1 className="mb-2 text-xl font-semibold">Cash review</h1>
+        <h1 className="pagetitle">Cash Review</h1>
         <div className="toolbar">
           <div className="count">
             {rows === undefined ? 'Loading…' : `${rows.length} waiting`}

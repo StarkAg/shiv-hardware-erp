@@ -12,6 +12,7 @@ import VoucherForm from './components/VoucherForm';
 import LedgerForm from './components/LedgerForm';
 import BillViewer from './components/BillViewer';
 import PrintPacket from './components/PrintPacket';
+import { History as HistoryIcon } from 'lucide-react'
 
 const TABS = [
   ['suppliers', 'Suppliers'],
@@ -181,6 +182,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew }) {
   return (
     <div className="app">
       <header className="topbar">
+        <h1 className="pagetitle">Party Accounts</h1>
         <div className="actions">
           {/* The four voucher buttons that were here are gone. They were the
               third way to write the same voucher and the worst of the three:
@@ -190,24 +192,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew }) {
               amount that settles them — already filled in. */}
           <button className="btn ghost" onClick={() => setLedgerForm(true)}>+ Ledger</button>
           <button className="iconbtn" onClick={() => setHistory(true)} aria-label="History" title="History">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M3.2 12a8.8 8.8 0 1 0 2.6-6.2M3 4.5V10h5.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M12 7.5V12l3 1.8"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <HistoryIcon size={18} aria-hidden="true" />
           </button>
         </div>
       </header>

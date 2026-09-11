@@ -10,25 +10,10 @@ import TagDots from './TagDots';
  * than an amount nobody has paid.
  */
 const Unsettled = () => (
-  <svg className="alertmark" viewBox="0 0 24 24" aria-label="Not settled" role="img">
-    <path
-      d="M12 3.6 22 20.4H2z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.1"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M12 10v4.2"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.1"
-      strokeLinecap="round"
-    />
-    <circle cx="12" cy="17.4" r="1.15" fill="currentColor" />
-  </svg>
+  <AlertTriangle className="alertmark" size={15} aria-label="Not settled" role="img" />
 );
 import { CardsSkeleton, TableSkeleton } from './Skeleton';
+import { AlertTriangle } from 'lucide-react'
 
 /**
  * One side of the party ledgers. Suppliers and customers are the same report

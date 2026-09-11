@@ -2768,6 +2768,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
           />
         )}
         <header className="topbar">
+          <h1 className="pagetitle">Day Book</h1>
           <div className="actions">
             <button className="btn" onClick={() => onNew()}>+ New Bill</button>
           </div>

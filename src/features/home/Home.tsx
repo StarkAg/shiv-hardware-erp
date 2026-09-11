@@ -27,14 +27,6 @@ const startOfToday = () => {
   return d.getTime()
 }
 
-/** The shop's cash and bank, out of the trial balance's own rows. */
-function drawer(trial: { rows: { name: string; group: string; debit: number; credit: number }[] } | undefined) {
-  const held = (trial?.rows ?? []).filter(
-    (r) => r.group === 'Cash-in-Hand' || r.group === 'Bank Accounts',
-  )
-  return held.reduce((total, r) => total + r.debit - r.credit, 0)
-}
-
 function Figure({
   label,
   value,
@@ -62,10 +54,10 @@ export function Home() {
 
   const today = startOfToday()
   const book = useQuery(api.reports.dayBook, { from: today, to: today + 86_399_999 })
-  const trial = useQuery(api.reports.trialBalance, {})
   const receivable = useQuery(api.reports.receivables, {})
   const payable = useQuery(api.reports.outstanding, {})
-  const unreadPhotos = useQuery(api.review.unread, { limit: 50 })
+  // `unread` hands back a capped list of ids; this is the count itself.
+  const review = useQuery(api.review.counts, {})
   const cashWaiting = useQuery(api.cash.unposted, {})
   const printing = useQuery(api.printJobs.listPending, {})
 
@@ -82,10 +74,8 @@ export function Home() {
   const unposted = bills.filter((b) => b.postError).length
 
   const waiting =
-    (unposted ? 1 : 0) +
-    ((unreadPhotos?.length ?? 0) ? 1 : 0) +
-    ((cashWaiting?.length ?? 0) ? 1 : 0) +
-    ((printing?.length ?? 0) ? 1 : 0)
+    unposted + (review?.unread ?? 0) + (review?.ready ?? 0) +
+    (cashWaiting?.length ?? 0) + (printing?.length ?? 0)
 
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
@@ -93,7 +83,12 @@ export function Home() {
         <div className="home-grid">
           <Figure label="Sales today" value={rupees(day.sales)} to="/bills" loading={book === undefined} />
           <Figure label="Received today" value={rupees(day.received)} to="/bills" loading={book === undefined} />
-          <Figure label="Cash and bank" value={rupees(drawer(trial))} to="/ledger/trial" loading={trial === undefined} />
+          {/* Cash and bank are deliberately not here. The drawer's own notes
+              are only now becoming vouchers, so the books' cash figure is
+              still a half-story — Trial Balance says so in as many words, and
+              a tile on the front page cannot. It belongs here once the drawer
+              is reconciled, and not before. */}
+          <Figure label="Paid today" value={rupees(day.paid)} to="/bills" loading={book === undefined} />
           <Figure
             label="Owed to the shop"
             value={rupees(receivable?.totals.closing ?? 0)}
@@ -116,8 +111,11 @@ export function Home() {
             {unposted > 0 && (
               <Figure label="Bills not in the books" value={String(unposted)} to="/bills" tone="attention" />
             )}
-            {(unreadPhotos?.length ?? 0) > 0 && (
-              <Figure label="Photos to price" value={String(unreadPhotos!.length)} to="/ledger/bills" tone="attention" />
+            {(review?.unread ?? 0) > 0 && (
+              <Figure label="Bills to read" value={String(review!.unread)} to="/ledger/bills" tone="attention" />
+            )}
+            {(review?.ready ?? 0) > 0 && (
+              <Figure label="Bills to price" value={String(review!.ready)} to="/ledger/bills" tone="attention" />
             )}
             {(cashWaiting?.length ?? 0) > 0 && (
               <Figure label="Cash notes without a party" value={String(cashWaiting!.length)} to="/cash-review" tone="attention" />

@@ -33,7 +33,7 @@ export function BillTrash() {
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
       <div className="app">
-        <h1 className="mb-2 text-xl font-semibold">Trash</h1>
+        <h1 className="pagetitle">Trash</h1>
         <p className="hint mb-4">Deleted bills and vouchers. A bill and its linked accounting entry are restored together.</p>
         <div className="toolbar">
           <input aria-label="Search trash" placeholder="Search party, bill or voucher" value={search} onChange={e => setSearch(e.target.value)} />

@@ -92,6 +92,7 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
 
   return (
     <>
+      <h1 className="pagetitle">Account Masters</h1>
       <nav className="tabs">
         {TABS.map(([id, label]) => (
           <button

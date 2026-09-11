@@ -17,6 +17,7 @@ import { GuaranteeCardFace } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
 import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, printOnServer, type ServerPrintPayload } from '../../lib/printServer'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
+import { toast } from '../../components/Toast'
 
 type GuaranteeLayout = 'card' | 'a4'
 
@@ -124,7 +125,6 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
-  const [savedToast, setSavedToast] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [showWhatsAppLogin, setShowWhatsAppLogin] = useState(false)
 
@@ -285,13 +285,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     const uniqueRecipients = recipients.filter((r) => (seen.has(r.mobile) ? false : seen.add(r.mobile)))
 
     if (uniqueRecipients.length === 0) {
-      setSavedToast(`Saved ${minted.number} · no mobile — WhatsApp skipped`)
-      window.setTimeout(() => setSavedToast(null), 2600)
+      toast(`Saved ${minted.number} · no mobile, WhatsApp skipped`)
       return
     }
 
     setGenerating(true)
-    setSavedToast(`Saved ${minted.number} · sending WhatsApp…`)
+    toast(`Saved ${minted.number} · sending WhatsApp…`, 'info')
     let sent = 0
     let firstError = ''
     let notConnected = false
@@ -306,16 +305,15 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     }
     setGenerating(false)
     if (notConnected) {
-      setSavedToast(`Saved ${minted.number} · WhatsApp needs login — scan the QR`)
+      toast(`Saved ${minted.number} · WhatsApp needs login`, 'error')
       setShowWhatsAppLogin(true)
     } else if (firstError) {
-      setSavedToast(`Saved ${minted.number} · WhatsApp failed: ${firstError}`)
+      toast(`Saved ${minted.number} · WhatsApp failed: ${firstError}`, 'error')
     } else if (sent > 0) {
-      setSavedToast(`Saved ${minted.number} · WhatsApp sent`)
+      toast(`Saved ${minted.number} · WhatsApp sent`)
     } else {
-      setSavedToast(`Saved ${minted.number} · customer already notified`)
+      toast(`Saved ${minted.number} · customer already notified`)
     }
-    window.setTimeout(() => setSavedToast(null), 4000)
   }
 
   // Print = save + WhatsApp the customer + send STRAIGHT to the printer (no preview).
@@ -337,14 +335,13 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         }
       : { kind: 'guarantee', document: printDoc, layout }
 
-    setSavedToast(`Printing ${minted.number}…`)
+    toast(`Printing ${minted.number}…`, 'info')
     try {
       const result = await printOnServer(payload)
-      setSavedToast(`Sent ${minted.number} to ${result.printer}`)
+      toast(`Sent ${minted.number} to ${result.printer}`)
     } catch (err) {
-      setSavedToast(`Print failed: ${err instanceof Error ? err.message : String(err)}`)
+      toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
     }
-    window.setTimeout(() => setSavedToast(null), 4500)
   }
 
   // Generate = save the card(s) + WhatsApp the customer (no print).
@@ -358,11 +355,6 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   return (
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
-        {savedToast && (
-          <div className="no-print fixed left-1/2 top-3 z-40 -translate-x-1/2 rounded-full bg-shiv-green px-4 py-1.5 text-sm font-semibold text-stone-900 shadow-lg" role="status">
-            {savedToast}
-          </div>
-        )}
         <div className="no-print flex flex-wrap items-center justify-center gap-3">
           <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Send size={20} /> {generating ? 'Generating…' : 'Generate'}

@@ -1,34 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { rupees, longDate } from '../lib/format';
 import { saveBillPdf } from '../lib/pdf';
+import { Download, ExternalLink, X } from 'lucide-react'
 
-const stroke = {
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 2,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-};
-
-const DownloadIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 3v11m0 0-4-4m4 4 4-4" {...stroke} />
-    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" {...stroke} />
-  </svg>
-);
-
-const OpenIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M14 4h6v6M20 4l-8 8" {...stroke} />
-    <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" {...stroke} />
-  </svg>
-);
-
-const CloseIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M6 6l12 12M18 6 6 18" {...stroke} />
-  </svg>
-);
+const DownloadIcon = () => <Download size={18} aria-hidden="true" />;
+const OpenIcon = () => <ExternalLink size={18} aria-hidden="true" />;
+const CloseIcon = () => <X size={18} aria-hidden="true" />;
 
 /**
  * The bill, as large as the window allows. Zooming is left to the browser —
