@@ -108,6 +108,9 @@ export const postBill = mutation({
     // carries a voucherId, so that cannot be the test.
     const keepAsBill = args.keepAsBill
       ?? (Boolean(bill.id) && !String(bill.id).startsWith('vch-'))
+    // A voucher the builder opened from the books rather than one of the
+    // shop's own bills. It brought its own reference and wording with it.
+    const borrowed = !keepAsBill
 
     const customerName = String(bill.customerName ?? '').trim()
     if (!customerName) throw new Error('This bill has no customer name, so there is no account to post it to.')
@@ -203,9 +206,15 @@ export const postBill = mutation({
       await ctx.db.patch(existing._id, {
         typeId: type._id,
         date, partyLedgerId: ledgerId, amount: total, updatedAt: now,
-        // A voucher written in the books keeps its own reference and wording
-        // unless the bill says otherwise; one posted from a bill keeps BILL-n.
-        ...(bill.ref !== undefined ? { refNo: String(bill.ref) || undefined } : {}),
+        /**
+         * `BILL-n` is how a bill and its voucher find each other, so it is not
+         * the operator's to overwrite. Typing "07" in the bill's Ref box used
+         * to land on the voucher, which then matched no bill — and the day
+         * book showed the sale twice, once as SAL-0063 and once as bill 15.
+         * Only a voucher opened from the books, which the builder is merely
+         * borrowing, keeps a reference of its own.
+         */
+        ...(borrowed && bill.ref !== undefined ? { refNo: String(bill.ref) || undefined } : {}),
         ...(bill.notes !== undefined ? { narration: String(bill.notes) || undefined } : {}),
         // An amount typed onto a voucher that was filed without one makes it
         // final, and it starts affecting the balances.
@@ -221,7 +230,7 @@ export const postBill = mutation({
         fy,
         date,
         partyLedgerId: ledgerId,
-        refNo: bill.ref ? String(bill.ref) : ref,
+        refNo: ref,
         narration: bill.notes ? String(bill.notes) : `${spec.type} ${number}`,
         status: 'final' as const,
         amount: total,

@@ -2689,18 +2689,30 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
       account: (v.contra ?? []).join(', '),
       amount: v.status === 'pending' ? null : v.amount,
       photos: (v.attachmentUrls ?? []).map((a: any) => a?.url).filter(Boolean),
-      billId: String(v.refNo ?? '').startsWith('BILL-')
-        ? bills.find((b) => `BILL-${b.number}` === v.refNo)?.id
-        : undefined,
+      billId: bills.find((b) => b.voucherId === v._id)?.id
+        ?? (String(v.refNo ?? '').startsWith('BILL-')
+          ? bills.find((b) => `BILL-${b.number}` === v.refNo)?.id
+          : undefined),
     }))
 
-    // A bill that never reached the books still happened. Bills written before
-    // they posted to the ledger would otherwise vanish from the day book.
-    const posted = new Set(
+    /**
+     * A bill that never reached the books still happened, so it gets a row of
+     * its own — but only if the books have not already got it, or the day book
+     * shows one sale twice.
+     *
+     * The pairing is by the voucher the bill names. Matching on the `BILL-n`
+     * reference alone was enough until a bill could carry a reference of its
+     * own: a bill with "07" in its Ref box posted a voucher that matched no
+     * bill, and the sale appeared as both SAL-0063 and bill 15. The reference
+     * is still checked, for bills written before they recorded a voucher id.
+     */
+    const postedIds = new Set((vouchers ?? []).map((v: any) => String(v._id)))
+    const postedRefs = new Set(
       (vouchers ?? []).map((v: any) => String(v.refNo ?? '')).filter((r) => r.startsWith('BILL-')),
     )
     for (const b of finished) {
-      if (posted.has(`BILL-${b.number}`)) continue
+      if (b.voucherId && postedIds.has(String(b.voucherId))) continue
+      if (postedRefs.has(`BILL-${b.number}`)) continue
       const at = startOfDay(b.date)
       if (from && at < startOfDay(from)) continue
       if (to && at > startOfDay(to)) continue

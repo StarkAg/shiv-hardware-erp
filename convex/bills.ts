@@ -91,17 +91,20 @@ export const remove = mutation({
     if (!bill) return { removed: false as const }
 
     const ref = `BILL-${bill.number}`
-    const candidate = bill.voucherId
-      ? await ctx.db.get(bill.voucherId as Id<'vouchers'>)
-      : await ctx.db.query('vouchers').filter((q) => q.eq(q.field('refNo'), ref)).first()
 
     /**
-     * The voucher goes only when this bill is the one that posted it — its
-     * reference names this bill. A row that is a voucher opened for editing
-     * borrows a voucher it does not own, and deleting that row must leave the
-     * books exactly as they were.
+     * The voucher goes only when this bill is the one that posted it. A bill
+     * that names its voucher says so outright, and that id is the link — the
+     * reference is how bills written before the id existed are matched, and
+     * the only test available for them.
+     *
+     * Demanding both is what let a bill whose voucher had been given another
+     * reference be deleted on its own, leaving an amount in the books with
+     * nothing to open.
      */
-    const voucher = candidate?.refNo === ref ? candidate : null
+    const voucher = bill.voucherId
+      ? await ctx.db.get(bill.voucherId as Id<'vouchers'>)
+      : (await ctx.db.query('vouchers').filter((q) => q.eq(q.field('refNo'), ref)).first()) ?? null
     const voucherTrashId = voucher
       ? await ctx.runMutation(api.vouchers.remove, { id: voucher._id })
       : null
@@ -123,7 +126,7 @@ export const remove = mutation({
       billId: id,
       bill,
       deletedAt,
-      ...(voucher ? { voucherRef: ref } : {}),
+      ...(voucher ? { voucherRef: voucher.refNo ?? ref } : {}),
       ...(voucherTrashId ? { voucherTrashId } : {}),
     })
     await ctx.db.patch(store!._id, {

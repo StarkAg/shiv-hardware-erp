@@ -172,6 +172,35 @@ describe('posting a bill', () => {
       .rejects.toThrow('deleted on another device')
   })
 
+  it('keeps BILL-n on the voucher even when the operator types a reference', async () => {
+    const t = await shop()
+    // "07" is the shop's own note on the bill — a site, a slip number. It used
+    // to land on the voucher, which then matched no bill, and the day book
+    // showed the one sale twice: once as SAL-0063, once as bill 15.
+    const res = await t.mutation(api.billLedger.postBill, { bill: aBill({ number: '15', ref: '07' }) })
+
+    const [voucher] = await vouchers(t)
+    expect(voucher.refNo).toBe('BILL-15')
+    const [bill] = await stored(t)
+    expect(bill.ref).toBe('07')            // the bill keeps what was typed
+    expect(bill.voucherId).toBe(res.voucherId)
+  })
+
+  it('takes the voucher to the trash with its bill, reference or no reference', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ number: '15', ref: '07' }) })
+    // A voucher renamed from the ledger side is still this bill's voucher.
+    await t.run(async ctx => {
+      const [v] = await ctx.db.query('vouchers').collect()
+      await ctx.db.patch(v._id, { refNo: 'SITE-07' })
+    })
+
+    await t.mutation(api.bills.remove, { id: 'bill-a' })
+    expect(await vouchers(t)).toHaveLength(0)
+    expect(await lines(t)).toHaveLength(0)
+    expect(await t.run(ctx => ctx.db.query('trash').collect())).toHaveLength(1)
+  })
+
   it('keeps a borrowed voucher out of the bill list', async () => {
     const t = await shop()
     const { voucherId } = await t.mutation(api.billLedger.postBill, { bill: aBill() })
