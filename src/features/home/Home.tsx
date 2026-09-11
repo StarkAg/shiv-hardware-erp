@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { useStore } from '../../lib/store'
+import { convexEnabled } from '../../lib/convexSync'
 import { rupees } from '../ledger/lib/format'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import { Bar } from '../ledger/components/Skeleton'
@@ -48,10 +49,14 @@ function Figure({
   )
 }
 
-export function Home() {
-  const dark = useLedgerTheme()
-  const { bills } = useStore()
-
+/**
+ * Everything that comes from the books.
+ *
+ * Split out because the offline build renders the router with no Convex client
+ * at all, and a query hook with nothing to ask throws. Mounted only where
+ * there is a deployment — the same split the guarantee screen already makes.
+ */
+function FromTheBooks() {
   const today = startOfToday()
   const book = useQuery(api.reports.dayBook, { from: today, to: today + 86_399_999 })
   const receivable = useQuery(api.reports.receivables, {})
@@ -69,18 +74,13 @@ export function Home() {
     return { sales: sum('SAL'), received: sum('RCT'), paid: sum('PAY'), entries: rows.length }
   }, [book])
 
-  // A bill that failed to post lives on this PC only, so it is counted here
-  // rather than queried — the server has never heard of it.
-  const unposted = bills.filter((b) => b.postError).length
-
   const waiting =
-    unposted + (review?.unread ?? 0) + (review?.ready ?? 0) +
+    (review?.unread ?? 0) + (review?.ready ?? 0) +
     (cashWaiting?.length ?? 0) + (printing?.length ?? 0)
 
   return (
-    <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
-      <div className="app">
-        <div className="home-grid">
+    <>
+      <div className="home-grid">
           <Figure label="Sales today" value={rupees(day.sales)} to="/bills" loading={book === undefined} />
           <Figure label="Received today" value={rupees(day.received)} to="/bills" loading={book === undefined} />
           {/* Cash and bank are deliberately not here. The drawer's own notes
@@ -106,11 +106,8 @@ export function Home() {
           <Figure label="Entries today" value={String(day.entries)} to="/bills" loading={book === undefined} />
         </div>
 
-        {waiting > 0 && (
-          <div className="home-grid home-waiting">
-            {unposted > 0 && (
-              <Figure label="Bills not in the books" value={String(unposted)} to="/bills" tone="attention" />
-            )}
+      {waiting > 0 && (
+        <div className="home-grid home-waiting">
             {(review?.unread ?? 0) > 0 && (
               <Figure label="Bills to read" value={String(review!.unread)} to="/ledger/bills" tone="attention" />
             )}
@@ -123,6 +120,33 @@ export function Home() {
             {(printing?.length ?? 0) > 0 && (
               <Figure label="Waiting to print" value={String(printing!.length)} to="/printer-queue" tone="attention" />
             )}
+        </div>
+      )}
+    </>
+  )
+}
+
+export function Home() {
+  const dark = useLedgerTheme()
+  const { bills } = useStore()
+
+  // A bill that failed to post lives on this PC only, so it is counted here
+  // rather than queried — the server has never heard of it.
+  const unposted = bills.filter((b) => b.postError).length
+
+  return (
+    <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
+      <div className="app">
+        {unposted > 0 && (
+          <div className="home-grid" style={{ marginBottom: 12 }}>
+            <Figure label="Bills not in the books" value={String(unposted)} to="/bills" tone="attention" />
+          </div>
+        )}
+        {convexEnabled() ? (
+          <FromTheBooks />
+        ) : (
+          <div className="home-grid">
+            <Figure label="Bills on this PC" value={String(bills.length)} to="/bills" />
           </div>
         )}
       </div>
