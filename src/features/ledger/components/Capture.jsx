@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
+import { X } from 'lucide-react'
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
@@ -183,7 +184,7 @@ export default function Capture() {
               onClick={() => discard({ id: s._id })}
               aria-label="Discard"
             >
-              ×
+              <X size={16} aria-hidden="true" />
             </button>
           </div>
         ))}

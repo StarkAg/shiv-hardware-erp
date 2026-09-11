@@ -10,7 +10,7 @@ import { formatINR } from '../../lib/pricing'
 import { fetchPrintServer } from '../../lib/printServer'
 import { GuaranteeCard } from '../print/GuaranteeCard'
 import { PrintPreview } from '../print/PrintPreview'
-import { Button, PageHeader } from '../../components/ui'
+import { Button, Page, PageHeader } from '../../components/ui'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -226,17 +226,17 @@ export function BillScanner() {
         subtitle="Point your camera at the handwritten bill"
       />
 
-      <div className="p-4 space-y-4 max-w-lg mx-auto">
+      <Page narrow>
         {/* Camera button */}
         <div
           onClick={() => inputRef.current?.click()}
           className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-10 cursor-pointer hover:border-shiv-green hover:bg-stone-100 transition dark:border-white/20 dark:bg-white/5"
         >
-          <Camera size={40} className="text-stone-400 dark:text-stone-500" />
+          <Camera size={40} className="text-muted" />
           <span className="text-base font-semibold text-stone-600 dark:text-stone-300">
             Tap to scan bill
           </span>
-          <span className="text-xs text-stone-400 dark:text-stone-500">
+          <span className="text-xs text-muted">
             Opens camera · works best in good light
           </span>
           {/* capture="environment" = rear camera on mobile */}
@@ -269,7 +269,7 @@ export function BillScanner() {
 
         {state === 'error' && (
           <div className="flex items-start gap-3 rounded-xl bg-red-50 dark:bg-red-950/30 px-4 py-3">
-            <XCircle size={20} className="text-red-500 mt-0.5 shrink-0" />
+            <XCircle size={20} className="text-danger mt-0.5 shrink-0" />
             <div>
               <div className="text-sm font-semibold text-red-700 dark:text-red-400">Scan failed</div>
               <div className="text-xs text-red-600 dark:text-red-400 mt-0.5">{errorMsg}</div>
@@ -307,13 +307,13 @@ export function BillScanner() {
 
             {/* Extracted summary */}
             <div className="rounded-xl border border-stone-200/90 bg-stone-50 dark:border-white/10 dark:bg-stone-900/90 p-4 space-y-2 text-sm">
-              <div><span className="font-semibold text-stone-500">M/s</span> {doc.customer.name || '—'}</div>
-              <div><span className="font-semibold text-stone-500">Mobile</span> {doc.customer.mobile || '—'}</div>
+              <div><span className="font-semibold text-muted">M/s</span> {doc.customer.name || '—'}</div>
+              <div><span className="font-semibold text-muted">Mobile</span> {doc.customer.mobile || '—'}</div>
               {doc.items.map((it, i) => (
                 <div key={i} className="flex justify-between">
                   <span>
                     {it.brandName}
-                    {it.sizeLabel ? <span className="text-stone-500"> · {it.sizeLabel}</span> : null}
+                    {it.sizeLabel ? <span className="text-muted"> · {it.sizeLabel}</span> : null}
                   </span>
                   <span className={it.guaranteeYears ? 'text-shiv-red font-semibold' : 'text-stone-600 dark:text-stone-300'}>
                     {it.amount ? `${it.guaranteeYears ? `${it.guaranteeYears} Years · ` : ''}${formatINR(it.amount)}` : it.guaranteeYears ? `${it.guaranteeYears} Years` : '—'}
@@ -344,7 +344,7 @@ export function BillScanner() {
             </div>
           </>
         )}
-      </div>
+      </Page>
 
       {showPrint && doc && (
         <PrintPreview
@@ -418,13 +418,13 @@ function ScanReviewModal({
         <div className="shrink-0 flex items-start justify-between gap-3 border-b border-stone-200 px-3 py-2 dark:border-white/10 sm:px-4 sm:py-3">
           <div>
             <h2 className="text-base font-bold leading-tight text-stone-950 dark:text-stone-50">Review scanned bill</h2>
-            <p className="text-[11px] font-medium leading-tight text-stone-500 dark:text-stone-400">Edits are learned for future scans.</p>
+            <p className="text-[11px] font-medium leading-tight text-muted">Edits are learned for future scans.</p>
           </div>
           {canClose && (
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-2 text-stone-500 hover:bg-stone-100 dark:hover:bg-white/10"
+              className="rounded-lg p-2 text-muted hover:bg-stone-100 dark:hover:bg-white/10"
               aria-label="Close"
             >
               <X size={18} />
@@ -466,7 +466,7 @@ function ScanReviewModal({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-bold uppercase text-stone-500 dark:text-stone-400">Items</h3>
+              <h3 className="text-sm font-bold uppercase text-muted">Items</h3>
               <Button
                 type="button"
                 variant="outline"
@@ -480,11 +480,11 @@ function ScanReviewModal({
             {data.items.map((item, index) => (
               <div key={index} className="rounded-lg border border-stone-200 bg-white p-2 dark:border-white/10 dark:bg-white/5 sm:p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Item {index + 1}</div>
+                  <div className="text-xs font-bold uppercase tracking-wide text-muted">Item {index + 1}</div>
                   <button
                     type="button"
                     onClick={() => removeItem(index)}
-                    className="rounded-lg p-1 text-stone-400 hover:bg-red-50 hover:text-shiv-red dark:hover:bg-red-950/30"
+                    className="rounded-lg p-1 text-muted hover:bg-red-50 hover:text-shiv-red dark:hover:bg-red-950/30"
                     aria-label={`Remove item ${index + 1}`}
                   >
                     <Trash2 size={16} />
@@ -631,7 +631,7 @@ function Field({
 }) {
   return (
     <label className={`block ${className}`}>
-      <span className="mb-0.5 block text-[11px] font-semibold leading-tight text-stone-500 dark:text-stone-400">{label}</span>
+      <span className="mb-0.5 block text-[11px] font-semibold leading-tight text-muted">{label}</span>
       {children}
     </label>
   )

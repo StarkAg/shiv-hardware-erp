@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Paperclip, X } from 'lucide-react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { rupees, shortDate } from '../ledger/lib/format'
@@ -19,6 +20,7 @@ export function BillTrash() {
   const purgeBill = useMutation(api.bills.purge)
   const [search, setSearch] = useState('')
   const [restoring, setRestoring] = useState<TrashRow | null>(null)
+  const [purging, setPurging] = useState<TrashRow | null>(null)
   const [viewing, setViewing] = useState<TrashRow | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
@@ -54,17 +56,10 @@ export function BillTrash() {
                   <td className="particulars" data-label="Party">{row.party}<div className="ref">{row.refNo}</div></td>
                   <td className="num" data-label="Amount">{row.status === 'pending' ? 'Unpriced' : rupees(row.amount ?? 0)}</td>
                   <td className="ref" data-label="Deleted">{new Date(row.deletedAt).toLocaleString('en-GB')}</td>
-                  <td data-label="Photos">{row.attachmentUrls.length > 0 && <button className="clip" aria-label={`View photos for ${row.label}`} onClick={() => setViewing(row)}>▣</button>}</td>
+                  <td data-label="Photos">{row.attachmentUrls.length > 0 && <button className="clip" aria-label={`View photos for ${row.label}`} onClick={() => setViewing(row)}><Paperclip size={13} aria-hidden="true" /></button>}</td>
                   <td className="rowacts" data-label="Actions">
                     <button className="btn small" disabled={busy !== null} onClick={() => setRestoring(row)}>Restore</button>
-                    {row.source === 'bill' && <button className="xbtn del" disabled={busy !== null} aria-label={`Permanently delete ${row.label}`} title="Delete for good" onClick={async () => {
-                      const pin = window.prompt('Permanently delete this bill and its linked voucher? Enter the code.')
-                      if (!pin) return
-                      setBusy(row._id); setError('')
-                      try { await purgeBill({ id: row._id, pin }) }
-                      catch (err) { setError(err instanceof Error ? err.message : String(err)) }
-                      finally { setBusy(null) }
-                    }}>✕</button>}
+                    {row.source === 'bill' && <button className="xbtn del" disabled={busy !== null} aria-label={`Permanently delete ${row.label}`} title="Delete for good" onClick={() => setPurging(row)}><X size={14} aria-hidden="true" /></button>}
                   </td>
                 </tr>
               ))}</tbody>
@@ -83,6 +78,19 @@ export function BillTrash() {
             else await restoreVoucher({ id: restoring._id })
           }}
           onClose={() => setRestoring(null)}
+        />}
+        {purging?.source === 'bill' && <Confirm
+          title={`Permanently delete ${purging.label}?`}
+          body="The bill and its linked voucher go for good. This cannot be undone."
+          confirmLabel="Delete for good"
+          danger
+          ask={{ label: 'Code', secret: true }}
+          onConfirm={async (pin) => {
+            setBusy(purging._id); setError('')
+            try { await purgeBill({ id: purging._id, pin }) }
+            finally { setBusy(null) }
+          }}
+          onClose={() => setPurging(null)}
         />}
         {viewing && <BillViewer voucher={{ ...viewing, vchLabel: viewing.label }} onClose={() => setViewing(null)} />}
       </div>

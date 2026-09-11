@@ -66,7 +66,7 @@ export function WhatsAppLoginModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="rounded-full p-1.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-white/10 dark:hover:text-stone-100"
+            className="rounded-full p-1.5 text-muted transition hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-white/10 dark:hover:text-stone-100"
           >
             <X size={18} />
           </button>
@@ -98,7 +98,7 @@ export function WhatsAppLoginModal({
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <RefreshCw size={32} className="animate-spin text-stone-400" />
+            <RefreshCw size={32} className="animate-spin text-muted" />
             <p className="text-sm font-medium text-stone-700 dark:text-stone-200">
               {status === 'logged_out'
                 ? 'Logged out — generating a new QR…'
@@ -108,11 +108,11 @@ export function WhatsAppLoginModal({
                     ? 'WhatsApp auto-print is disabled on the server.'
                     : 'Preparing WhatsApp…'}
             </p>
-            <p className="text-xs text-stone-400">The QR will appear here in a moment.</p>
+            <p className="text-xs text-muted">The QR will appear here in a moment.</p>
           </div>
         )}
 
-        <p className="mt-4 text-center text-[11px] uppercase tracking-wide text-stone-400">
+        <p className="mt-4 text-center text-[11px] uppercase tracking-wide text-muted">
           Status: {status}
         </p>
       </div>

@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
-import { Card, Input, PageHeader } from '../../components/ui'
+import { Card, Input, Page, PageHeader } from '../../components/ui'
 
 export function Customers() {
   const { customers } = useStore()
@@ -14,13 +14,13 @@ export function Customers() {
   return (
     <div>
       <PageHeader title="Customers" subtitle={`${customers.length} saved`} />
-      <div className="space-y-4 p-3 sm:p-4 md:p-6">
+      <Page>
         <div className="max-w-sm">
           <Input placeholder="Search name or mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <Card className="overflow-x-auto">
           <table className="min-w-[640px] w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400 dark:bg-white/5 dark:text-stone-500">
+            <thead className="bg-card2 text-left text-xs uppercase text-muted dark:bg-white/5 dark:text-muted">
               <tr>
                 <th className="px-4 py-2">M/s</th>
                 <th className="px-4 py-2">Mobile</th>
@@ -30,16 +30,16 @@ export function Customers() {
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} className="border-t border-slate-100 dark:border-white/10">
+                <tr key={c.id} className="border-t border-line dark:border-white/10">
                   <td className="px-4 py-2 font-medium">{c.name}</td>
                   <td className="px-4 py-2">{c.mobile}</td>
                   <td className="px-4 py-2">{c.uid || '—'}</td>
-                  <td className="px-4 py-2 text-slate-500 dark:text-stone-400">{c.address || '—'}</td>
+                  <td className="px-4 py-2 text-muted">{c.address || '—'}</td>
                 </tr>
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400 dark:text-stone-500">
+                  <td colSpan={4} className="px-4 py-8 text-center text-muted">
                     No customers yet — they're saved automatically when you save a quotation.
                   </td>
                 </tr>
@@ -47,7 +47,7 @@ export function Customers() {
             </tbody>
           </table>
         </Card>
-      </div>
+      </Page>
     </div>
   )
 }

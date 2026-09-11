@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Paperclip, X } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { shortDate } from '../lib/format';
@@ -133,7 +134,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
                     <span className="shot-page">{unit.pages.length} pages</span>
                   )}
                   <span className="shot-when">{shortDate(cover.at)}</span>
-                  {isPicked(unit) && <span className="shot-tick">✓</span>}
+                  {isPicked(unit) && <span className="shot-tick"><Check size={12} aria-hidden="true" /></span>}
                   {(
                     <button
                       type="button"
@@ -175,7 +176,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
         onDragLeave={() => setOver(false)}
         onDrop={drop}
       >
-        <span className="drop-mark">▣</span>
+        <span className="drop-mark"><Paperclip size={13} aria-hidden="true" /></span>
         <span className="drop-text">Drop, paste, or choose</span>
       </button>
 
@@ -206,7 +207,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
                 aria-label="Remove"
                 onClick={() => onChange(files.filter((_, n) => n !== i))}
               >
-                ×
+                <X size={16} aria-hidden="true" />
               </button>
               <span className="shot-size">{size(s.file.size)}</span>
             </div>

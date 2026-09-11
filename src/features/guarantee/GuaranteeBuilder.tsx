@@ -377,16 +377,16 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             <FileText size={20} /> Select Bill
           </button>
         </div>
-        <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+        <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">
           Next Ref No: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref.number}</span>
         </div>
 
         <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Customer</h2>
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Customer</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Input label="M/s (Name)" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Mobile</span>
+              <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>
               <input
                 type="tel"
                 inputMode="numeric"
@@ -404,7 +404,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UID</span>
+              <span className="mb-1 block text-xs font-semibold text-muted">UID</span>
               <input
                 type="text"
                 inputMode="text"
@@ -425,7 +425,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         </Card>
 
         <Card className="min-h-0 shrink-0 overflow-hidden text-stone-800 dark:text-stone-100">
-          <div className="border-b border-stone-100 px-4 py-2 text-sm font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:text-stone-400">
+          <div className="border-b border-stone-100 px-4 py-2 text-sm font-bold uppercase tracking-wide text-muted dark:border-white/10">
             Items
           </div>
           <SizeTable rows={rows} setRows={setRows} brandOptions={brandOptions} datalistId="type-options-1" />
@@ -433,10 +433,10 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
         {layout === 'card' && (
           <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Print Preview</h2>
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Print Preview</h2>
             <div className="flex flex-wrap items-start justify-center gap-6">
               <div className="flex flex-col items-center gap-2">
-                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-stone-500 dark:bg-white/10 dark:text-stone-300">
+                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted dark:bg-white/10 dark:text-stone-300">
                   Slot 1
                 </span>
                 <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-md border border-stone-300 bg-white shadow-sm dark:border-white/20">
@@ -445,7 +445,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
               </div>
 
               <div className="flex flex-col items-center gap-2">
-                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-stone-500 dark:bg-white/10 dark:text-stone-300">
+                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted dark:bg-white/10 dark:text-stone-300">
                   Slot 2
                 </span>
                 {secondCardOn ? (
@@ -457,7 +457,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                       type="button"
                       onClick={() => setSecondCardOn(false)}
                       aria-label="Remove slot 2 card"
-                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-stone-300 bg-white text-stone-500 shadow-sm transition hover:border-red-400 hover:text-red-500 dark:border-white/20 dark:bg-stone-800 dark:text-stone-300"
+                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-stone-300 bg-white text-muted shadow-sm transition hover:border-red-400 hover:text-danger dark:border-white/20 dark:bg-stone-800 dark:text-stone-300"
                     >
                       <X size={13} />
                     </button>
@@ -466,7 +466,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                   <button
                     type="button"
                     onClick={() => setSecondCardOn(true)}
-                    className="flex h-[86mm] w-[54mm] flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 bg-stone-50 text-stone-400 transition hover:border-shiv-green hover:text-shiv-green dark:border-white/15 dark:bg-white/5"
+                    className="flex h-[86mm] w-[54mm] flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 bg-stone-50 text-muted transition hover:border-shiv-green hover:text-shiv-green dark:border-white/15 dark:bg-white/5"
                   >
                     <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-current">
                       <Check size={16} />
@@ -479,11 +479,11 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
             {secondCardOn && (
               <div className="mt-4 border-t border-stone-100 pt-4 dark:border-white/10">
-                <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">Slot 2 Details</h3>
+                <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Slot 2 Details</h3>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <Input label="M/s (Name)" value={customer2.name} onChange={(e) => setCustomer2({ ...customer2, name: e.target.value })} />
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Mobile</span>
+                    <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>
                     <input
                       type="tel"
                       inputMode="numeric"
@@ -494,7 +494,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UID</span>
+                    <span className="mb-1 block text-xs font-semibold text-muted">UID</span>
                     <input
                       type="text"
                       maxLength={12}
@@ -532,7 +532,7 @@ function SizeTable({
   const cellClass =
     'w-full rounded border border-transparent bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white dark:text-stone-100 dark:focus:bg-stone-950'
   const sootClass =
-    'w-10 shrink-0 rounded border border-transparent bg-transparent px-1 py-1.5 text-sm text-stone-500 outline-none transition focus:border-shiv-green focus:bg-white dark:text-stone-400 dark:focus:bg-stone-950'
+    'w-10 shrink-0 rounded border border-transparent bg-transparent px-1 py-1.5 text-sm text-muted outline-none transition focus:border-shiv-green focus:bg-white  dark:focus:bg-stone-950'
 
   // Copy the last filled row into a new row (same size/brand for the next door),
   // keeping a trailing blank so the table still grows as you type. When nothing
@@ -553,7 +553,7 @@ function SizeTable({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-stone-200 bg-stone-100 text-xs font-bold uppercase tracking-wide text-stone-500 dark:border-white/10 dark:bg-white/5 dark:text-stone-400">
+          <tr className="border-b border-stone-200 bg-stone-100 text-xs font-bold uppercase tracking-wide text-muted dark:border-white/10 dark:bg-white/5">
             <th className="px-2 py-2 text-left">Thickness</th>
             <th className="px-2 py-2 text-left">Type</th>
             <th className="px-2 py-2 text-right">Length</th>
@@ -608,7 +608,7 @@ function SizeTable({
                     }
                     className={`${sootClass} text-right`}
                   />
-                  <span className="shrink-0 text-xs text-stone-400 dark:text-stone-500">/8</span>
+                  <span className="shrink-0 text-xs text-muted">/8</span>
                 </div>
               </td>
               <td className="p-0.5">
@@ -636,7 +636,7 @@ function SizeTable({
                     }
                     className={`${sootClass} text-right`}
                   />
-                  <span className="shrink-0 text-xs text-stone-400 dark:text-stone-500">/8</span>
+                  <span className="shrink-0 text-xs text-muted">/8</span>
                 </div>
               </td>
               <td className="p-0.5">
@@ -666,7 +666,7 @@ function SizeTable({
                     type="button"
                     onClick={() => removeSizeRow(setRows, row.id)}
                     aria-label="Remove row"
-                    className="rounded p-1 text-stone-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
+                    className="rounded p-1 text-muted transition hover:bg-red-50 hover:text-danger dark:hover:bg-red-950/30"
                   >
                     <Trash2 size={14} />
                   </button>

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Check } from 'lucide-react'
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { TAGS, orderTags } from '../lib/tags';
@@ -73,7 +74,7 @@ export default function TagDots({ tags, ledgerId, size = 9 }) {
                 title={t.name}
                 onClick={() => toggle({ id: ledgerId, tag: t.id })}
               >
-                {chosen && <span className="tagtick">✓</span>}
+                {chosen && <span className="tagtick"><Check size={12} aria-hidden="true" /></span>}
               </button>
             );
           })}

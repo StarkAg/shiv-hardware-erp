@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
 import { UpdateBanner } from './UpdateBanner'
+import { Toaster } from './Toast'
 import { CURRENT_VERSION } from '../lib/appUpdate'
 
 const CATEGORY_ICONS: Record<CategoryIcon, LucideIcon> = {
@@ -91,7 +92,7 @@ function BackBar() {
     <div className="back-bar no-print px-3 sm:px-4 md:px-6">
       <button
         onClick={() => (idx > 0 ? navigate(-1) : navigate('/quote-options'))}
-        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-white/10 dark:hover:text-white"
+        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-muted hover:bg-stone-100 hover:text-stone-900 dark:hover:bg-white/10 dark:hover:text-white"
       >
         <ChevronLeft size={15} /> Back
       </button>
@@ -138,7 +139,7 @@ export function AppLayout() {
           <button
             onClick={toggleRail}
             aria-label={railed ? 'Open sidebar' : 'Collapse sidebar'}
-            className={`rounded-lg p-1.5 text-stone-400 hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto' : 'ml-auto order-last'}`}
+            className={`rounded-lg p-1.5 text-muted hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto' : 'ml-auto order-last'}`}
           >
             {railed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
           </button>
@@ -174,7 +175,7 @@ export function AppLayout() {
                   `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
                     isActive
                       ? 'bg-stone-100 text-stone-950 dark:bg-white/10 dark:text-white'
-                      : 'text-stone-500 hover:text-stone-950 dark:text-stone-400 dark:hover:text-white'
+                      : 'text-muted hover:text-stone-950  dark:hover:text-white'
                   }`
                 }
               >
@@ -183,7 +184,7 @@ export function AppLayout() {
 
               {GROUP_ORDER.map((g) => (
                 <div key={g}>
-                  <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+                  <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
                     {g}
                   </div>
                   {CATEGORY_ORDER.filter((c) => CATEGORY_META[c].group === g).map((c) => {
@@ -296,10 +297,10 @@ export function AppLayout() {
                   <NavLink
                     key={v.to}
                     to={v.to}
-                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-400 dark:hover:bg-white/10 dark:hover:text-white"
+                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-muted hover:bg-stone-100 hover:text-stone-950 dark:hover:bg-white/10 dark:hover:text-white"
                   >
                     <span className="flex items-center gap-2"><Plus size={13} /> {v.label}</span>
-                    <span className="text-[10px] font-semibold text-stone-400 dark:text-stone-600">{v.key}</span>
+                    <span className="text-[10px] font-semibold text-muted dark:text-stone-600">{v.key}</span>
                   </NavLink>
                 ))}
               </div>
@@ -342,12 +343,12 @@ export function AppLayout() {
             href="https://www.linkedin.com/in/harshxagarwal"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-2 text-xs text-stone-500 transition hover:text-stone-950 dark:text-stone-400 dark:hover:text-white"
+            className="flex items-center gap-2 text-xs text-muted transition hover:text-stone-950 dark:hover:text-white"
           >
             <Wrench size={13} />
             By Harsh
           </a>
-          <span className="rounded-full bg-stone-200/70 px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-white/10 dark:text-stone-400">
+          <span className="rounded-full bg-stone-200/70 px-2 py-0.5 text-[10px] font-semibold text-muted dark:bg-white/10">
             v{CURRENT_VERSION}
           </span>
         </div>
@@ -358,6 +359,7 @@ export function AppLayout() {
   return (
     <div className="min-h-screen md:flex">
       <UpdateBanner />
+      <Toaster />
       <div className="no-print fixed inset-x-0 top-0 z-50 flex items-center border-b border-stone-200/80 bg-stone-50/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-stone-950/95 md:hidden" style={{ paddingTop: 'calc(0.5rem + env(safe-area-inset-top))', willChange: 'transform', transform: 'translateZ(0)' }}>
         <div className="flex items-center gap-2">
           <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 rounded-lg bg-white object-contain p-1" />
@@ -371,7 +373,7 @@ export function AppLayout() {
         <button
           onClick={() => setDark(toggleTheme())}
           aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="ml-auto rounded-lg p-2 text-stone-500 hover:bg-stone-200/70 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition"
+          className="ml-auto rounded-lg p-2 text-muted hover:bg-stone-200/70 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition"
         >
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
@@ -404,7 +406,7 @@ export function AppLayout() {
                 active:scale-90 active:opacity-70
                 ${active
                   ? 'bg-shiv-green/20 text-stone-950 dark:bg-shiv-green/20 dark:text-shiv-green'
-                  : 'text-stone-500 dark:text-stone-400'
+                  : 'text-muted'
                 }`}
               style={{ transition: 'transform 80ms ease, opacity 80ms ease' }}
             >

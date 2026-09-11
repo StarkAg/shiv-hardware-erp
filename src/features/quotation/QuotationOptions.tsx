@@ -34,7 +34,7 @@ export function QuotationOptions() {
         <div className="min-h-0 flex-1 space-y-2 overflow-hidden sm:space-y-4">
           {GROUP_ORDER.map((group) => (
           <section key={group} className="min-h-0">
-            <h2 className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 sm:mb-2 sm:text-xs">
+            <h2 className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wider text-muted sm:mb-2 sm:text-xs">
               {group}
             </h2>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">

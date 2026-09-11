@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { X } from 'lucide-react'
 import { shortDate } from '../lib/format';
 
 /**
@@ -36,7 +37,7 @@ export default function BillPane({ bill, onClose }) {
           {bill.date ? <div className="ref">{shortDate(bill.date)}</div> : null}
         </div>
         <button type="button" className="xbtn" onClick={onClose} aria-label="Close preview">
-          ✕
+          <X size={14} aria-hidden="true" />
         </button>
       </header>
 

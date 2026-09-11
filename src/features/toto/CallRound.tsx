@@ -5,6 +5,7 @@ import { Input } from '../../components/ui'
 import { Button, Card } from '../../components/ui'
 import type { TotoAvailability, VehicleType } from '../../lib/types'
 import { VEHICLE_LABEL } from '../../lib/types'
+import Confirm from '../ledger/components/Confirm'
 
 /**
  * One order's call round down the toto list.
@@ -47,6 +48,7 @@ const TAGS: { value: TotoAvailability; label: string; dot: string; ring: string 
 export function CallRound({ called, onCalled }: { called: string[]; onCalled: (id: string) => void }) {
   const { totoDrivers, setTotoAvailability, removeTotoDriver, updateTotoDriver } = useStore()
   const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
@@ -58,6 +60,20 @@ export function CallRound({ called, onCalled }: { called: string[]; onCalled: (i
   }, [totoDrivers])
 
   return (
+    <>
+    {removing && (
+      <Confirm
+        title={`Remove ${removing.name}?`}
+        confirmLabel="Remove"
+        danger
+        ask={{ label: 'Shop code', secret: true }}
+        onConfirm={(code) => {
+          if (code.trim() !== REMOVE_CODE) throw new Error('Wrong code.')
+          removeTotoDriver(removing.id)
+        }}
+        onClose={() => setRemoving(null)}
+      />
+    )}
     <Card className="divide-y divide-stone-100 dark:divide-white/10">
       {ordered.map((d) => {
         const done = called.includes(d.id)
@@ -91,13 +107,13 @@ export function CallRound({ called, onCalled }: { called: string[]; onCalled: (i
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate font-medium">{d.name}</span>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-500 dark:bg-white/10 dark:text-stone-400">
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-muted dark:bg-white/10">
                   <VehicleBadge vehicle={d.vehicle ?? 'toto'} />
                   {VEHICLE_LABEL[d.vehicle ?? 'toto']}
                 </span>
-                {done && <Check size={14} className="shrink-0 text-emerald-600" />}
+                {done && <Check size={14} className="shrink-0 text-good" />}
               </div>
-              <div className="text-xs text-stone-400 dark:text-stone-500">{d.phone}</div>
+              <div className="text-xs text-muted">{d.phone}</div>
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
@@ -130,7 +146,7 @@ export function CallRound({ called, onCalled }: { called: string[]; onCalled: (i
             <div className="relative shrink-0">
               <Button
                 variant="ghost"
-                className="px-1.5 py-1 text-stone-400"
+                className="px-1.5 py-1 text-muted"
                 title="More"
                 aria-label={`More actions for ${d.name}`}
                 onClick={() => setMenuFor(menuFor === d.id ? null : d.id)}
@@ -153,14 +169,8 @@ export function CallRound({ called, onCalled }: { called: string[]; onCalled: (i
                       Edit
                     </button>
                     <button
-                      onClick={() => {
-                        setMenuFor(null)
-                        const code = window.prompt(`Remove ${d.name}? Enter shop code:`)
-                        if (code === null) return
-                        if (code.trim() !== REMOVE_CODE) { alert('Wrong code.'); return }
-                        removeTotoDriver(d.id)
-                      }}
-                      className="block w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-stone-100 dark:hover:bg-white/10"
+                      onClick={() => { setMenuFor(null); setRemoving(d) }}
+                      className="block w-full px-3 py-2 text-left text-sm text-danger hover:bg-stone-100 dark:hover:bg-white/10"
                     >
                       Remove
                     </button>
@@ -172,5 +182,6 @@ export function CallRound({ called, onCalled }: { called: string[]; onCalled: (i
         )
       })}
     </Card>
+    </>
   )
 }

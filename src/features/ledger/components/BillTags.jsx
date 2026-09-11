@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Check } from 'lucide-react'
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { labelled, orderTags } from '../lib/tags';
@@ -66,7 +67,7 @@ export default function BillTags({ tags, inboxId, voucherId, names, size = 10 })
               >
                 <span className={`tagdot t-${t.id}`} />
                 <span className="tagrow-name">{t.label}</span>
-                {chosen && <span className="tagtick">✓</span>}
+                {chosen && <span className="tagtick"><Check size={12} aria-hidden="true" /></span>}
               </button>
             );
           })}

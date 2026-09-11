@@ -24,7 +24,7 @@ export function NotFound() {
       <AlertTriangle size={32} className="text-stone-300 dark:text-stone-600" />
       <div>
         <p className="text-base font-bold text-stone-900 dark:text-white">This page has moved</p>
-        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+        <p className="mt-1 text-sm text-muted">
           The link is from an older version of the panel.
         </p>
       </div>
@@ -49,12 +49,12 @@ export function AppError() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center gap-4 px-4 text-center">
-      <AlertTriangle size={32} className="text-red-500" />
+      <AlertTriangle size={32} className="text-danger" />
       <div>
         <p className="text-base font-bold text-stone-900 dark:text-white">The panel hit a problem</p>
         {/* The message is shown rather than hidden: the shop reads it out over
             the phone, and that is usually enough to say what went wrong. */}
-        <p className="mt-1 break-words text-sm text-stone-500 dark:text-stone-400">{message}</p>
+        <p className="mt-1 break-words text-sm text-muted">{message}</p>
       </div>
       <div className="flex gap-2">
         <button

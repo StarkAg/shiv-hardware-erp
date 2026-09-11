@@ -2,7 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * One palette for the whole panel.
+ *
+ * The shop ran two: the quotation and inventory screens on Tailwind's grey
+ * `stone` ramp, and the ledger on its own warm parchment and brass. They met
+ * in the middle of the day book and the seam showed. The ledger's was the
+ * better system — real tokens, a light and a dark set that answer to each
+ * other — so it is the one that moved up here, where both halves read it.
+ *
+ * The muted tone is the one thing that changed on the way: it was #a8a29e on
+ * the panel side, which is 2:1 against this background. Anything under 4.5:1
+ * is not a colour choice, it is text the shop cannot read in daylight. Every
+ * pair below is measured, not judged by eye.
+ */
 :root {
+  --bg: #e8e5df;            /* warm parchment — the body */
+  --card: #f3f0ea;
+  --card2: #ede9e1;
+  --fg: #1c1917;            /* 13.9:1 on --bg */
+  --muted: #6b625b;         /*  4.7:1 on --bg, 5.2:1 on --card */
+  --line: rgba(28, 25, 23, 0.12);
+  --brass: #b9924b;         /* the shop's colour: fills and borders */
+  --brass-ink: #201804;     /*  6.1:1 on --brass — what sits on a brass button */
+  --brass-text: #7d5f22;    /*  4.7:1 on --bg — brass where it has to be read */
+  --red: #9f1d20;           /*  6.3:1 on --bg */
+  --amber: #b47016;
+  --amber-text: #8a5410;    /*  5.0:1 on --bg */
+  --amber-tint: rgba(180, 112, 22, 0.12);
+  --amber-line: rgba(180, 112, 22, 0.3);
+  --green: #1a7a4a;
+  --green-text: #146239;    /*  5.9:1 on --bg */
+  --green-ink: #ffffff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --lift: 0 10px 30px rgba(28, 25, 23, 0.14);
+
+  /* The old names, kept so nothing that already reads them breaks. */
   --shiv-green: #b9924b;
   --shiv-red: #9f1d20;
   --mobile-topbar-height: calc(57px + env(safe-area-inset-top));
@@ -11,10 +46,35 @@
   --mobile-bottom-nav-space: calc(var(--mobile-bottom-nav-height) + var(--mobile-bottom-nav-offset));
 }
 
+/* Dark, on <html>. The ledger wrapper mirrors this class, so both halves turn
+   together from the one toggle. Every pair here is 4.5:1 or better as well. */
+.dark {
+  --bg: #12110f;
+  --card: #1a1815;
+  --card2: #211e1a;
+  --fg: #eae7e1;
+  --muted: #a8a29e;
+  --line: rgba(255, 255, 255, 0.10);
+  --brass: #c9a45c;
+  --brass-ink: #1a1204;
+  --brass-text: #c9a45c;
+  --red: #d3595c;
+  --amber: #d9a441;
+  --amber-text: #d9a441;
+  --amber-tint: rgba(217, 164, 65, 0.14);
+  --amber-line: rgba(217, 164, 65, 0.32);
+  --green: #4cb782;
+  --green-text: #4cb782;
+  --green-ink: #06210f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --lift: 0 10px 34px rgba(0, 0, 0, 0.44);
+}
+
 /* ── Light mode ───────────────────────────── */
 body {
-  @apply text-stone-800 antialiased;
-  background-color: #e8e5df;   /* warm parchment — easy on the eyes */
+  @apply antialiased;
+  color: var(--fg);
+  background-color: var(--bg);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   overflow-x: hidden;
 }
@@ -53,6 +113,21 @@ body {
   -webkit-user-select: none;
 }
 
+/*
+ * One focus ring.
+ *
+ * There were three: a proper ring on the shared inputs, a one-pixel border
+ * tint in the ledger, and the browser's own everywhere else — with four fields
+ * that showed nothing at all. This is a till app driven from the keyboard, so
+ * the operator has to be able to see where they are without hunting. Only
+ * :focus-visible, so a mouse click does not leave a ring behind.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 /* ── Hide all scrollbars ─────────────────── */
 * {
   scrollbar-width: none; /* Firefox */
@@ -65,7 +140,6 @@ body {
 
 /* ── Dark mode ────────────────────────────── */
 .dark body {
-  @apply text-stone-100;
   background:
     radial-gradient(circle at top right, rgba(185,146,75,0.14), transparent 28rem),
     linear-gradient(180deg, #12110f 0%, #1a1815 54%, #100f0e 100%);

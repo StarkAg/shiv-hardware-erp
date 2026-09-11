@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import Confirm from '../ledger/components/Confirm'
 import { useStore } from '../../lib/store'
 import { Pencil, Printer, Trash2 } from 'lucide-react'
 import { CATEGORY_LABELS } from '../../lib/types'
 import { enrichQuotation, formatSize } from '../../lib/pricing'
-import { Button, Card, Input, PageHeader } from '../../components/ui'
+import { Button, Card, Input, Page, PageHeader } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
 import { QuotationPrint } from '../print/QuotationPrint'
 
@@ -18,6 +20,7 @@ export function QuoteHistory() {
   const setQ = (value: string) => {
     setParams(value ? { q: value } : {}, { replace: true })
   }
+  const [deleting, setDeleting] = useState<{ id: string; number: string } | null>(null)
   const found = quotations.find((x) => x.id === id)
   const preview = found ? enrichQuotation(found) : null
 
@@ -30,14 +33,23 @@ export function QuoteHistory() {
 
   return (
     <div>
+      {deleting && (
+        <Confirm
+          title={`Delete ${deleting.number}?`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => deleteQuotation(deleting.id)}
+          onClose={() => setDeleting(null)}
+        />
+      )}
       <PageHeader title="Quote History" subtitle={`${quotations.length} quotations`} />
-      <div className="space-y-4 p-3 sm:p-4 md:p-6">
+      <Page>
         <div className="max-w-sm">
           <Input placeholder="Search number, name, mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <Card className="overflow-x-auto">
           <table className="min-w-[760px] w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400 dark:bg-white/5 dark:text-stone-500">
+            <thead className="bg-card2 text-left text-xs uppercase text-muted dark:bg-white/5 dark:text-muted">
               <tr>
                 <th className="px-4 py-2">Number</th>
                 <th className="px-4 py-2">Date</th>
@@ -49,12 +61,12 @@ export function QuoteHistory() {
             </thead>
             <tbody>
               {filtered.map((x) => (
-                <tr key={x.id} className="border-t border-slate-100 dark:border-white/10">
+                <tr key={x.id} className="border-t border-line dark:border-white/10">
                   <td className="px-4 py-2 font-medium">{x.number}</td>
                   <td className="px-4 py-2">{new Date(x.date).toLocaleDateString('en-GB')}</td>
                   <td className="px-4 py-2">
                     {x.customer.name || '—'}
-                    <div className="text-xs text-slate-400 dark:text-stone-500">{x.customer.mobile}</div>
+                    <div className="text-xs text-muted">{x.customer.mobile}</div>
                   </td>
                   <td className="px-4 py-2">{CATEGORY_LABELS[x.category]}</td>
                   <td className="px-4 py-2">{formatSize(x.height, x.width, x.category) || '—'}</td>
@@ -75,9 +87,9 @@ export function QuoteHistory() {
                       </Button>
                       <Button
                         variant="ghost"
-                        className="px-2 py-1 text-red-500"
+                        className="px-2 py-1 text-danger"
                         title="Delete"
-                        onClick={() => confirm(`Delete ${x.number}?`) && deleteQuotation(x.id)}
+                        onClick={() => setDeleting({ id: x.id, number: x.number })}
                       >
                         <Trash2 size={16} />
                       </Button>
@@ -87,7 +99,7 @@ export function QuoteHistory() {
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400 dark:text-stone-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted">
                     No quotations yet.
                   </td>
                 </tr>
@@ -95,7 +107,7 @@ export function QuoteHistory() {
             </tbody>
           </table>
         </Card>
-      </div>
+      </Page>
 
       {preview && (
         <PrintPreview

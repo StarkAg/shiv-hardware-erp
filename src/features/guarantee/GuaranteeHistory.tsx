@@ -3,11 +3,13 @@ import { useAction } from 'convex/react'
 import { MessageCircle, Printer, Trash2 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
-import { Button, Card, Input, PageHeader } from '../../components/ui'
+import { Button, Card, Input, Page, PageHeader } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
 import { GuaranteeCard } from '../print/GuaranteeCard'
 import { api } from '../../../convex/_generated/api'
 import type { GuaranteeDocument } from '../../lib/types'
+import { toast } from '../../components/Toast'
+import Confirm from '../ledger/components/Confirm'
 
 /** Brands on a card, condensed for the table. */
 function itemSummary(doc: GuaranteeDocument): string {
@@ -24,41 +26,50 @@ function itemSummary(doc: GuaranteeDocument): string {
 function SendWhatsAppButton({ doc }: { doc: GuaranteeDocument }) {
   const send = useAction(api.whatsapp.sendGuaranteeCard)
   const [busy, setBusy] = useState(false)
+  const [asking, setAsking] = useState(false)
+
+  const mobile = doc.customer?.mobile?.trim()
 
   async function onSend() {
-    const mobile = doc.customer?.mobile?.trim()
-    if (!mobile) {
-      alert('This customer has no mobile number saved.')
-      return
-    }
-    if (!confirm(`Send the guarantee card message for ${doc.number} to ${mobile}?`)) return
-
+    setAsking(false)
     setBusy(true)
     try {
       const res = await send({ number: doc.number })
-      alert(res.ok ? `Sent to ${mobile}` : `Failed: ${res.error}`)
+      if (res.ok) toast(`Sent to ${mobile}`)
+      else toast(`Failed: ${res.error}`, 'error')
     } catch (err) {
-      alert(`Failed: ${err instanceof Error ? err.message : String(err)}`)
+      toast(`Failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Button
-      variant="ghost"
-      className="px-2 py-1 text-emerald-600"
-      title="Send guarantee card message on WhatsApp"
-      disabled={busy}
-      onClick={onSend}
-    >
-      <MessageCircle size={16} />
-    </Button>
+    <>
+      <Button
+        variant="ghost"
+        className="px-2 py-1 text-good"
+        title="Send guarantee card message on WhatsApp"
+        disabled={busy}
+        onClick={() => (mobile ? setAsking(true) : toast('This customer has no mobile number saved.', 'error'))}
+      >
+        <MessageCircle size={16} />
+      </Button>
+      {asking && (
+        <Confirm
+          title={`Send ${doc.number} to ${mobile}?`}
+          confirmLabel="Send"
+          onConfirm={onSend}
+          onClose={() => setAsking(false)}
+        />
+      )}
+    </>
   )
 }
 
 export function GuaranteeHistory() {
   const { guarantees, deleteGuarantee } = useStore()
+  const [deleting, setDeleting] = useState<{ id: string; number: string } | null>(null)
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const [params, setParams] = useSearchParams()
@@ -80,14 +91,23 @@ export function GuaranteeHistory() {
 
   return (
     <div>
+      {deleting && (
+        <Confirm
+          title={`Delete ${deleting.number}?`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => deleteGuarantee(deleting.id)}
+          onClose={() => setDeleting(null)}
+        />
+      )}
       <PageHeader title="Guarantee History" subtitle={`${guarantees.length} cards`} />
-      <div className="space-y-4 p-3 sm:p-4 md:p-6">
+      <Page>
         <div className="max-w-sm">
           <Input placeholder="Search number, name, mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <Card className="overflow-x-auto">
           <table className="min-w-[760px] w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400 dark:bg-white/5 dark:text-stone-500">
+            <thead className="bg-card2 text-left text-xs uppercase text-muted dark:bg-white/5 dark:text-muted">
               <tr>
                 <th className="px-4 py-2">Number</th>
                 <th className="px-4 py-2">Date</th>
@@ -98,12 +118,12 @@ export function GuaranteeHistory() {
             </thead>
             <tbody>
               {filtered.map((x) => (
-                <tr key={x.id} className="border-t border-slate-100 dark:border-white/10">
+                <tr key={x.id} className="border-t border-line dark:border-white/10">
                   <td className="px-4 py-2 font-medium">{x.number}</td>
                   <td className="px-4 py-2">{new Date(x.date).toLocaleDateString('en-GB')}</td>
                   <td className="px-4 py-2">
                     {x.customer?.name || '—'}
-                    <div className="text-xs text-slate-400 dark:text-stone-500">{x.customer?.mobile}</div>
+                    <div className="text-xs text-muted">{x.customer?.mobile}</div>
                   </td>
                   <td className="px-4 py-2">{itemSummary(x)}</td>
                   <td className="px-4 py-2">
@@ -119,9 +139,9 @@ export function GuaranteeHistory() {
                       </Button>
                       <Button
                         variant="ghost"
-                        className="px-2 py-1 text-red-500"
+                        className="px-2 py-1 text-danger"
                         title="Delete"
-                        onClick={() => confirm(`Delete ${x.number}?`) && deleteGuarantee(x.id)}
+                        onClick={() => setDeleting({ id: x.id, number: x.number })}
                       >
                         <Trash2 size={16} />
                       </Button>
@@ -131,7 +151,7 @@ export function GuaranteeHistory() {
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400 dark:text-stone-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted">
                     No guarantee cards yet.
                   </td>
                 </tr>
@@ -139,7 +159,7 @@ export function GuaranteeHistory() {
             </tbody>
           </table>
         </Card>
-      </div>
+      </Page>
 
       {preview && (
         <PrintPreview

@@ -36,7 +36,7 @@ function PrinterCard({ printer, onCancel, busyId }: {
     <Card className="overflow-hidden">
       <div className="flex items-center justify-between gap-2 border-b border-stone-200/80 px-4 py-3 dark:border-white/10">
         <div className="flex min-w-0 items-center gap-2">
-          <Printer size={18} className="shrink-0 text-stone-500" />
+          <Printer size={18} className="shrink-0 text-muted" />
           <span className="truncate text-sm font-semibold text-stone-900 dark:text-stone-100">
             {printer.name.replace(/_/g, ' ').replace(/\s+\[?[0-9A-F]{6}\]?$/i, '').trim()}
           </span>
@@ -52,7 +52,7 @@ function PrinterCard({ printer, onCancel, busyId }: {
       )}
 
       {printer.jobs.length === 0 ? (
-        <div className="px-4 py-3 text-xs text-stone-400">No jobs in queue.</div>
+        <div className="px-4 py-3 text-xs text-muted">No jobs in queue.</div>
       ) : (
         <ul className="divide-y divide-stone-200/70 dark:divide-white/5">
           {printer.jobs.map((job) => (
@@ -61,7 +61,7 @@ function PrinterCard({ printer, onCancel, busyId }: {
                 <div className="truncate text-sm font-medium text-stone-800 dark:text-stone-100">
                   #{job.number} · Quotation/Document
                 </div>
-                <div className="truncate text-xs text-stone-400">
+                <div className="truncate text-xs text-muted">
                   {job.sizeKb ? `${job.sizeKb} KB` : ''}{job.when ? ` · ${job.when}` : ''}
                 </div>
               </div>
@@ -152,11 +152,11 @@ export function PrinterQueue() {
         )}
 
         {loading && !snapshot ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-stone-400">
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
             <Loader2 size={18} className="animate-spin" /> Reading printer queue…
           </div>
         ) : printers.length === 0 && !error ? (
-          <div className="py-16 text-center text-sm text-stone-400">No printers found on the shop computer.</div>
+          <div className="py-16 text-center text-sm text-muted">No printers found on the shop computer.</div>
         ) : (
           <div className="space-y-5">
             {withJobs.length > 0 && (
@@ -169,7 +169,7 @@ export function PrinterQueue() {
 
             {idle.length > 0 && (
               <div>
-                <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-stone-400">Idle printers</div>
+                <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">Idle printers</div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {idle.map((p) => (
                     <PrinterCard key={p.name} printer={p} onCancel={handleCancel} busyId={busyId} />

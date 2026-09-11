@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react'
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useUploader } from '../lib/upload';
@@ -314,7 +315,7 @@ export default function VoucherForm({
                       removeAttachment({ id: edit._id, storageId: shot.storageId })
                     }
                   >
-                    ×
+                    <X size={16} aria-hidden="true" />
                   </button>
                 </div>
               ))}

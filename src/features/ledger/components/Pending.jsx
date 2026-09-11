@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { X } from 'lucide-react'
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { rupees, shortDate } from '../lib/format';
@@ -94,7 +95,7 @@ export default function Pending({ rows: live, masters, onViewBill, onOpen }) {
                 <div className="pendingacts">
                   <button className="btn small" onClick={() => setPricing(r)}>Enter amount</button>
                   <button className="xbtn del" onClick={() => setDeleting(r)} aria-label="Delete">
-                    ✕
+                    <X size={14} aria-hidden="true" />
                   </button>
                 </div>
               </div>

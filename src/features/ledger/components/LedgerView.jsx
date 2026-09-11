@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Paperclip, Pencil, X } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
@@ -99,7 +100,7 @@ export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPr
             <h1>{account?.name ?? ''}</h1>
             <TagDots tags={account?.tags} ledgerId={ledgerId} size={11} />
             <button className="xbtn" onClick={() => setEditParty(true)} aria-label="Edit ledger">
-              ✎
+              <Pencil size={14} aria-hidden="true" />
             </button>
           </div>
           <div className="ref">
@@ -262,16 +263,16 @@ export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPr
                           onClick={() => onViewBill({ ...item.p, party: account?.name })}
                           aria-label="Bill photo"
                         >
-                          ▣ {item.p.attachmentUrls.length > 1 ? item.p.attachmentUrls.length : ''}
+                          <Paperclip size={13} aria-hidden="true" /> {item.p.attachmentUrls.length > 1 ? item.p.attachmentUrls.length : ''}
                         </button>
                       )}
                     </td>
                     <td className="rowacts" data-label="">
                       <button className="xbtn" onClick={() => openEdit(item.p)} aria-label="Edit">
-                        ✎
+                        <Pencil size={14} aria-hidden="true" />
                       </button>
                       <button className="xbtn del" onClick={() => setDeleting(item.p)} aria-label="Delete">
-                        ✕
+                        <X size={14} aria-hidden="true" />
                       </button>
                     </td>
                   </tr>
@@ -304,7 +305,7 @@ export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPr
                           onClick={() => onViewBill({ ...item.r, party: account?.name })}
                           aria-label="Bill photo"
                         >
-                          ▣ {item.r.attachmentUrls.length > 1 ? item.r.attachmentUrls.length : ''}
+                          <Paperclip size={13} aria-hidden="true" /> {item.r.attachmentUrls.length > 1 ? item.r.attachmentUrls.length : ''}
                         </button>
                       )}
                     </td>
@@ -314,10 +315,10 @@ export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPr
                         onClick={() => setEditing(item.r.voucherId)}
                         aria-label="Edit"
                       >
-                        ✎
+                        <Pencil size={14} aria-hidden="true" />
                       </button>
                       <button className="xbtn del" onClick={() => setDeleting(item.r)} aria-label="Delete">
-                        ✕
+                        <X size={14} aria-hidden="true" />
                       </button>
                     </td>
                   </tr>

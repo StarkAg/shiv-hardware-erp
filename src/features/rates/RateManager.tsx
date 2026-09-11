@@ -11,7 +11,9 @@ import {
   type GuaranteeYears,
   type ProductCategory,
 } from '../../lib/types'
-import { Button, Card, PageHeader } from '../../components/ui'
+import { Button, Card, Page, PageHeader } from '../../components/ui'
+import { toast } from '../../components/Toast'
+import Confirm from '../ledger/components/Confirm'
 
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 const COVERAGE_OPTIONS: CoverageType[] = ['guarantee', 'warranty']
@@ -50,6 +52,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
   // Edits are held in a local draft until "Save" is pressed.
   const [draft, setDraft] = useState<BrandSet[]>(() => codeSets(structuredClone(sets)))
   const [activeIdx, setActiveIdx] = useState(0)
+  const [deletingSet, setDeletingSet] = useState<number | null>(null)
   const navigate = useNavigate()
   const routeParams = useParams<{ category?: string; openId?: string }>()
   const openCat = (routeParams.category ?? routeParams.openId ?? 'readymade-door') as ProductCategory
@@ -79,14 +82,17 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
   }
   function removeSet(idx: number) {
     if (draft.length <= 1) return
-    if (!confirm(`Delete ${draft[idx].name}?`)) return
+    setDeletingSet(idx)
+  }
+
+  function dropSet(idx: number) {
     setDraft((d) => codeSets(d.filter((_, i) => i !== idx)))
     setActiveIdx((i) => Math.max(0, i >= idx ? i - 1 : i))
   }
 
   function save() {
     setSets(codeSets(structuredClone(draft)))
-    alert('Price sets saved')
+    toast('Price sets saved')
   }
   function reset() {
     setDraft(codeSets(structuredClone(sets)))
@@ -112,7 +118,16 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
         }
       />
 
-      <div className="space-y-4 p-3 sm:p-4 md:p-6">
+      {deletingSet !== null && (
+        <Confirm
+          title={`Delete ${draft[deletingSet]?.name}?`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => dropSet(deletingSet)}
+          onClose={() => setDeletingSet(null)}
+        />
+      )}
+      <Page>
         {/* Set tabs */}
         <div className="flex flex-wrap items-center gap-2">
           {draft.map((s, i) => (
@@ -131,7 +146,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
           <button
             onClick={addSet}
             title="Add a set (copy of current)"
-            className="flex items-center gap-1 rounded-lg border border-dashed border-stone-400 px-3 py-2 text-sm font-medium text-stone-500 hover:border-shiv-green hover:bg-white"
+            className="flex items-center gap-1 rounded-lg border border-dashed border-stone-400 px-3 py-2 text-sm font-medium text-muted hover:border-shiv-green hover:bg-white"
           >
             <Plus size={16} /> Add Set
           </button>
@@ -150,7 +165,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
               variant="ghost"
               onClick={() => removeSet(activeIdx)}
               disabled={draft.length <= 1}
-              className="flex items-center gap-1.5 text-red-500"
+              className="flex items-center gap-1.5 text-danger"
             >
               <Trash2 size={15} /> Delete set
             </Button>
@@ -168,7 +183,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                 onClick={() => setOpenCat(isOpen ? ('' as ProductCategory) : cat)}
               >
                 <span>
-                  {CATEGORY_LABELS[cat]} <span className="text-sm text-stone-400">({list.length})</span>
+                  {CATEGORY_LABELS[cat]} <span className="text-sm text-muted">({list.length})</span>
                 </span>
                 {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               </button>
@@ -181,7 +196,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                       <col className="w-[18%]" />
                       <col className="w-[8%]" />
                     </colgroup>
-                    <thead className="text-left text-[9px] uppercase text-slate-400 dark:text-stone-500 md:text-xs">
+                    <thead className="text-left text-[9px] uppercase text-muted md:text-xs">
                       <tr>
                         <th className="px-1 py-0.5 md:px-2 md:py-1">Brand</th>
                         <th className="px-0.5 py-0.5 text-right md:px-2 md:py-1">
@@ -197,10 +212,10 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                     </thead>
                     <tbody>
                       {list.map((b) => (
-                        <tr key={b.id} className="border-t border-slate-100 dark:border-white/10" style={tintedRowStyle(b)}>
+                        <tr key={b.id} className="border-t border-line dark:border-white/10" style={tintedRowStyle(b)}>
                           <td className="px-1 py-0.5 md:px-2 md:py-1">
                             <input
-                              className="h-7 w-full min-w-0 rounded border border-slate-200 px-1 text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
+                              className="h-7 w-full min-w-0 rounded border border-line px-1 text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
                               value={b.name}
                               onChange={(e) => updateBrand(b.id, { name: e.target.value })}
                             />
@@ -210,7 +225,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                               type="text"
                               inputMode="numeric"
                               pattern="[0-9]*"
-                              className="h-7 w-full min-w-0 rounded border border-slate-200 px-0.5 text-right text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
+                              className="h-7 w-full min-w-0 rounded border border-line px-0.5 text-right text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
                               value={b.rate}
                               onChange={(e) => updateBrand(b.id, { rate: Number(e.target.value.replace(/\D/g, '')) })}
                             />
@@ -257,7 +272,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                           </td>
                           <td className="px-0.5 py-0.5 text-right md:py-1">
                             <button
-                              className="rounded p-0.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 md:p-1"
+                              className="rounded p-0.5 text-danger hover:bg-red-50 dark:hover:bg-red-950/30 md:p-1"
                               onClick={() => removeBrand(b.id)}
                               title="Remove brand"
                             >
@@ -276,7 +291,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
             </Card>
           )
         })}
-      </div>
+      </Page>
     </div>
   )
 }

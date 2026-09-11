@@ -1,6 +1,36 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 
+/**
+ * The body of a page.
+ *
+ * There were five of these written out by hand — `p-3 sm:p-4 md:p-6` here,
+ * `p-4 md:p-6` there, `max-w-lg mx-auto` on the scanner — and three different
+ * maximum widths, so the panel changed size as you walked through it. This is
+ * the one shape, and it matches the ledger's `.app`, so crossing between the
+ * two halves no longer moves the page under the operator.
+ */
+export function Page({
+  children,
+  narrow = false,
+  className = '',
+}: {
+  children: ReactNode
+  /** For a form that should not run the full width of a shop laptop. */
+  narrow?: boolean
+  className?: string
+}) {
+  return (
+    <div
+      className={`mx-auto w-full space-y-4 px-3 pb-16 pt-3 sm:px-4 md:px-[18px] md:pt-4 ${
+        narrow ? 'max-w-2xl' : 'max-w-[1280px]'
+      } ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
+
 export function PageHeader({
   title,
   subtitle,
@@ -17,7 +47,7 @@ export function PageHeader({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-lg font-bold leading-tight text-stone-950 dark:text-stone-50 md:text-xl">{title}</h1>
-          {subtitle && <p className="text-sm font-medium text-stone-500 dark:text-stone-400">{subtitle}</p>}
+          {subtitle && <p className="text-sm font-medium text-muted">{subtitle}</p>}
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
@@ -52,7 +82,7 @@ export function Button({
 export function Input({ label, className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string }) {
   return (
     <label className="block">
-      {label && <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">{label}</span>}
+      {label && <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>}
       <input
         className={`w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 ${className}`}
         {...props}
@@ -74,7 +104,7 @@ export function Select({
 }: React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string }) {
   return (
     <label className="block">
-      {label && <span className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">{label}</span>}
+      {label && <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>}
       <div className="relative">
         <select
           className={`w-full appearance-none rounded-lg border border-stone-300 bg-stone-50 py-2 pl-3 pr-9 text-sm font-medium text-stone-800 outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 ${className}`}
@@ -84,7 +114,7 @@ export function Select({
         </select>
         <ChevronDown
           size={15}
-          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 dark:text-stone-500"
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted"
         />
       </div>
     </label>
@@ -237,7 +267,7 @@ export function DropDown({
         <span className="truncate">{selected?.label ?? placeholder ?? '—'}</span>
         <ChevronDown
           size={13}
-          className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
 

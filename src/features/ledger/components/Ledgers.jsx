@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Pencil, X } from 'lucide-react'
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
@@ -75,10 +76,8 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
     window.open(`${origin}${pathname}#${statementPath(l)}`, '_blank', 'noopener');
   };
 
-  const drop = async (ledger) => {
+  const drop = async (ledger, pin) => {
     setError('');
-    const pin = window.prompt(`Delete "${ledger.name}"? Enter the code to confirm.`);
-    if (!pin) return;
     try {
       await remove({ id: ledger._id, pin });
       setDeleting(null);
@@ -192,7 +191,7 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
                       >
                         ↗
                       </button>
-                      <button className="xbtn" aria-label="Edit" onClick={() => setEditing(l)}>✎</button>
+                      <button className="xbtn" aria-label="Edit" onClick={() => setEditing(l)}><Pencil size={14} aria-hidden="true" /></button>
                       {/* Offered only where it can succeed. An account with
                           anything posted to it can never be deleted — the
                           books would lose the other side of those entries. */}
@@ -202,10 +201,10 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
                           title={`${usage[l._id]} vouchers are posted to this account — it cannot be deleted`}
                           aria-hidden="true"
                         >
-                          ✕
+                          <X size={14} aria-hidden="true" />
                         </span>
                       ) : (
-                        <button className="xbtn del" aria-label="Delete" onClick={() => setDeleting(l)}>✕</button>
+                        <button className="xbtn del" aria-label="Delete" onClick={() => setDeleting(l)}><X size={14} aria-hidden="true" /></button>
                       )}
                     </td>
                   </tr>
@@ -227,10 +226,11 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
       {deleting && (
         <Confirm
           title={`Delete ${deleting.name}?`}
-          body="An account with any voucher against it cannot be deleted — only an empty one. You will be asked for the code."
+          body="An account with any voucher against it cannot be deleted — only an empty one."
           confirmLabel="Delete"
           danger
-          onConfirm={() => drop(deleting)}
+          ask={{ label: 'Code', secret: true }}
+          onConfirm={(pin) => drop(deleting, pin)}
           onClose={() => setDeleting(null)}
         />
       )}

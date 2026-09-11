@@ -41,7 +41,7 @@ function ChipList({
   const [adding, setAdding] = useState(false)
   const [val, setVal] = useState('')
 
-  function confirm() {
+  function commit() {
     const v = val.trim()
     if (v && !items.includes(v)) onAdd(v)
     setVal('')
@@ -50,7 +50,7 @@ function ChipList({
 
   return (
     <div className="flex items-start gap-2 py-2">
-      <span className="group flex w-16 shrink-0 items-center gap-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+      <span className="group flex w-16 shrink-0 items-center gap-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
         <span className="truncate">{label}</span>
         {onDeleteGroup && (
           <button
@@ -71,7 +71,7 @@ function ChipList({
             {v}
             <button
               onClick={() => onRemove(v)}
-              className="ml-0.5 text-stone-400 hover:text-red-400"
+              className="ml-0.5 text-muted hover:text-red-400"
             >
               <X size={11} />
             </button>
@@ -86,18 +86,18 @@ function ChipList({
               placeholder={placeholder}
               value={val}
               onChange={(e) => setVal(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') setAdding(false) }}
-              className="h-7 w-24 rounded-full border border-shiv-green bg-white px-2.5 text-xs outline-none dark:bg-stone-900 dark:text-white"
+              onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setAdding(false) }}
+              className="h-7 w-24 rounded-full border border-shiv-green bg-white px-2.5 text-xs dark:bg-stone-900 dark:text-white"
             />
             <button
-              onClick={confirm}
+              onClick={commit}
               className="h-7 rounded-full bg-shiv-green px-2.5 text-xs font-semibold text-stone-950"
             >
               Add
             </button>
             <button
               onClick={() => { setVal(''); setAdding(false) }}
-              className="text-stone-400 hover:text-stone-600"
+              className="text-muted hover:text-stone-600"
             >
               <X size={14} />
             </button>
@@ -105,7 +105,7 @@ function ChipList({
         ) : (
           <button
             onClick={() => setAdding(true)}
-            className="flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-stone-300 text-stone-400 hover:border-shiv-green hover:text-shiv-green dark:border-white/20"
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-stone-300 text-muted hover:border-shiv-green hover:text-shiv-green dark:border-white/20"
           >
             <Plus size={12} />
           </button>
@@ -120,7 +120,7 @@ function AddFieldButton({ onAdd }: { onAdd: (label: string) => void }) {
   const [adding, setAdding] = useState(false)
   const [label, setLabel] = useState('')
 
-  function confirm() {
+  function commit() {
     const l = label.trim()
     if (l) onAdd(l)
     setLabel('')
@@ -132,7 +132,7 @@ function AddFieldButton({ onAdd }: { onAdd: (label: string) => void }) {
       <div className="py-2">
         <button
           onClick={() => setAdding(true)}
-          className="flex items-center gap-1.5 text-xs font-medium text-stone-400 hover:text-shiv-green"
+          className="flex items-center gap-1.5 text-xs font-medium text-muted hover:text-shiv-green"
         >
           <Plus size={13} /> Add field
         </button>
@@ -148,16 +148,16 @@ function AddFieldButton({ onAdd }: { onAdd: (label: string) => void }) {
         placeholder="Field name (e.g. Colors)"
         value={label}
         onChange={(e) => setLabel(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') setAdding(false) }}
-        className="h-7 w-44 rounded-lg border border-shiv-green bg-white px-2.5 text-xs outline-none dark:bg-stone-900 dark:text-white"
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setAdding(false) }}
+        className="h-7 w-44 rounded-lg border border-shiv-green bg-white px-2.5 text-xs dark:bg-stone-900 dark:text-white"
       />
       <button
-        onClick={confirm}
+        onClick={commit}
         className="h-7 rounded-lg bg-shiv-green px-2.5 text-xs font-semibold text-stone-950"
       >
         Add
       </button>
-      <button onClick={() => { setLabel(''); setAdding(false) }} className="text-stone-400 hover:text-stone-600">
+      <button onClick={() => { setLabel(''); setAdding(false) }} className="text-muted hover:text-stone-600">
         <X size={14} />
       </button>
     </div>
@@ -212,11 +212,11 @@ function CatalogCard({
       <button className="flex w-full items-center justify-between px-4 py-3" onClick={onToggle}>
         <div className="flex items-center gap-2.5">
           <span className="font-semibold text-stone-800 dark:text-white">{title}</span>
-          <span className="text-xs text-stone-400">{summary}</span>
+          <span className="text-xs text-muted">{summary}</span>
         </div>
         {isOpen
-          ? <ChevronDown size={16} className="shrink-0 text-stone-400" />
-          : <ChevronRight size={16} className="shrink-0 text-stone-400" />
+          ? <ChevronDown size={16} className="shrink-0 text-muted" />
+          : <ChevronRight size={16} className="shrink-0 text-muted" />
         }
       </button>
 
@@ -306,7 +306,7 @@ export function Inventory() {
           className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-colors ${
             tab === 'catalog'
               ? 'border-shiv-green text-stone-900 dark:text-white'
-              : 'border-transparent text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200'
+              : 'border-transparent text-muted hover:text-stone-700  dark:hover:text-stone-200'
           }`}
         >
           <Package size={16} /> Hardware
@@ -316,7 +316,7 @@ export function Inventory() {
           className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-colors ${
             tab === 'rates'
               ? 'border-shiv-green text-stone-900 dark:text-white'
-              : 'border-transparent text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200'
+              : 'border-transparent text-muted hover:text-stone-700  dark:hover:text-stone-200'
           }`}
         >
           <IndianRupee size={16} /> Rates
@@ -327,7 +327,7 @@ export function Inventory() {
 
       {tab === 'catalog' && (
         <div className="mx-auto max-w-2xl space-y-3 px-4 pb-24 pt-4">
-          <p className="text-xs text-stone-400">
+          <p className="text-xs text-muted">
             Manage sizes, brands and custom fields for each item. Changes reflect instantly in bill making.
           </p>
 
@@ -371,7 +371,7 @@ export function Inventory() {
                   if (e.key === 'Enter') addNewItem()
                   if (e.key === 'Escape') { setNewName(''); setAddingNew(false) }
                 }}
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-stone-400 dark:text-white"
+                className="min-w-0 flex-1 bg-transparent text-sm placeholder:text-muted dark:text-white"
               />
               <button
                 onClick={addNewItem}
@@ -379,14 +379,14 @@ export function Inventory() {
               >
                 Add
               </button>
-              <button onClick={() => { setNewName(''); setAddingNew(false) }} className="text-stone-400 hover:text-stone-600">
+              <button onClick={() => { setNewName(''); setAddingNew(false) }} className="text-muted hover:text-stone-600">
                 <X size={16} />
               </button>
             </div>
           ) : (
             <button
               onClick={() => setAddingNew(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 py-3 text-sm font-medium text-stone-500 hover:border-shiv-green hover:text-shiv-green dark:border-white/20 dark:text-stone-400"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 py-3 text-sm font-medium text-muted hover:border-shiv-green hover:text-shiv-green dark:border-white/20"
             >
               <Plus size={16} /> Add Item
             </button>

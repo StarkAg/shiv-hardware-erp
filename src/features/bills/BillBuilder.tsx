@@ -1,23 +1,6 @@
 import { useState, useRef, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Camera,
-  IndianRupee,
-  Plus,
-  Printer,
-  ReceiptText,
-  Trash2,
-  X,
-  Lock,
-  Undo2,
-  Redo2,
-  RefreshCw,
-  Minus,
-  Truck,
-} from 'lucide-react'
+import { Camera, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
 // The ledger's own photo picker: files chosen here, and photographs the phone
@@ -65,6 +48,8 @@ import { rupees } from '../ledger/lib/format'
 import { TableSkeleton } from '../ledger/components/Skeleton'
 import { billSqft, isFootSized } from '../../lib/pricing'
 import { Button, DropDown } from '../../components/ui'
+import { toast } from '../../components/Toast'
+import Confirm from '../ledger/components/Confirm'
 
 /**
  * Square-foot pricing for boards and doors is parked, not removed.
@@ -615,7 +600,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
   return (
     <div className="bg-white px-2 py-1.5 dark:bg-stone-900">
       <div className="flex items-start gap-2">
-        <span className="mt-2 w-5 shrink-0 text-center text-xs font-bold text-stone-400">{idx + 1}</span>
+        <span className="mt-2 w-5 shrink-0 text-center text-xs font-bold text-muted">{idx + 1}</span>
         <div className="flex-1 min-w-0 space-y-2">
 
           {/* Description / product search */}
@@ -761,7 +746,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                           className={`flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 dark:text-stone-200 ${highlight === filtered.length + ci ? 'bg-stone-100 dark:bg-white/10' : ''}`}
                         >
                           <span className="flex-1 truncate">{formatItemDescription(entry.name)}</span>
-                          {entry.rate ? <span className="text-xs text-stone-400">₹{entry.rate}</span> : null}
+                          {entry.rate ? <span className="text-xs text-muted">₹{entry.rate}</span> : null}
                         </button>
                       ))}
                     </div>
@@ -770,7 +755,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                   <button
                     onMouseDown={(e) => { e.preventDefault(); pickRoundup() }}
                     onMouseEnter={() => setHighlight(navOptions.length - 2)}
-                    className={`flex w-full min-w-0 items-center gap-2 border-t border-stone-100 px-3 py-2 text-sm font-medium text-red-500 dark:border-white/5 ${
+                    className={`flex w-full min-w-0 items-center gap-2 border-t border-stone-100 px-3 py-2 text-sm font-medium text-danger dark:border-white/5 ${
                       highlight === navOptions.length - 2 ? 'bg-stone-100 dark:bg-white/10' : ''
                     }`}
                   >
@@ -819,7 +804,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                             setNewRate(0)
                             setAddingNew(true)
                           }}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-stone-400 hover:bg-stone-50 dark:hover:bg-white/5"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-muted hover:bg-stone-50 dark:hover:bg-white/5"
                         >
                           <Plus size={13} />
                           Add new custom item
@@ -830,7 +815,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                         onMouseDown={(e) => e.preventDefault()}
                         className="p-3 space-y-2"
                       >
-                        <div className="text-xs font-semibold text-stone-500 dark:text-stone-400">Add to My Items</div>
+                        <div className="text-xs font-semibold text-muted">Add to My Items</div>
 
                         {/* Name + Rate */}
                         <div className="flex gap-2">
@@ -844,7 +829,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                             className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-sm dark:border-white/10 dark:bg-stone-700 dark:text-white"
                           />
                           <div className="relative w-20 shrink-0">
-                            <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                            <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                             <input
                               type="number"
                               min={0}
@@ -860,7 +845,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                         <button
                           type="button"
                           onClick={() => setShowMoreOpts(v => !v)}
-                          className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+                          className="flex items-center gap-1 text-xs text-muted hover:text-stone-600 dark:hover:text-stone-300"
                         >
                           {showMoreOpts ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                           {showMoreOpts ? 'Less options' : 'Add sizes / brands'}
@@ -870,12 +855,12 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                           <div className="space-y-2 rounded-lg bg-stone-50 p-2 dark:bg-white/5">
                             {/* Sizes tag input */}
                             <div>
-                              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Sizes</div>
+                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Sizes</div>
                               <div className="flex flex-wrap gap-1 mb-1">
                                 {newItemSizes.map(s => (
                                   <span key={s} className="flex items-center gap-0.5 rounded-full bg-stone-200 px-2 py-0.5 text-xs dark:bg-white/10">
                                     {s}
-                                    <button type="button" onClick={() => setNewItemSizes(p => p.filter(x => x !== s))} className="text-stone-400 hover:text-red-500 ml-0.5"><X size={10} /></button>
+                                    <button type="button" onClick={() => setNewItemSizes(p => p.filter(x => x !== s))} className="text-muted hover:text-danger ml-0.5"><X size={10} /></button>
                                   </span>
                                 ))}
                               </div>
@@ -904,12 +889,12 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
 
                             {/* Brands tag input */}
                             <div>
-                              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Brands</div>
+                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Brands</div>
                               <div className="flex flex-wrap gap-1 mb-1">
                                 {newItemBrands.map(b => (
                                   <span key={b} className="flex items-center gap-0.5 rounded-full bg-stone-200 px-2 py-0.5 text-xs dark:bg-white/10">
                                     {b}
-                                    <button type="button" onClick={() => setNewItemBrands(p => p.filter(x => x !== b))} className="text-stone-400 hover:text-red-500 ml-0.5"><X size={10} /></button>
+                                    <button type="button" onClick={() => setNewItemBrands(p => p.filter(x => x !== b))} className="text-muted hover:text-danger ml-0.5"><X size={10} /></button>
                                   </span>
                                 ))}
                               </div>
@@ -950,7 +935,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                               setNewBrandInput('')
                               setShowDrop(false)
                             }}
-                            className="rounded-lg px-3 py-1.5 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-white/10"
+                            className="rounded-lg px-3 py-1.5 text-xs text-muted hover:bg-stone-100 dark:hover:bg-white/10"
                           >
                             Cancel
                           </button>
@@ -1042,7 +1027,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                   qty, unit and rate on it invites nonsense like "1 Pc @ -456". */}
               {amountOnly && !!item.description.trim() && (
                 <div className="relative w-24 shrink-0">
-                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                   <input
                     type="number"
                     placeholder="Amt"
@@ -1080,7 +1065,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                     onCommit={() => moveBillFocus(1)}
                   />
                   <div className="relative ml-auto w-24 shrink-0">
-                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                     <input
                       type="number"
                       placeholder="Amt" data-bill-row={idx} data-bill-col="amt"
@@ -1123,7 +1108,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                     onCommit={() => moveBillFocus(1)}
                   />
                   <div className="relative shrink-0 w-[4.5rem]">
-                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                     <input
                       ref={amountRef}
                       type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate" onKeyDown={billArrowKeys}
@@ -1141,7 +1126,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                     />
                   </div>
                   <div className="relative ml-auto w-24 shrink-0">
-                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                     <input
                       type="number"
                       placeholder="Amt"
@@ -1174,7 +1159,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                     onChange={(v) => handleDim('heightIn', Number(v))}
                     options={(isFootSized(item.category) ? BOARD_HEIGHT_FT : HEIGHT_OPTIONS).map(h => ({ value: String(h), label: isFootSized(item.category) ? `${h} ft` : `${h}"` }))}
                   />
-                  <span className="text-xs text-stone-400">×</span>
+                  <span className="text-xs text-muted"><X size={16} aria-hidden="true" /></span>
                   <DropDown
                     className="w-16 shrink-0"
                     value={String(item.widthIn ?? '')}
@@ -1190,9 +1175,9 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                     className="w-12 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
                     placeholder="1"
                   />
-                  <span className="text-xs text-stone-400">Pc</span>
+                  <span className="text-xs text-muted">Pc</span>
                   <div className="relative ml-auto shrink-0 w-[4.75rem]">
-                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                    <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                     <input
                       type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate" onKeyDown={billArrowKeys}
                       value={item.rateSqft || ''}
@@ -1203,7 +1188,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                     />
                   </div>
                   <div className="relative shrink-0 w-24 shrink-0">
-                                      <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                                      <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                                       <input
                                         type="number"
                                         placeholder="Amt"
@@ -1267,7 +1252,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                       className={`px-2.5 py-0.5 text-xs font-semibold rounded-lg border transition-colors ${
                         item.qty === q
                           ? 'bg-shiv-green border-shiv-green/50 text-stone-900'
-                          : 'border-stone-200 bg-stone-50 text-stone-500 dark:border-white/10 dark:bg-stone-800 dark:text-stone-300'
+                          : 'border-stone-200 bg-stone-50 text-muted dark:border-white/10 dark:bg-stone-800 dark:text-stone-300'
                       }`}
                     >
                       {q}
@@ -1298,7 +1283,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                     onCommit={() => moveBillFocus(1)}
                   />
                 <div className="relative shrink-0 w-[4.5rem]">
-                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                   <input
                     ref={amountRef}
                     type="number" placeholder="Rate" data-bill-nav="1" data-bill-row={idx} data-bill-col="rate" onKeyDown={billArrowKeys}
@@ -1318,7 +1303,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                   />
                 </div>
                 <div className="relative ml-auto w-24 shrink-0">
-                                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-stone-400" />
+                                  <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                                   <input
                                     type="number"
                                     placeholder="Amt"
@@ -1351,7 +1336,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                       {addToField === f.label ? (
                         // Inline input to add a new value to this field
                         <div className="flex items-center gap-1">
-                          <span className="text-xs text-stone-400">{f.label}:</span>
+                          <span className="text-xs text-muted">{f.label}:</span>
                           <input
                             autoFocus
                             type="text"
@@ -1362,7 +1347,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
                             className="w-24 rounded-lg border border-shiv-green/50 bg-stone-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-shiv-green/40 dark:bg-stone-800 dark:text-white"
                           />
                           <button onClick={commitAddToField} className="text-shiv-green hover:text-shiv-green/70"><CheckCircle2 size={14} /></button>
-                          <button onClick={() => { setAddToField(null); setAddToFieldVal('') }} className="text-stone-400 hover:text-red-400"><X size={12} /></button>
+                          <button onClick={() => { setAddToField(null); setAddToFieldVal('') }} className="text-muted hover:text-red-400"><X size={12} /></button>
                         </div>
                       ) : (
                         <DropDown
@@ -1391,7 +1376,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, disabled }: Sm
         <button
           onClick={() => onRemove(item.id)}
           disabled={disabled}
-          className="mt-1 rounded-lg p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 dark:hover:bg-red-900/30"
+          className="mt-1 rounded-lg p-1.5 text-muted hover:bg-red-50 hover:text-danger disabled:opacity-30 dark:hover:bg-red-900/30"
         >
           <Trash2 size={15} />
         </button>
@@ -1419,7 +1404,7 @@ function TallyListPanel({ list }: { list: PanelList | null }) {
 
   return (
     <aside className="no-print fixed right-0 top-0 z-30 hidden h-screen w-80 flex-col border-l border-stone-300 bg-stone-50 dark:border-white/15 dark:bg-stone-900 lg:flex xl:w-96">
-      <div className="border-b border-stone-300 bg-stone-100 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 dark:border-white/15 dark:bg-white/5 dark:text-stone-400">
+      <div className="border-b border-stone-300 bg-stone-100 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-muted dark:border-white/15 dark:bg-white/5">
         {list?.title ?? 'List'}
       </div>
       <div ref={ref} className="flex-1 overflow-y-auto py-1">
@@ -1443,7 +1428,7 @@ function TallyListPanel({ list }: { list: PanelList | null }) {
                 <span className="break-words leading-snug">{r.label}</span>
               </button>
             ))
-          : <div className="px-3 py-2 text-xs text-stone-400">No list on this field</div>}
+          : <div className="px-3 py-2 text-xs text-muted">No list on this field</div>}
       </div>
     </aside>
   )
@@ -1603,7 +1588,7 @@ function BillPreview({ bill }: { bill: Bill }) {
 
   return (
     <div>
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Preview</div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Preview</div>
       {/* Outer div measures available width; inner box is sized to the scaled
           bill exactly and clips the iframe's unscaled layout box. */}
       <div ref={wrapRef}>
@@ -1757,6 +1742,9 @@ export function BillBuilder() {
    * /bills/<id>, landed on the list every time.
    */
   const [view, setView] = useState<'list' | 'form'>(existing ? 'form' : 'list')
+  // What the screen is waiting to be told: Alt+D, or walking away from a bill
+  // that was never saved. Both used the browser's own dialog.
+  const [asking, setAsking] = useState<null | 'delete' | 'leave'>(null)
 
   /**
    * `/bills/voucher/<id>` — editing a voucher that has no bill behind it: one
@@ -2000,16 +1988,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     'mod+shift+z': () => redo(),
     'mod+a': () => save(),
     'mod+q': () => cancel(),
-    'alt+d': () => {
-      if (!confirm(`Delete bill ${draft.number}?`)) return
-      void deleteBill(draft.id).then((gone) => {
-        // A delete the server never agreed to is not a delete: the bill would
-        // be back on the next sync, with its voucher still in the books.
-        if (!gone) { alert('Could not reach the books, so the bill was not deleted.'); return }
-        setView('list')
-        navigate('/bills', { replace: true })
-      })
-    },
+    'alt+d': () => setAsking('delete'),
     Escape: () => {
       // A dropdown swallows Esc first; reaching here means nothing is open.
       const el = document.activeElement as HTMLElement | null
@@ -2049,7 +2028,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       const message = err instanceof Error ? err.message : String(err)
       console.error('[ledger] posting failed', err)
       if (keepAsBill) saveBill({ ...bill, postError: message })
-      alert(`Not saved to the books:\n${message}\n\nThe bill is kept on this PC as unposted. Fix it and save again.`)
+      toast(`Not saved to the books\n${message}\nKept on this PC as unposted.`, 'error')
       return null
     }
   }
@@ -2076,7 +2055,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       setPhotoFiles([])
       setPhotoPicked([])
     } catch (err) {
-      alert(`Could not attach the photos:\n${err instanceof Error ? err.message : String(err)}`)
+      toast(`Could not attach the photos\n${err instanceof Error ? err.message : String(err)}`, 'error')
       return null
     }
 
@@ -2089,7 +2068,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   async function save() {
-    if (readOnly) { alert(`This bill is open on ${lockedBy}.`); return }
+    if (readOnly) { toast(`This bill is open on ${lockedBy}.`, 'error'); return }
     committedRef.current = true
 
     const done = await postDraft()
@@ -2108,7 +2087,14 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // no save behind it goes when you leave, so say so first.
     const unsaved =
       !bills.find((b) => b.id === draft.id) && hasMeaningfulContent({ ...draft, total })
-    if (unsaved && !confirm('Leave without saving? This bill will not be kept.')) return
+    if (unsaved) { setAsking('leave'); return }
+    setView('list')
+    navigate('/bills', { replace: true })
+  }
+
+  /** Leaves the bill for good — what Alt+D and a discarded draft both end in. */
+  function leave() {
+    committedRef.current = true
     setView('list')
     navigate('/bills', { replace: true })
   }
@@ -2141,7 +2127,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   async function handlePrint() {
-    if (readOnly) { alert(`This bill is open on ${lockedBy}.`); return }
+    if (readOnly) { toast(`This bill is open on ${lockedBy}.`, 'error'); return }
     committedRef.current = true
 
     /**
@@ -2165,6 +2151,32 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       <ListPanelContext.Provider value={setPanelList}>
       <div className="mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-4 md:pt-6 lg:max-w-none lg:pl-8 lg:pr-[21rem] xl:pr-[25rem]">
         <TallyListPanel list={panelList} />
+
+        {asking === 'delete' && (
+          <Confirm
+            title={`Delete bill ${draft.number}?`}
+            confirmLabel="Delete"
+            danger
+            onConfirm={async () => {
+              const gone = await deleteBill(draft.id)
+              // A delete the server never agreed to is not a delete: the bill
+              // would be back on the next sync, its voucher still in the books.
+              if (!gone) throw new Error('Could not reach the books, so the bill was not deleted.')
+              leave()
+            }}
+            onClose={() => setAsking(null)}
+          />
+        )}
+        {asking === 'leave' && (
+          <Confirm
+            title="Leave without saving?"
+            body="This bill will not be kept."
+            confirmLabel="Leave"
+            danger
+            onConfirm={leave}
+            onClose={() => setAsking(null)}
+          />
+        )}
 
         <div className="flex items-center gap-1">
           <Button
@@ -2220,7 +2232,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
 
         <div className="space-y-2">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">
+            <label className="mb-1 block text-xs font-semibold text-muted">
               {BILL_KINDS[draft.kind ?? 'sale'].party} Name
             </label>
             <div className="relative">
@@ -2278,7 +2290,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                     <span className="truncate">{toProperCase(c.name)}</span>
                     {/* An account in the books, or a name off an old bill that
                         never opened one — saving the bill opens it. */}
-                    <span className="shrink-0 text-xs text-stone-400">
+                    <span className="shrink-0 text-xs text-muted">
                       {c.mobile || (c.account ? '' : 'new')}
                     </span>
                   </button>
@@ -2288,7 +2300,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Phone (optional)</label>
+            <label className="mb-1 block text-xs font-semibold text-muted">Phone (optional)</label>
             <input
               type="tel"
               inputMode="numeric"
@@ -2316,7 +2328,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">UID (optional)</label>
+            <label className="mb-1 block text-xs font-semibold text-muted">UID (optional)</label>
             <input
               type="tel"
               inputMode="numeric"
@@ -2344,7 +2356,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-500 dark:text-stone-400">Ref (optional)</label>
+            <label className="mb-1 block text-xs font-semibold text-muted">Ref (optional)</label>
             <input
               type="text"
               placeholder="PO no., site, via…"
@@ -2371,7 +2383,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           {/* No overflow-hidden here: the item and unit dropdowns are absolutely
               positioned inside these rows and would be clipped by it. */}
           <div className="rounded-lg border border-stone-300 dark:border-white/15">
-            <div className="flex items-center gap-2 rounded-t-lg border-b border-stone-300 bg-stone-100 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-500 dark:border-white/15 dark:bg-white/5 dark:text-stone-400">
+            <div className="flex items-center gap-2 rounded-t-lg border-b border-stone-300 bg-stone-100 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted dark:border-white/15 dark:bg-white/5">
               {/* Mirrors a row exactly: index, particulars, then the control
                   group with its own tighter gap, then the actions column. */}
               <span className="w-5 shrink-0 text-center">#</span>
@@ -2402,7 +2414,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
 
           <button
             onClick={addItem}
-            className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-stone-300 py-2 text-xs font-semibold text-stone-500 hover:border-stone-400 hover:bg-stone-50 dark:border-white/15 dark:text-stone-400 dark:hover:bg-white/5"
+            className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-stone-300 py-2 text-xs font-semibold text-muted hover:border-stone-400 hover:bg-stone-50 dark:border-white/15 dark:hover:bg-white/5"
           >
             <Plus size={13} /> Add Item
           </button>
@@ -2415,10 +2427,10 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 voucher, against the drawer or the bank. */}
             {!isMoneyVoucher && (
               <div className="flex items-center gap-1.5 rounded-xl bg-stone-100 px-3 py-2 dark:bg-stone-800">
-                <span className="text-sm text-stone-500 dark:text-stone-400">
+                <span className="text-sm text-muted">
                   {(draft.kind ?? 'sale') === 'purchase' ? 'Paid' : 'Received'}
                 </span>
-                <span className="text-sm text-stone-400">₹</span>
+                <span className="text-sm text-muted">₹</span>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -2436,7 +2448,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 <button
                   type="button"
                   onClick={() => setDraft((d) => ({ ...d, paidAmount: total, paid: true }))}
-                  className="rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 hover:bg-stone-200 dark:text-stone-400 dark:hover:bg-white/10"
+                  className="rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-stone-200 dark:hover:bg-white/10"
                 >
                   Full
                 </button>
@@ -2452,7 +2464,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                     className={`rounded-lg px-3 py-1 text-xs font-semibold capitalize ${
                       (draft.paymentMode ?? 'cash') === mode
                         ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-white'
-                        : 'text-stone-500 dark:text-stone-400'
+                        : 'text-muted'
                     }`}
                   >
                     {mode === 'cash' ? 'Cash' : 'Bank'}
@@ -2461,7 +2473,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               </div>
             )}
             <div className="rounded-xl bg-stone-100 px-5 py-2 dark:bg-stone-800">
-              <span className="text-sm text-stone-500 dark:text-stone-400">Total </span>
+              <span className="text-sm text-muted">Total </span>
               <span className="text-lg font-bold text-stone-900 dark:text-white">₹{total.toLocaleString('en-IN')}</span>
             </div>
           </div>
@@ -2472,7 +2484,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           {/* Cancel — intentionally small to avoid accidental taps */}
           <button
             onClick={cancel}
-            className="shrink-0 rounded-lg px-3 py-2.5 text-xs font-medium text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300"
+            className="shrink-0 rounded-lg px-3 py-2.5 text-xs font-medium text-muted hover:text-stone-600 dark:text-muted dark:hover:text-stone-300"
           >
             Cancel
           </button>
@@ -2507,7 +2519,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                 photoOpen
                   ? 'border-shiv-green bg-shiv-green/10 text-stone-900 dark:text-white'
-                  : 'border-stone-300 border-dashed text-stone-500 hover:border-stone-400 hover:bg-stone-50 dark:border-white/15 dark:text-stone-400 dark:hover:bg-white/5'
+                  : 'border-stone-300 border-dashed text-muted hover:border-stone-400 hover:bg-stone-50 dark:border-white/15  dark:hover:bg-white/5'
               }`}
             >
               <Camera size={15} />
@@ -2521,7 +2533,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             </button>
 
             {!photoOpen && photoCount > 0 && (
-              <span className="text-xs text-stone-400 dark:text-stone-500">
+              <span className="text-xs text-muted">
                 attached to this bill
               </span>
             )}
@@ -2640,6 +2652,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
 }) {
   const dark = useLedgerTheme()
   const navigate = useNavigate()
+  const [deleting, setDeleting] = useState<Bill | null>(null)
 
   // The period lives in the URL, so a day's book is a link someone can send.
   const [params, setParams] = useSearchParams()
@@ -2704,19 +2717,14 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         billId: b.id,
         problem: b.postError,
         onRetry: b.postError ? () => onRetry({ ...b, total: b.total }) : undefined,
-        onDelete: () => {
-          if (!confirm(`Delete bill #${b.number}?`)) return
-          void onDelete(b.id).then((gone) => {
-            if (!gone) alert('Could not reach the books, so the bill was not deleted.')
-          })
-        },
+        onDelete: () => setDeleting(b),
       })
     }
 
     // Newest first: this is the screen you open to see what just happened, and
     // ascending order buries today under two hundred rows.
     return list.sort((a, b) => b.date - a.date || b.label.localeCompare(a.label))
-  }, [vouchers, finished, from, to, bills, onDelete, onRetry])
+  }, [vouchers, finished, from, to, bills, onRetry])
 
   const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0)
 
@@ -2746,6 +2754,19 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
       <div className="app">
+        {deleting && (
+          <Confirm
+            title={`Delete bill #${deleting.number}?`}
+            body="The bill and the voucher it posted go to Trash together."
+            confirmLabel="Delete"
+            danger
+            onConfirm={async () => {
+              const gone = await onDelete(deleting.id)
+              if (!gone) throw new Error('Could not reach the books, so the bill was not deleted.')
+            }}
+            onClose={() => setDeleting(null)}
+          />
+        )}
         <header className="topbar">
           <div className="actions">
             <button className="btn" onClick={() => onNew()}>+ New Bill</button>
@@ -2829,7 +2850,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                             aria-label="Bill photo"
                             onClick={() => window.open(r.photos[0], '_blank', 'noopener')}
                           >
-                            <span aria-hidden="true">▣</span>
+                            <span aria-hidden="true"><Paperclip size={13} aria-hidden="true" /></span>
                             {r.photos.length > 1 && <span>{r.photos.length}</span>}
                           </button>
                         )}
@@ -2845,7 +2866,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                             r.billId ? `/bills/${r.billId}` : `/bills/voucher/${r.key}`,
                           )}
                         >
-                          ✎
+                          <Pencil size={14} aria-hidden="true" />
                         </button>
                         {r.onRetry && (
                           <button className="xbtn" aria-label="Post to the books" title="Post to the books" onClick={r.onRetry}>
@@ -2853,7 +2874,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                           </button>
                         )}
                         {r.onDelete && (
-                          <button className="xbtn del" aria-label="Delete" onClick={r.onDelete}>✕</button>
+                          <button className="xbtn del" aria-label="Delete" onClick={r.onDelete}><X size={14} aria-hidden="true" /></button>
                         )}
                       </td>
                     </tr>

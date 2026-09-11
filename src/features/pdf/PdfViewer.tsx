@@ -173,7 +173,7 @@ export function PdfViewer() {
         {fileMeta && (
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-stone-700 dark:text-stone-200">{fileMeta.name}</p>
-            <p className="text-xs text-stone-500 dark:text-stone-400">{formatBytes(fileMeta.size)}</p>
+            <p className="text-xs text-muted">{formatBytes(fileMeta.size)}</p>
           </div>
         )}
 
@@ -190,9 +190,9 @@ export function PdfViewer() {
                 min={1}
                 max={numPages || 1}
                 onChange={(e) => goTo(Number(e.target.value))}
-                className="w-12 bg-transparent text-center text-sm text-stone-700 outline-none dark:text-stone-200"
+                className="w-12 bg-transparent text-center text-sm text-stone-700 dark:text-stone-200"
               />
-              <span className="pr-1 text-sm text-stone-500 dark:text-stone-400">/ {numPages}</span>
+              <span className="pr-1 text-sm text-muted">/ {numPages}</span>
               <button onClick={() => goTo(pageNum + 1)} disabled={pageNum >= numPages} className="rounded p-1 text-stone-600 hover:bg-stone-100 disabled:opacity-40 dark:text-stone-300 dark:hover:bg-white/10">
                 <ChevronRight size={18} />
               </button>
@@ -215,7 +215,7 @@ export function PdfViewer() {
                 <ScanLine size={16} />
               </button>
             </div>
-            {busy && <Loader2 size={18} className="animate-spin text-stone-400" />}
+            {busy && <Loader2 size={18} className="animate-spin text-muted" />}
           </div>
         )}
       </div>
@@ -225,7 +225,7 @@ export function PdfViewer() {
         {status === 'empty' && (
           <button
             onClick={() => inputRef.current?.click()}
-            className="mx-auto mt-16 flex w-full max-w-sm flex-col items-center gap-3 rounded-2xl border border-dashed border-stone-300 px-6 py-16 text-center text-stone-500 transition hover:border-shiv-green hover:text-stone-700 dark:border-white/15 dark:text-stone-400 dark:hover:text-stone-200"
+            className="mx-auto mt-16 flex w-full max-w-sm flex-col items-center gap-3 rounded-2xl border border-dashed border-stone-300 px-6 py-16 text-center text-muted transition hover:border-shiv-green hover:text-stone-700 dark:border-white/15 dark:hover:text-stone-200"
           >
             <FileUp size={28} />
             <span className="text-sm font-semibold">Open a PDF from this device</span>
@@ -234,7 +234,7 @@ export function PdfViewer() {
         )}
 
         {status === 'opening' && (
-          <div className="mt-24 flex flex-col items-center gap-3 text-stone-500 dark:text-stone-400">
+          <div className="mt-24 flex flex-col items-center gap-3 text-muted">
             <Loader2 size={28} className="animate-spin" />
             <span className="text-sm">Opening…</span>
           </div>

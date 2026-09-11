@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Truck, Plus, X } from 'lucide-react'
-import { Button, Input } from '../../components/ui'
+import { Button, Input, Page } from '../../components/ui'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { VEHICLE_LABEL } from '../../lib/types'
@@ -44,7 +44,7 @@ export function Transport() {
     setCalled((c) => (c.includes(id) ? c : [...c, id]))
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
+    <Page>
       <div className="flex items-center justify-between">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-stone-950 dark:text-white">
           <Truck size={28} className="text-shiv-green" />
@@ -58,7 +58,7 @@ export function Transport() {
       {orderOpen ? (
         <>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-stone-500 dark:text-stone-400">
+            <span className="text-sm text-muted">
               {called.length} of {totoDrivers.length} called
             </span>
             <Button variant="ghost" onClick={() => setOrderOpen(false)}>Finish order</Button>
@@ -74,7 +74,7 @@ export function Transport() {
           >
             New Order
           </Button>
-          <p className="text-sm text-stone-400 dark:text-stone-500">
+          <p className="text-sm text-muted">
             {totoDrivers.length} vehicles · starts a fresh call round
           </p>
         </div>
@@ -87,7 +87,7 @@ export function Transport() {
               <h2 className="text-lg font-bold text-stone-950 dark:text-white">Add Vehicle</h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-stone-500 hover:text-stone-950 dark:text-stone-400 dark:hover:text-white"
+                className="text-muted hover:text-stone-950 dark:hover:text-white"
               >
                 <X size={20} />
               </button>
@@ -108,7 +108,7 @@ export function Transport() {
                     className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm ${
                       vehicle === v
                         ? 'border-shiv-green bg-shiv-green/15 text-stone-900 dark:text-white'
-                        : 'border-stone-200 text-stone-500 dark:border-white/10 dark:text-stone-400'
+                        : 'border-stone-200 text-muted dark:border-white/10 '
                     }`}
                   >
                     <VehicleBadge vehicle={v} size={14} />
@@ -123,6 +123,6 @@ export function Transport() {
           </div>
         </div>
       )}
-    </div>
+    </Page>
   )
 }

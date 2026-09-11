@@ -155,16 +155,16 @@ function BrandFlipCard({
               <div className="min-w-0 truncate text-[10px] font-bold text-stone-800 dark:text-stone-100">
                 {bill.customerName ? `M/S ${toProperCase(bill.customerName)}` : ''}
               </div>
-              <span className="shrink-0 text-[8px] text-stone-400">{dateStr}</span>
+              <span className="shrink-0 text-[8px] text-muted">{dateStr}</span>
             </div>
             <div className="mt-0.5 flex flex-col gap-0.5">
               {bill.customerPhone && (
-                <span className="flex items-center gap-1 text-[9px] text-stone-400">
+                <span className="flex items-center gap-1 text-[9px] text-muted">
                   <Phone size={8} className="shrink-0" /> {bill.customerPhone}
                 </span>
               )}
               {bill.customerUid && (
-                <span className="text-[9px] text-stone-400">UID {bill.customerUid}</span>
+                <span className="text-[9px] text-muted">UID {bill.customerUid}</span>
               )}
             </div>
           </div>
@@ -208,7 +208,7 @@ function BrandFlipCard({
           {/* Total */}
           <div className="shrink-0 border-t border-stone-200 px-3 py-2 dark:border-white/10">
             <div className="flex items-center justify-between border-b border-stone-200 pb-2 dark:border-white/10">
-              <span className="text-[9px] font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+              <span className="text-[9px] font-bold uppercase tracking-wide text-muted">
                 Total
               </span>
               <span className="text-[12px] font-extrabold text-stone-800 dark:text-stone-100">
@@ -228,7 +228,7 @@ function BrandFlipCard({
             ? 'bg-shiv-green text-stone-950'
             : disabled
             ? 'cursor-not-allowed border border-stone-200 bg-stone-50 text-stone-300 dark:border-white/5 dark:bg-white/5 dark:text-stone-700'
-            : 'border border-stone-300 bg-stone-50 text-stone-500 dark:border-white/15 dark:bg-white/5 dark:text-stone-400'
+            : 'border border-stone-300 bg-stone-50 text-muted dark:border-white/15 dark:bg-white/5 '
         }`}
         onClick={onToggleSelect}
       >
@@ -267,7 +267,7 @@ export function BillBrandCardsPage() {
 
   if (!bill) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-stone-400">
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted">
         <p className="text-sm">Bill not found.</p>
         <button onClick={() => navigate(-1)} className="text-sm underline">Go back</button>
       </div>
@@ -407,7 +407,7 @@ export function BillBrandCardsPage() {
       <div className="flex items-center gap-2 border-b border-stone-200/80 bg-stone-50/95 px-3 py-3 shadow-sm dark:border-white/10 dark:bg-stone-950/90">
         <button
           onClick={() => navigate(-1)}
-          className="rounded-lg p-2 text-stone-500 hover:bg-stone-100 dark:hover:bg-white/10"
+          className="rounded-lg p-2 text-muted hover:bg-stone-100 dark:hover:bg-white/10"
         >
           <ArrowLeft size={20} />
         </button>
@@ -415,12 +415,12 @@ export function BillBrandCardsPage() {
           <div className="text-sm font-bold text-stone-900 dark:text-stone-100">
             Bill #{bill.number}
             {bill.customerName && (
-              <span className="ml-1.5 text-xs font-medium text-stone-500 dark:text-stone-400">
+              <span className="ml-1.5 text-xs font-medium text-muted">
                 · {toProperCase(bill.customerName)}
               </span>
             )}
           </div>
-          <div className="text-xs text-stone-400 dark:text-stone-500">
+          <div className="text-xs text-muted">
             Plywood · {fmtAmount(grandTotal)}
           </div>
         </div>
@@ -435,7 +435,7 @@ export function BillBrandCardsPage() {
       {/* Cards grid */}
       <div className="flex-1 overflow-y-auto p-3">
         {groups.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-20 text-stone-400 dark:text-stone-500">
+          <div className="flex flex-col items-center justify-center gap-2 py-20 text-muted">
             <p className="text-sm font-medium">No plywood items in this bill.</p>
           </div>
         ) : (
