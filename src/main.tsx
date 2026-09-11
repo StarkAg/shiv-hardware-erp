@@ -23,6 +23,7 @@ import { LedgersPage } from './features/ledger/LedgersPage'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { BillTrash } from './features/bills/BillTrash'
 import { CashReview } from './features/cash/CashReview'
+import { Home } from './features/home/Home'
 import { PrinterQueue } from './features/print/PrinterQueue'
 import { PdfViewer } from './features/pdf/PdfViewer'
 import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
@@ -84,7 +85,8 @@ const router = createHashRouter([
     element: <AppLayout />,
     errorElement: <AppError />,
     children: [
-      { index: true, element: <Navigate to="/quote-options" replace /> },
+      { index: true, element: <Navigate to="/home" replace /> },
+      { path: 'home',           element: <Home /> },
       { path: 'quote-options',  element: <QuotationOptions /> },
       { path: 'quote',          element: <QuotationBuilder /> },
       { path: 'quote/:id',      element: <QuotationBuilder /> },
@@ -103,7 +105,6 @@ const router = createHashRouter([
       { path: 'inventory',      element: <Inventory /> },
       { path: 'inventory/:tab', element: <Inventory /> },
       { path: 'inventory/:tab/:openId', element: <Inventory /> },
-      { path: 'customers',      element: <Customers /> },
       { path: 'transport',      element: <Transport /> },
       { path: 'transport/:view', element: <Transport /> },
       { path: 'ledgers',        element: <LedgersPage /> },
@@ -120,6 +121,10 @@ const router = createHashRouter([
       { path: 'cash-review',    element: <CashReview /> },
       { path: 'trash',          element: <BillTrash /> },
       { path: 'printer-queue',  element: <PrinterQueue /> },
+      // The quotation half's own customer list. Not the books' party list —
+      // these are people who may only ever have had a quotation. Named for
+      // what it is in the menu until the two lists are actually merged.
+      { path: 'customers',      element: <Customers /> },
       // Links from older versions of the panel, kept working rather than 404.
       { path: 'voucher/:kind',  element: <VoucherRedirect /> },
       { path: 'pdf-viewer',     element: <PdfViewer /> },

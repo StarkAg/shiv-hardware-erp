@@ -937,3 +937,33 @@ to{opacity: 0}}
 .ledger-root .cam-group-mark{font-size: 15px; font-weight: 900; letter-spacing: 0.04em; line-height: 1;}
 .ledger-root .cam-group{min-width: 70px;}
 .ledger-root .cam-group.on .cam-group-text{opacity: 0.85;}
+
+
+/* ── The day, on opening ──────────────────────────────────────────────────
+ * Figures large enough to read across a counter, each one a link to the
+ * screen that acts on it. No captions: the shop knows what its own numbers
+ * mean, and a caption under every tile is one more thing between the
+ * operator and the figure.
+ */
+.ledger-root .home-grid{display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));}
+.ledger-root .home-waiting{margin-top: 12px;}
+.ledger-root .home-tile{display: flex; flex-direction: column; gap: 6px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  padding: 16px 18px; text-decoration: none; color: var(--fg); box-shadow: var(--shadow);
+  transition: border-color 0.15s ease, transform 0.12s ease;}
+.ledger-root .home-tile:hover{border-color: var(--brass);}
+.ledger-root .home-tile:active{transform: scale(0.995);}
+.ledger-root .home-tile-label{font-size: 12.5px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.04em;}
+.ledger-root .home-tile-value{font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;
+  line-height: 1.1;}
+.ledger-root .home-tile-owed .home-tile-value{color: var(--green-text);}
+.ledger-root .home-tile-owing .home-tile-value{color: var(--red);}
+/* Something is waiting for a person. Marked, not explained. */
+.ledger-root .home-tile-attention{border-color: var(--amber-line); background: var(--amber-tint);}
+.ledger-root .home-tile-attention .home-tile-value{color: var(--amber-text);}
+@media (max-width: 640px){
+  .ledger-root .home-grid{grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px;}
+  .ledger-root .home-tile{padding: 13px 14px; border-radius: 14px;}
+  .ledger-root .home-tile-value{font-size: 21px;}
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useShortcuts } from '../lib/useShortcuts'
 import { isDarkMode, toggleTheme } from '../lib/theme'
 import { assetPath } from '../lib/assets'
@@ -17,8 +17,6 @@ import {
   Package,
   Trash2,
   Users,
-  NotebookPen,
-  Plus,
   ReceiptText,
   ShieldCheck,
   Sun,
@@ -29,6 +27,11 @@ import {
   PanelLeftClose,
   BookOpen,
   Wallet,
+  LayoutDashboard,
+  ScanLine,
+  Scale,
+  IndianRupee,
+  Printer,
 } from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
 import { UpdateBanner } from './UpdateBanner'
@@ -48,6 +51,90 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
   }`
 
+/** The same, one level in. It was written out by hand six times. */
+const subLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
+    isActive
+      ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
+      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
+  }`
+
+/**
+ * The menu, by the work being done rather than by which of the two apps used
+ * to own the screen.
+ *
+ * It listed "Ledger" and "Ledgers" next to each other — one the party
+ * accounts, the other the list of accounts — and "Day Book" apart from both,
+ * while the bill scanner, the quote history, the customer list and the print
+ * queue had no entry at all and could only be reached by typing the address.
+ * Names here say what the thing is to the shop, not what it was called in
+ * whichever app it came from.
+ */
+type NavItem = {
+  to: string
+  label: string
+  icon: LucideIcon
+  /** Function key printed beside it, working from anywhere in the panel. */
+  key?: string
+  /** Paths that light this entry up. Defaults to its own, and anything under it. */
+  match?: string[]
+  /** …except these, which belong to an entry of their own. */
+  except?: string[]
+}
+
+const AREAS: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Home',
+    items: [{ to: '/home', label: 'Home', icon: LayoutDashboard }],
+  },
+  {
+    label: 'Transactions',
+    items: [
+      { to: '/bills', label: 'Day Book', icon: ReceiptText },
+      { to: '/bills?new=sale', label: 'Sale', icon: ReceiptText, key: 'F8' },
+      { to: '/bills?new=purchase', label: 'Purchase', icon: Package, key: 'F9' },
+      { to: '/bills?new=receipt', label: 'Receipt', icon: IndianRupee, key: 'F6' },
+      { to: '/bills?new=payment', label: 'Payment', icon: CreditCard, key: 'F5' },
+      { to: '/scan', label: 'Bill Scanner', icon: ScanLine },
+      { to: '/cash-review', label: 'Cash Review', icon: Wallet },
+    ],
+  },
+  {
+    label: 'Accounts',
+    items: [
+      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial'] },
+      { to: '/ledgers', label: 'Account Masters', icon: Users },
+      { to: '/ledger/trial', label: 'Trial Balance', icon: Scale },
+      { to: '/customers', label: 'Quotation Customers', icon: Users },
+    ],
+  },
+  {
+    label: 'Stock',
+    items: [
+      { to: '/inventory', label: 'Inventory', icon: Package },
+      { to: '/rates', label: 'Rates', icon: IndianRupee },
+    ],
+  },
+  {
+    label: 'Documents',
+    items: [
+      { to: '/quote-options', label: 'Quotations', icon: FileText, match: ['/quote-options', '/quote', '/product'] },
+      { to: '/history', label: 'Quote History', icon: History },
+      { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck },
+      { to: '/guarantee/a4', label: 'Guarantee A4', icon: FileText },
+      { to: '/guarantee/history', label: 'Guarantee History', icon: History },
+      { to: '/transport', label: 'Toto', icon: CarTaxiFront },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { to: '/printer-queue', label: 'Printer Queue', icon: Printer },
+      { to: '/trash', label: 'Trash', icon: Trash2 },
+    ],
+  },
+]
+
 // Each lands on the side of the books its voucher belongs to, so closing the
 // form leaves you among the right accounts rather than somewhere unrelated.
 // Straight into the bill builder, which writes any of the four and takes the
@@ -61,14 +148,35 @@ const VOUCHERS = [
   { to: '/bills?new=purchase', label: 'Purchase', key: 'F9', kind: 'purchase' },
 ] as const
 
+/**
+ * The phone's bar, on the same five areas as the menu. There were six items in
+ * a five-column grid, so the sixth dropped onto a row of its own.
+ */
 const MOBILE_NAV_ITEMS = [
-  { to: '/quote-options', label: 'New Quotation', icon: FileText, match: ['/quote', '/product'] },
-  { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck, match: ['/guarantee'] },
-  { to: '/bills', label: 'Day Book', icon: ReceiptText, match: ['/bills'] },
-  { to: '/transport', label: 'Toto', icon: CarTaxiFront, match: ['/transport'] },
-  { to: '/ledger', label: 'Ledger', icon: BookOpen, match: ['/ledger'] },
-  { to: '/inventory', label: 'Inventory', icon: Package, match: ['/inventory', '/rates'] },
+  { to: '/home', label: 'Home', icon: LayoutDashboard, match: ['/home'] },
+  { to: '/bills', label: 'Day Book', icon: ReceiptText, match: ['/bills', '/scan', '/cash-review'] },
+  { to: '/ledger', label: 'Accounts', icon: BookOpen, match: ['/ledger', '/ledgers'] },
+  { to: '/inventory', label: 'Stock', icon: Package, match: ['/inventory', '/rates'] },
+  { to: '/quote-options', label: 'Documents', icon: FileText, match: ['/quote', '/product', '/guarantee', '/history', '/transport'] },
 ] as const
+
+/**
+ * Which menu entry the current address belongs to.
+ *
+ * `NavLink` matches on the path alone, and the four voucher entries are all
+ * `/bills` with a different query — so opening a sale lit up Day Book, Sale,
+ * Purchase, Receipt and Payment at once. The query is the difference here, so
+ * it is what this compares.
+ */
+function isCurrent(item: NavItem, pathname: string, search: string): boolean {
+  const [path, query] = item.to.split('?')
+  if (query) return pathname === path && search === `?${query}`
+  if (item.except?.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return false
+  const paths = item.match ?? [path]
+  // A voucher being written is not the day book, even though both are /bills.
+  if (path === '/bills' && search.startsWith('?new=')) return false
+  return paths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
 
 /**
  * One back button for every page, rather than one written into each.
@@ -83,15 +191,15 @@ function BackBar() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
-  // Nothing to go back from on the landing page.
-  if (pathname === '/' || pathname === '/quote-options') return null
+  // Nothing to go back from on the screen the panel opens on.
+  if (pathname === '/' || pathname === '/home') return null
 
   const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0
 
   return (
     <div className="back-bar no-print px-3 sm:px-4 md:px-6">
       <button
-        onClick={() => (idx > 0 ? navigate(-1) : navigate('/quote-options'))}
+        onClick={() => (idx > 0 ? navigate(-1) : navigate('/home'))}
         className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-muted hover:bg-stone-100 hover:text-stone-900 dark:hover:bg-white/10 dark:hover:text-white"
       >
         <ChevronLeft size={15} /> Back
@@ -112,7 +220,6 @@ export function AppLayout() {
   const [open, setOpen] = useState(
     location.pathname.startsWith('/quote') || location.pathname.startsWith('/product'),
   )
-  const [guaranteeOpen, setGuaranteeOpen] = useState(location.pathname.startsWith('/guarantee'))
   // dark: just a re-render trigger — the real source of truth is the DOM class.
   const [dark, setDark] = useState(isDarkMode)
   // Desktop sidebar collapse, remembered so the shop's laptop keeps its choice.
@@ -129,7 +236,6 @@ export function AppLayout() {
 
   useEffect(() => {
     if (location.pathname.startsWith('/quote') || location.pathname.startsWith('/product')) setOpen(true)
-    if (location.pathname.startsWith('/guarantee')) setGuaranteeOpen(true)
   }, [location.pathname])
 
   const sidebar = (
@@ -154,179 +260,66 @@ export function AppLayout() {
       </div>
 
       <nav className={`flex-1 overflow-y-auto py-3 space-y-1 ${railed ? "px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "px-3"}`}>
-        {/* New Quotation (expandable) */}
-        <div>
-          <button
-            onClick={() => setOpen((o) => !o)}
-            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white"
-          >
-            <span className="flex items-center gap-3">
-              <FileText size={18} /> New Quotation
-            </span>
-            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </button>
+        {AREAS.map((area) => (
+          <div key={area.label} className={area.label === 'Home' ? '' : 'pt-2'}>
+            {area.label !== 'Home' && !railed && (
+              <div className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted">
+                {area.label}
+              </div>
+            )}
+            {area.label !== 'Home' && railed && <div className="mx-3 mb-2 border-t border-stone-200/80 dark:border-white/10" />}
 
-          {open && (
-            <div className="mt-1 ml-3 space-y-2 border-l border-stone-200 pl-2 py-1 dark:border-white/10">
-              <NavLink
-                to="/quote"
-                end
-                className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
-                    isActive
-                      ? 'bg-stone-100 text-stone-950 dark:bg-white/10 dark:text-white'
-                      : 'text-muted hover:text-stone-950  dark:hover:text-white'
-                  }`
-                }
+            {area.items.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                title={item.label}
+                className={linkClass({ isActive: isCurrent(item, location.pathname, location.search) })}
               >
-                <Plus size={14} /> Blank quotation
-              </NavLink>
+                <item.icon size={18} />
+                <span className="flex-1">{item.label}</span>
+                {item.key && (
+                  <span className="text-[11px] font-semibold text-muted">{item.key}</span>
+                )}
+              </Link>
+            ))}
 
-              {GROUP_ORDER.map((g) => (
-                <div key={g}>
-                  <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
-                    {g}
+            {/* Quotations open onto the shop's own product list — the fastest
+                way into a quote is picking what it is for. */}
+            {area.label === 'Documents' && !railed && (
+              <div>
+                <button
+                  onClick={() => setOpen((o) => !o)}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white"
+                >
+                  <span className="flex items-center gap-3"><Layers size={18} /> By product</span>
+                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+                {open && (
+                  <div className="mt-1 ml-3 space-y-2 border-l border-stone-200 py-1 pl-2 dark:border-white/10">
+                    {GROUP_ORDER.map((g) => (
+                      <div key={g}>
+                        <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                          {g}
+                        </div>
+                        {CATEGORY_ORDER.filter((c) => CATEGORY_META[c].group === g).map((c) => {
+                          const Icon = CATEGORY_ICONS[CATEGORY_META[c].icon]
+                          return (
+                            <NavLink key={c} to={`/product/${c}`} className={subLinkClass}>
+                              <Icon size={14} />
+                              {CATEGORY_META[c].short}
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    ))}
                   </div>
-                  {CATEGORY_ORDER.filter((c) => CATEGORY_META[c].group === g).map((c) => {
-                    const Icon = CATEGORY_ICONS[CATEGORY_META[c].icon]
-                    return (
-                      <NavLink
-                        key={c}
-                        to={`/product/${c}`}
-                        className={({ isActive }) =>
-                          `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
-                            isActive
-                              ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
-                              : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        <Icon size={14} />
-                        {CATEGORY_META[c].short}
-                      </NavLink>
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <button
-            onClick={() => setGuaranteeOpen((o) => !o)}
-            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white"
-          >
-            <span className="flex items-center gap-3">
-              <ShieldCheck size={18} /> Guarantee Card
-            </span>
-            {guaranteeOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </button>
-
-          {guaranteeOpen && (
-            <div className="mt-1 ml-3 space-y-1 border-l border-stone-200 pl-2 py-1 dark:border-white/10">
-              <NavLink
-                to="/guarantee/card"
-                className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
-                    isActive
-                      ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
-                      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
-                  }`
-                }
-              >
-                <CreditCard size={14} />
-                Card
-              </NavLink>
-              <NavLink
-                to="/guarantee/a4"
-                className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
-                    isActive
-                      ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
-                      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
-                  }`
-                }
-              >
-                <FileText size={14} />
-                A4 Sheet
-              </NavLink>
-              <NavLink
-                to="/guarantee/history"
-                className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
-                    isActive
-                      ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
-                      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
-                  }`
-                }
-              >
-                <History size={14} />
-                History
-              </NavLink>
-            </div>
-          )}
-        </div>
-
-        <NavLink to="/transport" className={linkClass}>
-          <CarTaxiFront size={18} /> Toto
-        </NavLink>
-
-        {/* The shop's own working pages, kept together at the foot of the menu
-            and away from the customer-facing quotation and guarantee flow. */}
-        <div className={`mt-2 border-t border-stone-200/80 pt-2 space-y-1 dark:border-white/10 ${railed ? '' : '-mx-3 px-3'}`}>
-          <NavLink to="/bills" className={linkClass}>
-            <ReceiptText size={18} /> Day Book
-          </NavLink>
-
-          {/* Vouchers, the way Tally lists them — same names, same F-keys,
-              which work from anywhere in the ledger, not just from this menu.
-              Always open: four entries are not worth a fold. */}
-          <div>
-            <div
-              className={`flex items-center gap-3 py-2 text-sm font-medium text-stone-600 dark:text-stone-300 ${
-                railed ? 'justify-center px-0' : 'px-3'
-              }`}
-            >
-              <NotebookPen size={18} /> {!railed && 'Vouchers'}
-            </div>
-
-            {!railed && (
-              <div className="ml-3 space-y-0.5 border-l border-stone-200 pl-2 py-1 dark:border-white/10">
-                {VOUCHERS.map((v) => (
-                  <NavLink
-                    key={v.to}
-                    to={v.to}
-                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-muted hover:bg-stone-100 hover:text-stone-950 dark:hover:bg-white/10 dark:hover:text-white"
-                  >
-                    <span className="flex items-center gap-2"><Plus size={13} /> {v.label}</span>
-                    <span className="text-[10px] font-semibold text-muted dark:text-stone-600">{v.key}</span>
-                  </NavLink>
-                ))}
+                )}
               </div>
             )}
           </div>
-
-          <NavLink to="/ledger" className={linkClass}>
-            <BookOpen size={18} /> Ledger
-          </NavLink>
-          {/* The accounts themselves, as against the books they hold. */}
-          <NavLink to="/ledgers" className={linkClass}>
-            <Users size={18} /> Ledgers
-          </NavLink>
-          <NavLink to="/inventory" className={linkClass}>
-            <Package size={18} /> Inventory
-          </NavLink>
-          {/* Drawer notes the books could not take on their own. */}
-          <NavLink to="/cash-review" className={linkClass}>
-            <Wallet size={18} /> Cash review
-          </NavLink>
-          <NavLink to="/trash" className={linkClass}>
-            <Trash2 size={18} /> Trash
-          </NavLink>
-        </div>
+        ))}
       </nav>
-
       <div className={`border-t border-stone-200/80 py-3 dark:border-white/10 space-y-2 ${railed ? "px-2" : "px-3"}`}>
         <button
           onClick={() => setDark(toggleTheme())}
