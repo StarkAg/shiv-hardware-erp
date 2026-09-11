@@ -542,3 +542,108 @@ export const trialBalance = query({
     };
   },
 });
+
+/**
+ * The shop's front page, in one question.
+ *
+ * Home used to ask six separate queries and each of them walked the whole
+ * ledger, so opening the panel took six passes over the same three tables to
+ * answer things that share every one of their reads. This does the walk once.
+ *
+ * It answers only what the front page shows: the day, the two directions money
+ * is owed, twelve months of trade, and who the largest balances belong to.
+ * Anything more detailed is a screen of its own, and this should not grow into
+ * a second copy of those.
+ */
+export const dashboard = query({
+  args: { from: v.number(), to: v.number(), months: v.optional(v.number()) },
+  handler: async (ctx, { from, to, months }) => {
+    const { ledgers, groupById, typeById } = await context(ctx);
+    const [vouchers, lines] = await Promise.all([
+      ctx.db.query("vouchers").collect(),
+      ctx.db.query("voucherEntries").collect(),
+    ]);
+
+    // ── the day ──────────────────────────────────────────────────────────
+    const today = vouchers.filter((v) => v.date >= from && v.date <= to && v.status === "final");
+    const sumOf = (name: string) =>
+      round2(today.filter((v) => typeById.get(v.typeId)?.name === name)
+        .reduce((t, v) => t + (v.amount ?? 0), 0));
+
+    // ── twelve months of trade, oldest first ─────────────────────────────
+    const span = months ?? 12;
+    const edge = new Date(to);
+    const series: { ym: string; label: string; sales: number; purchases: number }[] = [];
+    const slot = new Map<string, number>();
+    for (let back = span - 1; back >= 0; back--) {
+      const d = new Date(Date.UTC(edge.getUTCFullYear(), edge.getUTCMonth() - back, 1));
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+      slot.set(ym, series.length);
+      series.push({
+        ym,
+        // "Apr" is enough on an axis; the year rides on the tooltip.
+        label: d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" }),
+        sales: 0,
+        purchases: 0,
+      });
+    }
+    for (const voucher of vouchers) {
+      if (voucher.status !== "final" || !voucher.amount) continue;
+      const d = new Date(voucher.date);
+      const at = slot.get(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+      if (at === undefined) continue;
+      const name = typeById.get(voucher.typeId)?.name;
+      if (name === "Sale") series[at].sales = round2(series[at].sales + voucher.amount);
+      else if (name === "Purchase") series[at].purchases = round2(series[at].purchases + voucher.amount);
+    }
+
+    // ── who owes, and who is owed ────────────────────────────────────────
+    const byLedger = new Map<string, number>();
+    for (const line of lines) {
+      const key = line.ledgerId as string;
+      byLedger.set(key, (byLedger.get(key) ?? 0) + signed(line.side, line.amount));
+    }
+    const balances = ledgers.map((account) => ({
+      ledgerId: account._id,
+      name: account.name,
+      group: groupById.get(account.groupId)?.name ?? "—",
+      signed: round2(openingSigned(account) + (byLedger.get(account._id as string) ?? 0)),
+    }));
+
+    const debtors = balances.filter((b) => b.group === "Sundry Debtors");
+    const creditors = balances.filter((b) => b.group === "Sundry Creditors");
+    const top = (rows: typeof balances, sign: 1 | -1) =>
+      rows.filter((r) => r.signed * sign > 0)
+        .sort((a, b) => (b.signed - a.signed) * sign)
+        .slice(0, 6)
+        .map((r) => ({ ledgerId: r.ledgerId, name: r.name, amount: Math.abs(r.signed) }));
+
+    return {
+      day: {
+        sales: sumOf("Sale"),
+        purchases: sumOf("Purchase"),
+        received: sumOf("Receipt"),
+        paid: sumOf("Payment"),
+        entries: today.length,
+      },
+      /**
+       * Owed each way, gross — not netted against each other.
+       *
+       * The party reports net every balance into one figure, which turns
+       * ₹2.35L owed by customers and ₹2.02L of customer money held against no
+       * bill into a single "₹32,635 receivable" that is true of nobody. A
+       * front page has to show both sides or it is worse than showing neither.
+       */
+      receivable: round2(debtors.reduce((t, r) => t + Math.max(r.signed, 0), 0)),
+      payable: round2(creditors.reduce((t, r) => t + Math.max(-r.signed, 0), 0)),
+      // Money taken from a customer with no sale behind it, and the same the
+      // other way round — advances, or a bill somebody has not written up.
+      customerCredit: round2(debtors.reduce((t, r) => t + Math.max(-r.signed, 0), 0)),
+      supplierAdvance: round2(creditors.reduce((t, r) => t + Math.max(r.signed, 0), 0)),
+      months: series,
+      topOwing: top(debtors, 1),
+      topOwed: top(creditors, -1),
+      unpriced: vouchers.filter((v) => v.status === "pending").length,
+    };
+  },
+});

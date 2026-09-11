@@ -254,8 +254,10 @@ export function AppLayout() {
           <div className={`h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-white shadow-inner shadow-stone-400/30 ${railed ? 'hidden' : 'flex'}`}>
             <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 object-contain" />
           </div>
-          <div className={railed ? 'hidden' : ''}>
-            <div className="font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware Store</div>
+          <div className={`min-w-0 ${railed ? 'hidden' : ''}`}>
+            <div className="whitespace-nowrap text-[15px] font-bold leading-tight tracking-tight text-stone-950 dark:text-white">
+              Shiv Hardware Store
+            </div>
             <div className="text-xs font-medium text-shiv-green">Panel</div>
           </div>
         </div>
@@ -359,7 +361,7 @@ export function AppLayout() {
         <div className="flex items-center gap-2">
           <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 rounded-lg bg-white object-contain p-1" />
           <div>
-            <div className="text-sm font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware Store</div>
+            <div className="whitespace-nowrap text-sm font-bold leading-tight text-stone-950 dark:text-white">Shiv Hardware Store</div>
             <div className="text-xs font-medium text-shiv-green">Panel</div>
           </div>
         </div>
