@@ -1,47 +1,176 @@
-# Shiv Hardware Panel
+# Shiv Hardware ERP
 
-Quotation, rate-management and guarantee-card system for **Shiv Hardware Store**, replacing the legacy macro-Excel workflow. Built for pixel-accurate A4 printing.
+The working software of **Shiv Hardware Store**, Ramgarh Cantt — a hardware shop that
+sells doors, boards, windows and the fittings that go with them.
 
-## Run
+It began as a replacement for four Excel files that produced quotations and guarantee
+cards. It now keeps the shop's books: bills, party accounts, purchases, receipts and
+payments, the cash drawer, attendance and the catalogue, on one Convex database that
+every screen and every device reads.
+
+> Private repository. It holds the shop's live configuration, including deployment
+> credentials and third-party API keys. See [Configuration](#configuration).
+
+---
+
+## The parts
+
+| Directory | What it is | Runs as |
+|---|---|---|
+| [`src/`](src/) | **The panel.** Day book, bill builder, party accounts, account masters, trash, cash review, quotations, guarantee cards, inventory, rates, toto. React + TypeScript + Vite + Tailwind, HashRouter so it works from `file://` too. | Web (Vercel), desktop (Electron), Android (Capacitor) |
+| [`convex/`](convex/) | **The books and the backend.** Vouchers and their Dr/Cr lines, ledgers and groups, the bill snapshot, trash, cash sync, the photo-bill reader, attendance, WhatsApp and Twilio. | Convex |
+| [`cash-web/`](cash-web/) | **The cash book.** The counter's drawer, keyboard-first and offline-first, one line per note; it syncs through `convex/cash.ts` and posts Receipts and Payments into the books. | PWA (Vercel) |
+| [`stock-web/`](stock-web/) | **The stock panel.** Catalogue and rates on a laptop, one Convex row. | PWA (Vercel) |
+| [`attendance-web/`](attendance-web/) | **Attendance.** Who came in, and when. | PWA (Vercel) |
+| [`cloud-api/`](cloud-api/) | Small relay the phone-side flows call when the shop machine is not reachable. | Node (Railway) |
+| [`print-server/`](print-server/) | The shop machine's own service: printing, WhatsApp sending, and reading a photographed bill. | Node, on the shop PC |
+| [`electron/`](electron/) · [`android/`](android/) | Desktop and Android wrappers around the same panel build. | — |
+| [`tests/`](tests/) | Convex tests — posting, numbering, deletions, the drawer. | `npm test` |
+| [`docs/`](docs/) | [Integration review](docs/INTEGRATION_REVIEW.md) — what is and is not joined up, ranked. | — |
+
+---
+
+## How the books work
+
+The shop runs on Tally's model, because that is the model the accountant already knows.
+
+- Every transaction is a **voucher** of a type — Sale, Purchase, Receipt, Payment, Goods
+  Return, Purchase Return, Discount, Expense — with balanced **Dr/Cr lines** under it.
+  Nothing that does not balance is written: [`convex/lib/entries.ts`](convex/lib/entries.ts)
+  refuses it.
+- **A bill and its voucher are one save.** [`convex/billLedger.ts`](convex/billLedger.ts)
+  opens the party's account if it is new, writes the voucher, writes its lines and writes
+  the bill itself in a single Convex transaction — all of it or none of it. A failure
+  keeps the bill on the device that typed it, marked unposted and held back from sync,
+  with a retry in the day book. "Saved" means the books took it.
+- **Numbers come from the server.** One counter per voucher series per financial year,
+  one for bill numbers, and each checked against what is already used — live and in the
+  trash — before it is issued: [`convex/lib/numbering.ts`](convex/lib/numbering.ts). Two
+  counters saving at the same moment cannot collide.
+- **Part payment rides on the same voucher.** ₹10,000 sold with ₹4,000 in hand is
+  `Dr Customer 6,000 · Dr Cash 4,000 · Cr Sales 10,000` — one document to edit, delete
+  or restore.
+- **Deleting is reversible and travels.** A deleted bill and its voucher go to a shared
+  Trash together and come back together. A tombstone outlives the trash row, so a delete
+  on one counter removes it on the other and a stale device cannot push it back.
+- **The drawer is part of the books.** Every cash note posts itself as a Receipt or a
+  Payment when it syncs ([`convex/cash.ts`](convex/cash.ts)); notes naming somebody the
+  books do not know wait in **Cash Review** rather than having an account invented for
+  them.
+
+What is not done yet is written down honestly in the
+[integration review](docs/INTEGRATION_REVIEW.md): stock is still a catalogue rather than
+a quantity ledger, receipts are not allocated against individual bills, there is no
+period lock, and there is no per-person sign-in.
+
+---
+
+## Running it
 
 ```bash
 npm install
-npm run dev      # http://localhost:5180
-npm run build    # production build to dist/
+npm run dev          # the panel on http://localhost:5180
+npm test             # Convex tests (vitest + convex-test)
+npm run lint         # tsc --noEmit
+npm run build        # production build into dist/
 ```
 
-## Print server
+On the shop's Wi-Fi, `npm run dev -- --host` serves the panel to the other counter at
+`http://<this-machine-ip>:5180`. Camera capture needs a secure context, so the phone
+must use the hosted app rather than the plain HTTP address.
+
+**Backend**
 
 ```bash
-cd print-server
-npm install
-npm start
+npx convex dev                 # schema + functions against the dev deployment
+npx convex deploy --yes        # push to production
 ```
 
-- Main printer endpoints run on `http://<shop-computer-ip>:3333`.
-- WhatsApp upload print page: `http://<shop-computer-ip>:3333/whatsapp-print`
-- Share helper: `http://<shop-computer-ip>:3333/whatsapp-print/share`
+> `npx convex dev` rewrites `VITE_CONVEX_URL` in `.env.local` to the dev deployment.
+> Put it back before building, or the build ships an app that writes to the wrong
+> database.
 
-Open the WhatsApp print link on a phone, select received images or PDFs, and the shop computer prints them on `PRINT_PRINTER`.
+**The shop machine**
 
-## What's inside
+```bash
+npm run shop                   # panel + print server together
+npm run print:server           # print server alone, on :3333
+```
 
-- **New Quotation** — pick category + brand, enter Height/Width (inches + soot) → live sqft & amount. Save, then print Quotation or Guarantee Card.
-- **Quote History** — search, reopen, reprint, delete. Sequential numbers `SH-YYYY-NNNN`.
-- **Rate Manager** — edit brands, ₹/sqft rates and guarantee years (auto-saved).
-- **Customers** — auto-captured from saved quotes.
+**Everything else**
 
-## Architecture
+```bash
+npm --prefix cash-web run dev
+npm --prefix stock-web run dev
+npm --prefix attendance-web run dev
+npm run cloud:api
+```
 
-- React 18 + TypeScript + Vite + Tailwind.
-- `src/lib/pricing.ts` — pricing engine, ports Excel formulas exactly (`sqft = round(H×W/144,2)`, `cost = round(rate×sqft)` for quotations).
-- `src/lib/data/brands.ts` — seed rates transcribed from the Excel sheets (editable).
-- `src/lib/db/adapter.ts` — swappable persistence (localStorage now; Convex/SQLite later).
-- `src/features/print/*` — A4 print templates using the extracted letterhead + wax seals (`/assets`). `@page A4` CSS = deterministic output on any printer.
+**Desktop and Android**
 
-## Pending decisions / next steps
+```bash
+npm run desktop:dev            # Electron against a fresh build
+npm run dist:win               # Windows installer
+npm run android:apk            # debug APK through Capacitor
+```
 
-- **Data backend**: localStorage today → Convex (cloud sync, both platforms) or SQLite (offline). Adapter is ready.
-- **Real guarantee terms text** (currently placeholder) — replace `DEFAULT_TERMS` in `GuaranteeCard.tsx`.
-- **Aluminium slab pricing** — windows use a sqft-slab VLOOKUP + chaukhat/min-bill in Excel; currently flat ₹/sqft. To refine.
-- **Electron packaging** — wrap for Mac `.dmg` + Windows `.exe` with silent multi-copy printing.
+---
+
+## Deploying
+
+The panel is built locally and pushed as a prebuilt directory, so a deploy is exactly
+the bundle that was tested:
+
+```bash
+npm run build
+npx vercel deploy dist --project shiv-panel --prod --yes
+npx convex deploy --yes --typecheck enable
+```
+
+The other web apps each carry their own `npm run deploy`. Convex must go out with the
+panel when a function's arguments change, and open tabs need a reload.
+
+---
+
+## Configuration
+
+Environment files are committed deliberately, so a fresh machine can run the shop
+without hunting for values. **They contain live credentials** — a Convex deployment key,
+the cloud relay key, and Anthropic and Sarvam API keys that bill by use. That is safe
+only while this repository stays private and single-owner. If it is ever made public, or
+a collaborator is added, rotate every key first.
+
+| File | Holds |
+|---|---|
+| `.env.local` | `CONVEX_DEPLOYMENT`, `VITE_CONVEX_URL`, `VITE_CONVEX_SITE_URL`, cloud relay URL and key |
+| `cash-web/.env`, `stock-web/.env`, `attendance-web/.env` | the Convex URL each PWA talks to |
+| `cloud-api/.env` | Convex URL, relay key, port |
+| `print-server/.env` | printer names, relay credentials, `ANTHROPIC_API_KEY`, `SARVAM_API_KEY` |
+
+Server-side secrets that never belong in the bundle — the ledger PIN, Twilio and
+WhatsApp credentials — live in the Convex dashboard's environment, not in these files.
+
+---
+
+## Conventions
+
+- **Comments explain why, not what.** A comment on a fix says what went wrong and what
+  it cost, so the next person does not undo it.
+- **No hand-holding text on screen.** The staff are trained; a caption under every
+  figure is one more thing between them and the number.
+- **Lucide icons only**, never emoji, in the interface or on paper.
+- **One palette.** Colours are tokens in [`src/index.css`](src/index.css), light and dark,
+  every pair measured at 4.5:1 or better. Chart series are checked for colour-blind
+  separation rather than chosen by eye.
+- **Print layouts are the shop's paper.** [`src/features/print/`](src/features/print/)
+  and [`src/lib/billHtml.ts`](src/lib/billHtml.ts) change only when the paper is meant
+  to change.
+
+---
+
+## Tests
+
+`npm test` runs the Convex suite against an in-memory deployment — posting and
+re-posting, concurrent numbering, refused saves, deletions between devices, the trash
+pair, part payments and the cash drawer. They use synthetic records; no real
+transaction is touched.
