@@ -114,6 +114,14 @@ export interface GuaranteeCardItem {
 export interface GuaranteeDocument {
   id: string
   number: string
+  /**
+   * The secret printed into this card's QR, minted with its reference.
+   *
+   * The page behind the QR is public — the customer scanning it has no account
+   * — and card numbers run in a sequence, so the number alone would let anyone
+   * walk the file. Both are needed to open a card.
+   */
+  token?: string
   date: string
   customer: Customer
   category: ProductCategory

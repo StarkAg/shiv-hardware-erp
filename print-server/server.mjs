@@ -430,6 +430,16 @@ const whatsappGroupNameCache = new Map()
 // Live Baileys socket, set once the WhatsApp Web connection opens (null while
 // disconnected/reconnecting). Used to send customer guarantee notifications.
 let whatsappSock = null
+// The socket currently being connected (may be pre-login). Used to request a
+// phone pairing code as a more reliable alternative to scanning the QR.
+let whatsappConnectingSock = null
+// Force a fresh login (clears the saved session and reconnects → new QR).
+// Replaced with the real implementation once the WhatsApp socket starts.
+let whatsappRelogin = async () => { throw new Error('WhatsApp is not enabled') }
+// Reconnect KEEPING the saved session (no re-link needed). Used by the watchdog.
+let whatsappReconnect = async () => {}
+// Timestamp of the last time the connection was healthy ('ready'/'qr'/'starting').
+let whatsappLastHealthy = Date.now()
 const whatsappNotifiedGuarantees = new Set(loadWhatsAppNotifiedGuarantees())
 const printerHealthCache = new Map()
 const preparedPlainA4Printers = new Map()
@@ -1898,9 +1908,34 @@ async function startWhatsAppWebAutoPrint() {
   try {
     const {
       makeWASocket, useMultiFileAuthState, DisconnectReason,
-      downloadMediaMessage, makeCacheableSignalKeyStore,
+      downloadMediaMessage, makeCacheableSignalKeyStore, fetchLatestBaileysVersion,
     } = await import('@whiskeysockets/baileys')
     const qrcode = await import('qrcode')
+
+    // WhatsApp rejects outdated client versions with "Connection Failure" (405).
+    // AUTO-REPAIR: fetch the current WA-web version before each connect (throttled
+    // to once a minute) instead of the stale one bundled with Baileys, so when
+    // WhatsApp pushes a breaking version bump the server self-heals on the next
+    // reconnect — no manual restart. Falls back to the bundled default on error.
+    let waVersion
+    let lastVersionFetch = 0
+    // Start with Baileys' bundled version (stable, matched to this build). Only flip
+    // this on if WhatsApp rejects it with a 405 "Connection Failure" — then we pin
+    // the fetched current version. Self-healing without destabilising normal use.
+    let forceFetchedVersion = false
+    async function refreshWaVersion() {
+      if (waVersion && Date.now() - lastVersionFetch < 60_000) return
+      try {
+        const info = await fetchLatestBaileysVersion()
+        if (info?.version) {
+          waVersion = info.version
+          lastVersionFetch = Date.now()
+          console.log(`   WhatsApp Web: using WA version ${waVersion.join('.')}`)
+        }
+      } catch (err) {
+        console.warn('[whatsapp-web] could not fetch latest WA version, using bundled:', err?.message ?? err)
+      }
+    }
     // Reassignable: on a real logout we wipe the auth folder and reload these so
     // the next connect() starts fresh and Baileys emits a new QR to re-scan.
     let { state, saveCreds } = await useMultiFileAuthState(WHATSAPP_WEB_AUTH_DIR)
@@ -1923,8 +1958,23 @@ async function startWhatsAppWebAutoPrint() {
       child: () => silentLogger,
     }
 
-    function connect() {
+    // Each connect() bumps the generation; a socket only schedules its own
+    // reconnect if it's still the latest, so manual re-logins don't stack sockets.
+    let connectGen = 0
+    // Escalating backoff: repeated "Connection Failure" usually means WhatsApp is
+    // rate-limiting us; hammering every few seconds only prolongs the block.
+    let reconnectAttempts = 0
+
+    async function connect() {
+      const myGen = ++connectGen
+      // Only fetch/pin a version if WhatsApp previously rejected the bundled one.
+      if (forceFetchedVersion) {
+        await refreshWaVersion()
+        if (myGen !== connectGen) return // superseded while awaiting
+      }
       const sock = makeWASocket({
+        // Only pinned after a 405 version rejection; otherwise uses Baileys' bundled version.
+        ...(forceFetchedVersion && waVersion ? { version: waVersion } : {}),
         auth: {
           creds: state.creds,
           keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
@@ -1935,6 +1985,7 @@ async function startWhatsAppWebAutoPrint() {
         syncFullHistory: false,
         markOnlineOnConnect: false,
       })
+      whatsappConnectingSock = sock
 
       sock.ev.on('creds.update', saveCreds)
 
@@ -1943,10 +1994,13 @@ async function startWhatsAppWebAutoPrint() {
           whatsappWebState.status = 'qr'
           whatsappWebState.qrDataUrl = await qrcode.toDataURL(qr).catch(() => null)
           whatsappWebState.lastError = null
+          whatsappLastHealthy = Date.now()
           console.log('   WhatsApp Web auto-print: scan QR at /whatsapp-web')
         }
         if (connection === 'open') {
           whatsappSock = sock
+          reconnectAttempts = 0
+          whatsappLastHealthy = Date.now()
           whatsappWebState.status = 'ready'
           whatsappWebState.readyAt = whatsappWebState.readyAt || new Date().toISOString()
           whatsappWebState.qrDataUrl = null
@@ -1958,9 +2012,16 @@ async function startWhatsAppWebAutoPrint() {
           const code = lastDisconnect?.error?.output?.statusCode
           const loggedOut = code === DisconnectReason.loggedOut
           whatsappWebState.status = loggedOut ? 'logged_out' : 'reconnecting'
+          const errMsg = String(lastDisconnect?.error?.message ?? lastDisconnect?.error ?? '')
           whatsappWebState.lastError = lastDisconnect?.error
-            ? { at: new Date().toISOString(), error: String(lastDisconnect.error.message ?? lastDisconnect.error) }
+            ? { at: new Date().toISOString(), code, error: errMsg }
             : null
+          // If WhatsApp rejects our client version (405 / "Connection Failure"),
+          // switch to the fetched current WA-web version on the next reconnect.
+          if (!forceFetchedVersion && !loggedOut && (code === 405 || /connection failure/i.test(errMsg))) {
+            forceFetchedVersion = true
+            console.log('[whatsapp-web] client version rejected — switching to fetched WA version')
+          }
           console.log(`[whatsapp-web] disconnected code=${code}${loggedOut ? ', logged out — re-scan QR' : ', reconnecting...'}`)
           if (loggedOut) {
             whatsappGroupNameCache.clear()
@@ -1969,7 +2030,13 @@ async function startWhatsAppWebAutoPrint() {
             // Wipe the dead session so the reconnect below produces a fresh QR.
             await resetWhatsAppAuth()
           }
-          setTimeout(connect, loggedOut ? 1000 : 5000)
+          // Only reconnect if a newer connect() (e.g. a manual relogin) hasn't superseded us.
+          if (myGen === connectGen) {
+            reconnectAttempts = loggedOut ? 0 : reconnectAttempts + 1
+            // 1s after a clean logout; otherwise back off 10s → 20s → … → 60s.
+            const delay = loggedOut ? 1000 : Math.min(60_000, 10_000 * reconnectAttempts)
+            setTimeout(() => { if (myGen === connectGen) connect() }, delay)
+          }
         }
       })
 
@@ -1986,6 +2053,26 @@ async function startWhatsAppWebAutoPrint() {
           })
         }
       })
+    }
+
+    // Clear the saved session and reconnect from scratch → a fresh QR to scan.
+    whatsappRelogin = async () => {
+      console.log('[whatsapp-web] manual relogin requested — clearing session')
+      try { whatsappSock?.end?.(new Error('manual relogin')) } catch { /* ignore */ }
+      whatsappSock = null
+      whatsappWebState.status = 'starting'
+      whatsappWebState.qrDataUrl = null
+      whatsappWebState.readyAt = null
+      whatsappGroupNameCache.clear()
+      await resetWhatsAppAuth()
+      connect()
+    }
+
+    // Reconnect but KEEP the saved session — recovers a stalled link with no re-scan.
+    whatsappReconnect = async () => {
+      try { whatsappSock?.end?.(new Error('reconnect')) } catch { /* ignore */ }
+      whatsappSock = null
+      connect()
     }
 
     connect()
@@ -2771,7 +2858,7 @@ app.post('/queue/cancel', async (req, res) => {
 })
 
 // ── Health check ─────────────────────────────────────────────────────────────
-app.get('/status', (_req, res) => res.json({
+app.get('/status', (req, res) => res.json({
   ok: true,
   server: 'Shiv Print Server',
   printer: PRINT_PRINTER,
@@ -2782,6 +2869,8 @@ app.get('/status', (_req, res) => res.json({
     blackAndWhiteFallback: BW_FALLBACK_PRINTER,
     blackAndWhiteFallbackOnError: BW_FALLBACK_ON_ERROR,
   },
+  guaranteeQrBase: GUARANTEE_PUBLIC_URL || null,
+  guaranteeQrSample: guaranteeCardUrl('GC-YYYY-XXXX', req),
 }))
 // GET /sync  — SSE stream; clients reconnect automatically on disconnect
 app.get('/sync', (req, res) => {
@@ -2894,6 +2983,42 @@ function whatsappWebStatusPayload() {
 
 app.get('/whatsapp-web/status', (_req, res) => {
   res.json(whatsappWebStatusPayload())
+})
+
+// Force a fresh login: clears the stored session and reconnects so a new QR is
+// generated (use when the account is stuck reconnecting or you want to re-link).
+app.post('/whatsapp-web/relogin', async (_req, res) => {
+  try {
+    await whatsappRelogin()
+    res.json({ ok: true, status: whatsappWebState.status })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
+// Link by phone-number pairing code (more reliable than scanning the QR).
+// POST { phone: "918092850954" } → returns an 8-char code to type into WhatsApp:
+// Linked devices → Link a device → "Link with phone number instead".
+app.post('/whatsapp-web/pair-code', async (req, res) => {
+  const phone = String(req.body?.phone ?? req.query?.phone ?? '').replace(/\D/g, '')
+  if (phone.length < 11) {
+    return res.status(400).json({ ok: false, error: 'Send the WhatsApp number WITH country code, e.g. 918092850954' })
+  }
+  const sock = whatsappConnectingSock
+  if (!sock) {
+    return res.status(503).json({ ok: false, error: 'WhatsApp is not connecting yet — try again in a few seconds.' })
+  }
+  if (sock.authState?.creds?.registered) {
+    return res.status(400).json({ ok: false, error: 'This account is already linked.' })
+  }
+  try {
+    const code = await sock.requestPairingCode(phone)
+    const pretty = code?.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code
+    console.log(`[whatsapp-web] pairing code for ${phone}: ${pretty}`)
+    res.json({ ok: true, code: pretty })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message ?? err) })
+  }
 })
 
 // Send the guarantee-ready message to a customer's mobile on demand. Backs the
@@ -3360,6 +3485,20 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('   Cloud polling: disabled')
   }
   startWhatsAppWebAutoPrint()
+  // Watchdog: keep the linked WhatsApp session alive indefinitely. If it stays
+  // stuck (not ready/qr/starting) for over 8 minutes, reconnect using the SAVED
+  // session — no re-link. Skips 'logged_out' (that path already re-shows a QR).
+  setInterval(() => {
+    if (!WHATSAPP_AUTO_PRINT_ENABLED) return
+    const st = whatsappWebState.status
+    if (st === 'ready' || st === 'qr' || st === 'starting') { whatsappLastHealthy = Date.now(); return }
+    if (st === 'logged_out') return
+    if (Date.now() - whatsappLastHealthy > 8 * 60 * 1000) {
+      whatsappLastHealthy = Date.now()
+      console.log(`[whatsapp-web] watchdog: stuck at "${st}" — reconnecting with saved session`)
+      whatsappReconnect().catch(err => console.error('[whatsapp-web] watchdog reconnect failed', err?.message ?? err))
+    }
+  }, 2 * 60 * 1000)
   prepareEpsonPlainA4ColorDefaults(COLOR_PRINTER, 'startup')
   warmUpBrowser()
   if (!process.env.ANTHROPIC_API_KEY) console.warn('⚠  ANTHROPIC_API_KEY not set')

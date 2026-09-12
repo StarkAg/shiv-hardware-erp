@@ -1,98 +1,149 @@
 {
-  "hardwareCatalog": {
-    "aldrop": {
-      "brands": [
-        "Marla B/G",
-        "Mona B/n",
-        "GI"
-      ],
-      "sizes": [
-        "6\"",
-        "8\"",
-        "10\"",
-        "12\""
-      ]
-    },
-    "fevicol": {
-      "brands": [
-        "SH",
-        "Marine",
-        "HeatX",
-        "SR",
-        "SpeedX",
-        "Probond",
-        "Hi-per Star"
-      ],
-      "sizes": []
-    },
-    "handle": {
-      "brands": [
-        "Mona B/n",
-        "Norta B/n",
-        "B/n"
-      ],
-      "sizes": [
-        "4\"",
-        "6\"",
-        "8\"",
-        "10\"",
-        "12\""
-      ]
-    },
-    "hinge": {
-      "brands": [
-        "Acer Jazz",
-        "Norya Jazi",
-        "GI",
-        "SS"
-      ],
-      "sizes": [
-        "3\"",
-        "4\"",
-        "5\"",
-        "6\""
-      ]
-    },
-    "mica": {
+  "hardwareCatalog": {},
+  "customCatalog": [
+    {
       "brands": [],
+      "id": "6gpyuwzz",
+      "name": "19mm Solid Black Tiger 8 X 4",
+      "rate": 3520,
+      "rates": [
+        3520,
+        44,
+        1
+      ],
       "sizes": []
     },
-    "screw": {
-      "brands": [
-        "SS (+)",
-        "SS (-)",
-        "GI",
-        "Plain"
-      ],
-      "sizes": [
-        "½\"",
-        "¾\"",
-        "1\"",
-        "1¼\"",
-        "1½\"",
-        "2\"",
-        "2½\"",
-        "3\""
-      ]
-    },
-    "tape": {
+    {
       "brands": [],
+      "id": "mtve2tp8",
+      "name": "12mm",
       "sizes": []
     },
-    "tb": {
-      "brands": [
-        "Mona B/n",
-        "B/n"
+    {
+      "brands": [],
+      "id": "zkyt4en3",
+      "name": "Fevicol Marine 20 Kg",
+      "rate": 55,
+      "rates": [
+        55,
+        33
       ],
-      "sizes": [
-        "6\"",
-        "8\"",
-        "10\"",
-        "12\""
-      ]
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "z3102akx",
+      "name": "Fevicol Marine",
+      "rate": 290,
+      "rates": [
+        290
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "9acv2uj4",
+      "name": "12mm Black Tiger 8 X 4",
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "iipa3fx7",
+      "name": "14'' Telescopic Indian",
+      "rate": 532,
+      "rates": [
+        532
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "o37sv32n",
+      "name": "Sanmica Linear Off White",
+      "rate": 540,
+      "rates": [
+        540,
+        555
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "00igua0n",
+      "name": "Abbro Tape",
+      "rate": 120,
+      "rates": [
+        120
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "e3nuhtuu",
+      "name": "G PROFILE HANDLE BLACK 10'",
+      "rate": 1140,
+      "rates": [
+        1140
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "5a94rrnd",
+      "name": "Alaldite 180 Gm",
+      "rate": 430,
+      "rates": [
+        430
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "lrj5yzqm",
+      "name": "35 X 10 Liping Teak",
+      "rate": 12.5,
+      "rates": [
+        12.5
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "6jgqbati",
+      "name": "4'' Cutter Blade",
+      "rate": 210,
+      "rates": [
+        210
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "nev0xzyw",
+      "name": "12mm T Bit R/G 8'",
+      "rate": 280,
+      "rates": [
+        280
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "8pygrdvh",
+      "name": "12mm Black Tiger 7 X 4",
+      "rate": 2100,
+      "rates": [
+        2100
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "0b8gkxlf",
+      "name": "Fare",
+      "sizes": []
     }
-  },
-  "customCatalog": [],
+  ],
   "sets": [
     {
       "brands": [
@@ -712,5 +763,5 @@
       "name": "C1"
     }
   ],
-  "_savedAt": "2026-07-16T10:58:19.741Z"
+  "_savedAt": "2026-09-11T06:02:40.609Z"
 }

@@ -408,14 +408,27 @@ export async function pullGuaranteesFromServer(): Promise<GuaranteeDocument[] | 
 }
 
 /** Public URL of a single guarantee card on the print server — encoded into the QR. */
-export function guaranteeOnlineUrl(number: string, baseUrl?: string): string {
+export function guaranteeOnlineUrl(number: string, token?: string, baseUrl?: string): string {
   // Prefer the explicitly-configured public viewer (e.g. a Vercel deployment)
   // over the local print-server URL. The print server is reachable only on
   // the shop Wi-Fi; a global URL lets the printed card's QR resolve from
   // any device.
   const envBase = (import.meta.env.VITE_GUARANTEE_PUBLIC_URL ?? '').trim().replace(/\/+$/, '')
   const base = (baseUrl ?? (envBase || PRINT_SERVER_URL)).replace(/\/+$/, '')
-  return `${base}/g/${encodeURIComponent(number)}`
+  /**
+   * A hash URL, not a clean path.
+   *
+   * The card page is a single-page app on static hosting, so `/g/<number>`
+   * only resolves if the host is configured to rewrite it to index.html —
+   * which silently 404s the moment that config is wrong, and a dead QR is
+   * printed onto a card nobody can reprint. Everything after the `#` is the
+   * page's own business and never reaches the host, so this form works on any
+   * static host with no configuration at all.
+   */
+  const path = `${base}/#/g/${encodeURIComponent(number)}`
+  // Without the secret the page will not open the card, so a QR printed
+  // without one is a dead QR.
+  return token ? `${path}?k=${encodeURIComponent(token)}` : path
 }
 
 export type WhatsAppWebStatus = {

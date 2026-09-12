@@ -119,6 +119,19 @@ export default defineSchema({
   guaranteeDocuments: defineTable({
     localId: v.string(),
     number: v.string(),
+    /**
+     * The secret in the card's QR.
+     *
+     * The card is read by a customer with no account, so the page behind the
+     * QR answers to anyone who holds the link. Card numbers run in a sequence,
+     * which made the whole file walkable from GC-2026-0001 — names, mobiles,
+     * Aadhaar numbers and what each person paid. The number says which card;
+     * this says you are holding it.
+     *
+     * Optional only so the rows written before it existed still validate. A
+     * card without one cannot be opened.
+     */
+    token: v.optional(v.string()),
     customer: v.any(),
     document: v.any(),
     createdAt: v.number(),

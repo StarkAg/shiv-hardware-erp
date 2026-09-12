@@ -8,22 +8,14 @@ import { guaranteeOnlineUrl } from '../../lib/printServer'
 
 // Standalone guarantee document. It is not tied to a quotation.
 
-const DEFAULT_TERMS = [
-  'Guarantee is against borer/termite only, subject to proper installation & maintenance.',
-  'Guarantee is not valid against water-logging, fire, physical/mechanical damage or misuse.',
-  'This card must be produced at the time of any claim.',
-  'Polish, fittings, glass & handles are not covered under guarantee.',
-]
 
 type GuaranteeLayout = 'a4' | 'card'
 
 export function GuaranteeCard({
   document,
-  terms = DEFAULT_TERMS,
   layout = 'a4',
 }: {
   document: GuaranteeDocument
-  terms?: string[]
   layout?: GuaranteeLayout
 }) {
   if (layout === 'card') return <CompactGuaranteeCard document={document} />
@@ -86,14 +78,12 @@ export function GuaranteeCard({
           </tbody>
         </table>
 
-        {/* Terms + seal */}
+        {/* The seal. The terms are not printed here any more: the card is a
+            small piece of plastic and they filled it, while the page behind
+            its QR has room to set them out properly and is the copy that can
+            be corrected after printing. */}
         <div className="mt-3 flex gap-4">
-          <div className="flex-1">
-            <div className="mb-1 text-[12px] font-bold">Terms &amp; Conditions:</div>
-            <ol className="list-decimal space-y-0.5 pl-4 text-[10.5px] leading-snug">
-              {terms.map((t, i) => (<li key={i}>{t}</li>))}
-            </ol>
-          </div>
+          <div className="flex-1" />
           {seal && (
             <div className="flex w-[38mm] shrink-0 items-start justify-center">
               <img src={seal} alt={`${maxYears} year guarantee`} className="w-[34mm]" />
@@ -103,7 +93,7 @@ export function GuaranteeCard({
 
         <div className="relative mt-[10mm] min-h-[48mm]">
           <div className="absolute bottom-[10mm] left-[10mm]">
-            <GuaranteeQr value={guaranteeOnlineUrl(document.number)} size="32mm" />
+            <GuaranteeQr value={guaranteeOnlineUrl(document.number, document.token)} size="32mm" />
           </div>
           <div className="absolute bottom-0 right-0 text-center text-[12px]">
             <div className="mb-[14mm] font-bold">For {SHOP.name}</div>
@@ -203,7 +193,7 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
       )}
 
       <div className="absolute left-[3mm] top-[71mm]">
-        <GuaranteeQr value={guaranteeOnlineUrl(document.number)} size="12mm" />
+        <GuaranteeQr value={guaranteeOnlineUrl(document.number, document.token)} size="12mm" />
       </div>
     </>
   )

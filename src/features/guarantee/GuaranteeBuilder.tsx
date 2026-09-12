@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, Copy, FileText, Printer, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
+import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
 import {
   CATEGORY_LABELS,
@@ -119,9 +120,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const location = useLocation()
   // Each Save or Print mints a fresh GC-YYYY-NNNN ref number from the store sequence,
   // so every card becomes a permanent entry in the History tab and gets a stable QR.
-  const [ref, setRef] = useState<{ number: string; id: string }>(() => {
+  const [ref, setRef] = useState<{ number: string; id: string; token: string }>(() => {
     const number = `GC-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`
-    return { number, id: number }
+    return { number, id: number, token: mintCardToken() }
   })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
@@ -144,8 +145,11 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // the shop would do physically with a fresh-stamped card).
   function mintFreshRef() {
     const number = nextGuaranteeNumber()
-    setRef({ number, id: number })
-    return { number, id: number }
+    // A fresh card is a fresh secret. The QR is printed from this, so it has to
+    // exist before the card is drawn, not after it is saved.
+    const next = { number, id: number, token: mintCardToken() }
+    setRef(next)
+    return next
   }
 
   // On entry: reopen a saved guarantee (from History) or import a selected bill.
@@ -166,7 +170,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
   // Load a saved card back into the form so it can be viewed, edited or reprinted.
   function importGuarantee(g: GuaranteeDocument) {
-    setRef({ number: g.number, id: g.id })
+    // Its own secret, not a new one: the card in the customer's hand is
+    // printed with this and a reprint has to match it.
+    setRef({ number: g.number, id: g.id, token: g.token ?? mintCardToken() })
     setCustomer({
       id: g.customer.id || uid(),
       name: g.customer.name || '',
@@ -224,12 +230,13 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     if (imported.length) setRows((prev) => [...prev.filter(isRowFilled), ...imported, blankRow()])
   }
 
-  function buildGuaranteeDoc(uuid = ref): GuaranteeDocument {
+  function buildGuaranteeDoc(uuid: { number: string; id: string; token: string } = ref): GuaranteeDocument {
     const filled = rows.filter(isRowFilled)
     const primary = filled[0]
     return {
       id: uuid.id,
       number: uuid.number,
+      token: uuid.token,
       date: new Date().toISOString(),
       customer: { ...customer, name: toProperCase(customer.name) },
       category: DEFAULT_CATEGORY,
@@ -240,12 +247,13 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     }
   }
 
-  function buildSecondDoc(uuid = ref): GuaranteeDocument {
+  function buildSecondDoc(uuid: { number: string; id: string; token: string } = ref): GuaranteeDocument {
     const filled = rows2.filter(isRowFilled)
     const primary = filled[0]
     return {
       id: `${uuid.id}-2`,
       number: uuid.number,
+      token: uuid.token,
       date: new Date().toISOString(),
       customer: { ...customer2, name: toProperCase(customer2.name) },
       category: DEFAULT_CATEGORY,
@@ -262,7 +270,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // Save (and enqueue for sync) both cards under a freshly minted ref. The QR
   // points to /guarantee/<number> on the print server, which only resolves once
   // the card has been stored locally and pushed to the server.
-  function persistCards(minted: { number: string; id: string }) {
+  function persistCards(minted: { number: string; id: string; token: string }) {
     const freshDoc = buildGuaranteeDoc(minted)
     saveGuarantee(freshDoc)
     enqueueGuaranteeSync(freshDoc)
