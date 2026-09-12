@@ -1,5 +1,5 @@
 import { useState, useRef, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
-import { useLocation, useNavigate, useNavigationType, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Camera, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
@@ -2081,35 +2081,18 @@ export function BillBuilder() {
   }, [newKind])
 
   /**
-   * "Day Book" in the sidebar goes to /bills, which is this same component —
-   * so navigating there with a bill open left the builder on screen and the
-   * day book unreachable. The view has to be put back by hand.
+   * The day book has its own address now, so which screen you are on is
+   * something the URL says rather than something this component remembers.
    *
-   * Keyed on the path actually changing, not on the id being absent: starting
-   * a new bill switches to the form without moving the URL, and spending the
-   * `?new=` parameter rewrites the query on the spot. Either of those would
-   * bounce straight back to the list if absence of an id were the test.
+   * It used to share /bills with the voucher being written, and the only way
+   * to tell "the operator asked for the day book" from "the screen rewrote its
+   * own query" was to watch navigation types and count them. Every bug in this
+   * area came from that guesswork: the day book unreachable behind an open
+   * voucher, then a voucher that closed itself the instant it opened. A second
+   * address costs one line and removes the question.
    */
   const location = useLocation()
-  const navigationType = useNavigationType()
-  const lastKey = useRef(location.key)
-  /**
-   * Going to /bills when a voucher is open means the day book — the sidebar's
-   * Day Book is that same address, so the builder has to stand aside for it.
-   *
-   * Keyed on the navigation rather than the path: starting a voucher never
-   * moves the URL, so waiting for the path to change would never fire. The two
-   * navigations that are not departures are excluded by what they are, not by
-   * counting them — opening `?new=sale` is a push carrying that parameter, and
-   * spending it a moment later is a replace. A replace is the screen rewriting
-   * its own address and never means the operator left it.
-   */
-  useEffect(() => {
-    if (location.key === lastKey.current) return
-    lastKey.current = location.key
-    if (navigationType === 'REPLACE' || newKind) return
-    if (location.pathname === '/bills' && !id && !voucherId) setView('list')
-  }, [location.key, location.pathname, navigationType, newKind, id, voucherId])
+  const onDayBook = location.pathname === '/day'
 
   // The store can fill in after this mounts: a cold open on a shared link, or
   // a Convex sync landing a moment later. Once per id, so typing is never
@@ -2286,7 +2269,17 @@ export function BillBuilder() {
   const discount = Math.max(0, Number(draft.discount) || 0)
   const total = isMoneyVoucher ? money + discount : calcTotal(draft.items)
 
+  /**
+   * Start a voucher from the day book.
+   *
+   * The day book has its own address, so which screen shows is the URL's to
+   * say — setting the view here alone would leave the operator looking at the
+   * list they pressed the button on. It goes the way every other voucher is
+   * opened, by the address that asks for one, so there is one path in and it
+   * is the one that is used all day.
+   */
   function startNew(kind: BillKind = 'sale') {
+    if (onDayBook) { navigate(`/bills?new=${kind}`); return }
     setDraft(emptyBill(nextBillNumber(), kind))
     setView('form')
   }
@@ -2455,7 +2448,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
      */
     const partyTab = partyGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
     navigate(
-      done.ledgerId ? `/ledger/${partyTab}/${done.ledgerId}` : '/bills',
+      done.ledgerId ? `/ledger/${partyTab}/${done.ledgerId}` : '/day',
       { replace: true },
     )
   }
@@ -2468,14 +2461,14 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       !bills.find((b) => b.id === draft.id) && hasMeaningfulContent({ ...draft, total })
     if (unsaved) { setAsking('leave'); return }
     setView('list')
-    navigate('/bills', { replace: true })
+    navigate('/day', { replace: true })
   }
 
   /** Leaves the bill for good — what Alt+D and a discarded draft both end in. */
   function leave() {
     committedRef.current = true
     setView('list')
-    navigate('/bills', { replace: true })
+    navigate('/day', { replace: true })
   }
 
   /**
@@ -2525,7 +2518,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   // ---- FORM VIEW -----------------------------------------------------------
-  if (view === 'form') {
+  if (view === 'form' && !onDayBook) {
     return (
       <ListPanelContext.Provider value={setPanelList}>
         <TallyListPanel list={panelList} />

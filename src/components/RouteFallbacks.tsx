@@ -13,7 +13,7 @@ import { AlertTriangle, Home, RotateCw } from 'lucide-react'
 export function VoucherRedirect() {
   const { kind } = useParams<{ kind: string }>()
   const ok = ['sale', 'purchase', 'receipt', 'payment'].includes(kind ?? '')
-  return <Navigate to={ok ? `/bills?new=${kind}` : '/bills'} replace />
+  return <Navigate to={ok ? `/bills?new=${kind}` : '/day'} replace />
 }
 
 /** A URL that matches nothing. */

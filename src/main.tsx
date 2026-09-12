@@ -121,6 +121,16 @@ const router = createHashRouter([
       { path: 'ledger/trash',   element: <Navigate to="/trash" replace /> },
       { path: 'ledger/:tab',    element: <Ledger /> },
       { path: 'ledger/:tab/:partyId', element: <Ledger /> },
+      /**
+       * The day book has its own address.
+       *
+       * It shared /bills with the voucher being written, so "Day Book" in the
+       * sidebar pointed at the screen you were already on and the builder
+       * simply stayed put. Which of the two you get was local state the URL
+       * could not say — so a link, a refresh and the back button all
+       * disagreed. One address, one screen.
+       */
+      { path: 'day',            element: <BillBuilder /> },
       { path: 'bills',          element: <BillBuilder /> },
       // Editing a voucher that has no bill behind it — the ledger's own
       // entries and the ones approved from a photograph.

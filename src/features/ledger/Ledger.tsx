@@ -29,7 +29,7 @@ export function Ledger() {
   // The ledger's own day book was the same vouchers in the same table, one tab
   // deep. It is the panel's Day Book now, so old links go there.
   useEffect(() => {
-    if (tab === 'daybook') navigate('/bills', { replace: true })
+    if (tab === 'daybook') navigate('/day', { replace: true })
   }, [tab, navigate])
   const onRoute = useCallback((nextTab: string, nextParty: string | null) => {
     const path = `/ledger/${nextTab}${nextParty ? `/${nextParty}` : ''}`

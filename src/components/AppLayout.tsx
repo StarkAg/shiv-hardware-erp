@@ -90,7 +90,7 @@ const AREAS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Transactions',
     items: [
-      { to: '/bills', label: 'Day Book', icon: ReceiptText },
+      { to: '/day', label: 'Day Book', icon: ReceiptText },
       { to: '/bills?new=sale', label: 'Sale', icon: ReceiptText, key: 'F8' },
       { to: '/bills?new=purchase', label: 'Purchase', icon: Package, key: 'F9' },
       { to: '/bills?new=receipt', label: 'Receipt', icon: IndianRupee, key: 'F6' },
@@ -156,7 +156,7 @@ const VOUCHERS = [
  */
 const MOBILE_NAV_ITEMS = [
   { to: '/home', label: 'Home', icon: LayoutDashboard, match: ['/home'] },
-  { to: '/bills', label: 'Day Book', icon: ReceiptText, match: ['/bills', '/cash-review'] },
+  { to: '/day', label: 'Day Book', icon: ReceiptText, match: ['/day', '/bills', '/cash-review'] },
   { to: '/ledger', label: 'Accounts', icon: BookOpen, match: ['/ledger', '/ledgers'] },
   { to: '/inventory', label: 'Stock', icon: Package, match: ['/inventory', '/rates'] },
   { to: '/quote-options', label: 'Documents', icon: FileText, match: ['/quote', '/product', '/guarantee', '/history', '/transport'] },
@@ -175,8 +175,10 @@ function isCurrent(item: NavItem, pathname: string, search: string): boolean {
   if (query) return pathname === path && search === `?${query}`
   if (item.except?.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return false
   const paths = item.match ?? [path]
-  // A voucher being written is not the day book, even though both are /bills.
-  if (path === '/bills' && search.startsWith('?new=')) return false
+  // A voucher being written is not the day book. They had to share /bills
+  // once, and this told them apart by the query; the day book has its own
+  // address now, so only the voucher's own path is left to exclude here.
+  if (path === '/day' && search.startsWith('?new=')) return false
   return paths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 }
 

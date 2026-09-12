@@ -72,10 +72,10 @@ function FromTheBooks() {
   return (
     <>
       <div className="home-grid">
-        <Figure label="Sales today" value={rupees(data?.day.sales ?? 0)} to="/bills" loading={loading} />
-        <Figure label="Received today" value={rupees(data?.day.received ?? 0)} to="/bills" loading={loading} />
-        <Figure label="Paid today" value={rupees(data?.day.paid ?? 0)} to="/bills" loading={loading} />
-        <Figure label="Entries today" value={String(data?.day.entries ?? 0)} to="/bills" loading={loading} />
+        <Figure label="Sales today" value={rupees(data?.day.sales ?? 0)} to="/day" loading={loading} />
+        <Figure label="Received today" value={rupees(data?.day.received ?? 0)} to="/day" loading={loading} />
+        <Figure label="Paid today" value={rupees(data?.day.paid ?? 0)} to="/day" loading={loading} />
+        <Figure label="Entries today" value={String(data?.day.entries ?? 0)} to="/day" loading={loading} />
       </div>
 
       <div className="home-grid" style={{ marginTop: 12 }}>
@@ -146,14 +146,14 @@ export function Home() {
       <div className="app">
         {unposted > 0 && (
           <div className="home-grid" style={{ marginBottom: 12 }}>
-            <Figure label="Bills not in the books" value={String(unposted)} to="/bills" tone="attention" />
+            <Figure label="Bills not in the books" value={String(unposted)} to="/day" tone="attention" />
           </div>
         )}
         {convexEnabled() ? (
           <FromTheBooks />
         ) : (
           <div className="home-grid">
-            <Figure label="Bills on this PC" value={String(bills.length)} to="/bills" />
+            <Figure label="Bills on this PC" value={String(bills.length)} to="/day" />
           </div>
         )}
       </div>
