@@ -8,6 +8,7 @@ import { useShortcuts } from '../../lib/useShortcuts'
 // that would drift from it.
 import BillDropUntyped from '../ledger/components/BillDrop'
 import BillViewerUntyped from '../ledger/components/BillViewer'
+import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
 import { useUploader } from '../ledger/lib/upload'
 
 /**
@@ -31,6 +32,12 @@ const BillDrop = BillDropUntyped as unknown as (props: {
 /** The ledger's full-screen photo viewer, likewise plain JSX. */
 const BillViewer = BillViewerUntyped as unknown as (props: {
   voucher: unknown
+  onClose: () => void
+}) => JSX.Element
+
+/** The bill drawn from its figures, as the ledger opens it; plain JSX too. */
+const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
+  bill: Bill
   onClose: () => void
 }) => JSX.Element
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
@@ -3236,6 +3243,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   const dark = useLedgerTheme()
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState<Bill | null>(null)
+  const [previewing, setPreviewing] = useState<Bill | null>(null)
 
   // The period lives in the URL, so a day's book is a link someone can send.
   const [params, setParams] = useSearchParams()
@@ -3362,6 +3370,9 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
             onClose={() => setDeleting(null)}
           />
         )}
+        {previewing && (
+          <VoucherBillPreview bill={previewing} onClose={() => setPreviewing(null)} />
+        )}
         <header className="topbar">
           <h1 className="pagetitle">Day Book</h1>
           <div className="actions">
@@ -3448,6 +3459,18 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                           >
                             <span aria-hidden="true"><Paperclip size={13} aria-hidden="true" /></span>
                             {r.photos.length > 1 && <span>{r.photos.length}</span>}
+                          </button>
+                        )}
+                        {/* The bill itself, drawn from its figures — the same
+                            receipt icon the ledger shows beside a line. */}
+                        {r.billId && bills.some((b) => b.id === r.billId) && (
+                          <button
+                            className="clip"
+                            aria-label="Show the bill"
+                            title="Show the bill"
+                            onClick={() => setPreviewing(bills.find((b) => b.id === r.billId) ?? null)}
+                          >
+                            <ReceiptText size={13} aria-hidden="true" />
                           </button>
                         )}
                       </td>
