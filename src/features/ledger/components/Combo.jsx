@@ -16,6 +16,8 @@ export default function Combo({
   autoFocus,
   // Marks this field as a stop on the form's Enter walk.
   nav,
+  // Names that stop, for a walk that needs to know which field it is leaving.
+  navId,
 }) {
   const selected = options.find((o) => o.id === value) ?? null;
   const [open, setOpen] = useState(false);
@@ -118,6 +120,7 @@ export default function Combo({
         autoComplete="off"
         autoFocus={autoFocus}
         data-vf={nav ? '1' : undefined}
+        data-vf-id={navId}
         value={open ? query : selected?.name ?? ''}
         placeholder={open ? selected?.name ?? placeholder : placeholder}
         onChange={(e) => {

@@ -415,10 +415,6 @@
 .ledger-root button.fixedfield{width: 100%; text-align: left; cursor: pointer;}
 .ledger-root button.fixedfield:hover{border-color: var(--brass);}
 .ledger-root button.fixedfield:focus-visible{outline: 2px solid var(--brass); outline-offset: 1px;}
-/* Under the day book's Recent order a row sits beneath the day it was entered,
-   so it says which day it is actually dated for. */
-.ledger-root .entryno .datedfor{display: block; margin-top: 2px; font-size: 11px;
-  font-weight: 600; color: var(--muted); letter-spacing: 0;}
 .ledger-root .link.plain{text-decoration: none; color: var(--fg);}
 .ledger-root .link.plain:hover{color: var(--brass);}
 .ledger-root .alertmark{width: 13px; height: 13px; color: var(--red);

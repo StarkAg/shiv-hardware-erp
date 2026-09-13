@@ -6,8 +6,9 @@ import { useUploader } from '../lib/upload';
 import Combo from './Combo';
 import BillDrop from './BillDrop';
 import BillPane from './BillPane';
-import { inputDate, today, fromInputDate } from '../lib/format';
+import { inputDate, today, fromInputDate, longDate } from '../lib/format';
 import { groupLabel } from '../lib/groups';
+import { nextStep } from '../lib/walk';
 
 /**
  * The four vouchers this shop writes. Each is the same form — a party, an
@@ -62,6 +63,48 @@ const KINDS = {
 };
 
 /**
+ * The date, asked as its own question.
+ *
+ * Opens on the day the voucher is being written and takes one Enter to accept,
+ * so the common case costs a keystroke and the uncommon one - a bill written up
+ * days later - can no longer be filed under today by accident.
+ */
+function DateStep({ label, value, onChange, onDone }) {
+  const field = useRef(null);
+  const opened = useRef(value);   // what Escape puts back
+  useEffect(() => {
+    field.current?.focus();
+    field.current?.select?.();
+  }, []);
+
+  const keys = (e) => {
+    if (e.key !== 'Enter' && e.key !== 'Escape') return;
+    // The voucher form behind is listening for both; this one is answered here.
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') onChange(opened.current);
+    onDone();
+  };
+
+  return (
+    <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onDone()}>
+      <div className="modal narrow" role="dialog" aria-label={`${label} date`}>
+        <h2>Date of this {label.toLowerCase()}</h2>
+        <label>
+          Day it belongs to
+          <input ref={field} type="date" value={value} required
+            onChange={(e) => onChange(e.target.value)} onKeyDown={keys} />
+        </label>
+        <p className="hint">Enter to accept.</p>
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onDone}>Use this date</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Writes a voucher, or rewrites one. In edit mode the type and number are
  * fixed — a corrected entry keeps its identity — but both ledgers, the amount,
  * the date and the wording can all be put right.
@@ -105,6 +148,13 @@ export default function VoucherForm({
   const [picked, setPicked] = useState([]);   // photos taken on the phone
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The date sat first on the form and last in anyone's attention: the party
+  // picker takes the cursor when the voucher opens, so Enter walked straight
+  // past the date and vouchers were filed under today whatever day they were
+  // written for. It is a step of its own now - Enter reaches it after the
+  // party, and it has to be answered once before the rest of the voucher.
+  const [askDate, setAskDate] = useState(null);   // 'walk' | 'field' while open
+  const [dateAsked, setDateAsked] = useState(editing);
 
   const createPurchase = useMutation(api.vouchers.createPurchase);
   const createPayment = useMutation(api.vouchers.createPayment);
@@ -209,19 +259,40 @@ export default function VoucherForm({
    * cursor happened to be, half the voucher unfilled.
    *
    * The fields are taken from the DOM in the order they are drawn, so adding a
-   * field to the voucher puts it in the walk without listing it anywhere.
+   * field to the voucher puts it in the walk without listing it anywhere. The
+   * date is the one exception: it is a stop that opens a step rather than takes
+   * the cursor (see nextStep in lib/walk.js).
    */
   const formRef = useRef(null);
+  const stops = () => [...(formRef.current?.querySelectorAll('[data-vf]') ?? [])];
+
+  /** Focus the stop after the party - where the walk resumes once the date is in. */
+  const afterParty = () => {
+    const fields = stops();
+    const at = fields.findIndex((f) => f.dataset.vfId === 'party');
+    fields[at + 1]?.focus();
+  };
+
+  /** Focus the date itself - where the cursor was when the date was opened by hand. */
+  const focusDate = () => stops().find((f) => f.dataset.vfId === 'date')?.focus();
+
   const walk = (e) => {
     if (e.key !== 'Enter' || e.shiftKey || !formRef.current) return;
-    const fields = [...formRef.current.querySelectorAll('[data-vf]')];
+    const fields = stops();
     const from = e.target.closest?.('[data-vf]') ?? e.target;
     const at = fields.indexOf(from);
     if (at === -1) return;
     e.preventDefault();
-    const next = fields[at + 1];
-    if (next) next.focus();
-    else formRef.current.requestSubmit();
+    // Fields without an id of their own are known by where they stand.
+    const ids = fields.map((f, i) => f.dataset.vfId ?? `field-${i}`);
+    const step = nextStep({ stops: ids, from: ids[at], dateAsked });
+    if (step.do === 'ask-date') {
+      return setAskDate(step.then === 'submit' ? 'accept'
+        : from.dataset.vfId === 'date' ? 'field' : 'walk');
+    }
+    if (step.do === 'focus') return fields[ids.indexOf(step.stop)]?.focus();
+    if (step.do === 'submit') formRef.current.requestSubmit();
+    return undefined;
   };
 
   return (
@@ -233,10 +304,18 @@ export default function VoucherForm({
         <h2>{editing ? `Edit ${edit.vchLabel}` : spec.title}</h2>
 
         <div className="row">
-          <label>
-            Date
-            <input data-vf type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-          </label>
+          <div className="labelled">
+            <span>Date</span>
+            <button
+              type="button"
+              data-vf
+              data-vf-id="date"
+              className="fixedfield datefield"
+              onClick={() => setAskDate('field')}
+            >
+              {longDate(fromInputDate(date))}
+            </button>
+          </div>
           <label>
             {spec.refLabel}
             <input data-vf value={refNo} onChange={(e) => setRefNo(e.target.value)} />
@@ -262,6 +341,7 @@ export default function VoucherForm({
                 spec.partyGroup === 'Sundry Debtors' ? 'Dr' : 'Cr'
               )}
               createGroup={groupLabel(spec.partyGroup)}
+              navId="party"
               autoFocus={!defaultPartyId}
             />
           )}
@@ -340,6 +420,25 @@ export default function VoucherForm({
           </button>
         </div>
       </form>
+
+      {askDate && (
+        <DateStep
+          label={spec.title}
+          value={date}
+          onChange={setDate}
+          onDone={() => {
+            const from = askDate;
+            setAskDate(null);
+            setDateAsked(true);
+            // After the overlay has gone, or the focus lands under it.
+            requestAnimationFrame(() => {
+              if (from === 'accept') formRef.current?.requestSubmit();
+              else if (from === 'walk') afterParty();
+              else focusDate();
+            });
+          }}
+        />
+      )}
 
       <BillPane bill={preview} onClose={() => setPreview(null)} />
     </div>
