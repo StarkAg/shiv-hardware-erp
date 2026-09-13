@@ -191,8 +191,17 @@ export const usage = query({
 
 /** Removes a ledger, refusing while anything is posted to it. */
 export const removeLedger = mutation({
-  args: { pin: v.string(), id: v.id("ledgers")},
-  handler: async (ctx, { pin, id }) => {
+  args: {
+    pin: v.string(),
+    id: v.id("ledgers"),
+    /**
+     * Destroy what the bin still holds against this account, and then delete
+     * it. Asked for a second time in the UI, because this is the one way the
+     * account can go and what goes with it does not come back.
+     */
+    purgeTrash: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { pin, id, purgeTrash }) => {
     requirePin(pin);
     const lines = await ctx.db
       .query("voucherEntries")
@@ -222,24 +231,48 @@ export const removeLedger = mutation({
      * that no longer existed: money in the trial balance belonging to nobody,
      * in a party statement that could never be opened.
      */
-    const binned = (await ctx.db.query("trash").collect()).some(
+    const binned = (await ctx.db.query("trash").collect()).filter(
       (row) => row.partyLedgerId === id || row.entries.some((e) => e.ledgerId === id)
     );
-    const binnedBill = (await ctx.db.query("billsTrash").collect()).some(
+    const binnedBills = (await ctx.db.query("billsTrash").collect()).filter(
       (row) => row.bill?.ledgerId === id
     );
-    if (binned || binnedBill) {
-      throw new ConvexError(
-        "This account has something in the trash — empty it for good first, or restore it and post it elsewhere."
-      );
+    if ((binned.length || binnedBills.length) && !purgeTrash) {
+      // Structured, so the screen can offer the way through rather than just
+      // reporting the wall: it says what is in the bin and what it would cost.
+      throw new ConvexError({
+        kind: "trash",
+        vouchers: binned.length,
+        bills: binnedBills.length,
+        message:
+          "This account has something in the trash — it can go, but what the bin holds against it goes for good with it.",
+      });
+    }
+
+    // Asked for: the bin's hold on this account is destroyed, bill photographs
+    // and all, and only then does the account itself go. Nothing is left
+    // pointing at an account that no longer exists.
+    for (const row of binned) {
+      for (const doc of row.attachments ?? []) {
+        await ctx.storage.delete(typeof doc === "string" ? doc : doc.storageId).catch(() => {});
+      }
+      await ctx.db.delete(row._id);
+    }
+    for (const row of binnedBills) {
+      await ctx.db.delete(row._id);
     }
 
     const ledger = await ctx.db.get(id);
     await ctx.db.delete(id);
-    await record(ctx, "ledger.remove", `Removed empty ledger ${ledger?.name ?? ""}`, {
-      entity: "ledger",
-      entityId: id,
-    });
+    const alsoGone = binned.length + binnedBills.length;
+    await record(
+      ctx,
+      "ledger.remove",
+      alsoGone
+        ? `Removed ledger ${ledger?.name ?? ""} and purged ${alsoGone} binned ${alsoGone === 1 ? "entry" : "entries"} with it`
+        : `Removed empty ledger ${ledger?.name ?? ""}`,
+      { entity: "ledger", entityId: id },
+    );
   },
 });
 

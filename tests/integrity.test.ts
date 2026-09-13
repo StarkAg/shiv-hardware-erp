@@ -48,4 +48,47 @@ describe('deleting an account', () => {
       expect(await t.run(ctx => ctx.db.get(partyId))).toBeNull()
     } finally { vi.unstubAllEnvs() }
   })
+
+  it('says what the bin holds, so the screen can offer the way through', async () => {
+    vi.stubEnv('LEDGER_PIN', 'test-pin')
+    try {
+      const { t, partyId } = await shop()
+      await t.mutation(api.billLedger.postBill, { bill: aBill() })
+      await t.mutation(api.bills.remove, { id: 'bill-a' })
+
+      await expect(t.mutation(api.masters.removeLedger, { id: partyId, pin: 'test-pin' }))
+        .rejects.toMatchObject({ data: { kind: 'trash' } })
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it('goes, with what the bin held, when that is asked for', async () => {
+    vi.stubEnv('LEDGER_PIN', 'test-pin')
+    try {
+      const { t, partyId } = await shop()
+      await t.mutation(api.billLedger.postBill, { bill: aBill() })
+      await t.mutation(api.bills.remove, { id: 'bill-a' })
+
+      await t.mutation(api.masters.removeLedger, { id: partyId, pin: 'test-pin', purgeTrash: true })
+
+      expect(await t.run(ctx => ctx.db.get(partyId))).toBeNull()
+      // Nothing is left in either bin pointing at an account that has gone.
+      const binned = await t.run(ctx => ctx.db.query('trash').collect())
+      const binnedBills = await t.run(ctx => ctx.db.query('billsTrash').collect())
+      expect(binned.filter(r => r.partyLedgerId === partyId)).toHaveLength(0)
+      expect(binnedBills.filter(r => r.bill?.ledgerId === partyId)).toHaveLength(0)
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it('still refuses while the books themselves hold a voucher, purge or not', async () => {
+    vi.stubEnv('LEDGER_PIN', 'test-pin')
+    try {
+      const { t, partyId } = await shop()
+      await t.mutation(api.billLedger.postBill, { bill: aBill() })
+
+      // Live entries are not the bin's to clear: this one must not go.
+      await expect(t.mutation(api.masters.removeLedger, { id: partyId, pin: 'test-pin', purgeTrash: true }))
+        .rejects.toThrow(/entries|vouchers/i)
+      expect(await t.run(ctx => ctx.db.get(partyId))).not.toBeNull()
+    } finally { vi.unstubAllEnvs() }
+  })
 })

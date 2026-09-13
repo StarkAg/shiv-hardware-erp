@@ -34,6 +34,9 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  // An account the bin still holds something against: it can go, but only by
+  // destroying what the bin holds, so that is asked for separately.
+  const [purging, setPurging] = useState(null);
   const [error, setError] = useState('');
 
   const here = TABS.find(([id]) => id === tab) ?? TABS[0];
@@ -76,19 +79,30 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
     window.open(`${origin}${pathname}#${statementPath(l)}`, '_blank', 'noopener');
   };
 
-  const drop = async (ledger, pin) => {
+  const drop = async (ledger, pin, purgeTrash = false) => {
     setError('');
     try {
-      await remove({ id: ledger._id, pin });
+      await remove({ id: ledger._id, pin, purgeTrash });
       setDeleting(null);
+      setPurging(null);
     } catch (err) {
       // The refusals are the useful part: an account with vouchers against it
       // cannot go, and saying so is better than a silent failure. A thrown
       // ConvexError arrives in `data`; anything else only has a message.
-      setError(String(err?.data ?? err?.message ?? err));
+      const data = err?.data;
       setDeleting(null);
+      // The bin is the one refusal with a way through, so it is offered rather
+      // than reported.
+      if (data?.kind === 'trash') return setPurging({ ledger, ...data });
+      setError(String(data ?? err?.message ?? err));
     }
   };
+
+  /** "2 deleted vouchers and 1 deleted bill" — what goes with the account. */
+  const binnedSummary = (n) => [
+    n.vouchers && `${n.vouchers} deleted voucher${n.vouchers === 1 ? '' : 's'}`,
+    n.bills && `${n.bills} deleted bill${n.bills === 1 ? '' : 's'}`,
+  ].filter(Boolean).join(' and ');
 
   return (
     <>
@@ -233,6 +247,18 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
           ask={{ label: 'Code', secret: true }}
           onConfirm={(pin) => drop(deleting, pin)}
           onClose={() => setDeleting(null)}
+        />
+      )}
+
+      {purging && (
+        <Confirm
+          title={`Delete ${purging.ledger.name} and ${binnedSummary(purging)}?`}
+          body={`Nothing is posted to this account in the books, but the bin still holds ${binnedSummary(purging)} against it. They go for good — photographs included — and cannot be restored afterwards.`}
+          confirmLabel="Delete for good"
+          danger
+          ask={{ label: 'Code', secret: true }}
+          onConfirm={(pin) => drop(purging.ledger, pin, true)}
+          onClose={() => setPurging(null)}
         />
       )}
     </>
