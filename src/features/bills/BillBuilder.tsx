@@ -3347,9 +3347,11 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   }, [rows])
 
   const today = iso(new Date())
+  const yesterday = iso(new Date(Date.now() - 864e5))
   const monthStart = `${today.slice(0, 8)}01`
   const chips = [
     { label: 'Today', f: today, t: today },
+    { label: 'Yesterday', f: yesterday, t: yesterday },
     { label: 'This month', f: monthStart, t: today },
     { label: 'All', f: '', t: '' },
   ]
