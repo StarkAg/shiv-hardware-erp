@@ -26,6 +26,7 @@ import { PrinterQueue } from './features/print/PrinterQueue'
 import { CashReview } from './features/cash/CashReview'
 import { Home } from './features/home/Home'
 import { PdfViewer } from './features/pdf/PdfViewer'
+import { MobileView } from './features/mobile/MobileView'
 import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
 import { useStore } from './lib/store'
@@ -78,11 +79,31 @@ if (convexEnabled()) {
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
 const convex = CONVEX_URL ? new ConvexReactClient(CONVEX_URL) : null
 
+/**
+ * A phone opening the website gets the books to read, not the counter.
+ *
+ * Only the browser: the desktop and Android apps are the shop's own tools and
+ * keep the full panel. "Full panel" on the phone screen opts out for the
+ * session, so the next visit opens read-only again.
+ */
+function PhoneGate() {
+  const w = window as unknown as { shivDesktop?: unknown; Capacitor?: { isNativePlatform?: () => boolean } }
+  const phone =
+    !!convex &&
+    !w.shivDesktop &&
+    !w.Capacitor?.isNativePlatform?.() &&
+    window.matchMedia('(max-width: 767px) and (pointer: coarse)').matches
+  let optedOut = false
+  try { optedOut = sessionStorage.getItem('shiv-panel:full-panel') === '1' } catch { /* ignore */ }
+  return phone && !optedOut ? <Navigate to="/m" replace /> : <AppLayout />
+}
+
 // HashRouter keeps routing working when packaged as a desktop (file://) app.
 const router = createHashRouter([
+  { path: '/m', element: <MobileView />, errorElement: <AppError /> },
   {
     path: '/',
-    element: <AppLayout />,
+    element: <PhoneGate />,
     errorElement: <AppError />,
     children: [
       { index: true, element: <Navigate to="/home" replace /> },

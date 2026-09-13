@@ -16,7 +16,8 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 // bill dated the 1st shows as the 31st for anyone behind GMT.
 export const shortDate = (ms) => {
   const d = new Date(ms);
-  return `${String(d.getUTCDate()).padStart(2, '0')}-${MONTHS[d.getUTCMonth()]}-${String(
+  // dd/mm/yy, the way the shop writes a date.
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(
     d.getUTCFullYear()
   ).slice(2)}`;
 };

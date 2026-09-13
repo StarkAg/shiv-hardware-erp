@@ -10,6 +10,7 @@ import BillDropUntyped from '../ledger/components/BillDrop'
 import BillViewerUntyped from '../ledger/components/BillViewer'
 import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
 import { useUploader } from '../ledger/lib/upload'
+import { lastEntryDate, rememberEntryDate } from '../../lib/entryDate'
 
 /**
  * A bill as plain data, for handing to the server.
@@ -1765,7 +1766,7 @@ function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
     id: uid(),
     number,
     ...(kind === 'sale' ? {} : { kind }),
-    date: today(),
+    date: lastEntryDate(),
     customerName: '',
     customerPhone: '',
     ref: '',
@@ -2612,7 +2613,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               <input
                 type="date"
                 value={draft.date}
-                onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))}
+                onChange={(e) => { rememberEntryDate(e.target.value); setDraft((d) => ({ ...d, date: e.target.value })) }}
                 data-bill-date="1"
                 data-bill-nav="1"
                 /* The date sits in the voucher's head, above the party block,

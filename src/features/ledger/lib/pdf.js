@@ -152,6 +152,6 @@ export async function saveBillPdf(voucher) {
   });
 
   pdf.save(
-    `${clean(voucher.vchLabel) || 'bill'} ${clean(voucher.party)} ${shortDate(voucher.date)}.pdf`
+    `${clean(voucher.vchLabel) || 'bill'} ${clean(voucher.party)} ${shortDate(voucher.date).replace(/\//g, '-')}.pdf`
   );
 }

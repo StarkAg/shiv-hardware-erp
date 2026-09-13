@@ -119,7 +119,16 @@ export const postBill = mutation({
     // A bill photograph or an unpriced delivery can be filed before its amount
     // is known. It becomes a pending voucher with no entries, so no balance is
     // changed until a real amount is entered later.
-    const hasAmount = total > 0
+    //
+    // A bill with any goods line still lacking its rate is unpriced too, even
+    // if a fare already gives it a total: "Mica × 11, Fare 100" is not a ₹100
+    // sale, and posting it as one would put the wrong balance on the account.
+    const items: any[] = Array.isArray(bill.items) ? bill.items : []
+    const unpricedLine = items.some((i) =>
+      String(i?.description ?? '').trim() &&
+      !i?.isRoundup && !i?.isDiscount &&
+      !(Number(i?.amount) > 0))
+    const hasAmount = total > 0 && !unpricedLine
 
     const date = whenOf(bill.date)
     const spec = KINDS[(bill.kind ?? 'sale') as BillKind] ?? KINDS.sale
