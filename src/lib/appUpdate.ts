@@ -15,6 +15,9 @@ declare const __APP_VERSION__: string
 export const CURRENT_VERSION: string =
   typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0'
 
+declare const __BUILD_ID__: string
+export const BUILD_ID: string = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : ''
+
 export type UpdateInfo = {
   available: boolean
   currentVersion: string

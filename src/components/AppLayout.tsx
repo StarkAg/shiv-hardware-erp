@@ -36,7 +36,7 @@ import {
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
 import { UpdateBanner } from './UpdateBanner'
 import { Toaster } from './Toast'
-import { CURRENT_VERSION } from '../lib/appUpdate'
+import { BUILD_ID, CURRENT_VERSION } from '../lib/appUpdate'
 
 const CATEGORY_ICONS: Record<CategoryIcon, LucideIcon> = {
   door: DoorClosed,
@@ -347,8 +347,11 @@ export function AppLayout() {
             <Wrench size={13} />
             By Harsh
           </a>
-          <span className="rounded-full bg-stone-200/70 px-2 py-0.5 text-[10px] font-semibold text-muted dark:bg-white/10">
-            v{CURRENT_VERSION}
+          <span
+            title={BUILD_ID ? `Build ${BUILD_ID}` : undefined}
+            className="rounded-full bg-stone-200/70 px-2 py-0.5 text-[10px] font-semibold text-muted dark:bg-white/10"
+          >
+            v{CURRENT_VERSION}{BUILD_ID && <span className="font-normal"> · {BUILD_ID.split(' · ')[0]}</span>}
           </span>
         </div>
       </div>
