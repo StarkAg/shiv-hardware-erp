@@ -8,7 +8,6 @@ import BillDrop from './BillDrop';
 import BillPane from './BillPane';
 import { inputDate, today, fromInputDate } from '../lib/format';
 import { groupLabel } from '../lib/groups';
-import { lastEntryDate, rememberEntryDate } from '../../../lib/entryDate';
 
 /**
  * The four vouchers this shop writes. Each is the same form — a party, an
@@ -88,7 +87,7 @@ export default function VoucherForm({
       document.body.style.overflow = before;
     };
   }, []);
-  const [date, setDate] = useState(edit ? inputDate(edit.date) : lastEntryDate());
+  const [date, setDate] = useState(inputDate(edit ? edit.date : today()));
   const [partyId, setPartyId] = useState(edit?.partyLedgerId ?? defaultPartyId ?? '');
   const [accountId, setAccountId] = useState(
     edit?.accountLedgerId ?? accounts[0]?._id ?? ''
@@ -236,7 +235,7 @@ export default function VoucherForm({
         <div className="row">
           <label>
             Date
-            <input data-vf type="date" value={date} onChange={(e) => { rememberEntryDate(e.target.value); setDate(e.target.value); }} required />
+            <input data-vf type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </label>
           <label>
             {spec.refLabel}

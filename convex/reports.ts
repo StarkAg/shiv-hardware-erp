@@ -258,6 +258,9 @@ export const dayBook = query({
             .map((l) => ledgerById.get(l.ledgerId)?.name ?? "—"),
           _id: vch._id,
           date: vch.date,
+          // When it was written, as against the date on it — the day book lists
+          // the latest entry first, whatever day the bill itself is dated.
+          createdAt: vch.createdAt,
           vchType: type?.name ?? "—",
           vchLabel: vchLabel(type?.abbr ?? "VCH", vch.voucherNo),
           party: ledgerById.get(vch.partyLedgerId)?.name ?? "—",

@@ -35,6 +35,7 @@ type Voucher = {
   narration: string
   amount: number
   status: string
+  createdAt?: number
   contra: string[]
   attachmentUrls: { url?: string }[]
 }
@@ -130,7 +131,9 @@ export function MobileView() {
         ? matches(q, v.vchLabel, v.vchType, v.party, v.refNo, v.narration, v.contra.join(' '), v.amount, shortDate(v.date))
         : inPeriod(v.date, period),
     )
-    return list.sort((a, b) => b.date - a.date || b.vchLabel.localeCompare(a.vchLabel))
+    // Latest entered first, whatever date the bill carries.
+    return list.sort((a, b) =>
+      (b.createdAt ?? b.date) - (a.createdAt ?? a.date) || b.vchLabel.localeCompare(a.vchLabel))
   }, [vouchers, q, searching, period])
 
   const foundParties = useMemo(() => {
@@ -224,7 +227,7 @@ export function MobileView() {
                     {foundVouchers.length} vouchers · ₹{rupees(foundVouchers.reduce((s, v) => s + (v.status === 'pending' ? 0 : v.amount), 0))}
                   </p>
                 )}
-                <VoucherList vouchers={foundVouchers} loading={!vouchers} bills={bills} onBill={setBill} onParty={openLedger} grouped />
+                <VoucherList vouchers={foundVouchers} loading={!vouchers} bills={bills} onBill={setBill} onParty={openLedger} />
               </>
             ) : (
               <PartyList parties={foundParties} loading={!parties} onOpen={openLedger} />

@@ -10,7 +10,6 @@ import BillDropUntyped from '../ledger/components/BillDrop'
 import BillViewerUntyped from '../ledger/components/BillViewer'
 import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
 import { useUploader } from '../ledger/lib/upload'
-import { lastEntryDate, rememberEntryDate } from '../../lib/entryDate'
 
 /**
  * A bill as plain data, for handing to the server.
@@ -1766,7 +1765,7 @@ function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
     id: uid(),
     number,
     ...(kind === 'sale' ? {} : { kind }),
-    date: lastEntryDate(),
+    date: today(),
     customerName: '',
     customerPhone: '',
     ref: '',
@@ -2613,7 +2612,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               <input
                 type="date"
                 value={draft.date}
-                onChange={(e) => { rememberEntryDate(e.target.value); setDraft((d) => ({ ...d, date: e.target.value })) }}
+                onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))}
                 data-bill-date="1"
                 data-bill-nav="1"
                 /* The date sits in the voucher's head, above the party block,
@@ -3233,6 +3232,8 @@ type DayRow = {
   /** Why the books refused this bill, and how to ask them again. */
   problem?: string
   onRetry?: () => void
+  /** When it was written, which is not the date written on it. */
+  entered: number
 }
 
 function BillDayBook({ bills, onNew, onDelete, onRetry }: {
@@ -3250,12 +3251,15 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   const [params, setParams] = useSearchParams()
   const from = params.get('from') ?? ''
   const to = params.get('to') ?? ''
-  const setPeriod = (f: string, t: string) => {
+  const byDate = params.get('order') === 'date'
+  const setView = (f: string, t: string, dated: boolean) => {
     const next: Record<string, string> = {}
     if (f) next.from = f
     if (t) next.to = t
+    if (dated) next.order = 'date'
     setParams(next, { replace: true })
   }
+  const setPeriod = (f: string, t: string) => setView(f, t, byDate)
 
   // The server already knows how to answer for a window — the ledger's day
   // book has taken from/to since it was written; nothing ever passed them.
@@ -3280,6 +3284,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
       account: (v.contra ?? []).join(', '),
       amount: v.status === 'pending' ? null : v.amount,
       photos: (v.attachmentUrls ?? []).map((a: any) => a?.url).filter(Boolean),
+      entered: v.createdAt ?? v.date,
       billId: bills.find((b) => b.voucherId === v._id)?.id
         ?? (String(v.refNo ?? '').startsWith('BILL-')
           ? bills.find((b) => `BILL-${b.number}` === v.refNo)?.id
@@ -3318,6 +3323,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         account: b.postError ? `Not posted — ${b.postError}` : 'Not posted',
         amount: b.total,
         photos: [],
+        entered: b.updatedAt ?? b.postedAt ?? at,
         billId: b.id,
         problem: b.postError,
         onRetry: b.postError ? () => onRetry({ ...b, total: b.total }) : undefined,
@@ -3326,9 +3332,13 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     }
 
     // Newest first: this is the screen you open to see what just happened, and
-    // ascending order buries today under two hundred rows.
-    return list.sort((a, b) => b.date - a.date || b.label.localeCompare(a.label))
-  }, [vouchers, finished, from, to, bills, onRetry])
+    // ascending order buries today under two hundred rows. By default that is
+    // the latest *entered* — a slip from last week typed in just now belongs at
+    // the top, not a week down — with the bill's own date as the other order.
+    return byDate
+      ? list.sort((a, b) => b.date - a.date || b.label.localeCompare(a.label))
+      : list.sort((a, b) => b.entered - a.entered || b.label.localeCompare(a.label))
+  }, [vouchers, finished, from, to, bills, onRetry, byDate])
 
   const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0)
 
@@ -3337,6 +3347,8 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   // rows underneath it.
   const days = useMemo(() => {
     const out: { date: number; rows: DayRow[]; total: number }[] = []
+    // In entry order the dates jump about, so there are no day lines to draw.
+    if (!byDate) return rows.length ? [{ date: 0, rows, total: 0 }] : out
     for (const r of rows) {
       const key = iso(new Date(r.date))
       const last = out[out.length - 1]
@@ -3345,7 +3357,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     }
     for (const d of out) d.total = d.rows.reduce((s, r) => s + (r.amount ?? 0), 0)
     return out
-  }, [rows])
+  }, [rows, byDate])
 
   const today = iso(new Date())
   const yesterday = iso(new Date(Date.now() - 864e5))
@@ -3399,6 +3411,13 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                 {c.label}
               </button>
             ))}
+            <button
+              className="btn ghost"
+              title={byDate ? 'Showing by bill date — switch to latest entered first' : 'Showing latest entered first — switch to bill date'}
+              onClick={() => setView(from, to, !byDate)}
+            >
+              {byDate ? 'By bill date' : 'Latest entered'}
+            </button>
           </div>
         </div>
 
@@ -3422,14 +3441,20 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                 <tbody>
                   {days.map((day) => (
                     <Fragment key={day.date}>
-                      <tr className="grouprow">
-                        <td colSpan={4}>{dayLabel(day.date)}</td>
-                        <td className="num">{rupees(day.total)}</td>
-                        <td colSpan={2} />
-                      </tr>
+                      {byDate && (
+                        <tr className="grouprow">
+                          <td colSpan={4}>{dayLabel(day.date)}</td>
+                          <td className="num">{rupees(day.total)}</td>
+                          <td colSpan={2} />
+                        </tr>
+                      )}
                       {day.rows.map((r) => (
                     <tr key={r.key} className={r.problem ? 'unposted' : r.amount === null ? 'unpriced' : undefined}>
-                      <td className="mono entryno" data-label="Vch">{r.label}</td>
+                      <td className="mono entryno" data-label="Vch">
+                        {r.label}
+                        {/* No day lines in entry order, so each row says its own date. */}
+                        {!byDate && <div className="ref">{iso(new Date(r.date)).split('-').reverse().join('/').replace(/\/(\d\d)(\d\d)$/, '/$2')}</div>}
+                      </td>
                       <td className="particulars" data-label="Party">
                         {/* The name is the account: it opens their ledger,
                             whether or not the voucher came from a bill. The
