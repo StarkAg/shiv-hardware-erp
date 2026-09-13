@@ -13,16 +13,35 @@ const CLOUD_DISCOVERY_TIMEOUT_MS = 1500    // never let a slow/unreachable cloud
 // Invalidated by fetchPrintServer() when a request to it actually fails.
 let cachedServerUrl: string | null = null
 
+// Hosts where "same host, port 3333" is a sensible print-server guess: the panel
+// and print server are co-located (shop LAN, or a Tailscale address/MagicDNS).
+// A public host like *.vercel.app is NOT — there the print server lives elsewhere,
+// so we must use a configured/saved URL (or cloud) instead of <that-host>:3333.
+function isDirectReachableHost(hostname: string): boolean {
+  return (
+    /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname) || // RFC1918 LAN
+    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname) ||     // Tailscale CGNAT 100.64/10
+    hostname.endsWith('.ts.net')                                      // Tailscale MagicDNS
+  )
+}
+
 function detectPrintServerUrl() {
   if (configuredPrintServer) return configuredPrintServer
   if (typeof window === 'undefined') return `http://localhost:${PRINT_SERVER_PORT}`
 
+  // A manually-saved URL (e.g. the Tailscale HTTPS address) is authoritative.
+  const saved = readSavedPrintServerUrl()
+  if (saved) return saved
+
   const { protocol, hostname } = window.location
   const isHttp = protocol === 'http:' || protocol === 'https:'
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1'
-  if (isHttp && hostname && !isLocalhost) return `${protocol}//${hostname}:${PRINT_SERVER_PORT}`
+  // Only guess <page-host>:3333 when the panel is served from a LAN/Tailscale host.
+  if (isHttp && hostname && !isLocalhost && isDirectReachableHost(hostname)) {
+    return `${protocol}//${hostname}:${PRINT_SERVER_PORT}`
+  }
 
-  return readSavedPrintServerUrl() ?? `http://localhost:${PRINT_SERVER_PORT}`
+  return `http://localhost:${PRINT_SERVER_PORT}`
 }
 
 export const PRINT_SERVER_URL = detectPrintServerUrl()
@@ -83,7 +102,10 @@ function candidatePrintServerUrls() {
     const { protocol, hostname } = window.location
     const isHttp = protocol === 'http:' || protocol === 'https:'
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1'
-    if (isHttp && hostname && !isLocalhost) urls.add(`${protocol}//${hostname}:${PRINT_SERVER_PORT}`)
+    // Only a LAN/Tailscale page-host is a real print-server candidate (not vercel.app).
+    if (isHttp && hostname && !isLocalhost && isDirectReachableHost(hostname)) {
+      urls.add(`${protocol}//${hostname}:${PRINT_SERVER_PORT}`)
+    }
   }
 
   urls.add(`http://localhost:${PRINT_SERVER_PORT}`)

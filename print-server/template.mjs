@@ -9,6 +9,16 @@ import QRCode from 'qrcode'
 const __dir = dirname(fileURLToPath(import.meta.url))
 const ASSETS = resolve(__dir, '../public/assets')
 
+// PVC ID-card geometry. The Epson L8050 clips a margin at the extreme card edge
+// — a frame printed at 0mm comes out crooked/partial — so the usable print area
+// is the card inset by CARD_SAFE_MM on every side. Card content anchors to that
+// print area, never to the raw card edge.
+export const CARD_W_MM = 54
+export const CARD_H_MM = 86
+export const CARD_SAFE_MM = 3
+export const CARD_PRINT_W_MM = CARD_W_MM - CARD_SAFE_MM * 2  // 48mm
+export const CARD_PRINT_H_MM = CARD_H_MM - CARD_SAFE_MM * 2  // 80mm
+
 // Inline SVG QR for the guarantee card's online view. Returns '' if there's no
 // URL to encode (so the layout simply omits the QR rather than breaking).
 async function qrSvg(value, sizeMm) {
@@ -160,8 +170,10 @@ function cardPage(body) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: 54mm 86mm; margin: 0; }
-  html, body { width: 54mm; height: 86mm; margin: 0; background: #fff; }
+  @page { size: ${CARD_W_MM}mm ${CARD_H_MM}mm; margin: 0; }
+  html, body { width: ${CARD_W_MM}mm; height: ${CARD_H_MM}mm; margin: 0; background: #fff; }
+  /* Printer-safe print area: the card inset by CARD_SAFE_MM on every side. */
+  :root { --card-safe: ${CARD_SAFE_MM}mm; }
   body { font-family: Arial, Helvetica, sans-serif; color: #000; overflow: hidden; }
 </style>
 </head><body>${body}</body></html>`
@@ -337,7 +349,7 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
       const rowSize = (item.height || item.width) ? cardSize(item.height, item.width) : docSizeStr
       const rowQty = item.qty ?? document.qty
       return `
-        <div style="position:absolute;left:3mm;right:3mm;top:${(20.5 + i * 3.2).toFixed(1)}mm;display:grid;grid-template-columns:5.5mm 1fr 11mm 5mm 4.5mm;column-gap:1.3mm;align-items:baseline;font-size:4pt;line-height:1">
+        <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;top:${(20.5 + i * 3.2).toFixed(1)}mm;display:grid;grid-template-columns:5.5mm 1fr 11mm 5mm 4.5mm;column-gap:1.3mm;align-items:baseline;font-size:4pt;line-height:1">
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rowThickness)}</span>
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.brandName)}</span>
           <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rowSize)}</span>
@@ -348,17 +360,17 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
 
     const cardQr = await qrSvg(document.qrUrl, 12)
     return cardPage(`
-        <div style="position:relative;width:54mm;height:86mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
-          <div style="position:absolute;left:3mm;top:4mm;right:3mm;font-size:7pt;font-weight:600;line-height:1.18">
+        <div style="position:relative;width:${CARD_W_MM}mm;height:${CARD_H_MM}mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
+          <div style="position:absolute;left:${CARD_SAFE_MM}mm;top:4mm;right:${CARD_SAFE_MM}mm;font-size:7pt;font-weight:600;line-height:1.18">
             <div style="white-space:nowrap;overflow:hidden">M/s ${esc(customer.name || '')}${customer.address ? `,${esc(customer.address)}` : ''}</div>
             <div>Mob - ${esc(customer.mobile || '')}</div>
             <div>UID - ${esc(customer.uid || 'N/A')}</div>
           </div>
-          <div style="position:absolute;right:3mm;top:13.9mm;font-size:7pt;font-weight:500">${cardDate}</div>
+          <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:13.9mm;font-size:7pt;font-weight:500">${cardDate}</div>
           ${itemRows}
           ${totalAmount ? `
-          <div style="position:absolute;right:3mm;top:76.8mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
-          ${cardQr ? `<div style="position:absolute;left:3mm;top:71mm">${cardQr}</div>` : ''}
+          <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:76.8mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
+          ${cardQr ? `<div style="position:absolute;left:${CARD_SAFE_MM}mm;top:71mm">${cardQr}</div>` : ''}
         </div>
       `)
   }

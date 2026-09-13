@@ -17,6 +17,7 @@ import {
 import { GuaranteeCardFace } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
 import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, printOnServer, type ServerPrintPayload } from '../../lib/printServer'
+import { createCloudPrintJob, CLOUD_API_URL } from '../../lib/cloudApi'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
 
@@ -324,22 +325,26 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     }
   }
 
-  // Print = save + WhatsApp the customer + send STRAIGHT to the printer (no preview).
+  // Print = save the card(s) + print + WhatsApp the customer. Tries the print
+  // server directly (shop network / same PC); if it can't be reached — e.g. the
+  // panel is opened from the public Vercel URL — it queues the job through the
+  // cloud API, which the shop print server polls, prints, AND WhatsApps from.
+  // (WhatsApp is sent server-side in BOTH paths, so no client-side send here.)
   async function printCard() {
     if (generating) return
     const minted = mintFreshRef()
     persistCards(minted)
-    // Save + WhatsApp (shows its own toast; opens the QR login if WhatsApp is down).
-    await notifyCustomers(minted)
+    setGenerating(true)
 
     const printDoc = buildGuaranteeDoc(minted)
+    const printDoc2 = secondCardOn ? buildSecondDoc(minted) : null
     const payload: ServerPrintPayload = layout === 'card'
       ? {
           kind: 'guarantee',
           document: printDoc,
           layout,
           slot: 1,
-          ...(secondCardOn ? { documents: [printDoc, buildSecondDoc(minted)] } : {}),
+          ...(printDoc2 ? { documents: [printDoc, printDoc2] } : {}),
         }
       : { kind: 'guarantee', document: printDoc, layout }
 
@@ -347,8 +352,22 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     try {
       const result = await printOnServer(payload)
       toast(`Sent ${minted.number} to ${result.printer}`)
-    } catch (err) {
-      toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    } catch (directErr) {
+      // Direct print server unreachable — fall back to the cloud relay.
+      if (!CLOUD_API_URL) {
+        toast(`Print failed: ${directErr instanceof Error ? directErr.message : String(directErr)}`, 'error')
+        setGenerating(false)
+        return
+      }
+      try {
+        await createCloudPrintJob({ kind: 'guarantee', document: printDoc, layout, source: 'web' })
+        if (printDoc2) await createCloudPrintJob({ kind: 'guarantee', document: printDoc2, layout, source: 'web' })
+        toast(`Queued ${minted.number} to the shop printer (via cloud)`)
+      } catch (cloudErr) {
+        toast(`Print failed: ${cloudErr instanceof Error ? cloudErr.message : String(cloudErr)}`, 'error')
+      }
+    } finally {
+      setGenerating(false)
     }
   }
 

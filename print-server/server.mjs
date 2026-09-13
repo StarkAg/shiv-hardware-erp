@@ -20,7 +20,10 @@ import { appendFile, writeFile, unlink, mkdir, rm } from 'fs/promises'
 import { networkInterfaces, tmpdir, homedir } from 'os'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
-import { buildGuaranteeHtml, buildQuotationHtml, buildBillHtml } from './template.mjs'
+import {
+  buildGuaranteeHtml, buildQuotationHtml, buildBillHtml,
+  CARD_W_MM, CARD_H_MM, CARD_SAFE_MM, CARD_PRINT_W_MM, CARD_PRINT_H_MM,
+} from './template.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
@@ -61,8 +64,11 @@ const EPSON_CARD_SLOT_LEFT_MM = Number(process.env.EPSON_CARD_SLOT_LEFT_MM ?? 13
 const EPSON_CARD_SLOT_TOP_MM = Number(process.env.EPSON_CARD_SLOT_TOP_MM ?? 25)
 const EPSON_CARD_SLOT2_LEFT_MM = Number(process.env.EPSON_CARD_SLOT2_LEFT_MM ?? 78)
 const EPSON_CARD_SLOT2_TOP_MM = Number(process.env.EPSON_CARD_SLOT2_TOP_MM ?? EPSON_CARD_SLOT_TOP_MM)
-const CARD_WIDTH_MM = 54
-const CARD_HEIGHT_MM = 86
+// Card geometry lives in template.mjs so the rendered HTML and the tray
+// placement below can never drift apart. CARD_PRINT_* is the printer-safe
+// area — the Epson clips the extreme card edge, so nothing is laid out there.
+const CARD_WIDTH_MM = CARD_W_MM
+const CARD_HEIGHT_MM = CARD_H_MM
 const CHROME_PATH = findChromePath()
 const JSON_MAX_TOKENS = 2048
 const HONORIFICS = new Set(['jee', 'ji', 'sir', 'madam'])
@@ -262,6 +268,21 @@ function buildMobileGuaranteePageHtml(document) {
 
 const app = express()
 app.set('trust proxy', true)
+// Chrome's Private Network Access blocks a public-origin page (e.g. the Vercel
+// panel) from calling this local/private server unless the preflight response
+// grants it. This header + open CORS lets the deployed panel reach the print
+// server on the same PC (localhost) or LAN.
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Private-Network', 'true')
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || 'Content-Type')
+    res.setHeader('Access-Control-Max-Age', '86400')
+    return res.sendStatus(204)
+  }
+  next()
+})
 app.use(cors())
 app.use(express.json({ limit: process.env.PRINT_UPLOAD_LIMIT || '100mb' }))
 
@@ -2872,6 +2893,7 @@ app.get('/status', (req, res) => res.json({
   guaranteeQrBase: GUARANTEE_PUBLIC_URL || null,
   guaranteeQrSample: guaranteeCardUrl('GC-YYYY-XXXX', req),
 }))
+
 // GET /sync  — SSE stream; clients reconnect automatically on disconnect
 app.get('/sync', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream')
