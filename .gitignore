@@ -26,3 +26,6 @@ android/*.iml
 # Local development TLS private key
 certs/dev-key.pem
 .vercel/
+
+# One-off scripts written to read production while chasing a bug.
+.probe/

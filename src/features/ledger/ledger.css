@@ -410,6 +410,15 @@
 .ledger-root .chip.on{background: var(--brass); border-color: var(--brass); color: var(--brass-ink);}
 .ledger-root .fixedfield{padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px;
   background: var(--card2); color: var(--fg); font-size: 15px; font-weight: 700;}
+/* The date is a button now - it opens its own step - so it has to read as the
+   field it replaced, and show where the cursor is when Enter reaches it. */
+.ledger-root button.fixedfield{width: 100%; text-align: left; cursor: pointer;}
+.ledger-root button.fixedfield:hover{border-color: var(--brass);}
+.ledger-root button.fixedfield:focus-visible{outline: 2px solid var(--brass); outline-offset: 1px;}
+/* Under the day book's Recent order a row sits beneath the day it was entered,
+   so it says which day it is actually dated for. */
+.ledger-root .entryno .datedfor{display: block; margin-top: 2px; font-size: 11px;
+  font-weight: 600; color: var(--muted); letter-spacing: 0;}
 .ledger-root .link.plain{text-decoration: none; color: var(--fg);}
 .ledger-root .link.plain:hover{color: var(--brass);}
 .ledger-root .alertmark{width: 13px; height: 13px; color: var(--red);

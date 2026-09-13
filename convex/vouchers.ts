@@ -395,6 +395,23 @@ export const edit = mutation({
     const sides = SIDES[type?.name ?? ""];
     if (!sides) throw new Error(`Cannot edit a ${type?.name ?? "unknown"} voucher`);
 
+    /**
+     * This form writes exactly two lines, so it must not be handed a voucher
+     * that has more than two. A sale that took part of its money at the
+     * counter carries three — the customer, the drawer and Sales — and
+     * rewriting it as a pair would move the cash silently back onto the
+     * customer and out of the drawer, still balanced, still wrong.
+     */
+    const existingLines = await ctx.db
+      .query("voucherEntries")
+      .withIndex("by_voucher", (q) => q.eq("voucherId", args.id))
+      .collect();
+    if (existingLines.length > 2) {
+      throw new Error(
+        "This voucher has more than two lines — open the bill it came from and edit it there."
+      );
+    }
+
     const pending = args.amount === undefined || args.amount === null;
     if (pending && type?.name !== "Purchase" && type?.name !== "Sale") {
       throw new Error(`A ${type?.name?.toLowerCase()} needs an amount`);
@@ -678,6 +695,13 @@ export const retype = mutation({
       accountLedgerId ??
       existing.find((l) => l.ledgerId !== voucher.partyLedgerId)?.ledgerId;
     if (!contra) throw new Error("Nothing to post the other side against");
+    // Same reason as `edit`: retyping rewrites the voucher as a pair, and a
+    // voucher that carries a counter payment is three lines, not two.
+    if (existing.length > 2) {
+      throw new Error(
+        "This voucher has more than two lines — open the bill it came from and change it there."
+      );
+    }
 
     await clearLines(ctx, id);
     if (voucher.status === "final" && voucher.amount) {

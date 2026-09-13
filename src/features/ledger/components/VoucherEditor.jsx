@@ -21,10 +21,22 @@ export default function VoucherEditor({ id, onClose }) {
   const bills = useStore((st) => st.bills);
   const detail = useLive(api.vouchers.detail, { id }, `voucher:${id}`);
 
+  /**
+   * Which bill this voucher belongs to, if any.
+   *
+   * The bill names its voucher outright, so that is the test. Matching on the
+   * `BILL-n` reference alone was enough until a bill could carry a reference
+   * of its own — a voucher referenced "07" looked like nobody's, opened as a
+   * plain voucher, and saving it would have rewritten the bill's own voucher
+   * without the bill: the part payment flattened back onto the customer and
+   * the bill left pointing at lines it no longer matches.
+   */
   const ref = detail?.refNo || '';
-  const fromBill = ref.startsWith('BILL-')
-    ? bills.find((b) => String(b.number) === ref.slice('BILL-'.length))
-    : null;
+  const fromBill =
+    bills.find((b) => String(b.voucherId ?? '') === String(id))
+    ?? (ref.startsWith('BILL-')
+      ? bills.find((b) => String(b.number) === ref.slice('BILL-'.length))
+      : null);
 
   useEffect(() => {
     if (!detail) return;

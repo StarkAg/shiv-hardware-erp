@@ -212,6 +212,28 @@ export const removeLedger = mutation({
       throw new ConvexError("This account has vouchers against it — it cannot be deleted.");
     }
 
+    /**
+     * The trash counts as well.
+     *
+     * A deleted voucher keeps the account it was posted against, and its lines
+     * keep theirs, so that a restore puts the balances back exactly. Checking
+     * only the live books let an account be deleted while its voucher sat in
+     * the bin — and restoring it afterwards wrote lines against an account
+     * that no longer existed: money in the trial balance belonging to nobody,
+     * in a party statement that could never be opened.
+     */
+    const binned = (await ctx.db.query("trash").collect()).some(
+      (row) => row.partyLedgerId === id || row.entries.some((e) => e.ledgerId === id)
+    );
+    const binnedBill = (await ctx.db.query("billsTrash").collect()).some(
+      (row) => row.bill?.ledgerId === id
+    );
+    if (binned || binnedBill) {
+      throw new ConvexError(
+        "This account has something in the trash — empty it for good first, or restore it and post it elsewhere."
+      );
+    }
+
     const ledger = await ctx.db.get(id);
     await ctx.db.delete(id);
     await record(ctx, "ledger.remove", `Removed empty ledger ${ledger?.name ?? ""}`, {
