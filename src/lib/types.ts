@@ -295,6 +295,14 @@ export interface BillItem {
   widthIn?: number
   /** Rate per sqft (₹) — drives amount = rateSqft × (H×W/144) × qty */
   rateSqft?: number
+  /**
+   * For a sheet named with its thickness and size ("19mm Solid 8 X 4",
+   * "30mm S 81 X 38"): the area of one piece in square feet, read from the
+   * name. Kept on the line so the square-foot rate is on record with the bill.
+   */
+  sqft?: number
+  /** That sheet's price per square foot — amount ÷ qty ÷ sqft. */
+  sqftRate?: number
   /** ID of a CustomCatalogEntry that this item was picked from */
   customEntryId?: string
 }

@@ -54,6 +54,7 @@ import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import { rupees } from '../ledger/lib/format'
 import { TableSkeleton } from '../ledger/components/Skeleton'
 import { billSqft, isFootSized } from '../../lib/pricing'
+import { readBoardSize, sizeLabel, sqftFields, withSqft } from '../../lib/boardSize'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
@@ -736,6 +737,29 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   // picking "Fare" out of the item list must not bring qty, unit and rate back.
   const amountOnly = isRoundupLine(item) || isAmountOnlyLine(item)
 
+  // A sheet named with its thickness and size gets its square-foot rate shown
+  // under the line. Typing into it prices the line; otherwise it follows the
+  // amount. While the field has focus it holds what is being typed, because
+  // the amount rounds to a rupee and reading back through it would move the
+  // figure under the cursor.
+  const sheet = useMemo(() => (amountOnly ? null : readBoardSize(item.description)), [item.description, amountOnly])
+  const [sqftTyping, setSqftTyping] = useState<string | null>(null)
+  const sqftRate = sqftFields(item).sqftRate
+
+  function handleSqftRate(text: string) {
+    setSqftTyping(text)
+    if (!sheet) return
+    const rate = Number(text)
+    const qty = item.qty || 1
+    const amount = rate > 0 ? Math.round(rate * sheet.exactSqft * qty) : 0
+    onUpdate(item.id, {
+      amount,
+      // Lines that carry a rate keep it as the price of one piece, as typing
+      // the amount does.
+      ...(isCustomEntry || isHardware ? { rateSqft: amount ? Math.round((amount / qty) * 100) / 100 : undefined } : {}),
+    })
+  }
+
   return (
     <div className="bg-white px-2 py-1.5 dark:bg-stone-900">
       <div className="flex items-start gap-2">
@@ -1360,6 +1384,34 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
               )}
           </div>
 
+          {sheet && !!item.description.trim() && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+              <span className="font-semibold tabular-nums">
+                {sheet.thicknessMm}mm · {sizeLabel(sheet)} · {sheet.sqft} sqft
+              </span>
+              <div className="relative w-28 shrink-0">
+                <IndianRupee size={10} className="absolute left-1.5 top-2 text-muted" />
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  aria-label="Rate per sqft"
+                  value={sqftTyping ?? (sqftRate ?? '')}
+                  onFocus={(e) => { setSqftTyping(sqftRate ? String(sqftRate) : ''); e.target.select() }}
+                  onBlur={() => {
+                    setSqftTyping(null)
+                    if (isCustomEntry && item.customEntryId && item.amount && item.qty) {
+                      saveCustomEntryRate(item.customEntryId, Math.round((item.amount / item.qty) * 100) / 100)
+                    }
+                  }}
+                  onChange={(e) => handleSqftRate(e.target.value)}
+                  className="w-full rounded-md border border-stone-200 bg-stone-50 py-1 pl-5 pr-10 text-xs font-semibold tabular-nums dark:border-white/10 dark:bg-stone-800 dark:text-white"
+                />
+                <span className="pointer-events-none absolute right-2 top-1.5 text-[10px] font-semibold text-muted">/sqft</span>
+              </div>
+            </div>
+          )}
 
           {/* Hardware row 2: quick qty chips + qty · unit · rate → computed amount */}
           {isHardware && (
@@ -2292,7 +2344,9 @@ export function BillBuilder() {
   }
 
 function updateItem(itemId: string, patch: Partial<BillItem>) {
-    setDraft((d) => ({ ...d, items: d.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)) }))
+    // Every edit to a line passes here, so a sheet's square-foot rate is
+    // re-read from its name, qty and amount whichever of them just changed.
+    setDraft((d) => ({ ...d, items: d.items.map((i) => (i.id === itemId ? withSqft({ ...i, ...patch }) : i)) }))
   }
 
   function addItem() {
@@ -2433,7 +2487,9 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // the day book, once as the voucher and once as a bill of the same thing.
     // The `vch-` id is the test, not the voucherId: every posted bill has one.
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
-    return postStored({ ...draft, total, attachments }, !borrowed)
+    // Stamped once more on the way out, for lines of an older bill that were
+    // saved before sheets carried a square-foot rate and not touched since.
+    return postStored({ ...draft, items: draft.items.map(withSqft), total, attachments }, !borrowed)
   }
 
   async function save() {
