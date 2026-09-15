@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Paperclip, Pencil, ReceiptText, X } from 'lucide-react'
+import { ChevronLeft, Paperclip, Pencil, ReceiptText, Trash2, X } from 'lucide-react'
 import { useStore } from '../../../lib/store'
 import VoucherBillPreview from './VoucherBillPreview'
 import { api } from '../../../../convex/_generated/api';
@@ -39,6 +39,12 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const [deleting, setDeleting] = useState(null);
   const [editParty, setEditParty] = useState(false);
   const removeVoucher = useMutation(api.vouchers.remove);
+  // Deleting the account itself, from its own page — the same rule as Account
+  // Masters: only an empty account, behind the shop's code, and the bin's hold
+  // on it asked about separately.
+  const removeLedger = useMutation(api.masters.removeLedger);
+  const [deletingParty, setDeletingParty] = useState(false);
+  const [purgingParty, setPurgingParty] = useState(null);
   const data = useLive(api.reports.ledger, { ledgerId }, `ledger:${ledgerId}`);
   const papers = useLive(api.review.papersFor, { ledgerId }, `papers:${ledgerId}`) ?? [];
 
@@ -146,9 +152,65 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
             >
               Print
             </button>
+            {rows.length || pending.length ? (
+              <span
+                className="btn ghost muted"
+                title={`${rows.length + pending.length} vouchers are posted to this account — it cannot be deleted`}
+                aria-disabled="true"
+              >
+                <Trash2 size={14} aria-hidden="true" />
+              </span>
+            ) : (
+              <button className="btn ghost del" onClick={() => setDeletingParty(true)} aria-label="Delete account">
+                <Trash2 size={14} aria-hidden="true" /> Delete
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {deletingParty && account && (
+        <Confirm
+          title={`Delete ${account.name}?`}
+          body="An account with any voucher against it cannot be deleted — only an empty one."
+          confirmLabel="Delete"
+          danger
+          ask={{ label: 'Code', secret: true }}
+          onConfirm={async (pin) => {
+            try {
+              await removeLedger({ id: ledgerId, pin, purgeTrash: false });
+              onBack();
+            } catch (err) {
+              // The bin is the one refusal with a way through: offered, not reported.
+              if (err?.data?.kind === 'trash') return setPurgingParty(err.data);
+              throw new Error(String(err?.data ?? err?.message ?? err));
+            }
+          }}
+          onClose={() => setDeletingParty(false)}
+        />
+      )}
+
+      {purgingParty && account && (
+        <Confirm
+          title={`Delete ${account.name} and what the bin holds against it?`}
+          body={`Nothing is posted to this account in the books, but the bin still holds ${[
+            purgingParty.vouchers && `${purgingParty.vouchers} deleted voucher${purgingParty.vouchers === 1 ? '' : 's'}`,
+            purgingParty.bills && `${purgingParty.bills} deleted bill${purgingParty.bills === 1 ? '' : 's'}`,
+          ].filter(Boolean).join(' and ')} against it. They go for good — photographs included — and cannot be restored afterwards.`}
+          confirmLabel="Delete for good"
+          danger
+          ask={{ label: 'Code', secret: true }}
+          onConfirm={async (pin) => {
+            try {
+              await removeLedger({ id: ledgerId, pin, purgeTrash: true });
+              onBack();
+            } catch (err) {
+              throw new Error(String(err?.data ?? err?.message ?? err));
+            }
+          }}
+          onClose={() => setPurgingParty(null)}
+        />
+      )}
 
       <div className="toolbar">
         <div className="count">
