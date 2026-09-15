@@ -104,6 +104,37 @@ describe('posting a bill', () => {
     expect((await stored(t))[0]).toMatchObject({ id: 'bill-a', voucherId: pending.voucherId, total: 0 })
   })
 
+  it('files a bill with a goods line still at zero as pending, even with a total', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, {
+      bill: aBill({
+        total: 100,
+        items: [
+          { id: 'i1', description: 'Mica HR 8224 SF', qty: 11, unit: 'Pc', amount: 0 },
+          { id: 'i2', description: 'Fare', qty: 1, unit: 'Pc', amount: 100 },
+        ],
+      }),
+    })
+    expect((await vouchers(t))[0]).toMatchObject({ status: 'pending' })
+  })
+
+  it('posts a priced bill as final when a discount line is negative', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, {
+      bill: aBill({
+        total: 4250,
+        items: [
+          { id: 'i1', description: '4284 NGN', qty: 3, unit: 'Pc', amount: 2700, rateSqft: 900 },
+          { id: 'i2', description: '240 HDG', qty: 1, unit: 'Pc', amount: 900, rateSqft: 900 },
+          { id: 'i3', description: '111 HDG', qty: 1, unit: 'Pc', amount: 900, rateSqft: 900 },
+          // Picked from My Items, so no isDiscount or isRoundup flag.
+          { id: 'i4', description: 'Discount', qty: 1, unit: 'Pc', amount: -250, rateSqft: -250 },
+        ],
+      }),
+    })
+    expect((await vouchers(t))[0]).toMatchObject({ status: 'final', amount: 4250 })
+  })
+
   it('retries onto the same voucher instead of posting a second one', async () => {
     const t = await shop()
     const first = await t.mutation(api.billLedger.postBill, { bill: aBill() })
