@@ -1,6 +1,6 @@
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'convex/react'
-import { CreditCard, IndianRupee, Package, ReceiptText, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CreditCard, IndianRupee, Package, ReceiptText, type LucideIcon } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import { convexEnabled } from '../../lib/convexSync'
 import { rupees } from '../ledger/lib/format'
@@ -13,8 +13,11 @@ import { PageHeader } from '../../components/ui'
  * kind of entry: purchases, payments to suppliers, receipts from customers,
  * and goods sent out. A new hand already knows that sheet. So this is the
  * sheet — ruled, folded, the same four quarters in the same places — and a
- * tap on a quarter opens that voucher. What was entered today is written on
- * its lines, so the paper also shows where each kind of entry went.
+ * tap on a quarter opens that voucher. What was entered on the day is written
+ * on its lines, so the paper also shows where each kind of entry went.
+ *
+ * The arrows turn to the day before or after, the way the pile of old sheets
+ * is leafed through. The day is kept in the address, so a reload stays on it.
  */
 
 type Kind = 'purchase' | 'payment' | 'receipt' | 'sale'
@@ -48,11 +51,21 @@ const RULED: React.CSSProperties = {
 
 type Line = { key: string; party: string; amount: number | null }
 
-const startOfToday = () => {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+/** A calendar day as the shop's clock has it, "2026-09-15". */
+const isoDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** Midnight at the start of that day, local time. */
+const startOf = (day: string) => Date.parse(`${day}T00:00:00`)
+
+/** The day `by` days from `day`. */
+const shift = (day: string, by: number) => {
+  const d = new Date(startOf(day))
+  d.setDate(d.getDate() + by)
+  return isoDay(d)
 }
+
+const validDay = (day: string | null) => !!day && /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(startOf(day))
 
 function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
   const q = QUARTERS[index]
@@ -95,10 +108,10 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
   )
 }
 
-/** Today's vouchers, sorted onto their quarters in the order they were entered. */
-function TodaysPaper() {
-  const today = startOfToday()
-  const vouchers = useQuery(api.reports.dayBook, { from: today, to: today + 86_399_999 })
+/** One day's vouchers, sorted onto their quarters in the order they were entered. */
+function PaperFor({ day }: { day: string }) {
+  const from = startOf(day)
+  const vouchers = useQuery(api.reports.dayBook, { from, to: from + 86_399_999 })
 
   const byType = new Map<string, Line[]>()
   for (const v of [...(vouchers ?? [])].sort((a, b) => (a.createdAt ?? a.date) - (b.createdAt ?? b.date))) {
@@ -120,14 +133,54 @@ function Sheet({ lines }: { lines: (index: number) => Line[] | undefined }) {
   )
 }
 
+const ARROW =
+  'flex h-9 w-9 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700'
+
 export function DayPaper() {
-  const date = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })
+  const [params, setParams] = useSearchParams()
+  const today = isoDay(new Date())
+  const asked = params.get('date')
+  // A day later than today has no paper yet, and a mistyped one is today's.
+  const day = validDay(asked) && asked! <= today ? asked! : today
+  const onToday = day === today
+
+  const go = (next: string) => {
+    if (next > today) return
+    setParams(next === today ? {} : { date: next }, { replace: true })
+  }
+
+  const label = new Date(startOf(day)).toLocaleDateString('en-GB', {
+    weekday: 'long', day: '2-digit', month: 'short', year: 'numeric',
+  })
+
   return (
     <div>
-      <PageHeader title="Day Paper" subtitle={date} />
+      <PageHeader
+        title="Day Paper"
+        subtitle={onToday ? `Today · ${label}` : label}
+        actions={
+          <div className="flex items-center gap-2">
+            <button type="button" className={ARROW} onClick={() => go(shift(day, -1))} aria-label="Previous day" title="Previous day">
+              <ChevronLeft size={18} aria-hidden="true" />
+            </button>
+            {!onToday && (
+              <button
+                type="button"
+                className="h-9 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 hover:bg-stone-100 dark:border-white/15 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
+                onClick={() => go(today)}
+              >
+                Today
+              </button>
+            )}
+            <button type="button" className={ARROW} onClick={() => go(shift(day, 1))} disabled={onToday} aria-label="Next day" title="Next day">
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+          </div>
+        }
+      />
       <div className="p-3 md:p-6">
         {/* The offline build has no deployment to ask, so it gets the blank sheet. */}
-        {convexEnabled() ? <TodaysPaper /> : <Sheet lines={() => undefined} />}
+        {convexEnabled() ? <PaperFor day={day} /> : <Sheet lines={() => undefined} />}
       </div>
     </div>
   )
