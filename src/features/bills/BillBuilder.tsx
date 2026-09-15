@@ -1906,6 +1906,9 @@ function BillPreview({ bill }: { bill: Bill }) {
   )
 }
 
+/** Bills whose posting is still on its way to the server, by id. */
+const postingBills = new Set<string>()
+
 // ---- Bill list card -------------------------------------------------------
 export function BillBuilder() {
   const { id, voucherId } = useParams<{ id?: string; voucherId?: string }>()
@@ -2506,26 +2509,35 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
 
   async function save() {
     if (readOnly) { toast(`This bill is open on ${lockedBy}.`, 'error'); return }
+    // A second Accept while this bill is still posting would post it twice:
+    // the first call has not handed back a voucher to rewrite yet.
+    if (postingBills.has(draft.id)) return
     committedRef.current = true
 
-    const done = await postDraft()
-    // Stay on the bill when the books refused it. Walking away to a screen
-    // that looks like success is exactly what made the books drift.
-    if (!done) return
-
-    setView('list')
     /**
-     * Straight to the party's own account, which is what you want to see next:
-     * the voucher just written, and what they stand at now that it is in. The
-     * side follows the voucher — a purchase lands on the supplier's account,
-     * a sale on the customer's — and a bill the books never gave an account to
-     * falls back to the day book.
+     * Instant: the counter moves on the moment the bill is accepted, and the
+     * books catch up behind it.
+     *
+     * Waiting for the server cost half a second or more on every bill. The
+     * reason to wait was that walking away from a refused bill hid the
+     * refusal — so a refusal is not hidden: postStored keeps the bill on this
+     * PC marked unposted, says so in red, and the day book offers Retry.
      */
     const partyTab = partyGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
-    navigate(
-      done.ledgerId ? `/ledger/${partyTab}/${done.ledgerId}` : '/day',
-      { replace: true },
-    )
+    const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
+    if (!borrowed) saveBill({ ...draft, items: draft.items.map(withSqft), total })
+    setView('list')
+    // The party's own account when the bill already names one; a party
+    // opened by this bill has no account until the server answers, so the
+    // day book.
+    navigate(draft.ledgerId ? `/ledger/${partyTab}/${draft.ledgerId}` : '/day', { replace: true })
+
+    postingBills.add(draft.id)
+    try {
+      await postDraft()
+    } finally {
+      postingBills.delete(draft.id)
+    }
   }
 
   function cancel() {
