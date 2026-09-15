@@ -3,6 +3,7 @@ import { api } from '../../../convex/_generated/api';
 import { useLive } from './lib/cache';
 import { useShortcuts } from '../../lib/useShortcuts';
 import Parties from './components/Parties';
+import AllParties from './components/AllParties';
 import LedgerView from './components/LedgerView';
 import Bills, { needsYou } from './components/Bills';
 import TrialBalance from './components/TrialBalance';
@@ -15,6 +16,9 @@ import PrintPacket from './components/PrintPacket';
 import { History as HistoryIcon } from 'lucide-react'
 
 const TABS = [
+  // Customers and suppliers in one list, and where Party Accounts opens: most
+  // days the question is a name, not which side of the books it sits on.
+  ['all', 'All Parties'],
   ['suppliers', 'Suppliers'],
   ['customers', 'Customers'],
   ['bills', 'Bills'],
@@ -73,7 +77,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
   // it says, so every tab and every account is somewhere you can link to.
   const initialTab = route?.tab && TABS.some(([id]) => id === route.tab)
     ? route.tab
-    : (TABS.some(([id]) => id === landed) ? landed : 'suppliers');
+    : (TABS.some(([id]) => id === landed) ? landed : 'all');
   const [tab, setTab] = useState(initialTab);
   const [billStage] = useState(() => MOVED[intent.tab] ?? null);
   const [partyId, setPartyId] = useState(route?.partyId ?? null);
@@ -171,9 +175,13 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
     r: open('receipt'),
   });
 
+  // Opened from All Parties, an account stays under All Parties, so Back
+  // returns to the combined list rather than to one side of it.
   const openParty = (id) => {
     setPartyId(id);
-    setTab(groupOf(id) === 'Sundry Debtors' ? 'customers' : 'suppliers');
+    setTab((current) =>
+      current === 'all' ? 'all' : groupOf(id) === 'Sundry Debtors' ? 'customers' : 'suppliers'
+    );
   };
 
   if (printing) {
@@ -185,6 +193,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
       ledgerId={partyId}
       masters={masters}
       onBack={() => setPartyId(null)}
+      backLabel={tab === 'all' ? 'All parties' : undefined}
       onViewBill={setViewing}
       onPrint={(payload) => setPrinting(payload)}
       onAddVoucher={addVoucher}
@@ -224,6 +233,13 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
           </button>
         ))}
       </nav>
+
+      {tab === 'all' &&
+        (partyId ? (
+          ledgerPane
+        ) : (
+          <AllParties onOpen={openParty} onPrint={() => setPrinting({ scope: 'all' })} />
+        ))}
 
       {tab === 'suppliers' &&
         (partyId ? (

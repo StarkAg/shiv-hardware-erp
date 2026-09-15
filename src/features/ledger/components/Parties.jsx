@@ -20,9 +20,18 @@ import { AlertTriangle } from 'lucide-react'
  * read in opposite directions, so they are the same screen: only which side of
  * the account counts as movement in, and what the total is called, differ.
  */
-export default function Parties({
-  fnRef,
-  cacheKey,
+export default function Parties({ fnRef, cacheKey, ...rest }) {
+  const data = useLive(fnRef, {}, cacheKey);
+  return <PartiesView data={data} {...rest} />;
+}
+
+/**
+ * The party list itself, handed its rows. All Parties builds its rows from
+ * both reports and shows them here, so the two sides and the combined list are
+ * one screen with one set of habits — search, colours, print.
+ */
+export function PartiesView({
+  data,
   totalLabel,
   nameLabel,
   movement,
@@ -30,10 +39,11 @@ export default function Parties({
   onPrint,
   // Owing a supplier is the normal state of a trade account, not something to
   // flag — so the mark is only worth showing where a balance means someone
-  // has not paid the shop.
+  // has not paid the shop. A function decides row by row, for a mixed list.
   showUnsettled = true,
+  // Summary cards to show instead of the total and movement cards.
+  cards,
 }) {
-  const data = useLive(fnRef, {}, cacheKey);
   // Which colours the list is narrowed to. Nothing picked shows everyone.
   const [onlyTags, setOnlyTags] = React.useState([]);
   // Thirty-seven accounts is already too many to run an eye down, and the shop
@@ -57,7 +67,7 @@ export default function Parties({
     if (onlyTags.length && !(r.ledger.tags ?? []).some((t) => onlyTags.includes(t))) return false;
     if (!needle) return true;
     const l = r.ledger;
-    return [l.name, l.place, l.phone, l.gstin]
+    return [l.name, l.place, l.phone, l.gstin, r.kind]
       .some((field) => String(field ?? '').toLowerCase().includes(needle));
   });
   // Only offer colours that are actually in use, so the row is never a
@@ -70,18 +80,30 @@ export default function Parties({
   return (
     <>
       <div className="summary">
-        <div className="card total">
-          <div className="card-name">{totalLabel}</div>
-          <div className="card-amt">{rupees(totals.closing)}</div>
-          <div className="card-meta">{rows.length} ledgers</div>
-        </div>
-        {movement.map((col) => (
-          <div className="card" key={col.label}>
-            <div className="card-name">{col.label}</div>
-            <div className="card-amt">{rupees(totals[col.key])}</div>
-            <div className="card-meta">to date</div>
-          </div>
-        ))}
+        {cards ? (
+          cards.map((card, i) => (
+            <div className={`card${i === 0 ? ' total' : ''}`} key={card.name}>
+              <div className="card-name">{card.name}</div>
+              <div className="card-amt">{card.amount}</div>
+              <div className="card-meta">{card.meta}</div>
+            </div>
+          ))
+        ) : (
+          <>
+            <div className="card total">
+              <div className="card-name">{totalLabel}</div>
+              <div className="card-amt">{rupees(totals.closing)}</div>
+              <div className="card-meta">{rows.length} ledgers</div>
+            </div>
+            {movement.map((col) => (
+              <div className="card" key={col.label}>
+                <div className="card-name">{col.label}</div>
+                <div className="card-amt">{rupees(totals[col.key])}</div>
+                <div className="card-meta">to date</div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
       <div className="toolbar">
@@ -163,17 +185,20 @@ export default function Parties({
                               a number, which beats a dash. Tapping it calls
                               rather than opening the ledger underneath. */}
                           {r.ledger.place ? (
-                            <div className="ref">{r.ledger.place}</div>
+                            <div className="ref">{r.kind && `${r.kind} · `}{r.ledger.place}</div>
                           ) : r.ledger.phone ? (
-                            <a
-                              className="ref phone"
-                              href={phoneHref(r.ledger.phone)}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {phoneDisplay(r.ledger.phone)}
-                            </a>
+                            <div className="ref">
+                              {r.kind && `${r.kind} · `}
+                              <a
+                                className="ref phone"
+                                href={phoneHref(r.ledger.phone)}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {phoneDisplay(r.ledger.phone)}
+                              </a>
+                            </div>
                           ) : (
-                            <div className="ref">—</div>
+                            <div className="ref">{r.kind ?? '—'}</div>
                           )}
                         </div>
                         {r.pendingCount > 0 && (
@@ -190,7 +215,8 @@ export default function Parties({
                       </td>
                     ))}
                     <td className="num bal" data-label="Closing">
-                      {showUnsettled && (r.closing > 0.005 || r.pendingCount > 0) && (
+                      {(typeof showUnsettled === 'function' ? showUnsettled(r) : showUnsettled) &&
+                        (r.closing > 0.005 || r.pendingCount > 0) && (
                         <Unsettled />
                       )}
                       {rupees(r.closing)} <span className="side">{r.closingSide}</span>

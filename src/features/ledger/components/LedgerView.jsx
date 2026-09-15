@@ -16,7 +16,7 @@ import LedgerForm from './LedgerForm';
 import TagDots from './TagDots';
 
 /** One supplier's account, laid out the way their own statement is. */
-export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPrint, onAddVoucher }) {
+export default function LedgerView({ ledgerId, masters, onBack, backLabel, onViewBill, onPrint, onAddVoucher }) {
   /**
    * The shop's own bills, so a line in the ledger can show the bill it posted.
    * A voucher and its bill find each other by `BILL-n`, which is the reference
@@ -98,7 +98,7 @@ export default function LedgerView({ ledgerId, masters, onBack, onViewBill, onPr
         <div className="partyhead-main">
           <button className="backbtn" onClick={onBack}>
             <BackIcon />
-            {isCustomer ? 'All customers' : 'All suppliers'}
+            {backLabel ?? (isCustomer ? 'All customers' : 'All suppliers')}
           </button>
           <div className="partyname">
             <h1>{account?.name ?? ''}</h1>
