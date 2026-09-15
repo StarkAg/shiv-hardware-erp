@@ -55,6 +55,7 @@ import { rupees } from '../ledger/lib/format'
 import { TableSkeleton } from '../ledger/components/Skeleton'
 import { billSqft, isFootSized } from '../../lib/pricing'
 import { readBoardSize, sizeLabel, sqftFields, withSqft } from '../../lib/boardSize'
+import { keepTyped } from '../../lib/linePick'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
@@ -456,7 +457,8 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       sizeIn: undefined,
       qty: 1,
       rateSqft: undefined,
-      amount: 0,
+      // An amount already typed stays; a charge is still that figure.
+      amount: item.amount || 0,
     })
     setSearch(label)
     setShowDrop(false)
@@ -566,10 +568,11 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
         fieldValues: defaultFieldValues,
         heightIn: undefined,
         widthIn: undefined,
-        rateSqft: savedRate || undefined,
-        amount: savedRate ? Math.round(savedRate * 1) : 0,
+        ...keepTyped(item, {
+          rate: savedRate,
+          unit: hardwareCatalog[opt.category]?.unit ?? HARDWARE_DEFAULT_UNIT[opt.category] ?? 'Pc',
+        }),
         description: [opt.label, defaultSize, defaultBrand, fieldStr].filter(Boolean).join(' '),
-        unit: hardwareCatalog[opt.category]?.unit ?? HARDWARE_DEFAULT_UNIT[opt.category] ?? 'Pc',
       })
       return
     }
@@ -642,19 +645,6 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     onUpdate(item.id, { brandName, description: hwDescription({ brandName }) })
   }
 
-  function clearCategory() {
-    setSearch('')
-    onUpdate(item.id, {
-      category: undefined,
-      customEntryId: undefined,
-      brandName: undefined,
-      sizeIn: undefined,
-      heightIn: undefined,
-      widthIn: undefined,
-      rateSqft: undefined,
-      description: '',
-    })
-  }
 
   // ── Custom entry helpers ─────────────────────────────────────────────────
   function selectCustomEntry(entry: { id: string; name: string; sizes: string[]; brands: string[]; rate?: number; unit?: string }) {
@@ -683,11 +673,11 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       brandName: entry.brands[0] ?? undefined,
       // Re-picking the item this line already holds must not disturb what's on
       // it — passing back through the field is navigation, not a fresh choice.
-      rateSqft:  same ? item.rateSqft : (entry.rate ?? undefined),
-      amount:    same ? item.amount : (entry.rate ? Math.round(entry.rate * item.qty) : 0),
+      // What is typed on the line wins; the item's remembered rate and unit
+      // only fill a line that has none yet. See keepTyped.
+      ...(same ? {} : keepTyped(item, { rate: entry.rate, unit: entry.unit })),
       heightIn:  undefined,
       widthIn:   undefined,
-      unit: same ? item.unit : (entry.unit || 'Pc'),
     })
   }
 
@@ -821,7 +811,9 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                     requestAnimationFrame(() => el.setSelectionRange(v.length, v.length))
                   }
                   if (isCatalog) {
-                    // Typing over a committed selection → drop it, start fresh.
+                    // Editing a picked name is editing text: the line lets go
+                    // of the catalogue item but keeps its qty, unit, rate and
+                    // amount — renaming "1" Baffer" must not unprice it.
                     onUpdate(item.id, {
                       category: undefined,
                       customEntryId: undefined,
@@ -829,7 +821,6 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                       sizeIn: undefined,
                       heightIn: undefined,
                       widthIn: undefined,
-                      rateSqft: undefined,
                       description: v,
                     })
                   } else {
@@ -844,14 +835,6 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                 data-bill-col="desc"
                 onKeyDown={(e) => {
                   if (addingNew) return
-                  if (e.key === 'Backspace' && isCatalog) {
-                    // A committed pick is one value, not text — clear it whole
-                    // rather than nibbling characters off the end.
-                    e.preventDefault()
-                    clearCategory()
-                    setShowDrop(true)
-                    return
-                  }
                   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                     // Dropdown closed → the arrows belong to the bill, not the list.
                     if (!showDrop || !navOptions.length) {
