@@ -154,10 +154,16 @@ export function canonicalUnit(unit: string | undefined | null): string {
   return UNITS[clean.toLowerCase().replace(/\.$/, '')] ?? properText(clean)
 }
 
-/** The same person written two ways: case, spacing and the "M/s" set aside. */
+/**
+ * The same person written two ways: case, spacing, punctuation and the "M/s"
+ * set aside. "M/s W/B" and "M/s WB" were two accounts for one party, as were
+ * "E. Ahmed Jee, Irba, Ormanjhi" and "E Ahmed Jee, Irba Ormanjhi".
+ */
 export const foldName = (name: string | undefined | null) =>
   String(name ?? '')
     .trim()
     .toLowerCase()
     .replace(/^m\/s\.?\s+/, '')
+    .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
+    .trim()

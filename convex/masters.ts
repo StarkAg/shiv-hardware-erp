@@ -82,11 +82,13 @@ export const createLedger = mutation({
       ? args.aadhaar.replace(/\D/g, "") || undefined
       : undefined;
 
-    const clash = await ctx.db
-      .query("ledgers")
-      .withIndex("by_name", (q) => q.eq("name", name))
-      .unique();
-    if (clash) throw new Error(`A ledger named "${name}" already exists`);
+    // The same party written another way is the same party: "W/B" is "WB",
+    // "E. Ahmed" is "E Ahmed". Refused on the same side of the books only — a
+    // customer and a supplier of one name are two accounts on purpose.
+    const clash = (await ctx.db.query("ledgers").collect()).find(
+      (l) => l.name === name || (l.groupId === args.groupId && fold(l.name) === fold(name))
+    );
+    if (clash) throw new ConvexError(`"${clash.name}" already exists — use that account.`);
     const now = Date.now();
     const id = await ctx.db.insert("ledgers", {
       ...args,
@@ -132,6 +134,11 @@ export const updateLedger = mutation({
     if (patch.name && before) {
       const group = await ctx.db.get(before.groupId);
       patch.name = withCourtesy(patch.name, group?.name);
+      const renamed = patch.name;
+      const clash = (await ctx.db.query("ledgers").collect()).find(
+        (l) => l._id !== id && (l.name === renamed || (l.groupId === before.groupId && fold(l.name) === fold(renamed)))
+      );
+      if (clash) throw new ConvexError(`"${clash.name}" already exists — use that account.`);
     }
     await ctx.db.patch(id, { ...patch, updatedAt: Date.now() });
     const changed = Object.keys(patch).filter(

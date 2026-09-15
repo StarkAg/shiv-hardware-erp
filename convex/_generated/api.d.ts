@@ -35,6 +35,7 @@ import type * as lib_spelling from "../lib/spelling.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_trashLinks from "../lib/trashLinks.js";
 import type * as masters from "../masters.js";
+import type * as merge from "../merge.js";
 import type * as migrateLedger from "../migrateLedger.js";
 import type * as photos from "../photos.js";
 import type * as printJobs from "../printJobs.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   "lib/text": typeof lib_text;
   "lib/trashLinks": typeof lib_trashLinks;
   masters: typeof masters;
+  merge: typeof merge;
   migrateLedger: typeof migrateLedger;
   photos: typeof photos;
   printJobs: typeof printJobs;

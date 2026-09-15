@@ -119,4 +119,11 @@ describe('the same name two ways', () => {
     expect(foldName('M/s  Vishal Prasad Ji')).toBe(foldName('vishal prasad ji'))
     expect(foldName('Harsh')).toBe(foldName('harsh'))
   })
+
+  test('punctuation does not make a second party', () => {
+    expect(foldName('M/s W/B')).toBe(foldName('M/s WB'))
+    expect(foldName('M/s E. Ahmed Jee, Irba, Ormanjhi')).toBe(foldName('M/s E Ahmed Jee, Irba Ormanjhi'))
+    expect(foldName('M/s WB')).not.toBe(foldName('M/s W B Traders'))
+    expect(foldName('Ramesh Kumar, Kundru')).not.toBe(foldName('Ramesh Kumar, Chattar'))
+  })
 })

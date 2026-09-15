@@ -9,7 +9,7 @@
  */
 import type { MutationCtx, QueryCtx } from '../_generated/server'
 import type { Doc, Id } from '../_generated/dataModel'
-import { properText } from './text'
+import { foldName, properText } from './text'
 
 /**
  * The form two spellings of one name have to agree on.
@@ -20,12 +20,7 @@ import { properText } from './text'
  * Naisarai" and "M/s Pappu Jee, Naisarai" became two accounts with the balance
  * split between them, which is the whole thing this fold exists to stop.
  */
-export const fold = (name: string) =>
-  String(name ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/^m\/s\.?\s+/, '')
-    .replace(/\s+/g, ' ')
+export const fold = (name: string) => foldName(name)
 
 /**
  * The shop writes a party as "Santosh Singh Ji, Purnimandap" — who they are,
