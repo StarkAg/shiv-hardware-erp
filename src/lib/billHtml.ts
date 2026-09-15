@@ -365,7 +365,7 @@ function buildEstimatePages(bill: Bill): string {
     // showing what comes off the printer. Same gradient as the print server's.
     return `<div style="position:relative;width:148mm;min-height:210mm;margin:0 auto;padding:8mm 7mm 10mm;box-sizing:border-box;background-color:#fff;background-image:repeating-linear-gradient(transparent,transparent 7.8mm,#e8eef5 7.8mm,#e8eef5 8mm);background-position-y:22mm;${breakStyle}">
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;letter-spacing:5px;color:#888;text-transform:uppercase;margin-bottom:2mm;padding-bottom:1mm;border-bottom:0.5px solid #bbb">
-        <span>Estimate</span>
+        <span>${bill.kind === 'return' ? 'Goods Return' : 'Estimate'}</span>
         <span>${esc(bill.number)}${pages.length > 1 ? ` (${pageIdx + 1})` : ''}</span>
       </div>
       <div style="margin-bottom:3mm">

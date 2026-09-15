@@ -31,8 +31,7 @@ import {
   ScanLine,
   Printer,
   Scale,
-  IndianRupee,
-} from 'lucide-react'
+  IndianRupee, Undo2} from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
 import { UpdateBanner } from './UpdateBanner'
 import { Toaster } from './Toast'
@@ -95,6 +94,7 @@ const AREAS: { label: string; items: NavItem[] }[] = [
       { to: '/bills?new=purchase', label: 'Purchase', icon: Package, key: 'F9' },
       { to: '/bills?new=receipt', label: 'Receipt', icon: IndianRupee, key: 'F6' },
       { to: '/bills?new=payment', label: 'Payment', icon: CreditCard, key: 'F5' },
+      { to: '/bills?new=return', label: 'Goods Return', icon: Undo2 },
       { to: '/cash-review', label: 'Cash Review', icon: Wallet },
     ],
   },

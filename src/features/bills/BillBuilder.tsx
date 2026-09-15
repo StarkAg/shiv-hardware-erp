@@ -1813,6 +1813,8 @@ type PartyOption = {
   uid?: string
   /** True when this name is an account in the books, not just a name on a bill. */
   account?: boolean
+  /** Customer or Supplier — shown where a list holds both, as a goods return's does. */
+  side?: 'Customer' | 'Supplier'
 }
 
 /**
@@ -1822,11 +1824,13 @@ type PartyOption = {
 /** The two vouchers that are money and nothing else. */
 const MONEY_KINDS: BillKind[] = ['receipt', 'payment']
 
-const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier'> = {
+const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier' | 'both'> = {
   sale: 'customer',
   receipt: 'customer',
   purchase: 'supplier',
   payment: 'supplier',
+  // A goods return comes back from a customer or goes back to a supplier.
+  return: 'both',
 }
 
 function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
@@ -1955,13 +1959,30 @@ export function BillBuilder() {
    * nothing written before this is lost — they simply sort after the accounts.
    */
   const partyGroup = kind === 'purchase' || kind === 'payment' ? 'Sundry Creditors' : 'Sundry Debtors'
+  /**
+   * Purchase and Payment list suppliers only; Sale and Receipt customers only.
+   * A Goods Return lists both, each marked, because a return comes back from
+   * a customer or goes back to a supplier.
+   */
+  const partyGroups = kind === 'return' ? ['Sundry Debtors', 'Sundry Creditors'] : [partyGroup]
   const masters = useQuery(api.masters.all, {})
+  /** The account the name on this voucher is, when it is one — its side decides a return. */
+  const namedAccount = useMemo(() => {
+    const wanted = foldName(draft.customerName)
+    if (!wanted) return undefined
+    return (masters?.ledgers ?? []).find(
+      (l: any) => partyGroups.includes(l.groupName) && foldName(l.name) === wanted,
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [masters, draft.customerName, kind])
+  /** Which side of the books this voucher's party is on, as far as can be told. */
+  const sideGroup = kind === 'return' ? (namedAccount?.groupName ?? 'Sundry Debtors') : partyGroup
 
   const liveCustomers = useMemo<PartyOption[]>(() => {
     const byName = new Map<string, PartyOption>()
 
     for (const l of masters?.ledgers ?? []) {
-      if (l.groupName !== partyGroup) continue
+      if (!partyGroups.includes(l.groupName)) continue
       // Keyed with case, spacing and "M/s" set aside, so "M/s Wb" and a bill
       // typed "Wb" are one party in the list, not two.
       byName.set(foldName(l.name), {
@@ -1970,6 +1991,7 @@ export function BillBuilder() {
         mobile: l.phone ?? '',
         uid: l.aadhaar ?? '',
         account: true,
+        side: l.groupName === 'Sundry Creditors' ? 'Supplier' : 'Customer',
       })
     }
 
@@ -1977,9 +1999,16 @@ export function BillBuilder() {
     // one. An account of the same name already read wins — it carries the
     // balance, and offering both would put the two spellings side by side.
     if (kind === 'sale' || kind === 'receipt') {
+      // A supplier's name must not ride in on an old purchase or payment bill,
+      // nor on a sale typed against a name that is a supplier's account.
+      const suppliers = new Set(
+        (masters?.ledgers ?? []).filter((l) => l.groupName === 'Sundry Creditors').map((l) => foldName(l.name)),
+      )
       for (const b of bills) {
+        const billKind = b.kind ?? 'sale'
+        if (billKind !== 'sale' && billKind !== 'receipt') continue
         const name = (b.customerName ?? '').trim()
-        if (!name || byName.has(foldName(name))) continue
+        if (!name || byName.has(foldName(name)) || suppliers.has(foldName(name))) continue
         byName.set(foldName(name), {
           id: b.id,
           name: toProperCase(name),
@@ -1992,6 +2021,7 @@ export function BillBuilder() {
     return Array.from(byName.values()).sort(
       (a, b) => Number(!!b.account) - Number(!!a.account) || a.name.localeCompare(b.name),
     )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bills, kind, masters, partyGroup])
 
   const custMatches = useMemo(() => {
@@ -2007,12 +2037,12 @@ export function BillBuilder() {
   useEffect(() => {
     if (!showCust || !custMatches.length || !(draft.customerName ?? '').trim()) return
     setPanelList({
-      title: partyGroup === 'Sundry Creditors' ? 'List of Suppliers' : 'List of Customers',
+      title: kind === 'return' ? 'List of Parties' : partyGroup === 'Sundry Creditors' ? 'List of Suppliers' : 'List of Customers',
       highlight: custHl,
       rows: custMatches.map((c) => ({
         value: c.id,
         label: c.name,
-        hint: c.mobile || (c.account ? '' : 'not in books'),
+        hint: [kind === 'return' ? c.side : '', c.mobile].filter(Boolean).join(' · ') || (c.account ? '' : 'not in books'),
       })),
       onPick: (id) => {
         const c = custMatches.find((x) => x.id === id)
@@ -2050,7 +2080,7 @@ export function BillBuilder() {
    * ninety thousand down before writing them another bill.
    */
   const partyBook = useQuery(
-    partyGroup === 'Sundry Creditors' ? api.reports.outstanding : api.reports.receivables,
+    sideGroup === 'Sundry Creditors' ? api.reports.outstanding : api.reports.receivables,
     {},
   )
   const partyBalance = useMemo(() => {
@@ -2080,7 +2110,7 @@ export function BillBuilder() {
     if (!voucherId || !voucher || builtVoucher.current === voucherId) return
     builtVoucher.current = voucherId
     const kindOf: Record<string, BillKind> = {
-      sale: 'sale', purchase: 'purchase', receipt: 'receipt', payment: 'payment',
+      sale: 'sale', purchase: 'purchase', receipt: 'receipt', payment: 'payment', 'goods return': 'return',
     }
     setDraft({
       ...emptyBill(String(voucher.vchLabel ?? ''), kindOf[voucher.kind] ?? 'sale'),
@@ -2146,7 +2176,8 @@ export function BillBuilder() {
         const fresh = emptyBill(nextBillNumber(), kind)
         return newParty ? { ...fresh, customerName: toProperCase(newParty) } : fresh
       }
-      const crossed = PARTY_SIDE[d.kind ?? 'sale'] !== PARTY_SIDE[kind]
+      // Into a goods return the party always carries — it takes either side.
+      const crossed = PARTY_SIDE[kind] !== 'both' && PARTY_SIDE[d.kind ?? 'sale'] !== PARTY_SIDE[kind]
       return {
         ...d,
         kind,
@@ -2530,7 +2561,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
      * refusal — so a refusal is not hidden: postStored keeps the bill on this
      * PC marked unposted, says so in red, and the day book offers Retry.
      */
-    const partyTab = partyGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
+    const partyTab = sideGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
     if (!borrowed) saveBill({ ...draft, items: draft.items.map(withSqft), total })
     setView('list')
@@ -3050,7 +3081,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 where it went. A sale or a purchase asks how much of it was
                 settled now — that amount posts as a line of this same
                 voucher, against the drawer or the bank. */}
-            {!isMoneyVoucher && (
+            {!isMoneyVoucher && (draft.kind ?? 'sale') !== 'return' && (
               <div className="flex items-center gap-1.5 rounded-xl bg-stone-100 px-3 py-2 dark:bg-stone-800">
                 <span className="text-sm text-muted">
                   {(draft.kind ?? 'sale') === 'purchase' ? 'Paid' : 'Received'}
@@ -3274,7 +3305,7 @@ const iso = (d: Date) => {
  * The number is the bill's own until it posts and the books issue theirs.
  */
 const VCH_ABBR: Record<string, string> = {
-  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY',
+  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR',
 }
 const billLabel = (b: Bill) =>
   // A voucher opened for editing already carries the books' own label —
@@ -3367,7 +3398,8 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
       party: v.party,
       partyId: v.partyLedgerId,
       ref: v.refNo || '',
-      side: sideOf(v.vchLabel),
+      // A goods return can be either side, so its party's own group says which.
+      side: v.partyGroup ? (v.partyGroup === 'Sundry Creditors' ? 'suppliers' : 'customers') : sideOf(v.vchLabel),
       account: (v.contra ?? []).join(', '),
       amount: v.status === 'pending' ? null : v.amount,
       photos: (v.attachmentUrls ?? []).map((a: any) => a?.url).filter(Boolean),

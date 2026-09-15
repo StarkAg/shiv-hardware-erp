@@ -251,7 +251,12 @@ export const CATEGORY_META: Record<
 export type BillPaymentMode = 'cash' | 'online' | 'upi'
 
 /** The four vouchers the bill builder can write. */
-export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment'
+/**
+ * `return` is a Goods Return: goods coming back from a customer or going back to
+ * a supplier. It takes either kind of party; which way it posts follows the
+ * party's account.
+ */
+export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return'
 
 /** What each one is called, and what the party on it is called. */
 export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: string }> = {
@@ -259,6 +264,7 @@ export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: s
   purchase: { title: 'Purchase', party: 'Supplier', ref: 'Bill no.' },
   receipt:  { title: 'Receipt',  party: 'Customer', ref: 'Receipt no.' },
   payment:  { title: 'Payment',  party: 'Supplier', ref: 'Voucher no.' },
+  return:   { title: 'Goods Return', party: 'Party', ref: 'Ref' },
 }
 
 export interface BillItem {

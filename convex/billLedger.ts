@@ -3,7 +3,7 @@ import { mutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { fyOf, round2 } from './lib/money'
-import { openParty } from './lib/parties'
+import { findParty, openParty } from './lib/parties'
 import { nextVoucherNo, nextBillNo } from './lib/numbering'
 import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
@@ -44,6 +44,18 @@ const KINDS = {
   // account on the other side is the drawer or the bank itself.
   receipt:  { type: 'Receipt',  account: 'Cash',      group: 'Sundry Debtors',   party: 'Cr', other: 'Dr', settles: true },
   payment:  { type: 'Payment',  account: 'Cash',      group: 'Sundry Creditors', party: 'Dr', other: 'Cr', settles: true },
+  /**
+   * Goods Return from a customer: they owe less, and the return sits on its
+   * own account rather than netting Sales down. A return *to* a supplier is
+   * the other way round and is chosen by the party's account; see
+   * RETURN_TO_SUPPLIER.
+   */
+  return:   { type: 'Goods Return', account: 'Sales Return', group: 'Sundry Debtors', party: 'Cr', other: 'Dr', settles: false },
+} as const
+
+/** Goods Return to a supplier: the shop owes them less. */
+const RETURN_TO_SUPPLIER = {
+  type: 'Goods Return', account: 'Purchase Return', group: 'Sundry Creditors', party: 'Dr', other: 'Cr', settles: false,
 } as const
 
 export type BillKind = keyof typeof KINDS
@@ -138,7 +150,22 @@ export const postBill = mutation({
     const hasAmount = total > 0 && !unpricedLine
 
     const date = whenOf(bill.date)
-    const spec = KINDS[(bill.kind ?? 'sale') as BillKind] ?? KINDS.sale
+    const kind = (bill.kind ?? 'sale') as BillKind
+
+    /**
+     * A Goods Return goes whichever way its party's account says: back from a
+     * customer, or back to a supplier. A name with no account has no side yet,
+     * so it is refused rather than guessed — opening a customer for what was
+     * a supplier's return would put the balance on the wrong side for good.
+     */
+    const returnParty = kind === 'return' ? await findParty(ctx, customerName) : null
+    const returnGroup = returnParty ? (await ctx.db.get(returnParty.groupId))?.name : undefined
+    if (kind === 'return' && returnGroup !== 'Sundry Debtors' && returnGroup !== 'Sundry Creditors') {
+      throw new Error(`Pick the customer or supplier this goods return is for — "${customerName}" is not an account in the books.`)
+    }
+    const spec = kind === 'return' && returnGroup === 'Sundry Creditors'
+      ? RETURN_TO_SUPPLIER
+      : KINDS[kind] ?? KINDS.sale
 
     /**
      * Where the money itself went. Receipts and payments used to post to Bank
@@ -158,7 +185,8 @@ export const postBill = mutation({
      * restore instead of two that can come apart.
      */
     const asked = Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0
-    const received = spec.settles ? 0 : round2(Math.min(Math.max(asked, 0), Number(bill.total) || 0))
+    // No money changes hands on a goods return; a refund is its own receipt or payment.
+    const received = spec.settles || kind === 'return' ? 0 : round2(Math.min(Math.max(asked, 0), Number(bill.total) || 0))
 
     /**
      * Discount given up at settlement — allowed on a receipt, received on a

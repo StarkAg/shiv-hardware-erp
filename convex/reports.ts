@@ -230,7 +230,7 @@ export const ledger = query({
 export const dayBook = query({
   args: { from: v.optional(v.number()), to: v.optional(v.number()) },
   handler: async (ctx, { from, to }) => {
-    const { ledgerById, typeById } = await context(ctx);
+    const { ledgerById, typeById, groupById } = await context(ctx);
     const all = await ctx.db.query("vouchers").withIndex("by_date").collect();
     const inWindow = all.filter(
       (vch) =>
@@ -265,6 +265,8 @@ export const dayBook = query({
           vchLabel: vchLabel(type?.abbr ?? "VCH", vch.voucherNo),
           party: ledgerById.get(vch.partyLedgerId)?.name ?? "—",
           partyLedgerId: vch.partyLedgerId,
+          // Which side the party is on — a goods return can be either.
+          partyGroup: groupById.get(ledgerById.get(vch.partyLedgerId)?.groupId as never)?.name,
           refNo: vch.refNo ?? "",
           narration: vch.narration ?? "",
           amount: vch.amount,
