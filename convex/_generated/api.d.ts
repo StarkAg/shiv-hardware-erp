@@ -31,6 +31,7 @@ import type * as lib_money from "../lib/money.js";
 import type * as lib_numbering from "../lib/numbering.js";
 import type * as lib_parties from "../lib/parties.js";
 import type * as lib_pin from "../lib/pin.js";
+import type * as lib_spelling from "../lib/spelling.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_trashLinks from "../lib/trashLinks.js";
 import type * as masters from "../masters.js";
@@ -78,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   "lib/numbering": typeof lib_numbering;
   "lib/parties": typeof lib_parties;
   "lib/pin": typeof lib_pin;
+  "lib/spelling": typeof lib_spelling;
   "lib/text": typeof lib_text;
   "lib/trashLinks": typeof lib_trashLinks;
   masters: typeof masters;
