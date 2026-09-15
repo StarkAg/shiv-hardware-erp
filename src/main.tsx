@@ -27,6 +27,7 @@ import { CashReview } from './features/cash/CashReview'
 import { Home } from './features/home/Home'
 import { PdfViewer } from './features/pdf/PdfViewer'
 import { MobileView } from './features/mobile/MobileView'
+import { DayPaper } from './features/paper/DayPaper'
 import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
 import { startProperInputs } from './lib/properInputs'
@@ -113,6 +114,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <Navigate to="/home" replace /> },
       { path: 'home',           element: <Home /> },
+      { path: 'paper',          element: <DayPaper /> },
       { path: 'quote-options',  element: <QuotationOptions /> },
       { path: 'quote',          element: <QuotationBuilder /> },
       { path: 'quote/:id',      element: <QuotationBuilder /> },

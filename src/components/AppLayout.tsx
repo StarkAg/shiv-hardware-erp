@@ -28,6 +28,7 @@ import {
   BookOpen,
   Wallet,
   LayoutDashboard,
+  NotebookPen,
   ScanLine,
   Printer,
   Scale,
@@ -89,6 +90,7 @@ const AREAS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Transactions',
     items: [
+      { to: '/paper', label: 'Day Paper', icon: NotebookPen },
       { to: '/day', label: 'Day Book', icon: ReceiptText },
       { to: '/bills?new=sale', label: 'Sale', icon: ReceiptText, key: 'F8' },
       { to: '/bills?new=purchase', label: 'Purchase', icon: Package, key: 'F9' },
