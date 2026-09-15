@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
+import { foldName, properText } from './lib/text'
 
 export const list = query({
   args: {
@@ -22,7 +23,8 @@ export const upsert = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now()
-    const existing = args.localId
+    args = { ...args, name: properText(args.name) }
+    const byLocal = args.localId
       ? await ctx.db
         .query('customers')
         .withIndex('by_local_id', q => q.eq('localId', args.localId))
@@ -33,6 +35,13 @@ export const upsert = mutation({
           .withIndex('by_mobile', q => q.eq('mobile', args.mobile))
           .unique()
         : null
+    // The same person saved again from another device, or under another
+    // capitalisation — "Harsh" and "harsh" — is one customer, not two.
+    const sameName = byLocal ? null : (await ctx.db.query('customers').collect()).find(
+      (c) => foldName(c.name) === foldName(args.name) &&
+        (!args.mobile || !c.mobile || c.mobile === args.mobile),
+    )
+    const existing = byLocal ?? sameName
 
     if (existing) {
       await ctx.db.patch(existing._id, {

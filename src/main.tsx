@@ -29,6 +29,7 @@ import { PdfViewer } from './features/pdf/PdfViewer'
 import { MobileView } from './features/mobile/MobileView'
 import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
+import { startProperInputs } from './lib/properInputs'
 import { useStore } from './lib/store'
 import { convexEnabled, pushBillsToConvex, pushCatalogToConvex } from './lib/convexSync'
 
@@ -52,6 +53,10 @@ function disableMobileZoom() {
 
 disableMobileZoom()
 startOfflineSync()
+// Proper case in every text box, codes in capitals — see lib/properInputs.
+startProperInputs()
+// This device's quotation customers and units, brought to the same rule once.
+useStore.getState().normalizeCustomerNames()
 
 // ── Startup ────────────────────────────────────────────────────────────────
 // The panel used to open by asking a print server on the shop's Wi-Fi for the

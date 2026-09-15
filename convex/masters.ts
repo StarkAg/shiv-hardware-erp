@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { properText } from "./lib/text";
 import { v, ConvexError } from "convex/values";
 import { record, money } from "./lib/history";
 import { round2 } from "./lib/money";
@@ -21,29 +22,11 @@ const label = (name?: string) => (name ? GROUP_LABELS[name] ?? name : "—");
 
 /**
  * Names are written the way they are written on paper, whatever the keyboard
- * was doing at the time: "simran ply" and "SIMRAN PLY" both become "Simran
- * Ply".
- *
- * Deliberate acronyms survive — SRT, IOB, UCO stay as they are — unless the
- * whole name was shouted, in which case there was no intent to preserve and
- * every word is set properly.
+ * was doing at the time — the shop's one rule, in lib/text: proper case, codes
+ * in capitals ("240 HDG", "CGST"), capitals typed on purpose kept ("SRT"),
+ * caps lock set right ("SIMRAN PLY" → "Simran Ply").
  */
-export const properCase = (name: string) => {
-  const clean = name.trim().replace(/\s+/g, " ");
-  const shouted = clean === clean.toUpperCase();
-
-  return clean
-    .split(" ")
-    .map((word) => {
-      if (/^m\/s$/i.test(word)) return "M/s";
-      const letters = word.replace(/[^A-Za-z]/g, "");
-      const isAcronym =
-        letters.length > 0 && letters.length <= 4 && letters === letters.toUpperCase();
-      if (isAcronym && !shouted) return word;
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-    })
-    .join(" ");
-};
+export const properCase = (name: string) => properText(name);
 
 /**
  * Firms are written "M/s" on every bill the shop sends or receives, so they

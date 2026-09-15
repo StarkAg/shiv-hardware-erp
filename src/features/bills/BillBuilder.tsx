@@ -56,6 +56,7 @@ import { TableSkeleton } from '../ledger/components/Skeleton'
 import { billSqft, isFootSized } from '../../lib/pricing'
 import { readBoardSize, sizeLabel, sqftFields, withSqft } from '../../lib/boardSize'
 import { keepTyped } from '../../lib/linePick'
+import { canonicalUnit, foldName } from '../../../convex/lib/text'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
@@ -324,8 +325,10 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   /** Returns the canonical unit to store — a new one is remembered. */
   function pickUnit(v: string): string | null {
     if (!v || v === '__add__') return null
-    const typed = v.trim()
-    const saved = units.find((u) => u.toLowerCase() === typed.toLowerCase())
+    // One spelling per unit: "kg", "KG" and "Kg" are the same pick.
+    const typed = canonicalUnit(v)
+    if (!typed) return null
+    const saved = units.find((u) => canonicalUnit(u) === typed)
     if (saved) return saved
     addUnit(typed)
     return typed
@@ -1949,7 +1952,9 @@ export function BillBuilder() {
 
     for (const l of masters?.ledgers ?? []) {
       if (l.groupName !== partyGroup) continue
-      byName.set(String(l.name).trim().toLowerCase(), {
+      // Keyed with case, spacing and "M/s" set aside, so "M/s Wb" and a bill
+      // typed "Wb" are one party in the list, not two.
+      byName.set(foldName(l.name), {
         id: l._id,
         name: l.name,
         mobile: l.phone ?? '',
@@ -1964,8 +1969,8 @@ export function BillBuilder() {
     if (kind === 'sale' || kind === 'receipt') {
       for (const b of bills) {
         const name = (b.customerName ?? '').trim()
-        if (!name || byName.has(name.toLowerCase())) continue
-        byName.set(name.toLowerCase(), {
+        if (!name || byName.has(foldName(name))) continue
+        byName.set(foldName(name), {
           id: b.id,
           name: toProperCase(name),
           mobile: b.customerPhone ?? '',

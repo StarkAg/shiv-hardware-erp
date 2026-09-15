@@ -9,6 +9,7 @@
  */
 import type { MutationCtx, QueryCtx } from '../_generated/server'
 import type { Doc, Id } from '../_generated/dataModel'
+import { properText } from './text'
 
 /**
  * The form two spellings of one name have to agree on.
@@ -97,7 +98,8 @@ export async function openParty(
   name: string,
   opts: { phone?: string; group?: string } = {},
 ): Promise<Id<'ledgers'>> {
-  const clean = name.trim()
+  // Proper case on the way in, as the account form does it.
+  const clean = properText(name)
   if (!clean) throw new Error('No party name on this document.')
 
   const existing = await findParty(ctx, clean)

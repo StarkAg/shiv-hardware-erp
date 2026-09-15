@@ -7,6 +7,7 @@ import { openParty } from './lib/parties'
 import { nextVoucherNo, nextBillNo } from './lib/numbering'
 import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
+import { tidyBill } from './lib/billText'
 
 /**
  * Saving a bill, in one piece.
@@ -102,7 +103,9 @@ export const postBill = mutation({
     keepAsBill: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const bill = args.bill ?? {}
+    // Written the shop's way before anything reads it: the party in proper
+    // case, item codes in capitals, one spelling per unit.
+    const bill = tidyBill(args.bill ?? {})
     // A borrowed voucher row is filed under `vch-<id>`, which is how the panel
     // has always told the two apart. A bill that has been posted before also
     // carries a voucherId, so that cannot be the test.

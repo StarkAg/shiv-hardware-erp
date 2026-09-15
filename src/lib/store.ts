@@ -1,3 +1,4 @@
+import { canonicalUnit, foldName, properText } from '../../convex/lib/text'
 import { create } from 'zustand'
 import type { Bill, Brand, BrandSet, CustomCatalogEntry, Customer, GuaranteeDocument, HardwareCatalog, ProductCategory, Quotation, TotoAvailability, TotoDriver, VehicleType } from './types'
 import { DEFAULT_HARDWARE_CATALOG, TOTO_SEED } from './types'
@@ -170,13 +171,13 @@ export const useStore = create<AppState>((set, get) => ({
   customCatalog: (saved?.customCatalog as CustomCatalogEntry[]) ?? [],
   // Seeded from whatever past bills actually used, so nothing already written
   // loses its unit — not from a fixed list of options nobody picked.
-  units: (saved?.units as string[]) ?? (() => {
-    const used = ((saved?.bills as Bill[]) ?? [])
-      .flatMap(b => b.items ?? [])
-      .map(i => (i.unit ?? '').trim())
-      .filter(Boolean)
-    return Array.from(new Set(['Pc', ...used]))
-  })(),
+  // One spelling per unit, whatever this device saved before the rule:
+  // "kg" and "Kg" were two entries, "sit" a Sheet, "Bl" a B/L.
+  units: Array.from(new Set(
+    ((saved?.units as string[]) ?? ['Pc', ...((saved?.bills as Bill[]) ?? []).flatMap(b => b.items ?? []).map(i => i.unit ?? '')])
+      .map(u => canonicalUnit(u))
+      .filter(Boolean),
+  )),
 
   setSets: (sets) => {
     set({ sets: codeSets(sets) })
@@ -276,23 +277,38 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   normalizeCustomerNames: () => {
-    // Names were typed free-form for years; the bill now prints proper case, so
-    // bring the stored list in line rather than formatting at every read site.
-    const proper = (v: string) => v.replace(/\b\w/g, c => c.toUpperCase())
-    const changed: Customer[] = []
-    set((st) => {
-      const customers = st.customers.map((c) => {
-        const name = proper(c.name ?? '')
-        if (name === c.name) return c
-        const next = { ...c, name }
-        changed.push(next)
-        return next
-      })
-      return changed.length ? { customers } : {}
-    })
-    if (!changed.length) return
+    // Names were typed free-form for years. Bring this device's list to the
+    // shop's rule — proper case, codes in capitals — and keep one record per
+    // person: "Harsh" saved four times, once as "harsh", is one customer. A
+    // different mobile under the same name is a different person.
+    const before = get().customers
+    const kept: Customer[] = []
+    for (const c of before) {
+      const name = properText(c.name ?? '')
+      const same = kept.findIndex((k) =>
+        foldName(k.name) === foldName(name) &&
+        (!k.mobile || !c.mobile || k.mobile === c.mobile))
+      if (same < 0) {
+        kept.push(name === c.name ? c : { ...c, name })
+        continue
+      }
+      // The later record wins; blanks are filled from the earlier one.
+      const k = kept[same]
+      kept[same] = {
+        ...k,
+        ...c,
+        name,
+        mobile: c.mobile || k.mobile,
+        altMobile: c.altMobile || k.altMobile,
+        uid: c.uid || k.uid,
+        address: c.address || k.address,
+      }
+    }
+    const changed = kept.length !== before.length || kept.some((c, i) => c !== before[i])
+    if (!changed) return
+    set({ customers: kept })
     persist(get)
-    for (const c of changed) enqueueCustomerSync(c)
+    for (const c of kept) if (!before.includes(c)) enqueueCustomerSync(c)
   },
 
   nextBillNumber: () => {
@@ -471,10 +487,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addUnit: (u) => {
-    const unit = u.trim()
+    const unit = canonicalUnit(u)
     if (!unit) return
     const existing = get().units
-    if (existing.some(x => x.toLowerCase() === unit.toLowerCase())) return
+    if (existing.some(x => canonicalUnit(x) === unit)) return
     set({ units: [...existing, unit] })
     persist(get)
   },
