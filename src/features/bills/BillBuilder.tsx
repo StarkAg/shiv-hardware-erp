@@ -3247,27 +3247,6 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
 
       </div>
 
-      {/* Tally's key bar. The shortcuts it names are the ones the screen
-          already answers to, so it is a reminder of the keys rather than a
-          second set of buttons. */}
-      <div className="no-print fixed bottom-0 left-0 right-0 z-20 hidden border-t border-stone-300 bg-stone-100 dark:border-white/15 dark:bg-stone-900 lg:flex lg:pr-[21rem] xl:pr-[25rem]">
-        {[
-          { key: 'Q', label: 'Quit', onClick: cancel },
-          { key: 'A', label: 'Accept', onClick: save },
-          { key: 'D', label: 'Delete', onClick: () => setAsking('delete') },
-          { key: 'X', label: 'Cancel Vch', onClick: cancel },
-        ].map((k) => (
-          <button
-            key={k.key}
-            type="button"
-            onClick={k.onClick}
-            className="flex-1 border-r border-stone-300 px-3 py-1.5 text-left text-xs text-stone-700 last:border-r-0 hover:bg-stone-200 dark:border-white/15 dark:text-stone-300 dark:hover:bg-white/10"
-          >
-            <span className="font-bold text-shiv-green underline">{k.key}</span>
-            <span>: {k.label}</span>
-          </button>
-        ))}
-      </div>
       </ListPanelContext.Provider>
     )
   }
