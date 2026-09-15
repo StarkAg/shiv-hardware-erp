@@ -235,6 +235,13 @@ function moveBillFocus(dir: 1 | -1) {
     .filter((el) => el.offsetParent !== null)   // skip anything hidden
   if (!fields.length) return
   const i = fields.indexOf(document.activeElement as HTMLElement)
+  // Past the last box is Accept, as in Tally. Without this, Enter on the
+  // Narration of a payment or receipt went nowhere: it is the last box, and
+  // the step clamped to it.
+  if (dir === 1 && i === fields.length - 1) {
+    const save = document.querySelector<HTMLButtonElement>('[data-bill-save]')
+    if (save) { save.focus(); return }
+  }
   const next = fields[i === -1 ? 0 : Math.min(fields.length - 1, Math.max(0, i + dir))]
   next?.focus()
   if (next instanceof HTMLInputElement) next.select?.()
