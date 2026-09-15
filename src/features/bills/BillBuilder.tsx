@@ -41,7 +41,7 @@ const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
   onClose: () => void
 }) => JSX.Element
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
-import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, BILL_KINDS } from '../../lib/types'
+import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS } from '../../lib/types'
 import type { BillKind } from '../../lib/types'
 import { buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
 import { deviceId, deviceName } from '../../lib/device'
@@ -433,10 +433,21 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   ], [filtered, customFiltered, search, duplicateEntry])
 
   /** A fare, cartage or labour charge: a figure with a label, nothing else. */
-  function pickFare() {
+  function pickFare() { pickCharge('Fare') }
+
+  /**
+   * Any charge on the bill — fare, a discount, CGST 9% — as a label and an
+   * amount. The line drops whatever a catalogue item brought with it: no
+   * My Items link, unit or rate, so it cannot print with a quantity.
+   */
+  function pickCharge(label: string) {
     onUpdate(item.id, {
-      description: 'Fare',
+      description: label,
       amountOnly: true,
+      unit: undefined,
+      fieldValues: undefined,
+      heightIn: undefined,
+      widthIn: undefined,
       isRoundup: undefined,
       isDiscount: undefined,
       category: undefined,
@@ -447,7 +458,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       rateSqft: undefined,
       amount: 0,
     })
-    setSearch('Fare')
+    setSearch(label)
     setShowDrop(false)
     requestAnimationFrame(() => moveBillFocus(1))
   }
@@ -649,6 +660,19 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   function selectCustomEntry(entry: { id: string; name: string; sizes: string[]; brands: string[]; rate?: number; unit?: string }) {
     const same = item.customEntryId === entry.id
     const name = formatItemDescription(entry.name)
+    // "Discount", "CGST 9%", "Fare" saved in My Items are charges, not goods:
+    // the line takes the name and an amount, and nothing about a quantity.
+    if (isChargeName(name)) {
+      // Passing back through a line that already is this charge is
+      // navigation: keep the amount that was typed on it.
+      if (isAmountOnlyLine(item) && item.description.trim().toLowerCase() === name.toLowerCase()) {
+        setSearch(name)
+        setShowDrop(false)
+        return
+      }
+      pickCharge(name)
+      return
+    }
     setSearch(name)
     setShowDrop(false)
     onUpdate(item.id, {
