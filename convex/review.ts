@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { properItem } from "./lib/text";
 import {
   internalMutation,
   internalQuery,
@@ -1012,7 +1013,8 @@ export const approve = mutation({
     const lines = Array.isArray(reading.draft?.items) ? reading.draft.items : [];
     let lineNo = 0;
     for (const line of lines) {
-      const desc = String(line?.desc ?? "").trim();
+      // The shop's spelling and case, as a typed line gets: "abbro tape" → "Abro Tape".
+      const desc = properItem(String(line?.desc ?? ""));
       if (!desc) continue;
       lineNo += 1;
       const amount = typeof line?.amount === "number" ? line.amount : undefined;

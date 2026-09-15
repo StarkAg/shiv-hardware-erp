@@ -1,21 +1,65 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import { canonicalUnit, properItem } from './lib/text'
+import { canonicalUnit, foldName, properItem } from './lib/text'
 
 /**
  * My Items and the hardware catalogue in the shop's writing: item names in
- * proper case with codes in capitals, and one spelling per unit. Applied on
- * the way in, so a device holding an old copy cannot push "set" back over
- * "Set".
+ * the shop's spelling and proper case with codes in capitals, and one
+ * spelling per unit. Applied on the way in, so a device holding an old copy
+ * cannot push "set" back over "Set" or "Abbro" back over "Abro".
+ *
+ * Two entries that come out with the same name are one item — "Abro Tape"
+ * and "Abbro Tape" — and are merged: the first keeps its id, rate and unit,
+ * takes the other's sizes, brands and fields, and `remap` says which id went
+ * where so bill lines pointing at the removed one can follow.
  */
+const union = <T,>(a?: T[], b?: T[]) => Array.from(new Set([...(a ?? []), ...(b ?? [])]))
+
+function mergeFields(a?: any[], b?: any[]) {
+  const out = (a ?? []).map((f) => ({ ...f, values: [...(f.values ?? [])] }))
+  for (const f of b ?? []) {
+    const same = out.find((o) => foldName(o.label) === foldName(f.label))
+    if (same) same.values = union(same.values, f.values)
+    else out.push({ ...f, values: [...(f.values ?? [])] })
+  }
+  return out
+}
+
 export function tidyCatalog(args: { hardwareCatalog: any; customCatalog: any[]; sets: any[] }) {
-  const customCatalog = (args.customCatalog ?? []).map((e: any) => {
+  const renamed = (args.customCatalog ?? []).map((e: any) => {
     if (!e || typeof e !== 'object') return e
     const out = { ...e }
     if (typeof e.name === 'string') out.name = properItem(e.name)
     if (typeof e.unit === 'string' && e.unit) out.unit = canonicalUnit(e.unit)
     return out
   })
+
+  const customCatalog: any[] = []
+  const at = new Map<string, number>()
+  const remap: Record<string, string> = {}
+  for (const e of renamed) {
+    const key = e && typeof e === 'object' && typeof e.name === 'string' ? foldName(e.name) : ''
+    const i = key ? at.get(key) : undefined
+    if (i === undefined) {
+      if (key) at.set(key, customCatalog.length)
+      customCatalog.push(e)
+      continue
+    }
+    const into = customCatalog[i]
+    customCatalog[i] = {
+      ...into,
+      sizes: union(into.sizes, e.sizes),
+      brands: union(into.brands, e.brands),
+      ...(into.fields || e.fields ? { fields: mergeFields(into.fields, e.fields) } : {}),
+      ...(into.rates || e.rates ? { rates: union(into.rates, e.rates) } : {}),
+      rate: into.rate ?? e.rate,
+      unit: into.unit ?? e.unit,
+    }
+    if (customCatalog[i].rate === undefined) delete customCatalog[i].rate
+    if (customCatalog[i].unit === undefined) delete customCatalog[i].unit
+    if (e.id && into.id) remap[e.id] = into.id
+  }
+
   const hardwareCatalog: Record<string, any> = {}
   for (const [key, entry] of Object.entries(args.hardwareCatalog ?? {})) {
     const e = entry as any
@@ -23,7 +67,7 @@ export function tidyCatalog(args: { hardwareCatalog: any; customCatalog: any[]; 
       ? { ...e, unit: canonicalUnit(e.unit) }
       : e
   }
-  return { ...args, customCatalog, hardwareCatalog }
+  return { hardwareCatalog, customCatalog, sets: args.sets, remap }
 }
 
 /**
@@ -56,7 +100,13 @@ export const save = mutation({
       return { ignored: true as const, reason: 'An empty catalogue does not replace a full one.' }
     }
 
-    const data = { ...tidyCatalog(args), savedAt: Date.now() }
+    const tidy = tidyCatalog(args)
+    const data = {
+      hardwareCatalog: tidy.hardwareCatalog,
+      customCatalog: tidy.customCatalog,
+      sets: tidy.sets,
+      savedAt: Date.now(),
+    }
     if (existing) await ctx.db.patch(existing._id, data)
     else          await ctx.db.insert('catalogStore', data)
     return { ignored: false as const }

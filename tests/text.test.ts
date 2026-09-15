@@ -82,6 +82,9 @@ describe('items', () => {
     expect(properItem('19mm solid black tiger 8x4')).toBe('19mm Solid Black Tiger 8 X 4')
     expect(properItem('Flush Door 78×36')).toBe('Flush Door 78 X 36')
     expect(properItem('Mica ')).toBe('Mica')
+    expect(properItem('17x20x6 plate ss')).toBe('17 X 20 X 6 Plate SS')
+    expect(properItem('1 1/2"x3/4" moulding pin')).toBe('1 1/2" X 3/4" Moulding Pin')
+    expect(properItem('DDsm 9165 WA 77 2/8 x 36 3/8 1Pc')).toBe('DDSM 9165 WA 77 2/8 X 36 3/8 1Pc')
   })
 })
 

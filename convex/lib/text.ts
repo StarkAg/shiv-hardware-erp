@@ -1,3 +1,5 @@
+import { fixSpelling } from './spelling'
+
 /**
  * How every name in the shop is written: proper case, with codes in capitals.
  *
@@ -100,9 +102,14 @@ export function properText(input: string | undefined | null): string {
     .join(' ')
 }
 
-/** An item line: the name rule, and board sizes spaced "8 X 4". */
+/**
+ * An item line: the shop's spelling of the goods ("Abbro" → "Abro"), the
+ * name rule, and board sizes spaced "8 X 4".
+ */
 export function properItem(input: string | undefined | null): string {
-  return properText(input).replace(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/gi, '$1 X $2')
+  // Every "x" between two sizes, however many parts and with inch or foot
+  // marks: "17x20x6" → "17 X 20 X 6", '1 1/2"x3/4"' → '1 1/2" X 3/4"'.
+  return properText(fixSpelling(input)).replace(/(\d+(?:\.\d+)?['"′″]*)\s*[x×]\s*(?=\d)/gi, '$1 X ')
 }
 
 /**
