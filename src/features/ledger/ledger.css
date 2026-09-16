@@ -1096,12 +1096,33 @@ to{opacity: 0}}
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
 .ledger-root .billpeek-acts{display: flex; align-items: center; gap: 8px; flex: none;}
 .ledger-root .billpeek-acts .btn{display: inline-flex; align-items: center; gap: 6px;}
-.ledger-root .billpeek-body{flex: 1; min-height: 0; overflow: auto; padding: 14px;
-  display: flex; justify-content: center; align-items: flex-start;}
-/* 148mm x 210mm at 96dpi, the size buildBillHtml draws to. */
-.ledger-root .billframe{width: 559px; height: 793px; border: 1px solid var(--line);
-  background: #fff; box-shadow: var(--lift); flex: none;}
+/* The page is scaled to the space rather than scrolled, so the body never
+   scrolls: the page sits centred, the arrows in the room either side of it and
+   the page count under it. */
+.ledger-root .billpeek-body{flex: 1; min-height: 0; overflow: hidden; position: relative;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  padding-bottom: 44px;}
+.ledger-root .billpeek-page{position: relative; flex: none; overflow: hidden;
+  border: 1px solid var(--line); background: #fff; box-shadow: var(--lift);}
+/* Drawn at the page's own 148mm x 210mm and scaled down from its corner, so the
+   bill's own layout never reflows to fit a narrower box. */
+.ledger-root .billframe{position: absolute; top: 0; left: 0; border: 0; background: #fff;
+  transform-origin: top left;}
+.ledger-root .billpeek-turn{position: absolute; top: calc(50% - 22px); translate: 0 -50%;
+  width: 48px; height: 64px; display: grid; place-items: center; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; z-index: 1;}
+.ledger-root .billpeek-turn:hover:not(:disabled){border-color: var(--brass); color: var(--brass);}
+.ledger-root .billpeek-turn:disabled{opacity: .3; cursor: default;}
+.ledger-root .billpeek-turn.prev{left: 8px;}
+.ledger-root .billpeek-turn.next{right: 8px;}
+/* A label across the whole footer: on a phone the arrows sit inside it, so it
+   must not take their taps. */
+.ledger-root .billpeek-count{position: absolute; bottom: 12px; left: 0; right: 0;
+  text-align: center; font-size: 13px; color: var(--muted); pointer-events: none;}
+.ledger-root .billpeek-count b{color: var(--fg);}
 @media (max-width: 600px){
-  .ledger-root .billpeek-body{padding: 8px;}
-  .ledger-root .billframe{width: 100%; max-width: 559px; height: 70vh;}
+  /* Down beside the count, so the page keeps the full width of the phone. */
+  .ledger-root .billpeek-turn{top: auto; bottom: 2px; translate: none; width: 48px; height: 40px;}
+  .ledger-root .billpeek-turn.prev{left: calc(50% - 118px);}
+  .ledger-root .billpeek-turn.next{right: calc(50% - 118px);}
 }
