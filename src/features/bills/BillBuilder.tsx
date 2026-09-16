@@ -2004,9 +2004,14 @@ export function BillBuilder() {
       const suppliers = new Set(
         (masters?.ledgers ?? []).filter((l) => l.groupName === 'Sundry Creditors').map((l) => foldName(l.name)),
       )
+      // A bill tied to an account is that account, under whatever it is called
+      // now. Offering the name it was saved with is how a renamed customer came
+      // back into this list under the old name, beside the new one.
+      const accounts = new Set((masters?.ledgers ?? []).map((l) => String(l._id)))
       for (const b of bills) {
         const billKind = b.kind ?? 'sale'
         if (billKind !== 'sale' && billKind !== 'receipt') continue
+        if (b.ledgerId && accounts.has(String(b.ledgerId))) continue
         const name = (b.customerName ?? '').trim()
         if (!name || byName.has(foldName(name)) || suppliers.has(foldName(name))) continue
         byName.set(foldName(name), {

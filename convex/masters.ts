@@ -5,6 +5,7 @@ import { record, money } from "./lib/history";
 import { round2 } from "./lib/money";
 import { requirePin } from "./lib/pin";
 import { fold } from "./lib/parties";
+import { carryRename } from "./lib/rename";
 
 /** The groups whose ledgers are people the shop deals with. */
 const PARTY_GROUPS = ["Sundry Creditors", "Sundry Debtors"];
@@ -141,13 +142,27 @@ export const updateLedger = mutation({
       if (clash) throw new ConvexError(`"${clash.name}" already exists — use that account.`);
     }
     await ctx.db.patch(id, { ...patch, updatedAt: Date.now() });
+
+    // A rename is only a rename if the old name goes everywhere it was written.
+    let carried = "";
+    if (before && patch.name && patch.name !== before.name) {
+      const group = await ctx.db.get(before.groupId);
+      const copies = await carryRename(ctx, before, patch.name, group?.name !== "Sundry Creditors");
+      const parts = [
+        copies.bills && `${copies.bills} bill${copies.bills === 1 ? "" : "s"}`,
+        copies.binned && `${copies.binned} in the bin`,
+        copies.customers && `${copies.customers} customer record${copies.customers === 1 ? "" : "s"}`,
+      ].filter(Boolean);
+      if (parts.length) carried = ` — renamed on ${parts.join(", ")}`;
+    }
+
     const changed = Object.keys(patch).filter(
       (k) => (before as Record<string, unknown> | null)?.[k] !== (patch as Record<string, unknown>)[k]
     );
     await record(
       ctx,
       "ledger.update",
-      `Changed ${before?.name ?? "ledger"}${changed.length ? `: ${changed.join(", ")}` : ""}`,
+      `Changed ${before?.name ?? "ledger"}${changed.length ? `: ${changed.join(", ")}` : ""}${carried}`,
       { entity: "ledger", entityId: id, detail: patch }
     );
   },
