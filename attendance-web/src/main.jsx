@@ -8,6 +8,17 @@ const CONVEX_URL =
   import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
 const convex = new ConvexReactClient(CONVEX_URL)
 
+// A scroll over an amount box scrolls the page, never the amount: the box
+// lets go of focus before the wheel can nudge the figure it holds.
+document.addEventListener(
+  'wheel',
+  (e) => {
+    const field = document.activeElement
+    if (field instanceof HTMLInputElement && field.type === 'number' && e.target === field) field.blur()
+  },
+  { passive: true, capture: true },
+)
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ConvexProvider client={convex}>
