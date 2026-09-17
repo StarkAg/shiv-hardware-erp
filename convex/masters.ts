@@ -125,6 +125,8 @@ export const updateLedger = mutation({
     openingAsOf: v.optional(v.number()),
     notes: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
+    monthly: v.optional(v.number()),
+    payee: v.optional(v.string()),
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, { id, ...patch }) => {

@@ -13,6 +13,7 @@ import VoucherForm from './components/VoucherForm';
 import LedgerForm from './components/LedgerForm';
 import BillViewer from './components/BillViewer';
 import PrintPacket from './components/PrintPacket';
+import SalaryRent from './components/SalaryRent';
 import { History as HistoryIcon } from 'lucide-react'
 
 const TABS = [
@@ -21,6 +22,7 @@ const TABS = [
   ['all', 'All Parties'],
   ['suppliers', 'Suppliers'],
   ['customers', 'Customers'],
+  ['monthly', 'Salary & Rent'],
   ['bills', 'Bills'],
   ['trial', 'Trial Balance'],
 ];
@@ -49,7 +51,18 @@ const PARTY_GROUP = {
   payment: 'Sundry Creditors',
   sale: 'Sundry Debtors',
   receipt: 'Sundry Debtors',
+  refund: 'Sundry Debtors',
 };
+
+/** Accounts kept on the Salary & Rent tab rather than with the parties. */
+const MONTHLY_GROUPS = ['Staff', 'Rent Payable'];
+
+/** Whether an account belongs on a voucher of this kind. */
+const fitsVoucher = (kind, group) =>
+  group === PARTY_GROUP[kind] ||
+  // A goods return goes either way; a payment can be wages or rent.
+  (kind === 'return' && (group === 'Sundry Debtors' || group === 'Sundry Creditors')) ||
+  (kind === 'payment' && MONTHLY_GROUPS.includes(group));
 
 /** Manifest shortcuts land here: /?new=sale, /?tab=pending. */
 function launchIntent() {
@@ -138,7 +151,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
    * when the voucher is on their side of the books.
    */
   const addVoucher = (kind) => {
-    const keep = partyId && groupOf(partyId) === PARTY_GROUP[kind] ? partyId : null;
+    const keep = partyId && fitsVoucher(kind, groupOf(partyId)) ? partyId : null;
     const name = keep ? ledgers.find((l) => l._id === keep)?.name : undefined;
     if (onOpenVoucher) onOpenVoucher(kind, name);
     else startForm(kind);
@@ -180,7 +193,13 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
   const openParty = (id) => {
     setPartyId(id);
     setTab((current) =>
-      current === 'all' ? 'all' : groupOf(id) === 'Sundry Debtors' ? 'customers' : 'suppliers'
+      current === 'all'
+        ? 'all'
+        : MONTHLY_GROUPS.includes(groupOf(id))
+          ? 'monthly'
+          : groupOf(id) === 'Sundry Debtors'
+            ? 'customers'
+            : 'suppliers'
     );
   };
 
@@ -193,7 +212,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
       ledgerId={partyId}
       masters={masters}
       onBack={() => setPartyId(null)}
-      backLabel={tab === 'all' ? 'All parties' : undefined}
+      backLabel={tab === 'all' ? 'All parties' : tab === 'monthly' ? 'Salary & Rent' : undefined}
       onViewBill={setViewing}
       onPrint={(payload) => setPrinting(payload)}
       onAddVoucher={addVoucher}
@@ -275,6 +294,22 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
             ]}
             onOpen={openParty}
             onPrint={() => setPrinting({ scope: 'all' })}
+          />
+        ))}
+
+      {tab === 'monthly' &&
+        (partyId ? (
+          ledgerPane
+        ) : (
+          <SalaryRent
+            onOpen={openParty}
+            onPay={(id) => {
+              // Wages and rent are paid on the same voucher screen as everything
+              // else, with the account already named.
+              const name = id ? ledgers.find((l) => l._id === id)?.name : undefined;
+              if (onOpenVoucher) onOpenVoucher('payment', name);
+              else startForm('payment');
+            }}
           />
         ))}
 

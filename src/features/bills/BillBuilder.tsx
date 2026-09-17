@@ -1823,7 +1823,7 @@ type PartyOption = {
  * both the customer's; a purchase and a payment are both the supplier's.
  */
 /** The two vouchers that are money and nothing else. */
-const MONEY_KINDS: BillKind[] = ['receipt', 'payment']
+const MONEY_KINDS: BillKind[] = ['receipt', 'payment', 'refund']
 
 const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier' | 'both'> = {
   sale: 'customer',
@@ -1832,6 +1832,8 @@ const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier' | 'both'> = {
   payment: 'supplier',
   // A goods return comes back from a customer or goes back to a supplier.
   return: 'both',
+  // Money handed back to a customer.
+  refund: 'customer',
 }
 
 function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
@@ -2088,7 +2090,13 @@ export function BillBuilder() {
    * A Goods Return lists both, each marked, because a return comes back from
    * a customer or goes back to a supplier.
    */
-  const partyGroups = kind === 'return' ? ['Sundry Debtors', 'Sundry Creditors'] : [partyGroup]
+  // A payment can also be wages to a member of staff or rent for a premises,
+  // which are accounts of their own rather than suppliers.
+  const partyGroups = kind === 'return'
+    ? ['Sundry Debtors', 'Sundry Creditors']
+    : kind === 'payment'
+      ? [partyGroup, 'Staff', 'Rent Payable']
+      : [partyGroup]
   const masters = useQuery(api.masters.all, {})
   /** The account the name on this voucher is, when it is one — its side decides a return. */
   const namedAccount = useMemo(() => {
@@ -2122,7 +2130,7 @@ export function BillBuilder() {
     // Only the customer side has bills behind it; a supplier is never named on
     // one. An account of the same name already read wins — it carries the
     // balance, and offering both would put the two spellings side by side.
-    if (kind === 'sale' || kind === 'receipt') {
+    if (kind === 'sale' || kind === 'receipt' || kind === 'refund') {
       // A supplier's name must not ride in on an old purchase or payment bill,
       // nor on a sale typed against a name that is a supplier's account.
       const suppliers = new Set(
@@ -2240,6 +2248,7 @@ export function BillBuilder() {
     builtVoucher.current = voucherId
     const kindOf: Record<string, BillKind> = {
       sale: 'sale', purchase: 'purchase', receipt: 'receipt', payment: 'payment', 'goods return': 'return',
+      refund: 'refund',
     }
     setDraft({
       ...emptyBill(String(voucher.vchLabel ?? ''), kindOf[voucher.kind] ?? 'sale'),
@@ -2365,7 +2374,7 @@ export function BillBuilder() {
   const [photoShown, setPhotoShown] = useState<unknown>(null)
   // What the paperwork on this kind of voucher is called, and how much of it
   // is already on the bill — counted here so the button can say so while shut.
-  const isMoneyVoucher = (draft.kind ?? 'sale') === 'receipt' || (draft.kind ?? 'sale') === 'payment'
+  const isMoneyVoucher = MONEY_KINDS.includes(draft.kind ?? 'sale')
   /** Written against a supplier: a purchase or a payment. */
   const isSupplierVoucher = PARTY_SIDE[draft.kind ?? 'sale'] === 'supplier'
 
@@ -2649,7 +2658,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // with no document against it.
     let attachments = draft.attachments ?? []
     try {
-      const docKind = (draft.kind ?? 'sale') === 'receipt' || (draft.kind ?? 'sale') === 'payment'
+      const docKind = MONEY_KINDS.includes(draft.kind ?? 'sale')
         ? ('receipt' as const)
         : ('bill' as const)
       const uploaded = photoFiles.length ? await upload(photoFiles) : []
@@ -3101,7 +3110,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             <div className="flex flex-wrap items-end gap-3">
               <label className="flex-1 min-w-[9rem]">
                 <span className="mb-1 block text-xs font-semibold text-muted">
-                  Amount {(draft.kind ?? 'sale') === 'payment' ? 'paid' : 'received'}
+                  Amount {(draft.kind ?? 'sale') === 'receipt' ? 'received' : 'paid'}
                 </span>
                 <div className="relative">
                   <IndianRupee size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -3128,6 +3137,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
 
               {/* What the party was let off. It is not money, so it never
                   reaches the drawer — it clears the rest of their account. */}
+              {(draft.kind ?? 'sale') !== 'refund' && (
               <label className="flex-1 min-w-[9rem]">
                 <span className="mb-1 block text-xs font-semibold text-muted">
                   Discount {(draft.kind ?? 'sale') === 'payment' ? 'received' : 'allowed'}
@@ -3150,6 +3160,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                   />
                 </div>
               </label>
+              )}
             </div>
 
             {discount > 0 && (
@@ -3423,7 +3434,7 @@ const iso = (d: Date) => {
  * The number is the bill's own until it posts and the books issue theirs.
  */
 const VCH_ABBR: Record<string, string> = {
-  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR',
+  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR', refund: 'REF',
 }
 const billLabel = (b: Bill) =>
   // A voucher opened for editing already carries the books' own label —

@@ -1126,3 +1126,17 @@ to{opacity: 0}}
   .ledger-root .billpeek-turn.prev{left: calc(50% - 118px);}
   .ledger-root .billpeek-turn.next{right: calc(50% - 118px);}
 }
+
+/* Salary & Rent */
+.ledger-root .monthpick{display: flex; align-items: center; gap: 10px; min-width: 240px;}
+.ledger-root .monthpick .combo{flex: 1;}
+.ledger-root .monthly{margin-bottom: 26px;}
+.ledger-root .monthly-head{display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; flex-wrap: wrap; margin: 6px 0 10px;}
+.ledger-root .monthly-head h2{margin: 0; font-size: 13px; text-transform: uppercase;
+  letter-spacing: 0.14em; color: var(--muted); font-weight: 800;}
+.ledger-root .monthly-acts{display: flex; gap: 8px; flex-wrap: wrap;}
+.ledger-root .monthly-flash{margin-bottom: 12px;}
+.ledger-root .monthrun{max-width: 340px;}
+.ledger-root .monthrun .chip{cursor: default; font-variant-numeric: tabular-nums;}
+.ledger-root .monthrun .chip:hover{border-color: var(--line); color: inherit;}

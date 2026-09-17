@@ -284,6 +284,12 @@ const SIDES: Record<string, { party: "Dr" | "Cr"; account: "Dr" | "Cr" }> = {
   // account takes the debit and the cash or bank it came out of takes the
   // credit; there is no customer or supplier involved.
   Expense: { party: "Dr", account: "Cr" },
+  // A month's salary or rent falling due: Dr Salary or Rent, Cr the person or
+  // premises — owed, not yet paid. The payment that clears it is a Payment.
+  Journal: { party: "Cr", account: "Dr" },
+  // Money handed back to a customer — what was left over after a return.
+  // The customer is debited, the drawer or bank credited.
+  Refund: { party: "Dr", account: "Cr" },
 };
 
 /**

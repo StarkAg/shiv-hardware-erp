@@ -38,6 +38,7 @@ import type * as lib_trashLinks from "../lib/trashLinks.js";
 import type * as masters from "../masters.js";
 import type * as merge from "../merge.js";
 import type * as migrateLedger from "../migrateLedger.js";
+import type * as monthly from "../monthly.js";
 import type * as photos from "../photos.js";
 import type * as printJobs from "../printJobs.js";
 import type * as reports from "../reports.js";
@@ -88,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   masters: typeof masters;
   merge: typeof merge;
   migrateLedger: typeof migrateLedger;
+  monthly: typeof monthly;
   photos: typeof photos;
   printJobs: typeof printJobs;
   reports: typeof reports;

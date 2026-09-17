@@ -356,6 +356,12 @@ export default defineSchema({
     // they mean whatever the shop decides, and they are for finding people
     // again — the chasing list, the ones who pay late, the regulars.
     tags: v.optional(v.array(v.string())),
+    // Staff and rented premises only: what falls due every month, and — for a
+    // premises — who it is paid to. The ledger is named after the place,
+    // because one landlord can let the shop more than one of them and each
+    // runs its own arrears.
+    monthly: v.optional(v.number()),
+    payee: v.optional(v.string()),
     active: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),

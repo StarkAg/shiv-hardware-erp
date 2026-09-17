@@ -21,6 +21,10 @@ const SAME_DAY_ORDER: Record<string, number> = {
   Discount: 3,
   Receipt: 4,
   Payment: 4,
+  // A refund can only follow the return that left the customer in credit.
+  Refund: 4,
+  // A month falling due is the charge; any payment that day comes after it.
+  Journal: 1,
 };
 const dayRank = (typeName?: string) => SAME_DAY_ORDER[typeName ?? ""] ?? 5;
 

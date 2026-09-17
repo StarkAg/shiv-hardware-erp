@@ -51,6 +51,13 @@ const KINDS = {
    * RETURN_TO_SUPPLIER.
    */
   return:   { type: 'Goods Return', account: 'Sales Return', group: 'Sundry Debtors', party: 'Cr', other: 'Dr', settles: false },
+  /**
+   * Money handed back to a customer — what was over after a return worth more
+   * than they owed. It is a payment, but to a customer, so it keeps its own
+   * series (REF) and reads as a refund on their account rather than as a
+   * supplier being paid.
+   */
+  refund:   { type: 'Refund',   account: 'Cash',      group: 'Sundry Debtors',   party: 'Dr', other: 'Cr', settles: true },
 } as const
 
 /** Goods Return to a supplier: the shop owes them less. */
@@ -198,7 +205,8 @@ export const postBill = mutation({
      * reach the drawer: it goes to its own account, which is where the shop
      * can later see what a year of rounding off actually cost.
      */
-    const discount = spec.settles
+    // Nothing is let off on a refund; the money handed back is the whole of it.
+    const discount = spec.settles && kind !== 'refund'
       ? round2(Math.min(Math.max(Number(bill.discount) || 0, 0), total))
       : 0
 
@@ -210,10 +218,15 @@ export const postBill = mutation({
       if (deleted) throw new Error('This bill was deleted on another device. Restore it from Trash before saving again.')
     }
 
-    const type = await ctx.db
+    let type = await ctx.db
       .query('voucherTypes')
       .withIndex('by_name', (q) => q.eq('name', spec.type))
       .unique()
+    // The Refund series is opened the first time a refund is written.
+    if (!type && spec.type === 'Refund') {
+      const id = await ctx.db.insert('voucherTypes', { name: 'Refund', abbr: 'REF', sort: 10 })
+      type = await ctx.db.get(id)
+    }
     if (!type) throw new Error(`The "${spec.type}" voucher type is not set up.`)
 
     // "Sales Accounts" is the group; the account itself is the "Sales" ledger
@@ -272,8 +285,14 @@ export const postBill = mutation({
       const already = new Set((existing.attachments ?? []).map((a: any) =>
         typeof a === 'string' ? a : a.storageId))
       const added = attachments.filter((a) => !already.has(a.storageId))
+      // A bill saved again as another kind moves into that kind's series.
+      // Keeping the old number made a sale re-saved as a refund read REF-0144
+      // — a number the Refund series never issued, and one it would issue
+      // again later.
+      const retyped = existing.typeId !== type._id
       await ctx.db.patch(existing._id, {
         typeId: type._id,
+        ...(retyped ? { voucherNo: await nextVoucherNo(ctx, type, fy), fy } : {}),
         date, partyLedgerId: ledgerId, updatedAt: now,
         ...(hasAmount ? { amount: total, status: 'final' as const } : { amount: undefined, status: 'pending' as const }),
         /**

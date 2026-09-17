@@ -257,7 +257,7 @@ export type BillPaymentMode = 'cash' | 'online' | 'upi'
  * a supplier. It takes either kind of party; which way it posts follows the
  * party's account.
  */
-export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return'
+export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return' | 'refund'
 
 /** What each one is called, and what the party on it is called. */
 export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: string }> = {
@@ -266,6 +266,7 @@ export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: s
   receipt:  { title: 'Receipt',  party: 'Customer', ref: 'Receipt no.' },
   payment:  { title: 'Payment',  party: 'Supplier', ref: 'Voucher no.' },
   return:   { title: 'Goods Return', party: 'Party', ref: 'Ref' },
+  refund:   { title: 'Refund',   party: 'Customer', ref: 'Slip no.' },
 }
 
 export interface BillItem {

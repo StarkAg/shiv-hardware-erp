@@ -87,8 +87,11 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
       (a.kind === 'pending' ? 1 : 0) - (b.kind === 'pending' ? 1 : 0)
   );
 
-  const isCustomer =
-    (masters?.ledgers ?? []).find((l) => l._id === ledgerId)?.groupName === 'Sundry Debtors';
+  const groupName = (masters?.ledgers ?? []).find((l) => l._id === ledgerId)?.groupName;
+  const isCustomer = groupName === 'Sundry Debtors';
+  // Staff and rented premises: owed a month at a time and paid like a
+  // supplier, but never sold to or bought from.
+  const isMonthly = groupName === 'Staff' || groupName === 'Rent Payable';
 
   // What settling this account in full would take: a customer owing money sits
   // in debit, a supplier owed money in credit. Anything else — an advance, a
@@ -123,6 +126,13 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
               .filter(Boolean)
               .join(' · ')}
           </div>
+          {isMonthly && (account?.payee || account?.monthly) && (
+            <div className="ref">
+              {[account.payee, account.monthly && `${rupees(account.monthly)} a month`]
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
+          )}
           {account?.notes && <div className="note inline">{account.notes}</div>}
         </div>
         <div className="partyhead-figure">
@@ -131,12 +141,20 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
             {rupees(data?.closing ?? 0)} <span className="side">{data?.closingSide ?? 'Cr'}</span>
           </div>
           <div className="partyhead-actions">
-            {isCustomer ? (
+            {/* Every voucher that can be written on this side of the books,
+                with the account already named. */}
+            {isMonthly ? (
+              <button className="btn" onClick={() => onAddVoucher('payment', settles)}>
+                + Payment
+              </button>
+            ) : isCustomer ? (
               <>
                 <button className="btn" onClick={() => onAddVoucher('sale')}>+ Sale</button>
                 <button className="btn" onClick={() => onAddVoucher('receipt', settles)}>
                   + Receipt
                 </button>
+                <button className="btn" onClick={() => onAddVoucher('return')}>+ Goods Return</button>
+                <button className="btn" onClick={() => onAddVoucher('refund')}>+ Refund</button>
               </>
             ) : (
               <>
@@ -144,6 +162,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                 <button className="btn" onClick={() => onAddVoucher('payment', settles)}>
                   + Payment
                 </button>
+                <button className="btn" onClick={() => onAddVoucher('return')}>+ Goods Return</button>
               </>
             )}
             <button
