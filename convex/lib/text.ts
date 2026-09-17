@@ -109,10 +109,15 @@ export function properText(input: string | undefined | null): string {
 export function properItem(input: string | undefined | null): string {
   // Every "x" between two sizes, however many parts and with inch or foot
   // marks: "17x20x6" → "17 X 20 X 6", '1 1/2"x3/4"' → '1 1/2" X 3/4"'.
+  // Inches are written ", not '' — "10''Telescopic" is '10" Telescopic' —
+  // and the metal comes after the item: "SS Screw" is "Screw SS".
   // Then the names the shop settled on for whole items, last, so they are
   // written exactly as chosen.
   return shopName(
-    properText(fixSpelling(input)).replace(/(\d+(?:\.\d+)?['"′″]*)\s*[x×]\s*(?=\d)/gi, '$1 X '),
+    properText(fixSpelling(input))
+      .replace(/(\d)\s*(?:''|″)\s*/g, (_, d, at: number, all: string) => `${d}"${/[A-Za-z0-9(]/.test(all[at + _.length] ?? '') ? ' ' : ''}`)
+      .replace(/(\d+(?:\.\d+)?['"′″]*)\s*[x×]\s*(?=\d)/gi, '$1 X ')
+      .replace(/\bSS Screws?\b/g, (m) => `Screw${m.endsWith('s') ? 's' : ''} SS`),
   )
 }
 

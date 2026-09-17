@@ -63,7 +63,7 @@ export function fixSpelling(text: string | undefined | null): string {
  */
 const NAMES: Record<string, string> = {
   '19 x 6 ss screw (+)': '19 X 6 Screw SS (+)',
-  '30" ss screw (+)': '3" SS Screw (+)',
+  '30" screw ss (+)': '3" Screw SS (+)',
   '4" cutter blade': '4" Cutter Blade Bosch',
   '4" cutter blade bosch': '4" Cutter Blade Bosch',
   'sunmica linear offwhite': 'Sunmica Linear Off White',
@@ -89,6 +89,22 @@ const NAMES: Record<string, string> = {
   '6" t/b acer jazz': '6" TB Acer Jazz',
   '6mm s 8 x 4 pcs': '6mm S 8 X 4',
   'fevicol relam 430 g': 'Fevicol Relam 430 Gm',
+  // Laminates written as a bare code, or as "Mica".
+  '240 hdg': 'Sunmica HT 240 HDG',
+  '0.8 lw 8340': 'Sunmica 0.8mm LW 8340',
+  '0.8mm lw 8340': 'Sunmica 0.8mm LW 8340',
+  '0.8mm hg 8008': 'Sunmica 0.8mm HG 8008',
+  'sunmica lpol 1402': 'Sunmica LP/OL 1402',
+  'mica': 'Sunmica',
+  'mica 3 pcs': 'Sunmica',
+  'mica hg': 'Sunmica HG',
+  // A vague copy of an item that has its full name on the list.
+  '19mm l hinges': '19mm L Hinges SS',
+  '9" bed joint': '9" Bed Joint H',
+  '5" x 2.5" wpc chowkhat': `5" X 2.5" WPC Chowkhat 7'`,
+  '1 1/2" x 3/4" dhal pvc': '1 1/2" X 3/4" Dhal PVC 7 1/4"',
+  "35 x 10 lipping teak 250'": '35 X 10 Lipping Teak',
+  'glass runner': 'Glass Runner Prakash',
 }
 
 export const nameKey = (text: string) =>

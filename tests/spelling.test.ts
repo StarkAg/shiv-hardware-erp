@@ -56,7 +56,19 @@ describe('My Items that become one name are one entry', () => {
 describe('names the shop settled on', () => {
   test.each([
     ['19 X 6 SS Screw (+)', '19 X 6 Screw SS (+)'],
-    ['30" SS Screw (+)', '3" SS Screw (+)'],
+    ['30" SS Screw (+)', '3" Screw SS (+)'],
+    ["3'' SS Screw (+)", '3" Screw SS (+)'],
+    ["10''Telescopic Indian", '10" Telescopic Indian'],
+    ["17 No 1'' HL Nail", '17 No 1" HL Nail'],
+    ["1'' Pipe SS 12'", `1" Pipe SS 12'`],
+    ["2''x1'' Patti", '2" X 1" Patti'],
+    ['Mica HG', 'Sunmica HG'],
+    ['Mica 3 Pcs', 'Sunmica'],
+    ['240 HDG', 'Sunmica HT 240 HDG'],
+    ['0.8 LW 8340', 'Sunmica 0.8mm LW 8340'],
+    ['Sunmica LPOL 1402', 'Sunmica LP/OL 1402'],
+    ['9" Bed Joint', '9" Bed Joint H'],
+    ['Glass Runner', 'Glass Runner Prakash'],
     ["4'' Cutter Blade", '4" Cutter Blade Bosch'],
     ["4'' cutter blade bosch", '4" Cutter Blade Bosch'],
     ['Sunmica Linear Offwhite', 'Sunmica Linear Off White'],
@@ -81,7 +93,7 @@ describe('names the shop settled on', () => {
   })
 
   test('the ones kept apart stay apart', () => {
-    for (const name of ['3/4" Screw SS (+)', '19 X 6 Screw SS (+)', "3'' SS Screw (+)", '12mm S 6 X 3', 'Mica HG', 'Sunmica 4284 NGN Extra']) {
+    for (const name of ['3/4" Screw SS (+)', '19 X 6 Screw SS (+)', '12mm S 6 X 3', 'Magnet', 'Door Magnet', 'Sunmica 4284 NGN Extra', "1'' Oval Pipe".replace("''", '"')]) {
       expect(properItem(name)).toBe(properText(fixSpelling(name)))
     }
   })
