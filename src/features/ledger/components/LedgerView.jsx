@@ -21,29 +21,24 @@ const goodsOn = (bill) =>
 const figure = (n) => Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 /**
- * What a voucher was for, read off its bill: "Sunmica 20 Sheet @ 480".
+ * What an unpriced bill is still waiting on: "Sunmica 15 Sheet".
  *
- * A supplier's goods often arrive days before the rate does. The ledger row
- * used to say only "Purchase 144" until then, so nobody could tell from the
- * account what was still waiting to be priced. A line with no amount says so.
+ * A supplier's goods often arrive days before the rate does, and the row used
+ * to say only "Purchase 144" until then. Only the lines with no amount are
+ * listed — a priced row needs none of this, and a priced line on a half-priced
+ * bill is not what anyone is waiting for.
  */
 function Goods({ bill }) {
-  const goods = goodsOn(bill);
-  if (!goods.length) return null;
+  const waiting = goodsOn(bill).filter((i) => !Number(i.amount));
+  if (!waiting.length) return null;
   return (
     <div className="billgoods">
-      {goods.map((i) => {
-        const amount = Number(i.amount) || 0;
-        const qty = Number(i.qty) || 0;
-        const rate = Number(i.rateSqft) || (qty ? amount / qty : 0);
-        return (
-          <span key={i.id} className={`good${amount ? '' : ' norate'}`}>
-            {i.description}
-            {qty ? ` ${figure(qty)} ${i.unit ?? ''}` : ''}
-            {amount ? (rate ? ` @ ${figure(rate)}` : '') : ' · rate awaited'}
-          </span>
-        );
-      })}
+      {waiting.map((i) => (
+        <span key={i.id} className="good">
+          {i.description}
+          {Number(i.qty) ? ` ${figure(i.qty)} ${i.unit ?? ''}` : ''}
+        </span>
+      ))}
     </div>
   );
 }
@@ -447,12 +442,9 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                     <td className="ref mono" data-label="Ref">{item.r.refNo || '—'}</td>
                     <td className="particulars" data-label="Particulars">
                       {(item.r.contra ?? []).join(', ') || '—'}
-                      <Goods bill={billFor(item.r)} />
-                      {item.r.narration &&
-                        item.r.narration !== item.r.vchType &&
-                        !(billFor(item.r) && DEFAULT_NARRATION.test(item.r.narration)) && (
-                          <div className="ref">{item.r.narration}</div>
-                        )}
+                      {item.r.narration && item.r.narration !== item.r.vchType && (
+                        <div className="ref">{item.r.narration}</div>
+                      )}
                     </td>
                     <td className="num debit" data-label="Debit">
                       {item.r.side === 'Dr' ? rupees(item.r.amount) : ''}
