@@ -105,6 +105,25 @@ function PhoneGate() {
 }
 
 // HashRouter keeps routing working when packaged as a desktop (file://) app.
+/**
+ * A scroll over an amount box scrolls the page, never the amount.
+ *
+ * The browser's own behaviour is to nudge a focused number field up or down
+ * with the wheel — so reaching for the trackpad after typing ₹13,000 quietly
+ * saved ₹12,997. The field lets go of focus before the wheel reaches it, the
+ * figure stays as typed, and the page scrolls as the hand meant it to.
+ */
+document.addEventListener(
+  'wheel',
+  (e) => {
+    const field = document.activeElement
+    if (field instanceof HTMLInputElement && field.type === 'number' && e.target === field) {
+      field.blur()
+    }
+  },
+  { passive: true, capture: true },
+)
+
 const router = createHashRouter([
   { path: '/m', element: <MobileView />, errorElement: <AppError /> },
   {
