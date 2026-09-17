@@ -2,6 +2,7 @@
 // Modelled directly on the Excel sheets (Plywood/Door, Aluminium, Guarantee Card).
 
 import { assetPath } from './assets'
+import type { AutoKind, BillCharges } from './billCharges'
 
 export type ProductCategory =
   | 'readymade-door'
@@ -311,6 +312,11 @@ export interface BillItem {
   sqftRate?: number
   /** ID of a CustomCatalogEntry that this item was picked from */
   customEntryId?: string
+  /**
+   * A discount, GST or round-off line written from the bill's own settings
+   * rather than typed. See `billCharges.ts`.
+   */
+  auto?: AutoKind
 }
 
 /**
@@ -358,7 +364,7 @@ export function billCharges(items: BillItem[] = []): BillItem[] {
 
 const isChargeLine = (i: BillItem) => isRoundupLine(i) || isAmountOnlyLine(i)
 
-export interface Bill {
+export interface Bill extends BillCharges {
   id: string
   number: string        // sequential shop number e.g. "34", "35"
   date: string          // ISO date

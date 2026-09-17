@@ -350,8 +350,16 @@ function buildEstimatePages(bill: Bill): string {
 
     // Fare and round-off sit just above the total rule — a charge on the bill,
     // not one of the goods, and read right where the figure it changes is.
+    // A discount or tax is worked on the goods, so the goods are shown first.
+    const taxed = charges.some(c => /^(?:discount|less|[csi]?\s*\.?\s*gst)\b/i.test((c.description ?? '').trim()))
+    const subTotal = isLast && taxed && prevTotal === 0
+      ? `<div style="display:flex;justify-content:flex-end;align-items:baseline;gap:4mm;font-size:10pt;margin-bottom:1.5mm;border-top:0.5px solid #aaa;padding-top:1mm">
+          <span style="color:#555">Sub Total</span>
+          <span style="font-weight:700;min-width:24mm;text-align:right">${fmt(runningTotal)}</span>
+        </div>`
+      : ''
     const chargeLines = isLast
-      ? charges.map(c => `
+      ? subTotal + charges.map(c => `
           <div style="display:flex;justify-content:flex-end;align-items:baseline;gap:4mm;font-size:10pt;margin-bottom:1.5mm">
             <span style="color:#555">${esc(formatItemDescription(c.description))}</span>
             <span style="font-weight:600;min-width:24mm;text-align:right${Number(c.amount) < 0 ? ';color:#b00' : ''}">${fmt(Number(c.amount))}</span>

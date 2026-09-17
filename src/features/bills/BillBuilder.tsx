@@ -43,6 +43,7 @@ const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
 import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS } from '../../lib/types'
 import type { BillKind } from '../../lib/types'
+import { DEFAULT_GST_RATE, GST_RATES, handLines, withCharges, type BillCharges } from '../../lib/billCharges'
 import { buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
 import { deviceId, deviceName } from '../../lib/device'
 import { useMutation, useQuery } from 'convex/react'
@@ -1856,6 +1857,129 @@ function hasMeaningfulContent(bill: Bill): boolean {
   return bill.customerName.trim().length > 0 || bill.items.some(i => i.description.trim().length > 0)
 }
 
+/**
+ * Discount, GST and round-off for the whole bill. Each is a setting, and the
+ * lines it writes are listed underneath with what they came to.
+ */
+function ChargesPanel({ bill, charges, onChange }: {
+  bill: Bill
+  charges: BillItem[]
+  onChange: (patch: Partial<BillCharges>) => void
+}) {
+  const gst = bill.gst ?? 'none'
+  const round = bill.round ?? 'off'
+  const rate = bill.gstRate ?? DEFAULT_GST_RATE
+  // A tax line typed by hand as well as the one written here would charge it twice.
+  const typedTax = gst !== 'none' && handLines(bill.items).some((i) => /gst/i.test(i.description ?? '') && isChargeName(i.description))
+  const typedRound = round !== 'off' && handLines(bill.items).some((i) => isRoundupLine(i))
+
+  const seg = (on: boolean) =>
+    `px-2.5 py-1.5 text-xs font-semibold transition first:rounded-l-lg last:rounded-r-lg ${
+      on ? 'bg-shiv-green text-stone-950' : 'bg-white text-muted hover:bg-stone-50 dark:bg-stone-800 dark:hover:bg-stone-700'
+    }`
+  const group = 'flex overflow-hidden rounded-lg border border-stone-200 dark:border-white/10 [&>*+*]:border-l [&>*+*]:border-stone-200 dark:[&>*+*]:border-white/10'
+  const field = 'w-20 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-right text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white'
+  const num = (v: string) => (v === '' ? undefined : Number(v) || 0)
+
+  return (
+    <div className="mt-3 rounded-lg border border-stone-300 p-3 dark:border-white/15">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted">Discount</span>
+          <div className={group}>
+            <button type="button" className={seg(!bill.offIsPercent)} onClick={() => onChange({ offIsPercent: undefined })}>₹</button>
+            <button type="button" className={seg(!!bill.offIsPercent)} onClick={() => onChange({ offIsPercent: true })}>%</button>
+          </div>
+          <input
+            type="number" inputMode="decimal" min={0} max={bill.offIsPercent ? 100 : undefined}
+            data-bill-nav="1" onKeyDown={billArrowKeys}
+            aria-label={bill.offIsPercent ? 'Discount percent' : 'Discount in rupees'}
+            placeholder="0"
+            value={bill.offValue ?? ''}
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => onChange({ offValue: num(e.target.value) })}
+            className={field}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted">GST</span>
+          <div className={group}>
+            <button type="button" className={seg(gst === 'none')} onClick={() => onChange({ gst: undefined })}>None</button>
+            <button type="button" className={seg(gst === 'local')} onClick={() => onChange({ gst: 'local' })}>CGST + SGST</button>
+            <button type="button" className={seg(gst === 'igst')} onClick={() => onChange({ gst: 'igst' })}>IGST</button>
+          </div>
+          {gst !== 'none' && (
+            <select
+              aria-label="GST rate"
+              value={rate}
+              onChange={(e) => onChange({ gstRate: Number(e.target.value) })}
+              className="rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
+            >
+              {GST_RATES.map((r) => (
+                <option key={r} value={r}>{gst === 'local' ? `${r}% (${r / 2} + ${r / 2})` : `${r}%`}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted">Round off</span>
+          <div className={group}>
+            <button type="button" className={seg(round === 'off')} onClick={() => onChange({ round: undefined })}>Off</button>
+            <button type="button" className={seg(round === 'auto')} onClick={() => onChange({ round: 'auto' })}>Auto</button>
+            <button type="button" className={seg(round === 'manual')} onClick={() => onChange({ round: 'manual' })}>Manual</button>
+          </div>
+          {round === 'manual' && (
+            <input
+              type="number" inputMode="decimal" step="any"
+              data-bill-nav="1" onKeyDown={billArrowKeys}
+              aria-label="Round off amount, minus to take off"
+              placeholder="-0"
+              value={bill.roundValue ?? ''}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => onChange({ roundValue: num(e.target.value) })}
+              className={field}
+            />
+          )}
+        </div>
+      </div>
+
+      {charges.length > 0 && (
+        <div className="mt-3 space-y-1 border-t border-stone-200 pt-2 text-sm dark:border-white/10">
+          {charges.map((c) => (
+            <div key={c.id} className="flex justify-end gap-6">
+              <span className="text-muted">{c.description}</span>
+              <span className={`w-28 text-right font-semibold tabular-nums ${c.amount < 0 ? 'text-red-600 dark:text-red-300' : 'dark:text-white'}`}>
+                {c.amount < 0 ? '−' : '+'}₹{Math.abs(c.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {round === 'manual' && (
+        <p className="mt-2 text-xs text-muted">Type a minus figure to take money off, a plain one to add it.</p>
+      )}
+      {typedTax && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">A GST line is also typed in the items above, so tax is on this bill twice. Remove one.</p>
+      )}
+      {typedRound && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">A Roundup line is also typed in the items above. Remove it, or set Round off to Off.</p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * A saved bill as the editor holds it: the lines the counter wrote. Discount,
+ * GST and round-off lines are written again from the bill's settings, so the
+ * copies saved with it are set aside rather than edited as goods.
+ */
+function forEditing(bill: Bill): Bill {
+  const items = handLines(bill.items)
+  return { ...bill, items: items.length ? items : [emptyItem()] }
+}
+
 function calcTotal(items: BillItem[]) {
   return items.reduce((s, i) => s + (Number(i.amount) || 0), 0)
 }
@@ -1927,7 +2051,7 @@ export function BillBuilder() {
   const { bills, saveBill, deleteBill, nextBillNumber } = useStore()
 
   const existing = id ? bills.find((b) => b.id === id) : undefined
-  const [draft, setDraft] = useState<Bill>(() => existing ?? emptyBill(nextBillNumber()))
+  const [draft, setDraft] = useState<Bill>(() => (existing ? forEditing(existing) : emptyBill(nextBillNumber())))
   const [panelList, setPanelList] = useState<PanelList | null>(null)
 
 
@@ -2220,7 +2344,7 @@ export function BillBuilder() {
     const bill = bills.find((b) => b.id === id)
     if (!bill) return
     openedFor.current = id
-    setDraft({ ...bill })
+    setDraft(forEditing(bill))
     setView('form')
   }, [id, bills])
 
@@ -2384,7 +2508,11 @@ export function BillBuilder() {
    */
   const money = Math.max(0, Number(draft.moneyAmount) || 0)
   const discount = Math.max(0, Number(draft.discount) || 0)
-  const total = isMoneyVoucher ? money + discount : calcTotal(draft.items)
+  // Discount, GST and round-off are written from the goods on every change,
+  // so what is previewed, printed and posted is always the same bill.
+  const priced = useMemo(() => (isMoneyVoucher ? draft : withCharges(draft)), [draft, isMoneyVoucher])
+  const total = isMoneyVoucher ? money + discount : calcTotal(priced.items)
+  const setCharges = (patch: Partial<BillCharges>) => setDraft((d) => ({ ...d, ...patch }))
 
   /**
    * Start a voucher from the day book.
@@ -2547,7 +2675,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
     // Stamped once more on the way out, for lines of an older bill that were
     // saved before sheets carried a square-foot rate and not touched since.
-    return postStored({ ...draft, items: draft.items.map(withSqft), total, attachments }, !borrowed)
+    return postStored({ ...priced, items: priced.items.map(withSqft), total, attachments }, !borrowed)
   }
 
   async function save() {
@@ -2568,7 +2696,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
      */
     const partyTab = sideGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
-    if (!borrowed) saveBill({ ...draft, items: draft.items.map(withSqft), total })
+    if (!borrowed) saveBill({ ...priced, items: priced.items.map(withSqft), total })
     setView('list')
     // The party's own account when the bill already names one; a party
     // opened by this bill has no account until the server answers, so the
@@ -2644,7 +2772,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
      */
     const done = await postDraft()
     if (done) { doPrint(done.bill); return }
-    if (draft.postedAt) doPrint({ ...draft, total })
+    if (draft.postedAt) doPrint({ ...priced, total })
   }
 
   // ---- FORM VIEW -----------------------------------------------------------
@@ -3078,6 +3206,12 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           >
             <Plus size={13} /> Add Item
           </button>
+
+          <ChargesPanel
+            bill={draft}
+            charges={priced.items.filter((i) => i.auto)}
+            onChange={setCharges}
+          />
           </>)}
 
           {/* Running total, and what was taken against it */}
@@ -3248,7 +3382,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
         )}
 
         {/* Live print preview — scaled to fit phone width */}
-        <BillPreview bill={{ ...draft, total }} />
+        <BillPreview bill={{ ...priced, total }} />
 
       </div>
 
