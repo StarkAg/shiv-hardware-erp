@@ -11,7 +11,8 @@
  *   /data/monthly/   tables on the 1st, the last 24 months
  *   /data/weekly/    everything including photos, the last 4 Sundays
  *
- * Commands, run with `railway ssh -s backups -- node backup.mjs <command>`:
+ * Commands, run from any folder with
+ *   railway ssh -p 3204a621-3a84-4ad0-9960-d9195243d081 -e production -s backups node backup.mjs <command>
  *
  *   serve                 what the service runs: wait for 02:00, back up, repeat
  *   run [full]            back up now
