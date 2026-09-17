@@ -42,9 +42,59 @@ const FIXES: Record<string, string> = {
   screo: 'Screw',
   deewan: 'Dewan',
   bedjoin: 'Bedjoint',
+  alaldite: 'Araldite',
+  vaccum: 'Vacuum',
 }
 
 /** An item name with every known misspelling put right. */
 export function fixSpelling(text: string | undefined | null): string {
   return String(text ?? '').replace(/[A-Za-z]+/g, (word) => FIXES[word.toLowerCase()] ?? word)
+}
+
+/**
+ * Whole items the shop settled on one name for, where one item was on the
+ * list twice written two ways ("19 X 6 SS Screw (+)" and "19 X 6 Screw SS
+ * (+)"), or a laminate was "Mica", "HR Lam" or a bare code. Matched on the
+ * whole name, ignoring case, spacing and '' against ", so it only ever moves
+ * these items and never a word inside another name.
+ *
+ * To add one: the old name as `nameKey` gives it on the left, the shop's name
+ * on the right.
+ */
+const NAMES: Record<string, string> = {
+  '19 x 6 ss screw (+)': '19 X 6 Screw SS (+)',
+  '30" ss screw (+)': '3" SS Screw (+)',
+  '4" cutter blade': '4" Cutter Blade Bosch',
+  '4" cutter blade bosch': '4" Cutter Blade Bosch',
+  'sunmica linear offwhite': 'Sunmica Linear Off White',
+  'mica 9441': 'Sunmica 9441 SHG',
+  'mica 9441 - shg': 'Sunmica 9441 SHG',
+  '9441-shg': 'Sunmica 9441 SHG',
+  'mica 3419 century': 'Sunmica Century 3419 SU',
+  'mica 3419 su century': 'Sunmica Century 3419 SU',
+  'hr lam 8207-st': 'Sunmica HR 8207 ST',
+  'mica hr 8207 st': 'Sunmica HR 8207 ST',
+  'hr lam 8247 fr': 'Sunmica HR 8247 FR',
+  'h.r. lam 8221 sf': 'Sunmica HR 8221 SF',
+  'mica hr 8211 hg': 'Sunmica HR 8211 HG',
+  'mica hr 8224 sf': 'Sunmica HR 8224 SF',
+  '111 hdg': 'Sunmica HT 111 HDG',
+  '4284 ngn': 'Sunmica HT 4284 NGN',
+  'sunmica ht 4284': 'Sunmica HT 4284 NGN',
+  'c gst 9%': 'CGST 9%',
+  's gst 9%': 'SGST 9%',
+  '1/1/2 nail': '1 1/2" Nail',
+  '20no 3/4" hl nail': '20 No 3/4" HL Nail',
+  'l vacuum ss 3/4"': '3/4" L Vacuum SS',
+  '6" t/b acer jazz': '6" TB Acer Jazz',
+  '6mm s 8 x 4 pcs': '6mm S 8 X 4',
+  'fevicol relam 430 g': 'Fevicol Relam 430 Gm',
+}
+
+export const nameKey = (text: string) =>
+  text.toLowerCase().replace(/''|″/g, '"').replace(/′/g, "'").replace(/\s+/g, ' ').trim()
+
+/** The shop's name for an item it renamed, or the name as it came. */
+export function shopName(text: string): string {
+  return NAMES[nameKey(text)] ?? text
 }

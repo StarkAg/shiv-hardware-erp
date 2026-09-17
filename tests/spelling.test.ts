@@ -52,3 +52,51 @@ describe('My Items that become one name are one entry', () => {
     expect(remap).toEqual({ b: 'a' })
   })
 })
+
+describe('names the shop settled on', () => {
+  test.each([
+    ['19 X 6 SS Screw (+)', '19 X 6 Screw SS (+)'],
+    ['30" SS Screw (+)', '3" SS Screw (+)'],
+    ["4'' Cutter Blade", '4" Cutter Blade Bosch'],
+    ["4'' cutter blade bosch", '4" Cutter Blade Bosch'],
+    ['Sunmica Linear Offwhite', 'Sunmica Linear Off White'],
+    ['Mica 9441 - SHG', 'Sunmica 9441 SHG'],
+    ['9441-shg', 'Sunmica 9441 SHG'],
+    ['Mica 3419 SU Centyry', 'Sunmica Century 3419 SU'],
+    ['HR Lam 8207-ST', 'Sunmica HR 8207 ST'],
+    ['H.R. Lam 8221 SF', 'Sunmica HR 8221 SF'],
+    ['4284 NGN', 'Sunmica HT 4284 NGN'],
+    ['C GST 9%', 'CGST 9%'],
+    ['1/1/2 Nail', '1 1/2" Nail'],
+    ['20No 3/4" HL Nail', '20 No 3/4" HL Nail'],
+    ['Alaldite 180 Gm', 'Araldite 180 Gm'],
+    ['L Vaccum SS 3/4"', '3/4" L Vacuum SS'],
+    ["6'' T/B Acer Jazz", '6" TB Acer Jazz'],
+    ['6mm S 8 X 4 Pcs', '6mm S 8 X 4'],
+    ['Fevicol Relam 430 G', 'Fevicol Relam 430 Gm'],
+  ])('%s → %s', (input, expected) => {
+    expect(properItem(input)).toBe(expected)
+    // Settled: saving it again changes nothing.
+    expect(properItem(expected)).toBe(expected)
+  })
+
+  test('the ones kept apart stay apart', () => {
+    for (const name of ['3/4" Screw SS (+)', '19 X 6 Screw SS (+)', "3'' SS Screw (+)", '12mm S 6 X 3', 'Mica HG', 'Sunmica 4284 NGN Extra']) {
+      expect(properItem(name)).toBe(properText(fixSpelling(name)))
+    }
+  })
+
+  test('two spellings of one item become one entry, and bills follow', () => {
+    const tidy = tidyCatalog({
+      hardwareCatalog: {},
+      customCatalog: [
+        { id: 'a', name: '19 X 6 SS Screw (+)', rate: 0.88, unit: 'Pc', sizes: [], brands: [] },
+        { id: 'b', name: '19 X 6 Screw SS (+)', rate: 0.88, unit: 'Pc', sizes: [], brands: [] },
+        { id: 'c', name: '3/4" Screw SS (+)', rate: 0.88, unit: 'Pc', sizes: [], brands: [] },
+      ],
+      sets: [],
+    })
+    expect(tidy.customCatalog.map((e: any) => e.name)).toEqual(['19 X 6 Screw SS (+)', '3/4" Screw SS (+)'])
+    expect(tidy.remap).toEqual({ b: 'a' })
+  })
+})

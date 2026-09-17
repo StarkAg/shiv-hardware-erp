@@ -1,4 +1,4 @@
-import { fixSpelling } from './spelling'
+import { fixSpelling, shopName } from './spelling'
 
 /**
  * How every name in the shop is written: proper case, with codes in capitals.
@@ -109,7 +109,11 @@ export function properText(input: string | undefined | null): string {
 export function properItem(input: string | undefined | null): string {
   // Every "x" between two sizes, however many parts and with inch or foot
   // marks: "17x20x6" → "17 X 20 X 6", '1 1/2"x3/4"' → '1 1/2" X 3/4"'.
-  return properText(fixSpelling(input)).replace(/(\d+(?:\.\d+)?['"′″]*)\s*[x×]\s*(?=\d)/gi, '$1 X ')
+  // Then the names the shop settled on for whole items, last, so they are
+  // written exactly as chosen.
+  return shopName(
+    properText(fixSpelling(input)).replace(/(\d+(?:\.\d+)?['"′″]*)\s*[x×]\s*(?=\d)/gi, '$1 X '),
+  )
 }
 
 /**
