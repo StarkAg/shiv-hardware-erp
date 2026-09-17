@@ -14,6 +14,7 @@ import LedgerForm from './components/LedgerForm';
 import BillViewer from './components/BillViewer';
 import PrintPacket from './components/PrintPacket';
 import SalaryRent from './components/SalaryRent';
+import BillsToCome from './components/BillsToCome';
 import { History as HistoryIcon } from 'lucide-react'
 
 const TABS = [
@@ -23,6 +24,7 @@ const TABS = [
   ['suppliers', 'Suppliers'],
   ['customers', 'Customers'],
   ['monthly', 'Salary & Rent'],
+  ['tocome', 'Bills to Come'],
   ['bills', 'Bills'],
   ['trial', 'Trial Balance'],
 ];
@@ -52,6 +54,7 @@ const PARTY_GROUP = {
   sale: 'Sundry Debtors',
   receipt: 'Sundry Debtors',
   refund: 'Sundry Debtors',
+  grn: 'Sundry Creditors',
 };
 
 /** Accounts kept on the Salary & Rent tab rather than with the parties. */
@@ -124,6 +127,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
     ready: 0, reading: 0, failed: 0, doubt: 0, unread: 0,
   };
   const billsCount = needsYou(counts);
+  const toCome = useLive(api.receipts.openCount, {}, 'receipts:count');
   const groupOf = (id) => ledgers.find((l) => l._id === id)?.groupName;
   const onCustomers = tab === 'customers';
 
@@ -150,10 +154,10 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
    * the account with them. Same test as `startForm`: the party rides along only
    * when the voucher is on their side of the books.
    */
-  const addVoucher = (kind) => {
+  const addVoucher = (kind, _amount, extra) => {
     const keep = partyId && fitsVoucher(kind, groupOf(partyId)) ? partyId : null;
     const name = keep ? ledgers.find((l) => l._id === keep)?.name : undefined;
-    if (onOpenVoucher) onOpenVoucher(kind, name);
+    if (onOpenVoucher) onOpenVoucher(kind, name, extra);
     else startForm(kind);
   };
 
@@ -249,6 +253,9 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
           >
             {label}
             {id === 'bills' && billsCount > 0 && <span className="pill">{billsCount}</span>}
+            {id === 'tocome' && (toCome?.count ?? 0) > 0 && (
+              <span className={`pill${toCome.late ? '' : ' calm'}`}>{toCome.count}</span>
+            )}
           </button>
         ))}
       </nav>
@@ -312,6 +319,14 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
             }}
           />
         ))}
+
+      {tab === 'tocome' && (
+        <BillsToCome
+          onOpen={openParty}
+          onEnterBill={(row) => onOpenVoucher?.('purchase', row.party, { grn: row.voucherId })}
+          onViewBill={setViewing}
+        />
+      )}
 
       {tab === 'bills' && (
         <Bills

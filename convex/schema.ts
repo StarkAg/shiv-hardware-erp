@@ -29,6 +29,25 @@ const attachment = v.object({
 // While the old bare-id form is being migrated away, both shapes are accepted.
 const attachments = v.array(v.union(v.id("_storage"), attachment));
 
+const statusField = v.union(v.literal("final"), v.literal("pending"), v.literal("received"));
+
+/**
+ * How a delivery and its bill find each other.
+ *
+ * On a Goods Received Note: who counted the goods, and the purchase that
+ * finally billed them. On a purchase: the deliveries it bills — one bill often
+ * covers two or three drops. A link to a voucher that has since gone to the
+ * trash counts as no link, so deleting a purchase puts its deliveries back on
+ * Bills to Come by itself.
+ */
+const receiptFields = {
+  receivedBy: v.optional(v.string()),
+  billedIn: v.optional(v.id("vouchers")),
+  fromReceipts: v.optional(v.array(v.id("vouchers"))),
+  // What the checks said when the bill was saved against its deliveries.
+  checks: v.optional(v.array(v.string())),
+};
+
 export default defineSchema({
   // ── Bills backup (single-row snapshot; all bills incl. drafts) ────────────
   billsStore: defineTable({
@@ -388,11 +407,17 @@ export default defineSchema({
     // Tally cannot file a bill it has no amount for. This can: a pending
     // voucher carries no entries, so it touches no balance, and shows up in
     // its own queue until someone prices it.
-    status: v.union(v.literal("final"), v.literal("pending")),
+    //
+    // `received` is a Goods Received Note: the goods are in the shop, the
+    // supplier's bill is not. It never carries entries — nothing is owed on
+    // paper until the bill comes — and it waits on Bills to Come until a
+    // purchase is written against it.
+    status: statusField,
     amount: v.optional(v.number()),
     attachments,
     // Carried over from the photograph when the bill was approved.
     tags: v.optional(v.array(v.string())),
+    ...receiptFields,
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -425,10 +450,11 @@ export default defineSchema({
     partyLedgerId: v.id("ledgers"),
     refNo: v.optional(v.string()),
     narration: v.optional(v.string()),
-    status: v.union(v.literal("final"), v.literal("pending")),
+    status: statusField,
     amount: v.optional(v.number()),
     attachments,
     tags: v.optional(v.array(v.string())),
+    ...receiptFields,
     createdAt: v.number(),
     updatedAt: v.number(),
     // The lines as they stood, so a restore puts every balance back.

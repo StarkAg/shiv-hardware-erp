@@ -51,8 +51,13 @@ export function Ledger() {
    * own cut-down form in a modal. One voucher screen, wherever it is reached
    * from, which is the same rule the function keys already follow.
    */
-  const openVoucher = useCallback((kind: string, party?: string) => {
-    const query = new URLSearchParams({ new: kind, ...(party ? { party } : {}) })
+  const openVoucher = useCallback((kind: string, party?: string, extra?: { grn?: string }) => {
+    const query = new URLSearchParams({
+      new: kind,
+      ...(party ? { party } : {}),
+      // "Enter bill" on a delivery: the purchase is written against it.
+      ...(extra?.grn ? { grn: extra.grn } : {}),
+    })
     navigate(`/bills?${query}`)
   }, [navigate])
 

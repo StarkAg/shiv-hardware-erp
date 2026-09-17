@@ -28,6 +28,7 @@ import { Home } from './features/home/Home'
 import { PdfViewer } from './features/pdf/PdfViewer'
 import { MobileView } from './features/mobile/MobileView'
 import { DayPaper } from './features/paper/DayPaper'
+import { Receive } from './features/receive/Receive'
 import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
 import { startProperInputs } from './lib/properInputs'
@@ -126,6 +127,8 @@ document.addEventListener(
 
 const router = createHashRouter([
   { path: '/m', element: <MobileView />, errorElement: <AppError /> },
+  // Staff at the door, on a phone: a delivery in, with the challan photo.
+  { path: '/receive', element: <Receive />, errorElement: <AppError /> },
   {
     path: '/',
     element: <PhoneGate />,

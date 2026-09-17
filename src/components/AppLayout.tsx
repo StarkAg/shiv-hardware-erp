@@ -32,7 +32,7 @@ import {
   ScanLine,
   Printer,
   Scale,
-  IndianRupee, Undo2, HandCoins, CalendarClock } from 'lucide-react'
+  IndianRupee, Undo2, HandCoins, CalendarClock, PackageCheck, PackageOpen } from 'lucide-react'
 import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
 import { UpdateBanner } from './UpdateBanner'
 import { Toaster } from './Toast'
@@ -96,6 +96,7 @@ const AREAS: { label: string; items: NavItem[] }[] = [
       { to: '/bills?new=purchase', label: 'Purchase', icon: Package, key: 'F9' },
       { to: '/bills?new=receipt', label: 'Receipt', icon: IndianRupee, key: 'F6' },
       { to: '/bills?new=payment', label: 'Payment', icon: CreditCard, key: 'F5' },
+      { to: '/bills?new=grn', label: 'Goods Received', icon: PackageCheck },
       { to: '/bills?new=return', label: 'Goods Return', icon: Undo2 },
       { to: '/bills?new=refund', label: 'Refund', icon: HandCoins },
       { to: '/cash-review', label: 'Cash Review', icon: Wallet },
@@ -104,7 +105,8 @@ const AREAS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Accounts',
     items: [
-      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly'] },
+      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly', '/ledger/tocome'] },
+      { to: '/ledger/tocome', label: 'Bills to Come', icon: PackageOpen },
       { to: '/ledger/monthly', label: 'Salary & Rent', icon: CalendarClock },
       { to: '/ledgers', label: 'Account Masters', icon: Users },
       { to: '/ledger/trial', label: 'Trial Balance', icon: Scale },

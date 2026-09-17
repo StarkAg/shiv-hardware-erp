@@ -203,8 +203,33 @@ export const ledger = query({
         .collect()
     ).filter((vch) => vch.status === "pending");
 
+    /**
+     * Deliveries from this supplier. They carry no entries, so they never touch
+     * the running balance — they sit among the rows on their dates, the open
+     * ones waiting for a bill and the billed ones naming the purchase.
+     */
+    const received = [];
+    for (const vch of await ctx.db
+      .query("vouchers")
+      .withIndex("by_party", (q) => q.eq("partyLedgerId", ledgerId))
+      .collect()) {
+      if (vch.status !== "received") continue;
+      const billed = vch.billedIn ? await ctx.db.get(vch.billedIn) : null;
+      received.push({
+        ...vch,
+        vchLabel: vchLabel(typeById.get(vch.typeId)?.abbr ?? "GRN", vch.voucherNo),
+        vchType: typeById.get(vch.typeId)?.name ?? "Goods Received",
+        open: !billed,
+        billedLabel: billed
+          ? vchLabel(typeById.get(billed.typeId)?.abbr ?? "PUR", billed.voucherNo)
+          : null,
+        attachmentUrls: await urlsFor(ctx, vch.attachments),
+      });
+    }
+
     return {
       account,
+      received,
       opening: Math.abs(openingForWindow),
       openingSide: sideOf(openingForWindow),
       openingAsOf: account.openingAsOf,

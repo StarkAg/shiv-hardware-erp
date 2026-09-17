@@ -257,7 +257,7 @@ export type BillPaymentMode = 'cash' | 'online' | 'upi'
  * a supplier. It takes either kind of party; which way it posts follows the
  * party's account.
  */
-export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return' | 'refund'
+export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return' | 'refund' | 'grn'
 
 /** What each one is called, and what the party on it is called. */
 export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: string }> = {
@@ -267,6 +267,7 @@ export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: s
   payment:  { title: 'Payment',  party: 'Supplier', ref: 'Voucher no.' },
   return:   { title: 'Goods Return', party: 'Party', ref: 'Ref' },
   refund:   { title: 'Refund',   party: 'Customer', ref: 'Slip no.' },
+  grn:      { title: 'Goods Received', party: 'Supplier', ref: 'Challan no.' },
 }
 
 export interface BillItem {
@@ -426,6 +427,12 @@ export interface Bill extends BillCharges {
   paidDate?: string
   paymentMode?: BillPaymentMode
   upiRef?: string       // UPI/phone used for payment
+  /** On a Goods Received Note: who counted the goods in. */
+  receivedBy?: string
+  /** On a purchase: the deliveries (GRN voucher ids) this bill is for. */
+  grnIds?: string[]
+  /** On a purchase: what the checks against its deliveries said at saving. */
+  checks?: string[]
   notes?: string
   /**
    * @deprecated There are no drafts. A bill is written and saved, or it is not

@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
+import { useState, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Camera, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { useStore } from '../../lib/store'
@@ -58,6 +58,7 @@ import { billSqft, isFootSized } from '../../lib/pricing'
 import { readBoardSize, sizeLabel, sqftFields, withSqft } from '../../lib/boardSize'
 import { keepTyped } from '../../lib/linePick'
 import { canonicalUnit, foldName } from '../../../convex/lib/text'
+import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
@@ -1834,6 +1835,8 @@ const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier' | 'both'> = {
   return: 'both',
   // Money handed back to a customer.
   refund: 'customer',
+  // Goods in from a supplier, ahead of their bill.
+  grn: 'supplier',
 }
 
 function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
@@ -2084,7 +2087,7 @@ export function BillBuilder() {
    * Names typed on bills that never opened an account are still offered, so
    * nothing written before this is lost — they simply sort after the accounts.
    */
-  const partyGroup = kind === 'purchase' || kind === 'payment' ? 'Sundry Creditors' : 'Sundry Debtors'
+  const partyGroup = kind === 'purchase' || kind === 'payment' || kind === 'grn' ? 'Sundry Creditors' : 'Sundry Debtors'
   /**
    * Purchase and Payment list suppliers only; Sale and Receipt customers only.
    * A Goods Return lists both, each marked, because a return comes back from
@@ -2098,6 +2101,16 @@ export function BillBuilder() {
       ? [partyGroup, 'Staff', 'Rent Payable']
       : [partyGroup]
   const masters = useQuery(api.masters.all, {})
+  // The deliveries a purchase can be the bill for, and the ones this very
+  // purchase already bills.
+  const deliveries = useQuery(
+    api.receipts.open,
+    kind === 'purchase' ? { alsoFor: draft.voucherId ? String(draft.voucherId) : undefined } : 'skip',
+  )?.rows as DeliveryRow[] | undefined
+  // What the checks found at the last press of Save; a second press with the
+  // same findings saves.
+  const [checkList, setCheckList] = useState<string[]>([])
+  const checksRef = useRef<string[]>([])
   /** The account the name on this voucher is, when it is one — its side decides a return. */
   const namedAccount = useMemo(() => {
     const wanted = foldName(draft.customerName)
@@ -2249,6 +2262,7 @@ export function BillBuilder() {
     const kindOf: Record<string, BillKind> = {
       sale: 'sale', purchase: 'purchase', receipt: 'receipt', payment: 'payment', 'goods return': 'return',
       refund: 'refund',
+      'goods received': 'grn',
     }
     setDraft({
       ...emptyBill(String(voucher.vchLabel ?? ''), kindOf[voucher.kind] ?? 'sale'),
@@ -2292,8 +2306,14 @@ export function BillBuilder() {
   // written against an account already open — so the name is filled in rather
   // than typed again.
   const newParty = pageParams.get('party')
+  // `&grn=` comes from "Enter bill" on a delivery: the purchase is written
+  // against that delivery, with its lines already on it.
+  const newGrn = pageParams.get('grn')
+  const [pendingGrn, setPendingGrn] = useState<string | null>(null)
+  const clearPendingGrn = useCallback(() => setPendingGrn(null), [])
   useEffect(() => {
     if (!newKind) return
+    setPendingGrn(newKind === 'purchase' ? newGrn : null)
     setPageParams({}, { replace: true })
     const kind = newKind as BillKind
     /**
@@ -2684,7 +2704,13 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
     // Stamped once more on the way out, for lines of an older bill that were
     // saved before sheets carried a square-foot rate and not touched since.
-    return postStored({ ...priced, items: priced.items.map(withSqft), total, attachments }, !borrowed)
+    return postStored({
+      ...priced,
+      items: priced.items.map(withSqft),
+      total,
+      attachments,
+      ...((draft.kind ?? 'sale') === 'purchase' ? { checks: checksRef.current } : {}),
+    }, !borrowed)
   }
 
   async function save() {
@@ -2692,6 +2718,16 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // A second Accept while this bill is still posting would post it twice:
     // the first call has not handed back a voucher to rewrite yet.
     if (postingBills.has(draft.id)) return
+
+    // A purchase against deliveries is checked first. What the check finds is
+    // shown once; pressing Save again with the same findings saves, and they
+    // go on the voucher.
+    const found = (draft.kind ?? 'sale') === 'purchase' ? deliveryChecks({ ...priced, total }, deliveries) : []
+    if (found.length && found.join('|') !== checkList.join('|')) {
+      setCheckList(found)
+      return
+    }
+    checksRef.current = found
     committedRef.current = true
 
     /**
@@ -2705,7 +2741,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
      */
     const partyTab = sideGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
-    if (!borrowed) saveBill({ ...priced, items: priced.items.map(withSqft), total })
+    if (!borrowed) saveBill({ ...priced, items: priced.items.map(withSqft), total, checks: checksRef.current.length ? checksRef.current : undefined })
     setView('list')
     // The party's own account when the bill already names one; a party
     // opened by this bill has no account until the server answers, so the
@@ -3173,6 +3209,23 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           </div>
         )}
 
+        {(draft.kind ?? 'sale') === 'grn' && (
+          <CheckedBy
+            value={draft.receivedBy}
+            onChange={(name) => setDraft((d) => ({ ...d, receivedBy: name || undefined }))}
+          />
+        )}
+        {(draft.kind ?? 'sale') === 'purchase' && (
+          <AgainstDeliveries
+            draft={draft}
+            setDraft={setDraft}
+            rows={deliveries}
+            ledgerId={namedAccount?._id}
+            pendingGrn={pendingGrn}
+            onPendingDone={clearPendingGrn}
+          />
+        )}
+
         {/* Items */}
         <div>
           {!isMoneyVoucher && (<>
@@ -3218,11 +3271,14 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             <Plus size={13} /> Add Item
           </button>
 
+          {/* A delivery note is goods and counts; tax and discount belong to the bill. */}
+          {(draft.kind ?? 'sale') !== 'grn' && (
           <ChargesPanel
             bill={draft}
             charges={priced.items.filter((i) => i.auto)}
             onChange={setCharges}
           />
+          )}
           </>)}
 
           {/* Running total, and what was taken against it */}
@@ -3231,7 +3287,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 where it went. A sale or a purchase asks how much of it was
                 settled now — that amount posts as a line of this same
                 voucher, against the drawer or the bank. */}
-            {!isMoneyVoucher && (draft.kind ?? 'sale') !== 'return' && (
+            {!isMoneyVoucher && (draft.kind ?? 'sale') !== 'return' && (draft.kind ?? 'sale') !== 'grn' && (
               <div className="flex items-center gap-1.5 rounded-xl bg-stone-100 px-3 py-2 dark:bg-stone-800">
                 <span className="text-sm text-muted">
                   {(draft.kind ?? 'sale') === 'purchase' ? 'Paid' : 'Received'}
@@ -3313,6 +3369,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
           />
         </div>
+
+        <ChecksNotice checks={checkList} />
 
         {/* Actions */}
         <div className="flex items-center gap-3">
@@ -3434,7 +3492,7 @@ const iso = (d: Date) => {
  * The number is the bill's own until it posts and the books issue theirs.
  */
 const VCH_ABBR: Record<string, string> = {
-  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR', refund: 'REF',
+  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR', refund: 'REF', grn: 'GRN',
 }
 const billLabel = (b: Bill) =>
   // A voucher opened for editing already carries the books' own label —

@@ -28,8 +28,8 @@ const figure = (n) => Number(n).toLocaleString('en-IN', { maximumFractionDigits:
  * listed — a priced row needs none of this, and a priced line on a half-priced
  * bill is not what anyone is waiting for.
  */
-function Goods({ bill }) {
-  const waiting = goodsOn(bill).filter((i) => !Number(i.amount));
+function Goods({ bill, all = false }) {
+  const waiting = goodsOn(bill).filter((i) => all || !Number(i.amount));
   if (!waiting.length) return null;
   return (
     <div className="billgoods">
@@ -42,6 +42,17 @@ function Goods({ bill }) {
     </div>
   );
 }
+
+/** How long a delivery has waited for its bill: amber from 3 days, red from 7. */
+const DAY_MS = 86400000;
+const daysSince = (ms) => {
+  const d = Math.max(0, Math.floor((Date.now() - ms) / DAY_MS));
+  return d === 0 ? 'since today' : d === 1 ? '1 day' : `${d} days`;
+};
+const ageTone = (ms) => {
+  const d = (Date.now() - ms) / DAY_MS;
+  return d >= 7 ? 'late' : d >= 3 ? 'due' : '';
+};
 
 /** The wording a bill's voucher gets when nobody typed any: "Purchase 144". */
 const DEFAULT_NARRATION = /^(Sale|Purchase|Receipt|Payment|Goods Return|Refund) \S+$/;
@@ -113,6 +124,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const rows = data?.rows ?? [];
   const totals = data?.totals ?? { debit: 0, credit: 0 };
   const pending = data?.pending ?? [];
+  const received = data?.received ?? [];
   // Unpriced bills belong on their own dates, among the entries, not heaped at
   // the top. They carry no amount and no balance, so interleaving them is
   // presentation only — the running balance is worked out on the server and is
@@ -120,10 +132,12 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const stream = [
     ...rows.map((r, i) => ({ kind: 'entry', key: `${r.voucherId}-${i}`, date: r.date, r })),
     ...pending.map((p) => ({ kind: 'pending', key: p._id, date: p.date, p })),
+    // Deliveries sit on their dates like unpriced bills: no amount, no balance.
+    ...received.map((g) => ({ kind: 'received', key: g._id, date: g.date, g })),
   ].sort(
     (a, b) =>
       a.date - b.date ||
-      (a.kind === 'pending' ? 1 : 0) - (b.kind === 'pending' ? 1 : 0)
+      (a.kind === 'entry' ? 0 : 1) - (b.kind === 'entry' ? 0 : 1)
   );
 
   const groupName = (masters?.ledgers ?? []).find((l) => l._id === ledgerId)?.groupName;
@@ -201,6 +215,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
               </>
             ) : (
               <>
+                <button className="btn" onClick={() => onAddVoucher('grn')}>+ Goods Received</button>
                 <button className="btn" onClick={() => onAddVoucher('purchase')}>+ Purchase</button>
                 <button className="btn" onClick={() => onAddVoucher('payment', settles)}>
                   + Payment
@@ -368,7 +383,65 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
               </tr>
 
               {stream.map((item) =>
-                item.kind === 'pending' ? (
+                item.kind === 'received' ? (
+                  <tr
+                    className={`received${item.g.open ? ` open ${ageTone(item.g.date)}` : ' billed'}`}
+                    key={item.key}
+                  >
+                    <td className="mono" data-label="Date">{shortDate(item.g.date)}</td>
+                    <td className="mono entryno" data-label="Vch">{item.g.vchLabel}</td>
+                    <td className="vchtype" data-label="Type">Goods Received</td>
+                    <td className="ref mono" data-label="Ref">{item.g.refNo || '—'}</td>
+                    <td className="particulars" data-label="Particulars">
+                      {goodsOn(billFor(item.g)).length ? (
+                        <Goods bill={billFor(item.g)} all />
+                      ) : (
+                        <span className="ref">no lines written</span>
+                      )}
+                      <div className="ref">
+                        {[
+                          item.g.receivedBy && `checked by ${item.g.receivedBy}`,
+                          item.g.open ? `waiting ${daysSince(item.g.date)}` : `billed in ${item.g.billedLabel}`,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
+                    </td>
+                    <td className="num" data-label="Debit" />
+                    <td className="num" data-label="Bill">
+                      {item.g.open ? (
+                        <button
+                          className="btn small"
+                          onClick={() => onAddVoucher('purchase', undefined, { grn: item.g._id })}
+                        >
+                          Enter bill
+                        </button>
+                      ) : (
+                        <span className="ref">{item.g.billedLabel}</span>
+                      )}
+                    </td>
+                    <td className="num" data-label="Balance" />
+                    <td className="w-clip" data-label="">
+                      {item.g.attachmentUrls.length > 0 && (
+                        <button
+                          className="clip"
+                          onClick={() => onViewBill({ ...item.g, party: account?.name })}
+                          aria-label="Challan photo"
+                        >
+                          <Paperclip size={13} aria-hidden="true" /> {item.g.attachmentUrls.length > 1 ? item.g.attachmentUrls.length : ''}
+                        </button>
+                      )}
+                    </td>
+                    <td className="rowacts" data-label="">
+                      <button className="xbtn" onClick={() => openEdit(item.g)} aria-label="Edit">
+                        <Pencil size={14} aria-hidden="true" />
+                      </button>
+                      <button className="xbtn del" onClick={() => setDeleting(item.g)} aria-label="Delete">
+                        <X size={14} aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                ) : item.kind === 'pending' ? (
                   <tr className="unpriced" key={item.key}>
                     <td className="mono" data-label="Date">{shortDate(item.p.date)}</td>
                     <td className="mono entryno" data-label="Vch">{item.p.vchLabel}</td>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'convex/react'
-import { ChevronLeft, Paperclip, Phone, ReceiptText, Search, X } from 'lucide-react'
+import { ChevronLeft, PackageCheck, Paperclip, Phone, ReceiptText, Search, X } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { useStore } from '../../lib/store'
@@ -157,15 +157,23 @@ export function MobileView() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-base font-bold leading-tight">Shiv Hardware</h1>
-                <p className="text-[11px] text-stone-500">Books · read only</p>
+                <p className="text-[11px] text-stone-500">Books to read · deliveries to write</p>
               </div>
-              <Link
-                to="/home"
-                onClick={() => { try { sessionStorage.setItem('shiv-panel:full-panel', '1') } catch { /* ignore */ } }}
-                className="text-xs font-semibold text-stone-500 underline"
-              >
-                Full panel
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link
+                  to="/receive"
+                  className="flex items-center gap-1.5 rounded-full bg-shiv-green px-3 py-1.5 text-xs font-bold text-stone-950"
+                >
+                  <PackageCheck size={14} aria-hidden="true" /> Goods in
+                </Link>
+                <Link
+                  to="/home"
+                  onClick={() => { try { sessionStorage.setItem('shiv-panel:full-panel', '1') } catch { /* ignore */ } }}
+                  className="text-xs font-semibold text-stone-500 underline"
+                >
+                  Full panel
+                </Link>
+              </div>
             </div>
 
             <label className="flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2.5 dark:border-white/15 dark:bg-white/5">

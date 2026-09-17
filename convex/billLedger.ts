@@ -8,6 +8,7 @@ import { nextVoucherNo, nextBillNo } from './lib/numbering'
 import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
 import { tidyBill } from './lib/billText'
+import { GRN_ABBR, GRN_TYPE } from './lib/receipts'
 
 /**
  * Saving a bill, in one piece.
@@ -58,6 +59,12 @@ const KINDS = {
    * supplier being paid.
    */
   refund:   { type: 'Refund',   account: 'Cash',      group: 'Sundry Debtors',   party: 'Dr', other: 'Cr', settles: true },
+  /**
+   * Goods Received: the supplier's goods are in, their bill is not. It is
+   * filed with its lines and no entries — nothing is owed on paper yet — and
+   * the purchase written when the bill comes is linked back to it.
+   */
+  grn:      { type: GRN_TYPE,   account: 'Purchases', group: 'Sundry Creditors', party: 'Cr', other: 'Dr', settles: false },
 } as const
 
 /** Goods Return to a supplier: the shop owes them less. */
@@ -154,7 +161,8 @@ export const postBill = mutation({
       String(i?.description ?? '').trim() &&
       !i?.isRoundup && !i?.isDiscount &&
       !Number(i?.amount))
-    const hasAmount = total > 0 && !unpricedLine
+    // A delivery note never carries an amount, whatever its lines say.
+    const hasAmount = bill.kind !== 'grn' && total > 0 && !unpricedLine
 
     const date = whenOf(bill.date)
     const kind = (bill.kind ?? 'sale') as BillKind
@@ -222,9 +230,11 @@ export const postBill = mutation({
       .query('voucherTypes')
       .withIndex('by_name', (q) => q.eq('name', spec.type))
       .unique()
-    // The Refund series is opened the first time a refund is written.
-    if (!type && spec.type === 'Refund') {
-      const id = await ctx.db.insert('voucherTypes', { name: 'Refund', abbr: 'REF', sort: 10 })
+    // The Refund and Goods Received series open the first time one is written.
+    if (!type && (spec.type === 'Refund' || spec.type === GRN_TYPE)) {
+      const id = await ctx.db.insert('voucherTypes', spec.type === 'Refund'
+        ? { name: 'Refund', abbr: 'REF', sort: 10 }
+        : { name: GRN_TYPE, abbr: GRN_ABBR, sort: 11 })
       type = await ctx.db.get(id)
     }
     if (!type) throw new Error(`The "${spec.type}" voucher type is not set up.`)
@@ -294,7 +304,10 @@ export const postBill = mutation({
         typeId: type._id,
         ...(retyped ? { voucherNo: await nextVoucherNo(ctx, type, fy), fy } : {}),
         date, partyLedgerId: ledgerId, updatedAt: now,
-        ...(hasAmount ? { amount: total, status: 'final' as const } : { amount: undefined, status: 'pending' as const }),
+        ...(hasAmount
+          ? { amount: total, status: 'final' as const }
+          : { amount: undefined, status: kind === 'grn' ? 'received' as const : 'pending' as const }),
+        ...(kind === 'grn' ? { receivedBy: String(bill.receivedBy ?? '').trim() || undefined } : {}),
         /**
          * `BILL-n` is how a bill and its voucher find each other, so it is not
          * the operator's to overwrite. Typing "07" in the bill's Ref box used
@@ -318,7 +331,10 @@ export const postBill = mutation({
         partyLedgerId: ledgerId,
         refNo: ref,
         narration: bill.notes ? String(bill.notes) : `${spec.type} ${number}`,
-        status: hasAmount ? 'final' as const : 'pending' as const,
+        status: hasAmount ? 'final' as const : kind === 'grn' ? 'received' as const : 'pending' as const,
+        ...(kind === 'grn' && String(bill.receivedBy ?? '').trim()
+          ? { receivedBy: String(bill.receivedBy).trim() }
+          : {}),
         ...(hasAmount ? { amount: total } : {}),
         attachments,
         createdAt: now,
@@ -344,6 +360,52 @@ export const postBill = mutation({
           ? [{ ledgerId: discountAccount._id, side: spec.other, amount: discount }]
           : []),
       ].filter((line) => line.amount > 0))
+    }
+
+    /**
+     * The deliveries this bill is for.
+     *
+     * Each must be this supplier's and not already billed elsewhere; anything
+     * wrong refuses the whole save, since the transaction is one piece. A
+     * delivery this bill no longer names goes back to waiting. A save that
+     * says nothing about deliveries leaves the links as they were.
+     */
+    if (kind === 'purchase' && Array.isArray(bill.grnIds)) {
+      const grnKind = await ctx.db
+        .query('voucherTypes')
+        .withIndex('by_name', (q) => q.eq('name', GRN_TYPE))
+        .unique()
+      const label = (no: number) => `${GRN_ABBR}-${String(no).padStart(4, '0')}`
+      const linked: Id<'vouchers'>[] = []
+      for (const raw of new Set((bill.grnIds as unknown[]).map(String))) {
+        const id = ctx.db.normalizeId('vouchers', raw)
+        const grn = id ? await ctx.db.get(id) : null
+        if (!id || !grn || !grnKind || grn.typeId !== grnKind._id) {
+          throw new Error('A delivery this bill was written against is no longer in the books.')
+        }
+        if (grn.partyLedgerId !== ledgerId) {
+          throw new Error(`${label(grn.voucherNo)} is another supplier's delivery.`)
+        }
+        if (grn.billedIn && grn.billedIn !== voucherId) {
+          const other = await ctx.db.get(grn.billedIn)
+          if (other) {
+            const otherType = await ctx.db.get(other.typeId)
+            throw new Error(`${label(grn.voucherNo)} is already billed on ${otherType?.abbr ?? 'PUR'}-${String(other.voucherNo).padStart(4, '0')}.`)
+          }
+        }
+        await ctx.db.patch(id, { billedIn: voucherId })
+        linked.push(id)
+      }
+      for (const old of existing?.fromReceipts ?? []) {
+        if (linked.includes(old)) continue
+        const grn = await ctx.db.get(old)
+        if (grn?.billedIn === voucherId) await ctx.db.patch(old, { billedIn: undefined })
+      }
+      const checks = Array.isArray(bill.checks) ? bill.checks.map(String).filter(Boolean) : []
+      await ctx.db.patch(voucherId, {
+        fromReceipts: linked.length ? linked : undefined,
+        checks: checks.length ? checks : undefined,
+      })
     }
 
     /**
@@ -375,7 +437,9 @@ export const postBill = mutation({
     await record(
       ctx,
       existing ? 'bill.repost' : 'bill.post',
-      `${spec.type} ${number || ref} · ${customerName} · ${money(total)} on ${day(date)}`,
+      kind === 'grn'
+        ? `${spec.type} ${number || ref} · ${customerName}${bill.receivedBy ? ` · checked by ${bill.receivedBy}` : ''} on ${day(date)}`
+        : `${spec.type} ${number || ref} · ${customerName} · ${money(total)} on ${day(date)}`,
       { entity: 'voucher', entityId: voucherId },
     )
 
