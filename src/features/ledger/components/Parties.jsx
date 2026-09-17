@@ -4,6 +4,10 @@ import { rupees, phoneDisplay, phoneHref } from '../lib/format';
 import { TAGS } from '../lib/tags';
 import TagDots from './TagDots';
 
+/** Squared up: nothing owed either way, and no bill waiting for a price. */
+const isSettled = (r) =>
+  Math.abs(r.signedClosing ?? r.closing ?? 0) < 0.005 && !(r.pendingCount > 0);
+
 /**
  * An account that is not finished with: money still on it either way, or a
  * bill filed without a price — an amount nobody knows yet is no more settled
@@ -171,7 +175,11 @@ export function PartiesView({
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.ledger._id} className="clickable" onClick={() => onOpen(r.ledger._id)}>
+                  <tr
+                    key={r.ledger._id}
+                    className={`clickable${isSettled(r) ? ' settled' : ''}`}
+                    onClick={() => onOpen(r.ledger._id)}
+                  >
                     <td className="particulars" data-label={nameLabel}>
                       {/* Name over place, with the chip sitting against the
                           middle of both rather than hanging off the last line. */}

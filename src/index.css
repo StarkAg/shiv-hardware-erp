@@ -34,6 +34,8 @@
   --green: #1a7a4a;
   --green-text: #146239;    /*  5.9:1 on --bg */
   --green-ink: #ffffff;
+  --green-tint: rgba(26, 122, 74, 0.09);
+  --green-line: rgba(26, 122, 74, 0.30);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --lift: 0 10px 30px rgba(28, 25, 23, 0.14);
 
@@ -77,6 +79,8 @@
   --green: #4cb782;
   --green-text: #4cb782;
   --green-ink: #06210f;
+  --green-tint: rgba(76, 183, 130, 0.12);
+  --green-line: rgba(76, 183, 130, 0.34);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   --lift: 0 10px 34px rgba(0, 0, 0, 0.44);
   /* Dark is stepped separately, not brightened: its own band, its own check

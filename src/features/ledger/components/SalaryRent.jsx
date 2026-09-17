@@ -179,7 +179,15 @@ export default function SalaryRent({ onOpen, onPay }) {
                     </thead>
                     <tbody>
                       {rows.map((r) => (
-                        <tr key={r.ledgerId} className="clickable" onClick={() => onOpen(r.ledgerId)}>
+                        <tr
+                          key={r.ledgerId}
+                          // Paid up — but only once something has fallen due;
+                          // an account never charged is not settled, just new.
+                          className={`clickable${
+                            Math.abs(r.due) < 0.005 && (r.charged > 0 || r.opening > 0) ? ' settled' : ''
+                          }`}
+                          onClick={() => onOpen(r.ledgerId)}
+                        >
                           <td className="particulars" data-label={section.nameLabel}>
                             <div className="party">
                               {r.name}

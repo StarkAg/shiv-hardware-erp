@@ -145,9 +145,13 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
       ? data.closing
       : undefined;
 
+  // Nothing owed either way and no bill waiting for a price: the account is
+  // done with, and says so in green.
+  const isSettled = Boolean(data) && data.closing < 0.005 && pending.length === 0;
+
   return (
     <>
-      <div className="partyhead">
+      <div className={`partyhead${isSettled ? ' settled' : ''}`}>
         <div className="partyhead-main">
           <button className="backbtn" onClick={onBack}>
             <BackIcon />
