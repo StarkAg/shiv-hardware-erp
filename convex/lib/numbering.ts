@@ -17,6 +17,7 @@
  */
 import type { MutationCtx } from '../_generated/server'
 import type { Doc } from '../_generated/dataModel'
+import { readBills, storeMeta } from './billRows'
 
 /** The counter row for a voucher series — the ledger's key, now the only one. */
 export const voucherCounterName = (abbr: string, fy: string) => `vno:${abbr}:${fy}`
@@ -72,8 +73,8 @@ export async function nextBillNo(ctx: MutationCtx): Promise<number> {
     return Number.isFinite(n) ? n : 0
   }
 
-  const store = await ctx.db.query('billsStore').first()
-  const live = (store?.bills ?? []).reduce((max: number, b: any) => Math.max(max, numeric(b?.number)), 0)
+  const store = await storeMeta(ctx)
+  const live = (await readBills(ctx)).reduce((max: number, b: any) => Math.max(max, numeric(b?.number)), 0)
   // A deleted bill's number stays spoken for. It can be restored, and the
   // voucher it posted is still filed under `BILL-<n>`.
   const deleted = (await ctx.db.query('billsTrash').collect())

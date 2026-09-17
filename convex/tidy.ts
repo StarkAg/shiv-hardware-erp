@@ -4,6 +4,7 @@ import { foldName, properItem, properText } from './lib/text'
 import { tidyBill } from './lib/billText'
 import { tidyCatalog } from './catalog'
 import { withCourtesy } from './masters'
+import { readBills, writeBills } from './lib/billRows'
 
 /**
  * One pass that brings what is already stored in line with the naming rule.
@@ -94,10 +95,9 @@ export const everything = internalMutation({
     }
 
     // ── Bills ─────────────────────────────────────────────────────────────
-    const store = await ctx.db.query('billsStore').first()
-    if (store) {
-      let changed = 0
-      const bills = (store.bills ?? []).map((b: any) => {
+    {
+      const tidied: any[] = []
+      for (const b of await readBills(ctx)) {
         const tidy = tidyBill(b) as any
         if (Array.isArray(tidy.items)) {
           tidy.items = tidy.items.map((item: any) =>
@@ -106,8 +106,7 @@ export const everything = internalMutation({
               : item,
           )
         }
-        if (JSON.stringify(tidy) === JSON.stringify(b)) return b
-        changed++
+        if (JSON.stringify(tidy) === JSON.stringify(b)) continue
         const notes: string[] = []
         if (tidy.customerName !== b.customerName) notes.push(`"${b.customerName}" → "${tidy.customerName}"`)
         ;(b.items ?? []).forEach((item: any, i: number) => {
@@ -119,9 +118,9 @@ export const everything = internalMutation({
         })
         report.bills.push(`#${b.number}: ${notes.join('; ')}`)
         // Stamped newer, so a device holding the old copy takes this one.
-        return { ...tidy, updatedAt: now }
-      })
-      if (changed && !dryRun) await ctx.db.patch(store._id, { bills, savedAt: now })
+        tidied.push({ ...tidy, updatedAt: now })
+      }
+      if (tidied.length && !dryRun) await writeBills(ctx, tidied)
     }
 
     // ── Scanned bill lines ────────────────────────────────────────────────

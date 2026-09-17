@@ -25,6 +25,7 @@ import type * as history from "../history.js";
 import type * as http from "../http.js";
 import type * as inbox from "../inbox.js";
 import type * as ledgerViews from "../ledgerViews.js";
+import type * as lib_billRows from "../lib/billRows.js";
 import type * as lib_billText from "../lib/billText.js";
 import type * as lib_entries from "../lib/entries.js";
 import type * as lib_history from "../lib/history.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   inbox: typeof inbox;
   ledgerViews: typeof ledgerViews;
+  "lib/billRows": typeof lib_billRows;
   "lib/billText": typeof lib_billText;
   "lib/entries": typeof lib_entries;
   "lib/history": typeof lib_history;

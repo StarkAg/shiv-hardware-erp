@@ -52,7 +52,7 @@ describe('merging two accounts for one party', () => {
       voucher: await ctx.db.get(ids.voucher),
       entries: await ctx.db.query('voucherEntries').collect(),
       trash: await ctx.db.query('trash').collect(),
-      store: await ctx.db.query('billsStore').first(),
+      store: { bills: (await ctx.db.query('bills').collect()).map((r) => r.bill) },
     }))
     expect(state.gone).toBeNull()
     expect(state.keep).toMatchObject({ openingBalance: 60, openingSide: 'Dr', phone: '9999999999' })

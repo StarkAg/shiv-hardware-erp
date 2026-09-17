@@ -47,7 +47,7 @@ async function shop() {
 const NEW = 'M/s Ramesh Traders'
 
 const bills = async (t: any) =>
-  Object.fromEntries((await t.run((ctx: any) => ctx.db.query('billsStore').first())).bills.map((b: any) => [b.id, b]))
+  Object.fromEntries(((await t.query(api.bills.get, {}))?.bills ?? []).map((b: any) => [b.id, b]))
 
 describe('renaming an account', () => {
   it('renames every bill that belongs to it, by id or by its old name', async () => {

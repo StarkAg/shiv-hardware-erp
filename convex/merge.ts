@@ -1,4 +1,5 @@
 import { v, ConvexError } from 'convex/values'
+import { readBills, writeBills } from './lib/billRows'
 import { internalMutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
@@ -126,16 +127,10 @@ export const accounts = internalMutation({
       const now = Date.now()
       // The counter's copy of a bill remembers its account; it follows, stamped
       // newer so a device holding the old copy takes this one.
-      const store = await ctx.db.query('billsStore').first()
-      if (store) {
-        let changed = false
-        const bills = (store.bills ?? []).map((b: any) => {
-          if (!b?.ledgerId || !remap.has(b.ledgerId)) return b
-          changed = true
-          return { ...b, ledgerId: remap.get(b.ledgerId), updatedAt: now }
-        })
-        if (changed) await ctx.db.patch(store._id, { bills, savedAt: now })
-      }
+      const moved = (await readBills(ctx))
+        .filter((b: any) => b?.ledgerId && remap.has(b.ledgerId))
+        .map((b: any) => ({ ...b, ledgerId: remap.get(b.ledgerId), updatedAt: now }))
+      if (moved.length) await writeBills(ctx, moved)
       for (const row of await ctx.db.query('billsTrash').collect()) {
         const ledgerId = row.bill?.ledgerId
         if (ledgerId && remap.has(ledgerId)) {

@@ -4,6 +4,7 @@ import type { Doc } from './_generated/dataModel'
 import { fyOf } from './lib/money'
 import { nextVoucherNo } from './lib/numbering'
 import { record } from './lib/history'
+import { readBills, writeBills } from './lib/billRows'
 import {
   GRN_ABBR, GRN_TYPE, allBills, billOf, estimate, grnType, isGoods, isOpen, itemKey, lastRates, usualItems,
 } from './lib/receipts'
@@ -185,10 +186,9 @@ export const convertPending = internalMutation({
       await ctx.db.query('vouchers').withIndex('by_status', (q) => q.eq('status', 'pending')).collect()
     ).filter((vch) => vch.typeId === purchase._id)
 
-    const store = await ctx.db.query('billsStore').first()
-    const bills: any[] = (store?.bills ?? []) as any[]
+    const bills: any[] = await readBills(ctx)
+    const touched: any[] = []
     const converted: Array<{ from: string; to: string; party: string; lines: number; date: number }> = []
-    let billsChanged = false
 
     for (const vch of pending) {
       const lines = await ctx.db
@@ -214,15 +214,11 @@ export const convertPending = internalMutation({
         status: 'received',
         updatedAt: Date.now(),
       })
-      if (bill) {
-        bill.kind = 'grn'
-        bill.updatedAt = Date.now()
-        billsChanged = true
-      }
+      if (bill) touched.push({ ...bill, kind: 'grn', updatedAt: Date.now() })
       converted.push({ from, to: label(voucherNo), party: party?.name ?? '—', lines: (bill?.items ?? []).filter(isGoods).length, date: vch.date })
     }
 
-    if (billsChanged && store) await ctx.db.patch(store._id, { bills, savedAt: Date.now() })
+    if (touched.length) await writeBills(ctx, touched)
     if (!dryRun && converted.length) {
       await record(
         ctx,

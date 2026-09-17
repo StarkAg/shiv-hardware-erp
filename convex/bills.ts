@@ -1,10 +1,11 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { internalMutation, mutation, query } from './_generated/server'
 import { api } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { requirePin } from './lib/pin'
 import { linkTrashRows } from './lib/trashLinks'
 import { record } from './lib/history'
+import { dropBill, readBill, readBills, storeMeta, writeBills } from './lib/billRows'
 
 /**
  * Saves what a device has, without ever deleting what it hasn't.
@@ -26,14 +27,6 @@ export const save = mutation({
     billSeq: v.number(),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db.query('billsStore').first()
-    if (!existing) {
-      await ctx.db.insert('billsStore', {
-        bills: args.bills, billSeq: args.billSeq, savedAt: Date.now(),
-      })
-      return { kept: 0, written: args.bills.length }
-    }
-
     const [inTrash, tombstones] = await Promise.all([
       ctx.db.query('billsTrash').collect(),
       ctx.db.query('billTombstones').collect(),
@@ -44,34 +37,72 @@ export const save = mutation({
       ...inTrash.map((row) => row.billId),
       ...tombstones.map((row) => row.billId),
     ])
-    const byId = new Map<string, any>()
-    for (const bill of existing.bills ?? []) if (bill?.id) byId.set(bill.id, bill)
-
-    let written = 0
+    // Read once: a device sends every bill it holds, and a lookup per bill
+    // would be thousands of reads for a handful of changes.
+    const held = new Map((await readBills(ctx)).map((b: any) => [String(b.id), b]))
+    const changed: any[] = []
     for (const bill of args.bills) {
       if (!bill?.id || deleted.has(bill.id)) continue
       // Newer wins. This took whatever it was handed, so a PC that had been
       // off for a week would overwrite today's edits with its own stale copy
       // the moment it reconnected.
-      const mine = byId.get(bill.id)
-      if (mine && (mine.updatedAt ?? 0) > (bill.updatedAt ?? 0)) continue
-      byId.set(bill.id, bill)
-      written++
+      const mine = held.get(String(bill.id))
+      if (mine && (mine.updatedAt ?? 0) >= (bill.updatedAt ?? 0)) continue
+      changed.push(bill)
     }
-
-    await ctx.db.patch(existing._id, {
-      bills: [...byId.values()],
-      billSeq: Math.max(existing.billSeq ?? 0, args.billSeq),
-      savedAt: Date.now(),
-    })
-    return { kept: byId.size - written, written }
+    // A device that has nothing new to say changes nothing — and does not
+    // wake every other device up to tell them so.
+    if (changed.length) await writeBills(ctx, changed, args.billSeq)
+    else {
+      const meta = await storeMeta(ctx)
+      if (meta && args.billSeq > (meta.billSeq ?? 0)) await ctx.db.patch(meta._id, { billSeq: args.billSeq })
+    }
+    return { kept: args.bills.length - changed.length, written: changed.length }
   },
 })
 
-/** Return the single bills snapshot row (or null if nothing saved yet). */
+/**
+ * Every bill, in the shape devices have always been sent: the list, the
+ * running number, and when anything last changed.
+ */
 export const get = query({
   args: {},
-  handler: async (ctx) => ctx.db.query('billsStore').first(),
+  handler: async (ctx) => {
+    const meta = await storeMeta(ctx)
+    if (!meta) return null
+    return { bills: await readBills(ctx), billSeq: meta.billSeq ?? 0, savedAt: meta.savedAt }
+  },
+})
+
+/**
+ * Moves bills out of the old single row into a row each. Safe to run again:
+ * a bill already moved is left as it is.
+ *
+ *   npx convex run --prod bills:moveToRows
+ */
+export const moveToRows = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const meta = await storeMeta(ctx)
+    const legacy = ((meta?.bills ?? []) as any[]).filter((b) => b?.id)
+    // One read of what has already moved, and one write of the rest: reading
+    // the old row again for every bill runs past what one call may read.
+    const already = new Map((await ctx.db.query('bills').collect()).map((r) => [r.billId, r]))
+    const toMove = legacy.filter((bill) => {
+      const row = already.get(String(bill.id))
+      return !row || (row.bill?.updatedAt ?? 0) < (bill.updatedAt ?? 0)
+    })
+    if (toMove.length) await writeBills(ctx, toMove)
+    const moved = toMove.length
+    const rows = await ctx.db.query('bills').collect()
+    // Only once every bill from the old row has one of its own is the old row emptied.
+    const have = new Set(rows.map((r) => r.billId))
+    const missing = legacy.filter((b) => !have.has(String(b.id)))
+    if (missing.length) throw new Error(`${missing.length} bills did not move — nothing emptied`)
+    if (meta && legacy.length) await ctx.db.patch(meta._id, { bills: [], savedAt: Date.now() })
+    await record(ctx, 'bills.move', `Moved ${legacy.length} bills to a row each (${moved} written)`)
+    return { legacy: legacy.length, moved, rows: rows.length }
+  },
 })
 
 /**
@@ -86,8 +117,7 @@ export const get = query({
 export const remove = mutation({
   args: { id: v.string() },
   handler: async (ctx, { id }) => {
-    const store = await ctx.db.query('billsStore').first()
-    const bill = (store?.bills ?? []).find((b: any) => b?.id === id)
+    const bill = await readBill(ctx, id)
     if (!bill) return { removed: false as const }
 
     const ref = `BILL-${bill.number}`
@@ -129,10 +159,7 @@ export const remove = mutation({
       ...(voucher ? { voucherRef: voucher.refNo ?? ref } : {}),
       ...(voucherTrashId ? { voucherTrashId } : {}),
     })
-    await ctx.db.patch(store!._id, {
-      bills: (store!.bills ?? []).filter((b: any) => b?.id !== id),
-      savedAt: Date.now(),
-    })
+    await dropBill(ctx, id)
     return { removed: true as const, voucherRemoved: Boolean(voucher) }
   },
 })
@@ -188,10 +215,7 @@ export const restore = mutation({
       .unique()
     if (tombstone) await ctx.db.delete(tombstone._id)
     const bill = { ...row.bill, updatedAt: Date.now() }
-    const store = await ctx.db.query('billsStore').first()
-    const bills = (store?.bills ?? []).filter((b: any) => b?.id !== row.billId)
-    if (store) await ctx.db.patch(store._id, { bills: [...bills, bill], savedAt: Date.now() })
-    else await ctx.db.insert('billsStore', { bills: [bill], billSeq: Number(bill.number) || 0, savedAt: Date.now() })
+    await writeBills(ctx, [bill], Number(bill.number) || 0)
     await ctx.db.delete(id)
     await record(ctx, 'bill.restore', `Restored bill ${bill.number}`, { entity: 'bill', entityId: row.billId })
     return bill

@@ -50,11 +50,24 @@ const receiptFields = {
 
 export default defineSchema({
   // ── Bills backup (single-row snapshot; all bills incl. drafts) ────────────
+  // Now only the running bill number and when a bill last changed; the bills
+  // themselves are in `bills`. `bills` here is what is left from before the
+  // move, and is emptied by `bills:moveToRows`.
   billsStore: defineTable({
-    bills:   v.array(v.any()),
+    bills:   v.optional(v.array(v.any())),
     billSeq: v.number(),
     savedAt: v.number(),
   }),
+
+  /** One row per bill, kept whole in the panel's own shape. See lib/billRows. */
+  bills: defineTable({
+    billId: v.string(),
+    number: v.string(),
+    updatedAt: v.number(),
+    bill: v.any(),
+  })
+    .index("by_bill", ["billId"])
+    .index("by_number", ["number"]),
 
   /**
    * Bills that were deleted, kept whole so they can be put back.

@@ -1,4 +1,5 @@
 import type { MutationCtx } from '../_generated/server'
+import { readBills, writeBills } from './billRows'
 import type { Id } from '../_generated/dataModel'
 import { fold } from './parties'
 
@@ -41,17 +42,11 @@ export async function carryRename(
   const retitle = (bill: any) => ({ ...bill, customerName: renamed, ledgerId: ledger._id, updatedAt: now })
 
   let bills = 0
-  const store = await ctx.db.query('billsStore').first()
-  if (store) {
-    let touched = false
-    const next = (store.bills ?? []).map((bill: any) => {
-      if (!ours(bill) || bill.customerName === renamed) return bill
-      touched = true
-      bills++
-      return retitle(bill)
-    })
-    if (touched) await ctx.db.patch(store._id, { bills: next, savedAt: now })
-  }
+  const retitled = (await readBills(ctx))
+    .filter((bill: any) => ours(bill) && bill.customerName !== renamed)
+    .map(retitle)
+  bills = retitled.length
+  if (retitled.length) await writeBills(ctx, retitled)
 
   // What the bin holds comes back as it was saved, so it has to say the new name.
   let binned = 0

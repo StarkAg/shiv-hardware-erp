@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { readBills, writeBills } from "./lib/billRows";
 import { properText } from "./lib/text";
 import { v, ConvexError } from "convex/values";
 import { record, money } from "./lib/history";
@@ -544,15 +545,10 @@ export const mergeDuplicateParties = mutation({
     // The counter's own copy of a bill remembers the account it posted to, so
     // it has to follow — otherwise reopening it would point at nothing.
     if (!dryRun && remap.size) {
-      const store = await ctx.db.query("billsStore").first();
-      if (store) {
-        const bills = (store.bills ?? []).map((b: any) =>
-          b?.ledgerId && remap.has(b.ledgerId)
-            ? { ...b, ledgerId: remap.get(b.ledgerId) }
-            : b,
-        );
-        await ctx.db.patch(store._id, { bills });
-      }
+      const moved = (await readBills(ctx))
+        .filter((b: any) => b?.ledgerId && remap.has(b.ledgerId))
+        .map((b: any) => ({ ...b, ledgerId: remap.get(b.ledgerId), updatedAt: Date.now() }));
+      if (moved.length) await writeBills(ctx, moved);
       await record(
         ctx,
         "ledger.merge-duplicates",

@@ -9,6 +9,7 @@ import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
 import { tidyBill } from './lib/billText'
 import { GRN_ABBR, GRN_TYPE } from './lib/receipts'
+import { readBills, writeBills } from './lib/billRows'
 
 /**
  * Saving a bill, in one piece.
@@ -100,8 +101,7 @@ function whenOf(date: unknown): number {
 async function billNumberFor(ctx: MutationCtx, bill: any): Promise<string> {
   const wanted = String(bill?.number ?? '').trim()
   if (wanted) {
-    const store = await ctx.db.query('billsStore').first()
-    const clash = (store?.bills ?? []).some((b: any) => b?.id !== bill.id && String(b?.number) === wanted)
+    const clash = (await readBills(ctx)).some((b: any) => b?.id !== bill.id && String(b?.number) === wanted)
       || (await ctx.db.query('billsTrash').collect())
         .some((row) => row.billId !== bill.id && String(row.bill?.number) === wanted)
     if (!clash) return wanted
@@ -116,7 +116,7 @@ export const ensureParty = mutation({
 
 export const postBill = mutation({
   args: {
-    // The bill as the counter holds it. `billsStore` keeps bills whole, so the
+    // The bill as the counter holds it. Bills are kept whole (lib/billRows), so the
     // shape stays the panel's rather than being flattened into arguments here.
     bill: v.any(),
     attachments: v.optional(v.array(attachmentDoc)),
@@ -427,11 +427,7 @@ export const postBill = mutation({
       }
       // A bill that posted has no failure to remember.
       delete stored.postError
-      const store = await ctx.db.query('billsStore').first()
-      const kept = (store?.bills ?? []).filter((b: any) => b?.id !== bill.id)
-      const billSeq = Math.max(store?.billSeq ?? 0, Number(number) || 0)
-      if (store) await ctx.db.patch(store._id, { bills: [...kept, stored], billSeq, savedAt: now })
-      else await ctx.db.insert('billsStore', { bills: [stored], billSeq, savedAt: now })
+      await writeBills(ctx, [stored], Number(number) || 0)
     }
 
     await record(

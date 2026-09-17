@@ -2,6 +2,7 @@ import type { QueryCtx } from '../_generated/server'
 import type { Doc, Id } from '../_generated/dataModel'
 import { foldName } from './text'
 import { round2 } from './money'
+import { readBills } from './billRows'
 
 /**
  * Deliveries, and what they are likely to cost.
@@ -35,10 +36,9 @@ export const unitRate = (i: any) => {
 
 export const itemKey = (description: unknown) => foldName(String(description ?? ''))
 
-/** Every bill the shop holds. They live whole in one row. */
+/** Every bill the shop holds. */
 export async function allBills(ctx: QueryCtx): Promise<any[]> {
-  const store = await ctx.db.query('billsStore').first()
-  return (store?.bills ?? []) as any[]
+  return readBills(ctx)
 }
 
 /** The bill a voucher was written from, by the voucher it names or its BILL-n ref. */
