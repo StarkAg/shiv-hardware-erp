@@ -1140,3 +1140,9 @@ to{opacity: 0}}
 .ledger-root .monthrun{max-width: 340px;}
 .ledger-root .monthrun .chip{cursor: default; font-variant-numeric: tabular-nums;}
 .ledger-root .monthrun .chip:hover{border-color: var(--line); color: inherit;}
+
+/* What a bill was for, under its ledger row */
+.ledger-root .billgoods{display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px;
+  font-size: 12.5px; font-weight: 500; color: var(--muted);}
+.ledger-root tr.unpriced .billgoods{font-size: 13.5px; font-weight: 700; color: var(--fg); margin-top: 0;}
+.ledger-root .billgoods .good.norate{color: var(--amber-text);}

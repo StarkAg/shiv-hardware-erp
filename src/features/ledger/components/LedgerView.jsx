@@ -11,6 +11,45 @@ import Confirm from './Confirm';
 import { Bar, TableSkeleton } from './Skeleton';
 
 const BackIcon = () => <ChevronLeft size={18} aria-hidden="true" />;
+
+/** The goods on a bill — not its fare, discount, tax or round-off. */
+const goodsOn = (bill) =>
+  (bill?.items ?? []).filter(
+    (i) => String(i?.description ?? '').trim() && !i.isRoundup && !i.isDiscount && !i.auto && !i.amountOnly
+  );
+
+const figure = (n) => Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+/**
+ * What a voucher was for, read off its bill: "Sunmica 20 Sheet @ 480".
+ *
+ * A supplier's goods often arrive days before the rate does. The ledger row
+ * used to say only "Purchase 144" until then, so nobody could tell from the
+ * account what was still waiting to be priced. A line with no amount says so.
+ */
+function Goods({ bill }) {
+  const goods = goodsOn(bill);
+  if (!goods.length) return null;
+  return (
+    <div className="billgoods">
+      {goods.map((i) => {
+        const amount = Number(i.amount) || 0;
+        const qty = Number(i.qty) || 0;
+        const rate = Number(i.rateSqft) || (qty ? amount / qty : 0);
+        return (
+          <span key={i.id} className={`good${amount ? '' : ' norate'}`}>
+            {i.description}
+            {qty ? ` ${figure(qty)} ${i.unit ?? ''}` : ''}
+            {amount ? (rate ? ` @ ${figure(rate)}` : '') : ' · rate awaited'}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The wording a bill's voucher gets when nobody typed any: "Purchase 144". */
+const DEFAULT_NARRATION = /^(Sale|Purchase|Receipt|Payment|Goods Return|Refund) \S+$/;
 import VoucherEditor from './VoucherEditor';
 import LedgerForm from './LedgerForm';
 import TagDots from './TagDots';
@@ -25,6 +64,11 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const bills = useStore((st) => st.bills);
   const [previewing, setPreviewing] = useState(null);
   const billFor = (row) => {
+    // The bill names its voucher outright; the BILL-n reference is the fallback
+    // for bills saved before they did. Same test as VoucherEditor.
+    const id = String(row?.voucherId ?? row?._id ?? '');
+    const named = id && bills.find((b) => String(b.voucherId ?? '') === id);
+    if (named) return named;
     const ref = String(row?.refNo ?? '');
     if (!ref.startsWith('BILL-')) return null;
     const number = ref.slice(5);
@@ -332,13 +376,31 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                     <td className="vchtype" data-label="Type">{item.p.vchType}</td>
                     <td className="ref mono" data-label="Ref">{item.p.refNo || '—'}</td>
                     <td className="particulars" data-label="Particulars">
-                      {item.p.narration || '—'}
+                      {goodsOn(billFor(item.p)).length ? (
+                        <>
+                          <Goods bill={billFor(item.p)} />
+                          {item.p.narration && !DEFAULT_NARRATION.test(item.p.narration) && (
+                            <div className="ref">{item.p.narration}</div>
+                          )}
+                        </>
+                      ) : (
+                        item.p.narration || '—'
+                      )}
                     </td>
                     <td className="num" data-label="Debit" />
                     <td className="num" data-label="Amount">
-                      <button className="btn small" onClick={() => setPricing(item.p)}>
-                        Enter amount
-                      </button>
+                      {/* A bill with its lines is priced line by line on the
+                          bill itself, so the goods stay on record with their
+                          rates; a bare slip takes one figure. */}
+                      {goodsOn(billFor(item.p)).length ? (
+                        <button className="btn small" onClick={() => openEdit(item.p)}>
+                          Enter rates
+                        </button>
+                      ) : (
+                        <button className="btn small" onClick={() => setPricing(item.p)}>
+                          Enter amount
+                        </button>
+                      )}
                     </td>
                     <td className="num" data-label="Balance" />
                     <td className="w-clip" data-label="">
@@ -381,9 +443,12 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                     <td className="ref mono" data-label="Ref">{item.r.refNo || '—'}</td>
                     <td className="particulars" data-label="Particulars">
                       {(item.r.contra ?? []).join(', ') || '—'}
-                      {item.r.narration && item.r.narration !== item.r.vchType && (
-                        <div className="ref">{item.r.narration}</div>
-                      )}
+                      <Goods bill={billFor(item.r)} />
+                      {item.r.narration &&
+                        item.r.narration !== item.r.vchType &&
+                        !(billFor(item.r) && DEFAULT_NARRATION.test(item.r.narration)) && (
+                          <div className="ref">{item.r.narration}</div>
+                        )}
                     </td>
                     <td className="num debit" data-label="Debit">
                       {item.r.side === 'Dr' ? rupees(item.r.amount) : ''}
