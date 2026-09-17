@@ -1,0 +1,14 @@
+{
+  "name": "shiv-backups",
+  "private": true,
+  "type": "module",
+  "description": "Nightly copies of the Shiv Panel books, kept on a Railway volume.",
+  "scripts": {
+    "start": "node backup.mjs serve",
+    "now": "node backup.mjs run"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "convex": "^1.34.1"
+  }
+}

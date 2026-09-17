@@ -1156,3 +1156,7 @@ to{opacity: 0}}
 .ledger-root .table-wrap .ledger tbody tr.settled{background: linear-gradient(var(--green-tint), var(--green-tint)), var(--card);
     border-color: var(--green-line);}
 .ledger-root .table-wrap .ledger tbody tr.settled td{background: transparent;}}
+
+/* When the books were last copied somewhere safe */
+.ledger-root .home-backup{margin: 16px 2px 0; font-size: 12.5px; color: var(--muted);}
+.ledger-root .home-backup.late{color: var(--red); font-weight: 700;}

@@ -22,6 +22,16 @@ import '../ledger/ledger.css'
  * screen can disagree with the ledger.
  */
 
+/** "18 Sep, 2:00 am" */
+const when = (ms: number) =>
+  new Date(ms).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+
+/** "3 days ago" */
+const since = (ms: number) => {
+  const hours = Math.floor((Date.now() - ms) / 3_600_000)
+  return hours < 48 ? `${hours} hours ago` : `${Math.floor(hours / 24)} days ago`
+}
+
 const startOfToday = () => {
   const d = new Date()
   d.setHours(0, 0, 0, 0)
@@ -63,11 +73,15 @@ function FromTheBooks() {
   const data = useQuery(api.reports.dashboard, { from: today, to: today + 86_399_999 })
   const review = useQuery(api.review.counts, {})
   const cashWaiting = useQuery(api.cash.unposted, {})
+  const backup = useQuery(api.backups.latest, {})
+  // A night is missed if the last good copy is more than a day and a half old.
+  const backupLate = backup !== undefined &&
+    (!backup.lastGood || Date.now() - backup.lastGood.at > 36 * 3_600_000)
   const loading = data === undefined
 
   const waiting =
     (review?.unread ?? 0) + (review?.ready ?? 0) +
-    (cashWaiting?.length ?? 0) + (data?.unpriced ?? 0)
+    (cashWaiting?.length ?? 0) + (data?.unpriced ?? 0) + (backupLate ? 1 : 0)
 
   return (
     <>
@@ -102,6 +116,14 @@ function FromTheBooks() {
           {(data?.unpriced ?? 0) > 0 && (
             <Figure label="Vouchers with no amount" value={String(data!.unpriced)} to="/ledger/bills" tone="attention" />
           )}
+          {backupLate && (
+            <Figure
+              label={backup?.lastGood ? 'Backup missed' : 'No backup yet'}
+              value={backup?.lastGood ? since(backup.lastGood.at) : '—'}
+              to="/home"
+              tone="attention"
+            />
+          )}
           {(cashWaiting?.length ?? 0) > 0 && (
             <Figure label="Cash notes without a party" value={String(cashWaiting!.length)} to="/cash-review" tone="attention" />
           )}
@@ -127,6 +149,13 @@ function FromTheBooks() {
           <div style={{ marginTop: 12 }}>
             <NetTrade months={data.months} />
           </div>
+
+          {backup?.lastGood && (
+            <p className={`home-backup${backupLate ? ' late' : ''}`}>
+              Last backup {when(backup.lastGood.at)}
+              {backup.lastFull ? ` · photos ${when(backup.lastFull.at)}` : ''}
+            </p>
+          )}
         </>
       )}
     </>

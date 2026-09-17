@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
 import type * as attendance from "../attendance.js";
+import type * as backups from "../backups.js";
 import type * as billLedger from "../billLedger.js";
 import type * as billLocks from "../billLocks.js";
 import type * as bills from "../bills.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   ai: typeof ai;
   attendance: typeof attendance;
+  backups: typeof backups;
   billLedger: typeof billLedger;
   billLocks: typeof billLocks;
   bills: typeof bills;

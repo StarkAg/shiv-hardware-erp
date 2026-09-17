@@ -586,6 +586,21 @@ export default defineSchema({
     .index("by_party", ["partyLedgerId"])
     .index("by_date", ["date"]),
 
+  /**
+   * Every run of the nightly backup, good or bad. The backup lives outside
+   * this database (a disk on Railway), so this is how the panel knows it
+   * happened — and says so on Home when it has not.
+   */
+  backupRuns: defineTable({
+    at: v.number(),
+    ok: v.boolean(),
+    kind: v.union(v.literal("tables"), v.literal("full")),
+    file: v.optional(v.string()),
+    bytes: v.optional(v.number()),
+    vouchers: v.optional(v.number()),
+    error: v.optional(v.string()),
+  }).index("by_at", ["at"]),
+
   counters: defineTable({
     name: v.string(),
     value: v.number(),
