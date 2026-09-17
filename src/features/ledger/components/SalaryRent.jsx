@@ -53,9 +53,9 @@ const SECTIONS = [
  * paying is an ordinary payment against the one account.
  */
 export default function SalaryRent({ onOpen, onPay }) {
-  const data = useLive(api.monthly.board, {}, 'monthly');
   const choices = monthChoices();
   const [month, setMonth] = useState(choices[1].id);
+  const data = useLive(api.monthly.board, { month }, `monthly:${month}`);
   const [adding, setAdding] = useState(null);
   const [editing, setEditing] = useState(null);
   const [flash, setFlash] = useState('');
@@ -78,7 +78,7 @@ export default function SalaryRent({ onOpen, onPay }) {
   }
 
   const label = shortOf(month);
-  const staffDue = data?.totals.staff.due ?? 0;
+  const wagesPaid = data?.totals.staff.paidInMonth ?? 0;
   const rentDue = data?.totals.rent.due ?? 0;
 
   const charge = async (section, pending) => {
@@ -101,19 +101,15 @@ export default function SalaryRent({ onOpen, onPay }) {
     <>
       <div className="summary">
         <div className="card total">
-          <div className="card-name">Owed now</div>
-          <div className="card-amt">{rupees(staffDue + rentDue)}</div>
-          <div className="card-meta">salary and rent together</div>
-        </div>
-        <div className="card">
-          <div className="card-name">Salaries owed</div>
-          <div className="card-amt">{rupees(staffDue)}</div>
-          <div className="card-meta">{rupees(data?.totals.staff.monthly ?? 0)} a month</div>
-        </div>
-        <div className="card">
           <div className="card-name">Rent owed</div>
           <div className="card-amt">{rupees(rentDue)}</div>
           <div className="card-meta">{rupees(data?.totals.rent.monthly ?? 0)} a month</div>
+        </div>
+        {/* Wages are paid by the day: this is what went out, not what is owed. */}
+        <div className="card">
+          <div className="card-name">Wages paid · {label}</div>
+          <div className="card-amt">{rupees(wagesPaid)}</div>
+          <div className="card-meta">salary sheet {rupees(data?.totals.staff.monthly ?? 0)} a month</div>
         </div>
       </div>
 
@@ -141,6 +137,7 @@ export default function SalaryRent({ onOpen, onPay }) {
             <div className="monthly-head">
               <h2>{section.title}</h2>
               <div className="monthly-acts">
+                {section.kind === 'rent' && (
                 <button
                   className={`btn small${done ? ' ghost' : ''}`}
                   disabled={done || busy === section.kind || rows.length === 0}
@@ -155,6 +152,7 @@ export default function SalaryRent({ onOpen, onPay }) {
                     ? `${label} charged ✓`
                     : `Charge ${label} · ${rupees(pending.reduce((t, r) => t + r.monthly, 0))}`}
                 </button>
+                )}
                 <button className="btn small ghost" onClick={() => setAdding(section)}>
                   + {section.nameLabel}
                 </button>
@@ -171,9 +169,18 @@ export default function SalaryRent({ onOpen, onPay }) {
                       <tr>
                         <th>{section.nameLabel}</th>
                         <th className="num">Monthly</th>
-                        <th>Charged</th>
-                        <th className="num">Paid</th>
-                        <th className="num">Owed</th>
+                        {section.kind === 'staff' ? (
+                          <>
+                            <th className="num">Paid · {label}</th>
+                            <th className="num">Paid in all</th>
+                          </>
+                        ) : (
+                          <>
+                            <th>Charged</th>
+                            <th className="num">Paid</th>
+                            <th className="num">Owed</th>
+                          </>
+                        )}
                         <th />
                       </tr>
                     </thead>
@@ -184,7 +191,7 @@ export default function SalaryRent({ onOpen, onPay }) {
                           // Paid up — but only once something has fallen due;
                           // an account never charged is not settled, just new.
                           className={`clickable${
-                            Math.abs(r.due) < 0.005 && (r.charged > 0 || r.opening > 0) ? ' settled' : ''
+                            section.kind === 'rent' && Math.abs(r.due) < 0.005 && (r.charged > 0 || r.opening > 0) ? ' settled' : ''
                           }`}
                           onClick={() => onOpen(r.ledgerId)}
                         >
@@ -221,20 +228,29 @@ export default function SalaryRent({ onOpen, onPay }) {
                               {rupees(r.monthly)}
                             </button>
                           </td>
-                          <td data-label="Charged">
-                            <MonthRun row={r} />
-                          </td>
-                          <td className="num" data-label="Paid">{rupees(r.paid)}</td>
-                          <td className="num bal" data-label="Owed">
-                            {rupees(Math.abs(r.due))}{' '}
-                            <span className="side">{r.due < 0 ? 'ahead' : ''}</span>
-                          </td>
+                          {section.kind === 'staff' ? (
+                            <>
+                              <td className="num bal" data-label={`Paid · ${label}`}>{rupees(r.paidInMonth)}</td>
+                              <td className="num" data-label="Paid in all">{rupees(r.paid)}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td data-label="Charged">
+                                <MonthRun row={r} />
+                              </td>
+                              <td className="num" data-label="Paid">{rupees(r.paid)}</td>
+                              <td className="num bal" data-label="Owed">
+                                {rupees(Math.abs(r.due))}{' '}
+                                <span className="side">{r.due < 0 ? 'ahead' : ''}</span>
+                              </td>
+                            </>
+                          )}
                           <td className="rowacts" data-label="">
                             <button
                               className="btn small ghost"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onPay(r.ledgerId, r.due > 0 ? r.due : undefined);
+                                onPay(r.ledgerId, section.kind === 'rent' && r.due > 0 ? r.due : undefined);
                               }}
                             >
                               Pay
@@ -245,9 +261,18 @@ export default function SalaryRent({ onOpen, onPay }) {
                       <tr className="opening">
                         <td data-label="">Total</td>
                         <td className="num" data-label="Monthly">{rupees(totals.monthly)}</td>
-                        <td data-label="" />
-                        <td className="num" data-label="Paid">{rupees(totals.paid)}</td>
-                        <td className="num bal" data-label="Owed">{rupees(totals.due)}</td>
+                        {section.kind === 'staff' ? (
+                          <>
+                            <td className="num bal" data-label={`Paid · ${label}`}>{rupees(totals.paidInMonth ?? 0)}</td>
+                            <td className="num" data-label="Paid in all">{rupees(totals.paid)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td data-label="" />
+                            <td className="num" data-label="Paid">{rupees(totals.paid)}</td>
+                            <td className="num bal" data-label="Owed">{rupees(totals.due)}</td>
+                          </>
+                        )}
                         <td data-label="" />
                       </tr>
                     </tbody>
@@ -373,6 +398,7 @@ function AccountForm({ section, onClose }) {
             <input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </label>
         </div>
+        {rent && (
         <div className="row">
           <label>
             Already owed
@@ -391,6 +417,7 @@ function AccountForm({ section, onClose }) {
             <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} />
           </label>
         </div>
+        )}
         {error && <p className="error">{error}</p>}
         <div className="modal-actions">
           <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>
@@ -412,6 +439,7 @@ function MonthlyForm({ section, row, onClose }) {
   const updateLedger = useMutation(api.masters.updateLedger);
   const rent = section.kind === 'rent';
   const [monthly, setMonthly] = useState(String(row.monthly || ''));
+  // For staff this is the salary sheet's figure, kept for reference; nothing is charged from it.
   const [payee, setPayee] = useState(row.payee ?? '');
   const [phone, setPhone] = useState(row.phone ?? '');
   const [busy, setBusy] = useState(false);
@@ -462,7 +490,9 @@ function MonthlyForm({ section, row, onClose }) {
           Phone
           <input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </label>
-        <p className="hint">Months already charged keep their old figure.</p>
+        <p className="hint">
+          {rent ? 'Months already charged keep their old figure.' : 'For reference — wages are recorded as they are paid.'}
+        </p>
         {error && <p className="error">{error}</p>}
         <div className="modal-actions">
           <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>

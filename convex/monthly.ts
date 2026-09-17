@@ -78,7 +78,9 @@ async function ensure(ctx: MutationCtx) {
   };
   const expenses = await groupFor("Indirect Expenses", "expense", "Dr", 7);
   const groups: Record<Kind, Id<"groups">> = {
-    staff: await groupFor(GROUP.staff, "liability", "Cr", 8),
+    // Wages are paid by the day, so a staff account is where that expense is
+    // kept, person by person — not a debt that a month falls due into.
+    staff: await groupFor(GROUP.staff, "expense", "Dr", 8),
     rent: await groupFor(GROUP.rent, "liability", "Cr", 9),
   };
 
@@ -174,8 +176,16 @@ async function accountsOf(ctx: QueryCtx, kind: Kind) {
  * missed month shows as a gap rather than a smaller number.
  */
 export const board = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { month: v.optional(v.string()) },
+  handler: async (ctx, { month }) => {
+    // What was paid in the month being looked at; this month unless one is asked for.
+    const ist = new Date(Date.now() + 5.5 * 3_600_000);
+    const key = month && MONTH_KEY.test(month)
+      ? month
+      : `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, "0")}`;
+    const from = monthStart(key);
+    const [y, m] = key.split("-").map(Number);
+    const until = Date.UTC(y, m, 1);
     const journal = await ctx.db
       .query("voucherTypes")
       .withIndex("by_name", (q) => q.eq("name", "Journal"))
@@ -201,6 +211,9 @@ export const board = query({
           // money handed over; nothing else is ever posted to them.
           const charged = lines.filter((l) => l.side === "Cr").reduce((t, l) => t + l.amount, 0);
           const paid = lines.filter((l) => l.side === "Dr").reduce((t, l) => t + l.amount, 0);
+          const paidInMonth = lines
+            .filter((l) => l.side === "Dr" && l.date >= from && l.date < until)
+            .reduce((t, l) => t + l.amount, 0);
           const net =
             signed(account.openingSide, account.openingBalance) +
             lines.reduce((t, l) => t + signed(l.side, l.amount), 0);
@@ -216,6 +229,7 @@ export const board = query({
             opening: round2(-signed(account.openingSide, account.openingBalance)) + 0,
             charged: round2(charged),
             paid: round2(paid),
+            paidInMonth: round2(paidInMonth),
             // Positive: the shop owes. Negative: paid ahead.
             due: round2(-net) + 0,
             months,
@@ -225,15 +239,21 @@ export const board = query({
 
     const staff = await rowsFor("staff");
     const rent = await rowsFor("rent");
-    const sum = (rows: typeof staff, key: "monthly" | "due" | "paid" | "charged") =>
-      round2(rows.reduce((t, r) => t + r[key], 0));
+    const sum = (rows: typeof staff, field: "monthly" | "due" | "paid" | "charged" | "paidInMonth") =>
+      round2(rows.reduce((t, r) => t + r[field], 0));
 
     return {
       ready: Boolean(journal) && Boolean(await groupNamed(ctx, GROUP.staff)),
+      month: key,
       staff,
       rent,
       totals: {
-        staff: { monthly: sum(staff, "monthly"), due: sum(staff, "due"), paid: sum(staff, "paid") },
+        staff: {
+          monthly: sum(staff, "monthly"),
+          due: sum(staff, "due"),
+          paid: sum(staff, "paid"),
+          paidInMonth: sum(staff, "paidInMonth"),
+        },
         rent: { monthly: sum(rent, "monthly"), due: sum(rent, "due"), paid: sum(rent, "paid") },
       },
     };
@@ -245,6 +265,9 @@ export const chargeMonth = mutation({
   args: { kind: KIND, month: v.string() },
   handler: async (ctx, { kind, month }) => {
     if (!MONTH_KEY.test(month)) throw new Error(`Not a month: ${month}`);
+    // Wages are paid daily and recorded as they are paid; a month is never
+    // charged to staff as a debt.
+    if (kind === "staff") throw new Error("Salaries are paid daily — nothing is charged for a month.");
     const setup = await ensure(ctx);
     const posted: string[] = [];
     const already: string[] = [];
@@ -262,7 +285,7 @@ export const chargeMonth = mutation({
       await record(
         ctx,
         "monthly.charge",
-        `${kind === "staff" ? "Salary" : "Rent"} for ${monthLabel(month)} fell due — ` +
+        `Rent for ${monthLabel(month)} fell due — ` +
           `${posted.length} ${posted.length === 1 ? "account" : "accounts"}, ${money(total)}`,
         { entity: "monthly", detail: { kind, month, posted } }
       );
@@ -296,8 +319,9 @@ export const addAccount = mutation({
       monthly: round2(args.monthly),
       payee: args.payee?.trim() || undefined,
       phone: args.phone?.trim() || undefined,
-      openingBalance: round2(args.owed ?? 0),
-      openingSide: "Cr",
+      // Nothing is ever owed to staff here — wages are paid as they are earned.
+      openingBalance: args.kind === "staff" ? 0 : round2(args.owed ?? 0),
+      openingSide: args.kind === "staff" ? "Dr" : "Cr",
       openingAsOf: args.owedAsOf,
       active: true,
       createdAt: now,
@@ -346,7 +370,7 @@ export const loadSheet = internalMutation({
         payee: extra.payee,
         phone: extra.phone,
         openingBalance: extra.owed ?? 0,
-        openingSide: "Cr",
+        openingSide: kind === "staff" ? "Dr" : "Cr",
         openingAsOf: asOf,
         active: true,
         createdAt: now,
@@ -401,5 +425,45 @@ export const loadSheet = internalMutation({
       );
     }
     return { made, posted };
+  },
+});
+
+/**
+ * Staff accounts as the record of wages paid, not of wages owed. Run once on a
+ * deployment set up before wages were known to be paid daily.
+ *
+ *   npx convex run --prod monthly:staffPaidDaily
+ */
+export const staffPaidDaily = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const group = await groupNamed(ctx, GROUP.staff);
+    if (!group) return { changed: false };
+    const charged = [];
+    const journal = await ctx.db
+      .query("voucherTypes")
+      .withIndex("by_name", (q) => q.eq("name", "Journal"))
+      .unique();
+    for (const account of await accountsOf(ctx, "staff")) {
+      const vouchers = await ctx.db
+        .query("vouchers")
+        .withIndex("by_party", (q) => q.eq("partyLedgerId", account._id))
+        .collect();
+      if (journal && vouchers.some((vch) => vch.typeId === journal._id)) charged.push(account.name);
+    }
+    // A month already charged to someone would read as money paid out once
+    // the account is an expense. None should exist; stop rather than guess.
+    if (charged.length) throw new Error(`Salary months are charged to ${charged.join(", ")} — remove them first.`);
+    if (group.nature === "expense" && group.normalSide === "Dr") return { changed: false };
+    await ctx.db.patch(group._id, { nature: "expense", normalSide: "Dr" });
+    for (const account of await accountsOf(ctx, "staff")) {
+      if (account.openingBalance === 0 && account.openingSide !== "Dr") {
+        await ctx.db.patch(account._id, { openingSide: "Dr", updatedAt: Date.now() });
+      }
+    }
+    await record(ctx, "monthly.staff-daily", "Staff accounts now record wages paid (paid daily), not wages owed", {
+      entity: "monthly",
+    });
+    return { changed: true };
   },
 });

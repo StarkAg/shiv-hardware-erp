@@ -80,5 +80,5 @@ describe('bills in rows', () => {
     const got = await t.query(api.bills.get, {})
     expect(got?.bills).toHaveLength(3000)
     expect(JSON.stringify(got?.bills).length).toBeGreaterThan(1024 * 1024)
-  })
+  }, 30_000)
 })

@@ -98,26 +98,45 @@ describe('salary and rent', () => {
       'Shop + Back Down Godown': 88050,
     })
     expect(board.totals.rent.due).toBe(286500)
-    expect(board.totals.staff).toEqual({ monthly: 121800, due: 0, paid: 0 })
+    expect(board.totals.staff).toMatchObject({ monthly: 121800, paid: 0, paidInMonth: 0 })
   })
 
-  it('charges a month to everyone once, and a payment comes off what is owed', async () => {
+  it('charges rent once a month, and never charges wages', async () => {
     const t = await shop()
     await t.mutation(internal.monthly.loadSheet, {})
-    const charged = await t.mutation(api.monthly.chargeMonth, { kind: 'staff', month: '2026-09' })
-    expect(charged.posted).toHaveLength(6)
-    const twice = await t.mutation(api.monthly.chargeMonth, { kind: 'staff', month: '2026-09' })
-    expect(twice.posted).toHaveLength(0)
-    expect(twice.already).toHaveLength(6)
+    const again = await t.mutation(api.monthly.chargeMonth, { kind: 'rent', month: '2026-09' })
+    expect(again).toMatchObject({ posted: [], already: expect.arrayContaining(['Front Godown']) })
+    const october = await t.mutation(api.monthly.chargeMonth, { kind: 'rent', month: '2026-10' })
+    expect(october.posted).toHaveLength(3)
+    await expect(t.mutation(api.monthly.chargeMonth, { kind: 'staff', month: '2026-09' })).rejects.toThrow(/paid daily/)
+  })
 
+  it('records a wage as paid, by the month it was paid in', async () => {
+    const t = await shop()
+    await t.mutation(internal.monthly.loadSheet, {})
     // A wage handed over at the counter, on the same voucher screen as any payment.
     await t.mutation(api.billLedger.postBill, {
-      bill: bill({ id: 'wage', number: '', customerName: 'Anup', kind: 'payment', total: 500, moneyAmount: 500 }),
+      bill: bill({ id: 'wage', number: '', date: '2026-09-10', customerName: 'Anup', kind: 'payment', total: 500, moneyAmount: 500 }),
     })
-    const board = await t.query(api.monthly.board, {})
-    const anup = board.staff.find(r => r.name === 'Anup')!
-    expect(anup).toMatchObject({ charged: 19500, paid: 500, due: 19000 })
-    expect(anup.months.map(m => m.label)).toEqual(['Sep 2026'])
+    const sep = await t.query(api.monthly.board, { month: '2026-09' })
+    expect(sep.staff.find(r => r.name === 'Anup')).toMatchObject({ paid: 500, paidInMonth: 500, charged: 0 })
+    expect(sep.totals.staff.paidInMonth).toBe(500)
+    const oct = await t.query(api.monthly.board, { month: '2026-10' })
+    expect(oct.staff.find(r => r.name === 'Anup')).toMatchObject({ paid: 500, paidInMonth: 0 })
+    const group = await t.run(ctx => ctx.db.query('groups').withIndex('by_name', q => q.eq('name', 'Staff')).unique())
+    expect(group).toMatchObject({ nature: 'expense', normalSide: 'Dr' })
+  })
+
+  it('turns staff set up as owed into staff paid daily', async () => {
+    const t = await shop()
+    await t.run(async ctx => {
+      const g = await ctx.db.insert('groups', { name: 'Staff', nature: 'liability', normalSide: 'Cr', sort: 8 })
+      await ctx.db.insert('ledgers', { name: 'Sonu', groupId: g, monthly: 16500, openingBalance: 0, openingSide: 'Cr', openingAsOf: 1, active: true, createdAt: 1, updatedAt: 1 })
+    })
+    expect(await t.mutation(internal.monthly.staffPaidDaily, {})).toEqual({ changed: true })
+    expect(await t.mutation(internal.monthly.staffPaidDaily, {})).toEqual({ changed: false })
+    const sonu = await t.run(ctx => ctx.db.query('ledgers').withIndex('by_name', q => q.eq('name', 'Sonu')).unique())
+    expect(sonu).toMatchObject({ openingSide: 'Dr', openingBalance: 0 })
   })
 
   it('refuses a month that is not one', async () => {
