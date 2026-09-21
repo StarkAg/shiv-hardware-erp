@@ -75,3 +75,58 @@
 .sp-opening { align-self: flex-end; margin-bottom: 8px; }
 @media (max-width: 390px) { .sp-title h1 { font-size: 20px; } .sp-summary > div, .sp-balances > div { padding: 11px; } .sp-date label { flex-direction: column; align-items: stretch; gap: 4px; } .sp-title { align-items: flex-start; } }
 @media (prefers-reduced-motion: reduce) { .sp-button { transition: none; } }
+
+/* ── The team, on one screen ──────────────────────────────────────────────
+ * Marking a day, reading what is owed and paying it are the three things done
+ * here all afternoon. They were behind a dropdown that showed one person at a
+ * time, so "who is still to be paid" meant clicking through everybody. Dense
+ * on purpose: six rows should fit above the fold on the counter's laptop.
+ */
+.sp-board { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); }
+.sp-board-head, .sp-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1.4fr) auto minmax(5rem, .7fr) minmax(5.5rem, .8fr) minmax(5rem, .7fr) auto;
+  gap: 10px; align-items: center; padding: 8px 12px;
+}
+.sp-board-head { background: var(--card2); border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.sp-row { border-top: 1px solid var(--line); cursor: pointer; transition: background-color .15s; }
+.sp-row:first-of-type { border-top: 0; }
+.sp-row:hover { background: var(--card2); }
+.sp-row.is-on { background: var(--card2); box-shadow: inset 3px 0 0 var(--brass); }
+.sp-row:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
+.sp-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-who b { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-who small { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sp-num { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
+.sp-due { font-weight: 700; }
+.sp-adv { color: var(--red); }
+
+/* One letter per state. The full word is the title and the aria-label; the
+   board has six of these across and words would push the figures off. */
+.sp-marks { display: flex; gap: 3px; }
+.sp-mark {
+  width: 30px; min-height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--card2); color: var(--muted); font: inherit; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: background-color .15s, color .15s, border-color .15s;
+}
+.sp-mark:hover:enabled { border-color: var(--brass); color: var(--fg); }
+.sp-mark:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.sp-mark:disabled { opacity: .45; cursor: not-allowed; }
+.sp-mark.is-on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+.sp-mark.is-on.m-N, .sp-mark.is-on.m-L { background: var(--red); border-color: var(--red); color: #fff; }
+.sp-mark.is-on.m-H { background: var(--amber); border-color: var(--amber); color: #fff; }
+
+.sp-row-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.sp-tiny { min-height: 32px; padding: 6px 10px; font-size: 12px; border-radius: 7px; }
+.sp-detail { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Narrow: the figures keep their own line rather than squeezing the name. */
+@media (max-width: 720px) {
+  .sp-board-head { display: none; }
+  .sp-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; padding: 12px; }
+  .sp-marks { grid-column: 1 / -1; }
+  .sp-num { text-align: left; }
+  .sp-num::before { content: attr(data-label) ' '; color: var(--muted); font-size: 11px; }
+  .sp-row-acts { grid-column: 1 / -1; justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) { .sp-row, .sp-mark { transition: none; } }
