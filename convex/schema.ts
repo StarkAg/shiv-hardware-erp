@@ -266,6 +266,16 @@ export default defineSchema({
     openingDue: v.number(),
     openingAdvance: v.number(),
     rates: v.array(v.object({ from: v.string(), rate: v.number() })),
+    /**
+     * A fixed amount earned at the end of every month, on top of the days.
+     *
+     * One man is on 800 a day plus 1,200 at month end; the rest are on days
+     * alone. It was being remembered and paid by hand each month, which is a
+     * thing that gets forgotten in a busy September. Earned on the last day of
+     * the month, in full — it is a standing arrangement, not something the
+     * attendance sheet pro-rates.
+     */
+    monthly: v.optional(v.number()),
     ledgerId: v.id('ledgers'),
     createdAt: v.number(),
   }).index('by_staff', ['staff']),

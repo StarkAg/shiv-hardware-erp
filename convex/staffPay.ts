@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { internalMutation, mutation, query } from './_generated/server'
 import { account, amount, assertUnsettled, indiaToday, validDate } from './lib/staffPay'
 import { foldName } from './lib/text'
 import { postCashEntry } from './cash'
@@ -72,6 +72,61 @@ export const changeRate = mutation({
     const meta = await ctx.db.query('attendanceMeta').first()
     if (meta && from <= indiaToday()) await ctx.db.patch(meta._id, { rates: { ...(meta.rates ?? {}), [staff]: rate }, updatedAt: Date.now() })
     await ctx.db.insert('attendanceLog', { at: Date.now(), action: 'rate', date: from, summary: `${staff}: ₹${rate}/day from ${from}` })
+  },
+})
+
+/**
+ * The standing monthly amount, on top of the days.
+ *
+ * Zero takes it off. Earned on the last day of each month from here on and
+ * for every month already tracked — it is what the arrangement has always
+ * been, so the account should read as though it was recorded all along.
+ */
+export const setMonthly = mutation({
+  args: { staff: v.string(), monthly: v.number() },
+  handler: async (ctx, { staff, monthly }) => {
+    amount(monthly, true)
+    const profile = await ctx.db.query('staffPayProfiles').withIndex('by_staff', q => q.eq('staff', staff)).unique()
+    if (!profile) throw new Error('Set up staff tracking first.')
+    await assertUnsettled(ctx, staff, profile.startDate)
+    await ctx.db.patch(profile._id, { monthly: monthly || undefined })
+    await ctx.db.insert('attendanceLog', {
+      at: Date.now(), action: 'monthly', date: indiaToday(),
+      summary: monthly ? `${staff}: ₹${monthly} a month on top of the days` : `${staff}: monthly amount removed`,
+    })
+  },
+})
+
+/**
+ * Move where a staff member's tracking begins.
+ *
+ * For a profile opened on the wrong day: Vijay was set up on the 20th when the
+ * shop had been paying him from the 1st, and a rate cannot start before
+ * tracking does — so correcting the rate alone leaves the first nineteen days
+ * earning nothing at all.
+ *
+ * Internal on purpose. This rewrites where a man's wages begin, which is not a
+ * thing any screen at the counter should offer; it is a correction, made
+ * deliberately, by somebody who has checked what is already paid. Refuses
+ * outright if anything is settled on or after the new start.
+ */
+export const retrackFrom = internalMutation({
+  args: { staff: v.string(), startDate: v.string(), rate: v.optional(v.number()) },
+  handler: async (ctx, { staff, startDate, rate }) => {
+    validDate(startDate)
+    if (startDate > indiaToday()) throw new Error('Tracking cannot start in the future.')
+    const profile = await ctx.db.query('staffPayProfiles').withIndex('by_staff', q => q.eq('staff', staff)).unique()
+    if (!profile) throw new Error('Set up staff tracking first.')
+    await assertUnsettled(ctx, staff, startDate)
+    const first = rate ?? profile.rates[0].rate
+    amount(first)
+    // Later rate changes stand; only the opening one moves with the start.
+    const rates = [{ from: startDate, rate: first }, ...profile.rates.filter(r => r.from > startDate)]
+    await ctx.db.patch(profile._id, { startDate, rates })
+    await ctx.db.insert('attendanceLog', {
+      at: Date.now(), action: 'payroll-retrack', date: startDate,
+      summary: `${staff}: tracking moved to start ${startDate} at ₹${first}/day`,
+    })
   },
 })
 

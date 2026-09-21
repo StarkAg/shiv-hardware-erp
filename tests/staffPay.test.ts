@@ -175,3 +175,71 @@ describe('cashier daily staff payments', () => {
     await expect(setup(t)).rejects.toThrow('already set up')
   })
 })
+
+/**
+ * A standing amount on top of the days.
+ *
+ * One man is on a daily rate plus a fixed sum at month end. It was being
+ * remembered and paid by hand, which is a thing that gets forgotten.
+ */
+describe('the monthly amount', () => {
+  const setMonthly = (t: ReturnType<typeof convexTest>, monthly: number) =>
+    t.mutation(api.staffPay.setMonthly, { staff: 'Vijay', monthly })
+
+  it('is earned on the last day of the month, on top of that day', async () => {
+    const t = await shop()
+    vi.setSystemTime(new Date('2026-09-30T12:00:00Z'))
+    await setup(t)
+    await setMonthly(t, 1200)
+    await mark(t, '2026-09-30', 'P')
+
+    const v = await balance(t, '2026-09-30')
+    const last = v.daily.find(d => d.date === '2026-09-30')!
+    expect(last.monthly).toBe(1200)
+    expect(last.earned).toBe(1700)   // 500 for the day + 1200 standing
+    expect(v.month.monthly).toBe(1200)
+    expect(v.due).toBe(1700)
+  })
+
+  it('is not earned on any other day', async () => {
+    const t = await shop()
+    await setup(t)
+    await setMonthly(t, 1200)
+    await mark(t, '2026-09-18', 'P')
+
+    const v = await balance(t, '2026-09-18')
+    expect(v.daily.find(d => d.date === '2026-09-18')!.monthly).toBe(0)
+    expect(v.due).toBe(500)
+  })
+
+  it('lands even when nobody marked the sheet that day', async () => {
+    const t = await shop()
+    vi.setSystemTime(new Date('2026-09-30T12:00:00Z'))
+    await setup(t)
+    await setMonthly(t, 1200)
+    // No attendance at all in September.
+    const v = await balance(t, '2026-09-30')
+    expect(v.due).toBe(1200)
+  })
+
+  it('is paid for each month already tracked, not just the current one', async () => {
+    const t = await shop()
+    vi.setSystemTime(new Date('2026-11-30T12:00:00Z'))
+    await setup(t)          // tracking from 2026-09-01
+    await setMonthly(t, 1200)
+    const v = await balance(t, '2026-11-30')
+    // September, October and November ends.
+    expect(v.due).toBe(3600)
+  })
+
+  it('comes off again when set to zero', async () => {
+    const t = await shop()
+    vi.setSystemTime(new Date('2026-09-30T12:00:00Z'))
+    await setup(t)
+    await setMonthly(t, 1200)
+    await setMonthly(t, 0)
+    const v = await balance(t, '2026-09-30')
+    expect(v.profile.monthly).toBeUndefined()
+    expect(v.due).toBe(0)
+  })
+})
