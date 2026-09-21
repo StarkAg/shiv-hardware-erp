@@ -85,11 +85,22 @@ describe('cashier daily staff payments', () => {
     const [cash] = (await t.query(api.cash.pull, {})).entries.filter(e => e.mode === 'online')
     expect(cash).toMatchObject({ amount: 200, staffPaymentId: 'payment-0002' })
   })
-  it('cannot pay wages that are still being recovered, or pay the same earnings twice', async () => {
+  /**
+   * The cap is what has been EARNED and not yet handed over, not what is `due`
+   * after an advance has eaten into it — taking that cut is the shop's choice.
+   * What can never happen is paying out more wages than were worked for.
+   */
+  it('cannot pay out more wages than have been earned', async () => {
     const t = await shop(); await setup(t, { openingAdvance: 500 }); await mark(t, '2026-09-01', 'P')
-    await expect(pay(t)).rejects.toThrow('Only ₹0 is payable')
-    await mark(t, '2026-09-02', 'P'); await pay(t, { date: '2026-09-02' })
-    await expect(pay(t, { requestId: 'payment-0002', date: '2026-09-02' })).rejects.toThrow('Only ₹0 is payable')
+    // One day worked, so one day may be paid — even though an advance stands
+    // and `due` is nil because of it.
+    expect((await balance(t, '2026-09-01')).due).toBe(0)
+    await pay(t)
+    // Nothing further has been earned, so nothing further can be paid.
+    await expect(pay(t, { requestId: 'payment-0002' })).rejects.toThrow('earned and not yet paid')
+    await mark(t, '2026-09-02', 'P')
+    await pay(t, { requestId: 'payment-0002', date: '2026-09-02' })
+    await expect(pay(t, { requestId: 'payment-0003', date: '2026-09-02' })).rejects.toThrow('earned and not yet paid')
   })
   it('reads old advances from the tracking period but never posts them again', async () => {
     const t = await shop()
@@ -241,5 +252,57 @@ describe('the monthly amount', () => {
     const v = await balance(t, '2026-09-30')
     expect(v.profile.monthly).toBeUndefined()
     expect(v.due).toBe(0)
+  })
+})
+
+/**
+ * Cutting an advance out of a day's wage is the shop's choice, not a rule.
+ *
+ * A man with an advance running still turns up and still eats. Some days he is
+ * given his day's money and the advance is left where it is.
+ */
+describe('taking the advance cut, or not', () => {
+  const advance = (t: ReturnType<typeof convexTest>, amount: number) =>
+    t.mutation(api.staffPay.pay, { requestId: 'adv-0001', staff: 'Vijay', date: '2026-09-01', kind: 'advance', amount, mode: 'cash', note: '' })
+
+  it('still recovers by default — due is nil while an advance stands', async () => {
+    const t = await shop()
+    await setup(t)
+    await advance(t, 2000)
+    await mark(t, '2026-09-02', 'P')
+    const v = await balance(t, '2026-09-02')
+    expect(v.due).toBe(0)
+    expect(v.advance).toBe(1500)     // 2000 advance, 500 earned against it
+    expect(v.payableMax).toBe(500)   // but a full day is there to be paid
+  })
+
+  it('lets the day be paid in full, leaving the advance untouched', async () => {
+    const t = await shop()
+    await setup(t)
+    await advance(t, 2000)
+    await mark(t, '2026-09-02', 'P')
+    await t.mutation(api.staffPay.pay, { requestId: 'wage-0002', staff: 'Vijay', date: '2026-09-02', kind: 'wage', amount: 500, mode: 'cash', note: '' })
+
+    const v = await balance(t, '2026-09-02')
+    expect(v.paid).toBe(500)
+    expect(v.advance).toBe(2000)     // back where it was — nothing was cut
+    expect(v.payableMax).toBe(0)
+  })
+
+  it('refuses more than has actually been earned', async () => {
+    const t = await shop()
+    await setup(t)
+    await advance(t, 2000)
+    await mark(t, '2026-09-02', 'P')
+    await expect(t.mutation(api.staffPay.pay, { requestId: 'wage-0003', staff: 'Vijay', date: '2026-09-02', kind: 'wage', amount: 600, mode: 'cash', note: '' }))
+      .rejects.toThrow(/earned and not yet paid/)
+  })
+
+  it('wages owed from before tracking can still be paid', async () => {
+    const t = await shop()
+    await setup(t, { openingDue: 1000 })
+    const v = await balance(t, '2026-09-01')
+    expect(v.due).toBe(1000)
+    expect(v.payableMax).toBe(1000)
   })
 })

@@ -175,7 +175,14 @@ export const pay = mutation({
     const closed = await ctx.db.query('cashCloses').withIndex('by_date', q => q.eq('date', args.date)).unique()
     if (closed && !closed.deleted) throw new Error('The cash register is closed for this date. Reopen it before paying.')
     const balance = await account(ctx, profile, args.date)
-    if (args.kind === 'wage' && args.amount > balance.due) throw new Error(`Only ₹${balance.due} is payable after advance recovery. Use Advance for money paid ahead.`)
+    // Capped at the wages actually earned and not yet handed over — NOT at
+    // `due`. Cutting an advance out of a day's wage is the shop's choice, so
+    // paying the full day and leaving the advance standing has to be allowed;
+    // the balance takes care of itself, since the wage paid puts the advance
+    // straight back where it was.
+    if (args.kind === 'wage' && args.amount > balance.payableMax) {
+      throw new Error(`Only ₹${balance.payableMax} of wages has been earned and not yet paid. Use Advance for money paid ahead.`)
+    }
     const now = Date.now()
     await ctx.db.insert('staffPayments', { ...args, at: now })
     if (args.kind === 'advance') await ctx.db.insert('attendanceAdvances', {

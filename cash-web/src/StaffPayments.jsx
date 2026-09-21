@@ -151,10 +151,12 @@ export default function StaffPayments({ today, date: selectedDate, onDate, onSav
             </span>
             <span role="cell" className="sp-num" data-label="Today">{live ? money(r.earnedToday) : '—'}</span>
             <span role="cell" className="sp-num sp-due" data-label="Payable">{live ? money(r.due) : '—'}</span>
-            <span role="cell" className="sp-num sp-adv" data-label="Advance">{live && r.advance > 0 ? money(r.advance) : '—'}</span>
+            <span role="cell" className="sp-num sp-adv" data-label="Advance">{live && r.advance > 0
+              ? <>{money(r.advance)}<small>{r.rate > 0 ? `${Math.ceil(r.advance / r.rate)} days` : ''}</small></>
+              : '—'}</span>
             <span role="cell" className="sp-row-acts">
               {live && <>
-                <button className="sp-button sp-tiny" disabled={!ready || !r.due || !!pending}
+                <button className="sp-button sp-tiny" disabled={!ready || !(r.due || r.payableMax) || !!pending}
                   onClick={e => { e.stopPropagation(); setDialog({ type: 'payment', row: r, kind: 'wage' }) }}>Pay</button>
                 <button className="sp-button sp-secondary sp-tiny" disabled={!ready || !!pending}
                   onClick={e => { e.stopPropagation(); setDialog({ type: 'payment', row: r, kind: 'advance' }) }}>Advance</button>
@@ -212,6 +214,10 @@ function RateDialog({ dialog, date, today, onClose, onDone }) {
 function PaymentDialog({ dialog, date, onClose, onDone }) {
   const [attempt, setAttempt] = useState(dialog.pending || null)
   const [value, setValue] = useState(String(dialog.pending?.amount ?? (dialog.kind === 'wage' ? dialog.row.due : '')))
+  // `due` is the day's wage after the advance has taken its cut, and is what
+  // the box opens on. The cut is the shop's choice though, so the full day can
+  // be handed over instead and the advance left standing.
+  const most = dialog.row ? Math.max(dialog.row.due, dialog.row.payableMax ?? dialog.row.due) : 0
   const [mode, setMode] = useState(dialog.pending?.mode || 'cash')
   const [note, setNote] = useState(dialog.pending?.note || '')
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -239,7 +245,13 @@ function PaymentDialog({ dialog, date, onClose, onDone }) {
   }
   return <Modal title={`${kind === 'advance' ? 'Give advance' : 'Pay wages'} · ${staff}`} busy={busy} onClose={onClose}><form onSubmit={submit}>
     <p className="sp-policy">{labelDate(paymentDate)}</p>
-    <label>Amount to hand over<input required autoFocus type="number" inputMode="decimal" min="0.01" max={kind === 'wage' && dialog.row ? dialog.row.due : 10000000} step="0.01" value={value} disabled={busy || !!attempt} onChange={e => setValue(e.target.value)} /></label>
+    <label>Amount to hand over<input required autoFocus type="number" inputMode="decimal" min="0.01" max={kind === 'wage' ? most : 10000000} step="0.01" value={value} disabled={busy || !!attempt} onChange={e => setValue(e.target.value)} /></label>
+    {kind === 'wage' && most > dialog.row.due && <div className="sp-cut">
+      <button type="button" className={`sp-button sp-tiny ${Number(value) === dialog.row.due ? '' : 'sp-secondary'}`} disabled={busy || !!attempt}
+        onClick={() => setValue(String(dialog.row.due))}>Cut advance · {money(dialog.row.due)}</button>
+      <button type="button" className={`sp-button sp-tiny ${Number(value) === most ? '' : 'sp-secondary'}`} disabled={busy || !!attempt}
+        onClick={() => setValue(String(most))}>Full day · {money(most)}</button>
+    </div>}
     <label>Pay from<select value={mode} disabled={busy || !!attempt} onChange={e => setMode(e.target.value)}><option value="cash">Cash drawer</option><option value="online">Online / bank</option></select></label>
     <label>Note (optional)<input maxLength={500} value={note} disabled={busy || !!attempt} onChange={e => setNote(e.target.value)} /></label>
     {attempt && !busy && <p className="sp-policy">Confirmation pending. Retry uses the same payment reference and cannot create a second payout.</p>}

@@ -85,6 +85,17 @@ export async function account(ctx: QueryCtx, profile: Doc<'staffPayProfiles'>, a
     staff: profile.staff, profile, rate: rateOn(profile, asOf), status: today?.status ?? '',
     earnedToday: today?.earned ?? 0, recoveredToday: today?.recovered ?? 0,
     due: Math.max(0, balance), advance: Math.max(0, -balance), earned, paid, advanced, recovered,
+    /**
+     * The most that may be handed over as wages, advance or no advance.
+     *
+     * `due` is what is left after an advance has eaten into the wages, and
+     * that is the usual thing to pay. But taking the cut is the shop's choice,
+     * not a rule — a man with an advance running still turns up and still eats,
+     * and some days he is given his day's money and the advance is left where
+     * it is. That is every wage ever owed, less what has already been handed
+     * over, and it ignores the advance entirely.
+     */
+    payableMax: round2(profile.openingDue + earned - paid),
     month: {
       earned: round2(month.reduce((n, d) => n + d.earned, 0)),
       monthly: round2(month.reduce((n, d) => n + d.monthly, 0)),

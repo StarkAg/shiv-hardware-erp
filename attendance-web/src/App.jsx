@@ -28,6 +28,7 @@ const MONTH_CACHE_KEY = 'shiv-attendance:months'
 const STAFF_CACHE_KEY = 'shiv-attendance:staff'
 const RATES_CACHE_KEY = 'shiv-attendance:rates'
 const ADV_CACHE_KEY = 'shiv-attendance:advances'
+const OWING_CACHE_KEY = 'shiv-attendance:owing'
 const HISTORY_SEEN_KEY = 'shiv-attendance:history-seen'
 const DEVICE_ID_KEY = 'shiv-attendance:device-id'
 // The pay rule itself lives in pay.js, apart from the screen, so that the one
@@ -227,6 +228,26 @@ export default function App() {
     return () => { off = true }
   }, [month, currentMonth, convex])
 
+  /**
+   * What each man still owes on an advance, and at what rate.
+   *
+   * The advance rows below say what was TAKEN in a month. What the shop is
+   * asked at the counter is what is still to be worked off, which only payroll
+   * knows — it nets every day earned against it. Read once and cached; a stale
+   * figure here is better than none, and it refreshes on the next open.
+   */
+  const [owing, setOwing] = useState(() => readCache(OWING_CACHE_KEY, {}))
+  useEffect(() => {
+    convex.query(anyApi.staffPay.board, { date: new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10) })
+      .then((board) => {
+        if (!board?.rows) return
+        const next = {}
+        for (const row of board.rows) if (row.profile) next[row.staff] = { advance: row.advance, rate: row.rate }
+        setOwing(next); writeCache(OWING_CACHE_KEY, next)
+      })
+      .catch(() => {})
+  }, [convex])
+
   // Advances for the month — cache-first (past months skip the read).
   const [advances, setAdvances] = useState(() => readCache(ADV_CACHE_KEY, {})[ym(cursor)])
   const refetchAdvances = (mo) => {
@@ -411,7 +432,7 @@ export default function App() {
       ) : (
         <PayView
           cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
-          rates={rates} advances={advances} unlockThen={unlockThen}
+          rates={rates} advances={advances} owing={owing} unlockThen={unlockThen}
           onSetRate={setRate} onAddAdvance={addAdvance} onRemoveAdvance={removeAdvance}
         />
       )}
@@ -592,7 +613,7 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
   )
 }
 
-function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances, unlockThen, onSetRate, onAddAdvance, onRemoveAdvance }) {
+function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances, owing, unlockThen, onSetRate, onAddAdvance, onRemoveAdvance }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const dim = daysInMonth(y, m0 + 1)
@@ -696,6 +717,14 @@ function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances
                 </span>
               </div>
               <div><span className="pk">Advances</span><span className="pv neg">{r.advTotal ? `- ${inr(r.advTotal)}` : inr(0)}</span></div>
+              {/* What is still to be worked off, and how long that takes at
+                  his own rate — the question actually asked at the counter. */}
+              {owing?.[sel]?.advance > 0 && <div>
+                <span className="pk">Advance left</span>
+                <span className="pv neg">{inr(owing[sel].advance)}
+                  {owing[sel].rate > 0 && <small> · {Math.ceil(owing[sel].advance / owing[sel].rate)} days</small>}
+                </span>
+              </div>}
               <div className="netrow"><span className="pk">Take-home</span><span className="pv strong">{inr(r.net)}</span></div>
             </div>
           </div>

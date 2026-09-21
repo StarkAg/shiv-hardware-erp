@@ -130,3 +130,9 @@
   .sp-row-acts { grid-column: 1 / -1; justify-content: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) { .sp-row, .sp-mark { transition: none; } }
+
+/* Two ways to pay a day when an advance is running: take the cut, or hand over
+   the full day and leave the advance where it is. */
+.sp-cut { display: flex; gap: 6px; }
+.sp-cut .sp-button { flex: 1; }
+.sp-adv small { display: block; font-size: 10px; font-weight: 600; opacity: .75; }
