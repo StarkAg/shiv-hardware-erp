@@ -26,7 +26,7 @@ const QUALITY = 0.82;
  * Frames are captured at bill-legible size, so what leaves here is already
  * small enough to upload without anyone waiting on it.
  */
-export default function LiveCamera({ onShot, onUnavailable, controls }) {
+function LiveCamera({ onShot, onUnavailable, controls }) {
   const video = useRef(null);
   const stream = useRef(null);
   const [ready, setReady] = useState(false);
@@ -206,3 +206,15 @@ export default function LiveCamera({ onShot, onUnavailable, controls }) {
     </div>
   );
 }
+
+/**
+ * Held still while the screen around it changes.
+ *
+ * A caller that shows a running count or an upload state re-renders on every
+ * photograph — three times over, as each one is queued, sent and finished. Each
+ * of those was dragging the video element and the whole capture path through a
+ * render on the very turn the shutter was trying to be free. With stable props
+ * this renders once and then never again, and the counts are written onto their
+ * nodes instead.
+ */
+export default React.memo(LiveCamera);

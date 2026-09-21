@@ -62,7 +62,7 @@ async function blockedBecause(ctx: QueryCtx, row: CashRow): Promise<string | nul
  * because an account has not been set up yet; the entry simply stays in the
  * review queue with the reason.
  */
-async function postCashEntry(ctx: MutationCtx, entryId: string): Promise<void> {
+export async function postCashEntry(ctx: MutationCtx, entryId: string): Promise<void> {
   const row = await ctx.db
     .query('cashEntries')
     .withIndex('by_entry_id', (q) => q.eq('entryId', entryId))
@@ -166,6 +166,7 @@ export const push = mutation({
           .query('cashEntries')
           .withIndex('by_entry_id', (q) => q.eq('entryId', op.entryId))
           .unique()
+        if (existing?.staffPaymentId) throw new Error('Manage this payment in Cashier → Staff Payments.')
         // `ledgerId` and `voucherId` are the books' own columns and are not
         // sent by the phone; spreading only the note's fields leaves them be.
         const row = {
@@ -269,6 +270,148 @@ export const pull = query({
  * This is the small amount of work the counter cannot do: saying which account
  * a name belongs to. Everything else posts itself.
  */
+/**
+ * Every note in the drawer, newest first, whatever became of it.
+ *
+ * The review screen only ever listed what it could not post, which answered
+ * "what is stuck" and nothing else — not what came in today, not what has been
+ * posted, not where the money went. A day's cash is a thing the shop reads
+ * whole, so this returns the lot and lets the screen mark the few that are
+ * still waiting.
+ *
+ * `days` bounds it, because the drawer is written every day for ever and a
+ * screen does not need all of it to be useful.
+ */
+export const all = query({
+  args: { days: v.optional(v.number()) },
+  handler: async (ctx, { days }) => {
+    const span = days ?? 30;
+    const from = new Date(Date.now() - span * 86400000).toISOString().slice(0, 10);
+
+    const rows = (await ctx.db.query('cashEntries').collect())
+      .filter((row) => !row.deleted && row.date >= from)
+      .sort((a, b) => (a.date === b.date ? b.at - a.at : b.date.localeCompare(a.date)))
+
+    const out = []
+    for (const row of rows) {
+      // Only asked of a note that has not posted — it walks the books, and
+      // there is nothing it could tell us about one that already has.
+      const why = row.voucherId ? null : await blockedBecause(ctx, row)
+      const party = row.ledgerId ? await ctx.db.get(row.ledgerId) : null
+      out.push({
+        _id: row._id,
+        entryId: row.entryId,
+        date: row.date,
+        kind: row.kind,
+        mode: row.mode,
+        name: row.name,
+        amount: row.amount,
+        dealer: !!row.dealer,
+        posted: !!row.voucherId,
+        party: party?.name ?? null,
+        why,
+      })
+    }
+    return out
+  },
+})
+
+/**
+ * One day in the drawer: what came in, what went out, and nothing else.
+ *
+ * A day at a time rather than a span, because that is how the cash register is
+ * read and how the evening count is checked — the question is always "what
+ * happened today", and yesterday is one step back, not a filter.
+ *
+ * `near` is what lets the arrows know when to stop: the first and last day the
+ * drawer has anything written on, so paging cannot wander off into empty dates.
+ */
+export const forDay = query({
+  args: { date: v.string() },
+  handler: async (ctx, { date }) => {
+    const live = (await ctx.db.query('cashEntries').collect()).filter((row) => !row.deleted)
+
+    const rows = live.filter((row) => row.date === date).sort((a, b) => a.at - b.at)
+
+    /**
+     * Cash and bank are counted apart, because only one of them is in the
+     * drawer. Adding a phone transfer to the notes in the till gives a figure
+     * that matches nothing anybody can count at the end of the day, which is
+     * the one thing this page exists to do.
+     */
+    const cash = { opening: 0, in: 0, out: 0, expected: 0 }
+    const bank = { opening: 0, in: 0, out: 0, closing: 0 }
+    for (const row of rows) {
+      const side = row.mode === 'online' ? bank : cash
+      if (row.kind === 'in') side.in += row.amount
+      else side.out += row.amount
+    }
+
+    const opening = await ctx.db
+      .query('cashOpenings')
+      .withIndex('by_date', (q) => q.eq('date', date))
+      .first()
+    if (opening && !opening.deleted) {
+      cash.opening = opening.cash
+      bank.opening = opening.online
+    }
+    cash.expected = cash.opening + cash.in - cash.out
+    bank.closing = bank.opening + bank.in - bank.out
+
+    const closeRow = await ctx.db
+      .query('cashCloses')
+      .withIndex('by_date', (q) => q.eq('date', date))
+      .first()
+    const close =
+      closeRow && !closeRow.deleted
+        ? { counted: closeRow.counted, shut: !!closeRow.shut, at: closeRow.at }
+        : null
+
+    const dates = live.map((row) => row.date).sort()
+
+    return {
+      date,
+      rows: rows.map((row) => ({
+        entryId: row.entryId,
+        kind: row.kind,
+        mode: row.mode,
+        name: row.name,
+        amount: row.amount,
+        dealer: !!row.dealer,
+        at: row.at,
+      })),
+      cash,
+      bank,
+      close,
+      // What the drawer is over or short by. Null until somebody has counted:
+      // an uncounted day is not a day that balanced.
+      difference: close && !close.shut ? close.counted - cash.expected : null,
+      hasOpening: !!(opening && !opening.deleted),
+      count: rows.length,
+      near: { first: dates[0] ?? null, last: dates[dates.length - 1] ?? null },
+    }
+  },
+})
+
+/** What the drawer did over the days on screen: in, out, and what is stuck. */
+export const totals = query({
+  args: { days: v.optional(v.number()) },
+  handler: async (ctx, { days }) => {
+    const span = days ?? 30;
+    const from = new Date(Date.now() - span * 86400000).toISOString().slice(0, 10);
+    const rows = (await ctx.db.query('cashEntries').collect())
+      .filter((row) => !row.deleted && row.date >= from)
+
+    let inn = 0, out = 0, waiting = 0
+    for (const row of rows) {
+      if (row.kind === 'in') inn += row.amount
+      else out += row.amount
+      if (!row.voucherId) waiting += 1
+    }
+    return { in: inn, out, net: inn - out, waiting, count: rows.length }
+  },
+})
+
 export const unposted = query({
   args: {},
   handler: async (ctx) => {
@@ -310,6 +453,7 @@ export const assign = mutation({
       .withIndex('by_entry_id', (q) => q.eq('entryId', entryId))
       .unique()
     if (!row) throw new Error('That drawer note is no longer here.')
+    if (row.staffPaymentId) throw new Error('Manage this payment in Cashier → Staff Payments.')
     await ctx.db.patch(row._id, { ledgerId })
     await postCashEntry(ctx, entryId)
 

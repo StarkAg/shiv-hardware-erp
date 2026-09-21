@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    // ES2022 for Array.prototype.at, which the shared convex/ modules use and
+    // convex/tsconfig.json already allows at ES2023. The panel type-checks
+    // those same files through src's imports, so a narrower lib here failed the
+    // build on code that compiles cleanly on the server side.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",

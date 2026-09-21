@@ -1,0 +1,77 @@
+.wrap.fit.staff .fitcard { overflow-y: auto; overscroll-behavior: contain; }
+.staff-payments { display: flex; flex-direction: column; gap: 16px; padding: 4px; }
+.staff-payments h1, .staff-payments h2, .staff-payments h3, .sp-modal h2 { margin: 0; line-height: 1.25; }
+.staff-payments h1 { font-size: 22px; letter-spacing: -.03em; }
+.staff-payments h2, .sp-modal h2 { font-size: 18px; }
+.staff-payments h3 { font-size: 14px; }
+.sp-title, .sp-person, .sp-section-title, .sp-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sp-title > div, .sp-person > div { min-width: 0; }
+.sp-title p, .sp-person p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.sp-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none; min-height: 44px; padding: 10px 14px; border: 1px solid transparent; border-radius: 9px; background: var(--brass); color: var(--brass-ink); font: inherit; font-size: 13px; line-height: 20px; font-weight: 700; cursor: pointer; transition: filter .15s, background-color .15s; }
+.sp-secondary { background: var(--card2); border-color: var(--line); color: var(--fg); }
+.sp-button:hover:enabled { filter: brightness(1.07); }
+.sp-button:active:enabled { filter: brightness(.95); }
+.sp-button:disabled, .sp-status:disabled, .sp-text-button:disabled { opacity: .45; cursor: not-allowed; }
+.sp-button:focus-visible, .sp-status:focus-visible, .sp-text-button:focus-visible, .staff-payments input:focus-visible, .staff-payments select:focus-visible, .sp-modal input:focus-visible, .sp-modal select:focus-visible, .sp-history summary:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+.sp-text-button { border: none; background: none; padding: 8px 0; font: inherit; font-size: 13px; font-weight: 650; text-align: left; text-decoration: underline; text-underline-offset: 3px; color: var(--fg); cursor: pointer; min-height: 40px; }
+.sp-date { display: flex; gap: 10px; align-items: center; }
+.sp-date > button { width: 44px; padding: 0; font-size: 24px; }
+.sp-date label { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.sp-date input { flex: 1; min-width: 0; }
+.staff-payments input, .staff-payments select, .sp-modal input, .sp-modal select { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 9px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; color: var(--fg); color-scheme: light; }
+.dark .staff-payments input, .dark .staff-payments select, .dark .sp-modal input, .dark .sp-modal select { color-scheme: dark; }
+.sp-staff-select, .sp-modal form > label { display: grid; gap: 6px; font-size: 12px; font-weight: 650; color: var(--muted); }
+.sp-summary, .sp-balances { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid var(--line); background: var(--card2); border-radius: 12px; }
+.sp-summary > div, .sp-balances > div { display: flex; flex-direction: column; gap: 6px; padding: 14px; min-width: 0; }
+.sp-summary > div + div, .sp-balances > div + div { border-left: 1px solid var(--line); }
+.sp-summary span, .sp-balances span { color: var(--muted); font-size: 12px; }
+.sp-summary strong { font-size: 21px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sp-balances strong { font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sp-balances > div:first-child strong { color: var(--green); }
+.sp-balances small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.sp-balances { background: transparent; }
+.sp-attendance { border-top: 1px solid var(--line); padding-top: 16px; }
+.sp-section-title { align-items: baseline; }
+.sp-section-title > span { font-size: 11px; color: var(--muted); }
+.sp-statuses { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.sp-status { flex: 1 1 auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-height: 44px; color: var(--fg); background: var(--card2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.sp-status.is-on { border-color: var(--brass); background: var(--brass); color: var(--brass-ink); box-shadow: inset 0 0 0 1px var(--brass); }
+.sp-day-figures { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+.sp-day-figures b { color: var(--fg); font-variant-numeric: tabular-nums; margin-left: 3px; }
+.sp-policy { font-size: 12px; line-height: 1.6; margin: 0; color: var(--muted); }
+.sp-pay-actions, .sp-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sp-pay-actions > button, .sp-form-actions > button { flex: 1; }
+.sp-month { padding: 14px; background: var(--card2); border-radius: 12px; }
+.sp-month > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.sp-month span { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+.sp-month b { color: var(--fg); font-size: 18px; }
+.sp-month p { font-size: 12px; margin-bottom: 0; }
+.sp-history { border-top: 1px solid var(--line); padding-top: 14px; }
+.sp-history summary { cursor: pointer; min-height: 32px; font-weight: 700; font-size: 14px; }
+.sp-payment { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.sp-payment > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.sp-payment b, .sp-statement b { font-size: 13px; }
+.sp-payment span, .sp-statement span { font-size: 11px; line-height: 1.5; color: var(--muted); }
+.sp-payment.is-void { opacity: .65; }
+.sp-payment.is-void b { text-decoration: line-through; }
+.sp-statement > div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.sp-statement > div > div { display: flex; flex-direction: column; gap: 4px; }
+.sp-statement > div > div:last-child { text-align: right; }
+.sp-error, .sp-notice, .sp-pending { padding: 12px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.sp-error { color: var(--red); border-color: var(--red); }
+.sp-notice { color: var(--green); }
+.sp-pending { border-color: var(--amber); }
+.sp-pending p { margin-top: 0; }
+.sp-empty { padding: 20px 0; }
+.sp-empty p { font-size: 13px; color: var(--muted); line-height: 1.7; }
+.sp-muted { font-size: 13px; color: var(--muted); }
+.sp-danger { color: var(--red); }
+.sp-danger-fill { background: #9f1d20; color: #fff; }
+.sp-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.sp-modal { width: 420px; max-width: 100%; max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; padding: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 16px 60px rgba(0,0,0,.3); }
+.sp-modal-head { margin-bottom: 18px; }
+.sp-modal-head button { width: 40px; min-height: 40px; padding: 0; font-size: 22px; }
+.sp-modal form { display: grid; gap: 16px; }
+.sp-opening { align-self: flex-end; margin-bottom: 8px; }
+@media (max-width: 390px) { .sp-title h1 { font-size: 20px; } .sp-summary > div, .sp-balances > div { padding: 11px; } .sp-date label { flex-direction: column; align-items: stretch; gap: 4px; } .sp-title { align-items: flex-start; } }
+@media (prefers-reduced-motion: reduce) { .sp-button { transition: none; } }

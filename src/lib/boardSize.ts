@@ -26,6 +26,13 @@ export interface BoardSize {
   sqft: number
   /** The same area unrounded, for dividing a price by. */
   exactSqft: number
+  /**
+   * What is left of the name once the thickness and the size are taken out —
+   * "Solid S", "B.Board S", "F.Door PF S". That remainder is what says which
+   * board it is, so whoever is comparing two names does not have to find the
+   * thickness and the size a second time with regexes of their own.
+   */
+  rest: string
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -52,8 +59,8 @@ export function readBoardSize(description: string | undefined | null): BoardSize
 
   // The size is looked for with the thickness taken out, so "19mm 8x4" never
   // reads the 19 as half of a size.
-  const rest = text.slice(0, thick.index) + ' ' + text.slice((thick.index ?? 0) + thick[0].length)
-  const m = rest.match(SIZE)
+  const withoutThickness = text.slice(0, thick.index) + ' ' + text.slice((thick.index ?? 0) + thick[0].length)
+  const m = withoutThickness.match(SIZE)
   if (!m) return null
   const height = measure(m[1], m[2], m[3])
   const width = measure(m[4], m[5], m[6])
@@ -61,7 +68,10 @@ export function readBoardSize(description: string | undefined | null): BoardSize
 
   const unit = height <= 12 && width <= 12 ? 'ft' : 'in'
   const exactSqft = unit === 'ft' ? height * width : (height * width) / 144
-  return { thicknessMm, height, width, unit, sqft: round2(exactSqft), exactSqft }
+  const rest = (withoutThickness.slice(0, m.index) + ' ' + withoutThickness.slice((m.index ?? 0) + m[0].length))
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { thicknessMm, height, width, unit, sqft: round2(exactSqft), exactSqft, rest }
 }
 
 /** "8×4 ft", "81×38 in" — how the size is said back on the bill row. */

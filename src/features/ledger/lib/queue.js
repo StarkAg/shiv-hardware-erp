@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { asImages, crop, shrink } from './image';
+import { deviceStack } from '../../../lib/deviceStack';
 
 // Enough to keep a phone's uplink busy without starving the shutter of CPU.
 const LANES = 3;
@@ -65,7 +66,10 @@ export function useUploadQueue() {
       });
       if (!res.ok) throw new Error(`Upload failed (${res.status})`);
       const { storageId } = await res.json();
-      await addRef.current({ storageId, groupId: item.groupId });
+      // Read at the moment of filing rather than held in the component: the
+      // phone can be put on a stack halfway through a run, and the next shot
+      // should carry it.
+      await addRef.current({ storageId, groupId: item.groupId, stack: deviceStack() });
       patch(item.id, { status: 'done' });
 
       // A multi-page PDF arrives as one item and leaves as several, grouped so

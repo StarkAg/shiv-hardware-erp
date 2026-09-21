@@ -4,7 +4,7 @@
   "version": "0.1.8",
   "type": "module",
   "main": "electron/main.cjs",
-  "description": "Shiv Hardware Store — quotation, rate & guarantee-card panel with pixel-accurate A4 printing",
+  "description": "Shiv Hardware Store \u2014 quotation, rate & guarantee-card panel with pixel-accurate A4 printing",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -23,7 +23,8 @@
     "android:add": "cap add android",
     "android:sync": "npm run build && cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy:counter": "bash scripts/deploy-counter.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",

@@ -57,6 +57,30 @@
   --mobile-bottom-nav-height: 4.5rem;
   --mobile-bottom-nav-offset: max(0.75rem, env(safe-area-inset-bottom));
   --mobile-bottom-nav-space: calc(var(--mobile-bottom-nav-height) + var(--mobile-bottom-nav-offset));
+  --control-height: 40px;
+  --control-radius: 8px;
+}
+
+/* Component-layer defaults let compact table controls keep their utilities. */
+@layer components {
+  .panel-button {
+    @apply inline-flex shrink-0 items-center justify-center gap-2 border px-4 py-2 text-sm font-semibold;
+    min-height: var(--control-height);
+    border-radius: var(--control-radius);
+    line-height: 20px;
+    vertical-align: middle;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, filter 150ms ease;
+  }
+  .panel-button:disabled { cursor: not-allowed; opacity: 0.5; }
+  .panel-button > svg { flex: none; width: 16px; height: 16px; }
+}
+
+@media (pointer: coarse) {
+  :root { --control-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-button { transition: none; }
 }
 
 /* Dark, on <html>. The ledger wrapper mirrors this class, so both halves turn

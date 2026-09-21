@@ -5,7 +5,6 @@ import { useShortcuts } from '../../lib/useShortcuts';
 import Parties from './components/Parties';
 import AllParties from './components/AllParties';
 import LedgerView from './components/LedgerView';
-import Bills, { needsYou } from './components/Bills';
 import TrialBalance from './components/TrialBalance';
 import History from './components/History';
 import Capture from './components/Capture';
@@ -17,33 +16,36 @@ import SalaryRent from './components/SalaryRent';
 import BillsToCome from './components/BillsToCome';
 import { History as HistoryIcon } from 'lucide-react'
 
+/**
+ * The tab strip on Party Accounts: accounts, and nothing else.
+ *
+ * Bills to Come, Bills and the Trial Balance were tabs here too, which made a
+ * screen called Party Accounts the place you also went for three things that
+ * are not accounts — and each already has its own entry in the sidebar, so
+ * every one of them was reachable two ways and looked like two places.
+ *
+ * Salary & Rent went the same way. Staff and premises are accounts, but they
+ * are not parties — nobody trades with them, nothing is bought or sold, and
+ * what is owed falls due by the calendar rather than by a bill. It keeps its
+ * own sidebar entry, which is the whole of what it needs.
+ */
 const TABS = [
   // Customers and suppliers in one list, and where Party Accounts opens: most
   // days the question is a name, not which side of the books it sits on.
   ['all', 'All Parties'],
   ['suppliers', 'Suppliers'],
   ['customers', 'Customers'],
-  ['monthly', 'Salary & Rent'],
-  ['tocome', 'Bills to Come'],
-  ['bills', 'Bills'],
-  ['trial', 'Trial Balance'],
 ];
 
 /**
- * Where the four old tabs went.
+ * Every view this screen can show, tabs or not.
  *
- * Reviewing, doubting, pricing and looking through the photographs are four
- * things done to one bill, and having them four tabs apart is what made a bill
- * feel scattered. They are stages of the Bills screen now. The old names still
- * work as links — the phone's shortcut is `/?tab=pending` and there are
- * bookmarks besides.
+ * The sidebar links straight to /ledger/tocome, /ledger/bills and
+ * /ledger/trial, and those still have to land where they say. Validating an
+ * address against the tab strip instead would have quietly dropped all three
+ * back to All Parties the moment they stopped being tabs.
  */
-const MOVED = {
-  review: 'review',
-  doubt: 'doubt',
-  pending: 'unpriced',
-  photos: 'photos',
-};
+const VIEWS = [...TABS.map(([id]) => id), 'monthly', 'tocome', 'trial'];
 
 const KINDS = ['purchase', 'payment', 'sale', 'receipt'];
 
@@ -87,15 +89,13 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
   // The phone opens straight onto the camera; nothing else on that screen.
   if (intent.capture) return <Capture />;
 
-  // An old tab name opens Bills at the stage it became.
-  const landed = MOVED[intent.tab] ? 'bills' : intent.tab;
+  const landed = intent.tab;
   // The URL wins over the query-string intent: a pasted link should land where
   // it says, so every tab and every account is somewhere you can link to.
-  const initialTab = route?.tab && TABS.some(([id]) => id === route.tab)
+  const initialTab = route?.tab && VIEWS.includes(route.tab)
     ? route.tab
-    : (TABS.some(([id]) => id === landed) ? landed : 'all');
+    : (VIEWS.includes(landed) ? landed : 'all');
   const [tab, setTab] = useState(initialTab);
-  const [billStage] = useState(() => MOVED[intent.tab] ?? null);
   const [partyId, setPartyId] = useState(route?.partyId ?? null);
 
   // Follow the address bar — back/forward and pasted links both arrive here.
@@ -126,7 +126,6 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
   const counts = useLive(api.review.counts, {}, 'review:counts') ?? {
     ready: 0, reading: 0, failed: 0, doubt: 0, unread: 0,
   };
-  const billsCount = needsYou(counts);
   const toCome = useLive(api.receipts.openCount, {}, 'receipts:count');
   const groupOf = (id) => ledgers.find((l) => l._id === id)?.groupName;
   const onCustomers = tab === 'customers';
@@ -252,10 +251,6 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
             }}
           >
             {label}
-            {id === 'bills' && billsCount > 0 && <span className="pill">{billsCount}</span>}
-            {id === 'tocome' && (toCome?.count ?? 0) > 0 && (
-              <span className={`pill${toCome.late ? '' : ' calm'}`}>{toCome.count}</span>
-            )}
           </button>
         ))}
       </nav>
@@ -325,16 +320,6 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
           onOpen={openParty}
           onEnterBill={(row) => onOpenVoucher?.('purchase', row.party, { grn: row.voucherId })}
           onViewBill={setViewing}
-        />
-      )}
-
-      {tab === 'bills' && (
-        <Bills
-          masters={masters}
-          pending={pending}
-          initialStage={billStage}
-          onViewBill={setViewing}
-          onOpen={openParty}
         />
       )}
 

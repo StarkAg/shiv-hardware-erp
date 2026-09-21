@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
-import Review from './Review';
 import Pending from './Pending';
 import Photos from './Photos';
 import Panel from './Panel';
@@ -15,9 +14,17 @@ import Panel from './Panel';
  * had got to. They are one screen now, and the strip is the only thing that
  * moves.
  */
+/**
+ * Naming a photographed slip is not done here any more.
+ *
+ * Review and In doubt were the two stages that handed the counter a photograph
+ * and asked whose it was. That walk belongs to the sorting site now — it is
+ * done standing up, on a phone, by whoever is holding the paper, and surfacing
+ * the same queue in the middle of the books meant bills arriving on a screen
+ * nobody was working. What stays here is the part that is genuinely accounting:
+ * a bill filed unpriced, waiting for its rates.
+ */
 export const STAGES = [
-  ['review', 'Review'],
-  ['doubt', 'In doubt'],
   // Called Pending because that is what it has always been called. The stage
   // id stays `unpriced` — it is what /?tab=pending resolves to and what the
   // remembered stage is stored under.
@@ -32,8 +39,6 @@ const isStage = (id) => STAGES.some(([s]) => s === id);
 /** Where a bill at each stage is, in numbers, for the strip. */
 function billCounts(counts, pendingCount) {
   return {
-    review: counts.ready ?? 0,
-    doubt: counts.doubt ?? 0,
     unpriced: pendingCount,
     photos: null,           // counting every photograph costs a heavy query
     unread: counts.unread ?? 0,
@@ -71,9 +76,9 @@ export default function Bills({ masters, pending, initialStage, onViewBill, onOp
     if (isStage(initialStage)) return initialStage;
     try {
       const held = localStorage.getItem(REMEMBERED);
-      return isStage(held) ? held : 'review';
+      return isStage(held) ? held : 'unpriced';
     } catch {
-      return 'review';
+      return 'unpriced';
     }
   });
 
@@ -100,20 +105,10 @@ export default function Bills({ masters, pending, initialStage, onViewBill, onOp
           >
             {label}
             <Ind n={n[id]} title={`${n[id]} at this stage`} />
-            {/* Both of these belong to Review, and both are the sort of thing
-                that goes unnoticed on a screen you are not looking at. */}
-            {id === 'review' && (
-              <>
-                <Ind n={n.unread} tone="amber" title={`${n.unread} photographed, not read yet`} />
-                <Ind n={n.failed} tone="red" title={`${n.failed} could not be read`} />
-              </>
-            )}
           </button>
         ))}
       </div>
 
-      {stage === 'review' && <Review masters={masters} />}
-      {stage === 'doubt' && <Review masters={masters} only="doubt" />}
       {stage === 'unpriced' && (
         <Pending rows={pending} masters={masters} onViewBill={onViewBill} onOpen={onOpen} />
       )}

@@ -108,6 +108,7 @@ export const restore = mutation({
   handler: async (ctx, { id }) => {
     const row = await ctx.db.get(id);
     if (!row) throw new Error("That entry is no longer in the trash");
+    if (row.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Record a new payment in Cashier → Staff Payments so wages and cash stay together.');
 
     const { _id, _creationTime, entries, deletedAt, ...voucher } = row;
     const voucherId = await ctx.db.insert("vouchers", voucher);

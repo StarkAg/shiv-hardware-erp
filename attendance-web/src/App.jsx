@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useConvex } from 'convex/react'
 import { anyApi } from 'convex/server'
+import { monthPay, ATTEND_THRESHOLD } from './pay.js'
 
 const api = anyApi
 const EDIT_PASSWORD = '5454'
@@ -29,7 +30,8 @@ const RATES_CACHE_KEY = 'shiv-attendance:rates'
 const ADV_CACHE_KEY = 'shiv-attendance:advances'
 const HISTORY_SEEN_KEY = 'shiv-attendance:history-seen'
 const DEVICE_ID_KEY = 'shiv-attendance:device-id'
-const ATTEND_THRESHOLD = 20 // min attended days to unlock Tuesday pay
+// The pay rule itself lives in pay.js, apart from the screen, so that the one
+// calculation deciding what somebody is paid can be tested on its own.
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
 function readCache(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v ?? fallback } catch { return fallback }
@@ -599,6 +601,8 @@ function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances
   const tuesdays = days.filter((d) => isTue(d)).length
   const monthStr = ym(cursor)
   const isCurMonth = monthStr === ym(new Date())
+  const todayKey = dateKey(new Date())
+  const isFuture = (d) => dateKey(d) > todayKey
 
   const [sel, setSel] = useState(staff[0] || '')
   useEffect(() => { if (!staff.includes(sel)) setSel(staff[0] || '') }, [staff, sel])
@@ -616,22 +620,14 @@ function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances
 
   const computeRow = (name) => {
     const rate = Number(rates?.[name] || 0)
-    let attended = 0
-    let paidDays = 0
-    for (const d of days) {
-      const st = statusFor(d, name)
-      const w = st === 'P' ? 1 : st === 'H' ? 0.5 : 0
-      if (!w) continue
-      attended += w
-      if (!isTue(d)) paidDays += w
-    }
-    const unlocked = attended >= ATTEND_THRESHOLD
-    const base = paidDays * rate
-    const tueBonus = unlocked ? tuesdays * rate : 0
     const list = (advByStaff[name] || []).slice().sort((a, b) => a.date.localeCompare(b.date))
-    const advTotal = list.reduce((s, a) => s + Number(a.amount || 0), 0)
-    const net = base + tueBonus - advTotal
-    return { name, rate, attended, paidDays, unlocked, base, tueBonus, advTotal, advList: list, net }
+    const advances = list.reduce((s, a) => s + Number(a.amount || 0), 0)
+    const row = monthPay({
+      entries: days.map((d) => ({ date: d, status: statusFor(d, name), future: isFuture(d) })),
+      rate,
+      advances,
+    })
+    return { name, rate, advList: list, ...row }
   }
 
   const r = sel ? computeRow(sel) : null
@@ -683,13 +679,22 @@ function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances
                 ? 'Daily income not set yet.'
                 : r.unlocked
                   ? `Well done! You unlocked Tuesday pay — an extra ${inr(r.tueBonus)} this month.`
-                  : `Attend ${remaining} more day${remaining === 1 ? '' : 's'} to unlock ${inr(tuesdays * r.rate)} Tuesday pay.`}
+                  : r.missed.length > 0
+                    ? `${inr(tuesdays * r.rate)} Tuesday pay is lost this month — `
+                      + `${r.missed.map((d) => `${WD[d.getDay()]} ${d.getDate()}`).join(', ')} `
+                      + `${r.missed.length === 1 ? 'was' : 'were'} not a full day.`
+                    : `Attend ${remaining} more day${remaining === 1 ? '' : 's'} to unlock ${inr(tuesdays * r.rate)} Tuesday pay.`}
             </div>
 
             <div className="paygrid">
               <div><span className="pk">Daily income</span><span className="pv">{inr(r.rate)}</span></div>
               <div><span className="pk">Base ({r.paidDays}d)</span><span className="pv">{inr(r.base)}</span></div>
-              <div><span className="pk">Tuesdays ({tuesdays})</span><span className="pv">{r.unlocked ? inr(r.tueBonus) : '—'}</span></div>
+              <div>
+                <span className="pk">Tuesdays ({tuesdays})</span>
+                <span className="pv">
+                  {r.unlocked ? inr(r.tueBonus) : r.missed.length > 0 ? 'Mon/Wed missed' : '—'}
+                </span>
+              </div>
               <div><span className="pk">Advances</span><span className="pv neg">{r.advTotal ? `- ${inr(r.advTotal)}` : inr(0)}</span></div>
               <div className="netrow"><span className="pk">Take-home</span><span className="pv strong">{inr(r.net)}</span></div>
             </div>

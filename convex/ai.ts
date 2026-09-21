@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 
 /**
  * Read through MeshAPI, which speaks Anthropic's own /v1/messages and fronts
@@ -20,6 +21,48 @@ import { api, internal } from "./_generated/api";
 // No trailing /v1 — the SDK adds `/v1/messages` itself.
 const BASE_URL = process.env.MESH_BASE_URL ?? "https://api.meshapi.ai";
 const MODEL = process.env.MESH_VISION_MODEL ?? "anthropic/claude-sonnet-5";
+
+/**
+ * What a photograph actually is, read from its first bytes.
+ *
+ * Every image was being declared as JPEG because that is what the phone's
+ * camera produces — and the model refuses an image whose declared type is not
+ * the type it turns out to be, so a single PNG failed the read outright. The
+ * bytes are the only honest answer: a scanner, a screenshot, a file dragged in
+ * from a desktop and a photo pasted from a chat are all different formats
+ * arriving through the same door.
+ *
+ * The four the model accepts are the four recognised here; anything else is
+ * called a JPEG and left to fail with the model's own message rather than a
+ * guess of mine.
+ */
+function imageType(bytes: Buffer): "image/jpeg" | "image/png" | "image/gif" | "image/webp" {
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return "image/png";
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (bytes.length >= 6 && bytes.subarray(0, 6).toString("ascii").startsWith("GIF8")) {
+    return "image/gif";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes.subarray(0, 4).toString("ascii") === "RIFF" &&
+    bytes.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return "image/jpeg";
+}
+
+/** One page, fetched and described the way the model needs it. */
+async function fetchImage(url: string): Promise<{ data: string; media_type: ReturnType<typeof imageType> }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not fetch the photo (${res.status})`);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  return { data: bytes.toString("base64"), media_type: imageType(bytes) };
+}
 
 const BILL_TOOL: Anthropic.Tool = {
   name: "file_bill",
@@ -131,12 +174,8 @@ export const read = action({
       const photo = await ctx.runQuery(internal.review.photoUrls, { inboxId });
       if (!photo) throw new Error("That photo is no longer in the inbox");
 
-      const pageData: string[] = [];
-      for (const url of photo.pages) {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Could not fetch the photo (${res.status})`);
-        pageData.push(Buffer.from(await res.arrayBuffer()).toString("base64"));
-      }
+      const pageData = [];
+      for (const url of photo.pages) pageData.push(await fetchImage(url));
 
       const [ledgers, lessons] = await Promise.all([
         ctx.runQuery(internal.review.partyNames, {}),
@@ -157,12 +196,12 @@ export const read = action({
           {
             role: "user",
             content: [
-              ...pageData.map((data: string) => ({
+              ...pageData.map((page) => ({
                 type: "image" as const,
                 source: {
                   type: "base64" as const,
-                  media_type: "image/jpeg" as const,
-                  data,
+                  media_type: page.media_type,
+                  data: page.data,
                 },
               })),
               {
@@ -274,3 +313,138 @@ async function inLanes(ctx: any, ids: string[]) {
   });
   await Promise.all(lanes);
 }
+
+/* ------------------------------------------------------------------ */
+/* the name, and nothing else                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Reading a backlog of unpriced slips asks the model one question: whose is
+ * this? No items, no figures, no date — those are either not known yet or are
+ * on the paper to be read when the bill is priced. A tool with one field costs
+ * a fraction of the full form and comes back in about a second, which is what
+ * makes confirming two thousand of them bearable.
+ */
+const NAME_TOOL: Anthropic.Tool = {
+  name: "whose_bill",
+  description: "Say which customer this slip belongs to.",
+  input_schema: {
+    type: "object",
+    properties: {
+      party: {
+        type: "string",
+        description: "The customer's name as it should be filed, or empty if unreadable.",
+      },
+      confidence: { type: "number" },
+    },
+    required: ["party", "confidence"],
+    additionalProperties: false,
+  },
+};
+
+const NAME_SYSTEM = `You read the customer's name off a handwritten shop slip from a hardware store in Jharkhand, India. That is the only thing asked of you.
+
+What makes it the same person is the NAME. Sanjay Prasad and Vishal Prasad are two customers, not one badly written one, and no shared surname or shared village joins them. Read the given name; a different given name is a different person.
+
+The locality after a comma never makes a match — it only confirms one already made on the name. Two people in Chainpur are still two people.
+
+Where a name is struck out and rewritten, the rewritten one is the customer.
+
+Return the name exactly as written when it matches nobody in the shop's list. An unrecognised name is a new customer or a misreading, and either is easier to fix at the counter than a bill filed to the wrong man's account.
+
+Return an empty party rather than a guess when you genuinely cannot read it. Somebody will look at it. confidence is 0 to 1, your honest read on whether this needs checking.`;
+
+/** Reads one slip for its customer's name and saves it as that bill's draft. */
+export const readName = action({
+  args: { inboxId: v.id("inbox") },
+  handler: async (ctx, { inboxId }): Promise<{ ok: boolean; error?: string }> => {
+    const started = Date.now();
+    await ctx.runMutation(internal.review.markReading, { inboxId });
+
+    try {
+      const photo = await ctx.runQuery(internal.review.photoUrls, { inboxId });
+      if (!photo) throw new Error("That photo is no longer in the inbox");
+
+      // Only the first sheet: the name is on the front of a bill, and pulling
+      // three pages through the model to read one line is paying for nothing.
+      const page = await fetchImage(photo.pages[0]);
+
+      const ledgers: string[] = await ctx.runQuery(internal.review.partyNames, {});
+
+      const apiKey = process.env.MESH_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("no api key");
+      const client = new Anthropic({ apiKey, baseURL: BASE_URL });
+
+      const response = await client.messages.create({
+        model: MODEL,
+        max_tokens: 300,
+        system: NAME_SYSTEM,
+        tools: [NAME_TOOL],
+        tool_choice: { type: "tool", name: "whose_bill" },
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image" as const,
+                source: { type: "base64" as const, media_type: page.media_type, data: page.data },
+              },
+              {
+                type: "text" as const,
+                text: [
+                  "Accounts already open in this shop's books. These slips are handwritten, so the same customer turns up spelled several ways — Nilesh and Nitesh are one pen-stroke apart and are the same shop. When the name on the slip is plainly one of these people, return that account's spelling exactly as listed.",
+                  ledgers.map((l) => `  - ${l}`).join("\n") || "  (none yet)",
+                  "",
+                  "Whose slip is this?",
+                ].join("\n"),
+              },
+            ],
+          },
+        ],
+      });
+
+      const call = response.content.find((b) => b.type === "tool_use");
+      if (!call) throw new Error("The reader did not answer");
+      const draft = (call as Anthropic.ToolUseBlock).input;
+
+      await ctx.runMutation(internal.review.saveReading, {
+        inboxId,
+        draft,
+        model: MODEL,
+        ms: Date.now() - started,
+      });
+      return { ok: true };
+    } catch (err: any) {
+      const message =
+        err?.status === 401 || /no api key|api[_ ]?key|authentication/i.test(err?.message ?? "")
+          ? "No key on the deployment — run: npx convex env set MESH_API_KEY <key>"
+          : err?.message ?? String(err);
+      await ctx.runMutation(internal.review.failReading, { inboxId, error: message });
+      return { ok: false, error: message };
+    }
+  },
+});
+
+/**
+ * Keeps a few names read ahead of whoever is naming.
+ *
+ * Called by the naming screen as it works, so the guess for the next slip is
+ * usually already there by the time it comes up and nobody watches a spinner.
+ * Small batches on purpose — a long run is a series of short ones, and stopping
+ * halfway keeps everything it had done.
+ */
+export const readNamesAhead = action({
+  args: { stack: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, { stack, limit }): Promise<{ started: number }> => {
+    const waiting: string[] = await ctx.runQuery(api.filing.unreadAhead, {
+      stack,
+      limit: limit ?? 4,
+    });
+    await Promise.all(
+      waiting.map((inboxId) =>
+        ctx.runAction(api.ai.readName, { inboxId: inboxId as Id<"inbox"> })
+      )
+    );
+    return { started: waiting.length };
+  },
+});

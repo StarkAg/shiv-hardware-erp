@@ -42,7 +42,7 @@ export function queue(op) {
 }
 
 let client = null
-function convex() {
+export function convex() {
   if (client) return client
   // The same fallback the attendance app carries: this URL is public and is
   // already baked into that bundle, so the deploy does not depend on an

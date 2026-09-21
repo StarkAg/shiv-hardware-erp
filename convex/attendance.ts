@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
+import { amount, assertUnsettled, indiaToday } from './lib/staffPay'
 
 const DEFAULT_STAFF = ['Vijay', 'Anup', 'Sonu', 'Anand', 'Vicky', 'Dharmendra']
 
@@ -60,6 +61,14 @@ export const getRates = query({
 export const setRate = mutation({
   args: { staff: v.string(), rate: v.number() },
   handler: async (ctx, { staff, rate }) => {
+    amount(rate)
+    const profile = await ctx.db.query('staffPayProfiles').withIndex('by_staff', q => q.eq('staff', staff)).unique()
+    if (profile) {
+      const from = indiaToday()
+      if (profile.rates.at(-1)!.from > from) throw new Error('A future rate is already scheduled. Manage rates in Staff Payments.')
+      await assertUnsettled(ctx, staff, from)
+      await ctx.db.patch(profile._id, { rates: [...profile.rates.filter(r => r.from !== from), { from, rate }] })
+    }
     const meta = await ctx.db.query('attendanceMeta').first()
     const rates = { ...((meta?.rates ?? {}) as Record<string, number>) }
     const prev = rates[staff] ?? 0
@@ -87,6 +96,8 @@ export const getAdvances = query({
 export const addAdvance = mutation({
   args: { staff: v.string(), date: v.string(), amount: v.number(), note: v.optional(v.string()) },
   handler: async (ctx, { staff, date, amount, note }) => {
+    const profile = await ctx.db.query('staffPayProfiles').withIndex('by_staff', q => q.eq('staff', staff)).unique()
+    if (profile && date >= profile.startDate) throw new Error('Give this advance in Cashier → Staff Payments so the register stays in sync.')
     const id = await ctx.db.insert('attendanceAdvances', { staff, date, amount, note, at: Date.now() })
     await logChange(ctx, { date, action: 'advance', summary: `${staff}: advance ₹${amount}${note ? ` (${note})` : ''}` })
     return id
@@ -97,6 +108,8 @@ export const removeAdvance = mutation({
   args: { id: v.id('attendanceAdvances') },
   handler: async (ctx, { id }) => {
     const row = await ctx.db.get(id)
+    if (row?.staffPaymentId) throw new Error('Reverse this advance in Cashier → Staff Payments.')
+    if (row) await assertUnsettled(ctx, row.staff, row.date)
     await ctx.db.delete(id)
     if (row) await logChange(ctx, { date: row.date, action: 'advance', summary: `${row.staff}: removed advance ₹${row.amount}` })
   },
@@ -124,10 +137,11 @@ export const lockDay = mutation({
       .withIndex('by_date', (q) => q.eq('date', date))
       .unique()
     const before = (existing?.marks ?? {}) as Record<string, string>
+    if (marks) for (const change of diffMarks(before, marks)) await assertUnsettled(ctx, change.staff, date)
     if (existing) {
       await ctx.db.patch(existing._id, {
         locked: true,
-        ...(marks ? { marks } : {}),
+        ...(marks ? { marks, unpaidLeaves: Object.fromEntries(Object.entries(existing.unpaidLeaves ?? {}).filter(([staff]) => before[staff] === marks[staff])) } : {}),
         updatedAt: Date.now(),
       })
     } else {
@@ -157,9 +171,10 @@ export const setMark = mutation({
       .unique()
     const marks = { ...(existing?.marks ?? {}) } as Record<string, string>
     const prev = marks[staff] || ''
+    if (prev !== status) await assertUnsettled(ctx, staff, date)
     if (status) marks[staff] = status
     else delete marks[staff]
-    if (existing) await ctx.db.patch(existing._id, { marks, updatedAt: Date.now() })
+    if (existing) await ctx.db.patch(existing._id, { marks, unpaidLeaves: { ...(existing.unpaidLeaves ?? {}), [staff]: false }, updatedAt: Date.now() })
     else await ctx.db.insert('attendanceDays', { date, marks, updatedAt: Date.now() })
     if (prev !== status) {
       await logChange(ctx, {
@@ -181,7 +196,8 @@ export const setDay = mutation({
       .withIndex('by_date', (q) => q.eq('date', date))
       .unique()
     const before = (existing?.marks ?? {}) as Record<string, string>
-    if (existing) await ctx.db.patch(existing._id, { marks, updatedAt: Date.now() })
+    for (const change of diffMarks(before, marks)) await assertUnsettled(ctx, change.staff, date)
+    if (existing) await ctx.db.patch(existing._id, { marks, unpaidLeaves: Object.fromEntries(Object.entries(existing.unpaidLeaves ?? {}).filter(([staff]) => before[staff] === marks[staff])), updatedAt: Date.now() })
     else await ctx.db.insert('attendanceDays', { date, marks, updatedAt: Date.now() })
     const changes = diffMarks(before, marks as Record<string, string>)
     if (changes.length) {

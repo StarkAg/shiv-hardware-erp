@@ -5,25 +5,15 @@ import { ConvexProvider, ConvexReactClient } from 'convex/react'
 import './index.css'
 import { AppLayout } from './components/AppLayout'
 import { ConvexSync } from './components/ConvexSync'
-import { QuotationBuilder } from './features/quotation/QuotationBuilder'
-import { RateManager } from './features/rates/RateManager'
-import { Inventory } from './features/inventory/Inventory'
-import { Customers } from './features/customers/Customers'
-import { QuoteHistory } from './features/quotation/QuoteHistory'
-import { QuotationOptions } from './features/quotation/QuotationOptions'
 import { PrintDemo } from './features/print/PrintDemo'
-import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
-import { GuaranteeHistory } from './features/guarantee/GuaranteeHistory'
-import { BillSelectPage } from './features/guarantee/BillSelectPage'
-import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
-import { Transport } from './features/transport/Transport'
 import { Ledger } from './features/ledger/Ledger'
+import { Profit } from './features/profit/Profit'
 import { LedgersPage } from './features/ledger/LedgersPage'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { BillTrash } from './features/bills/BillTrash'
-import { BillScanner } from './features/scan/BillScanner'
 import { PrinterQueue } from './features/print/PrinterQueue'
 import { CashReview } from './features/cash/CashReview'
+import { CashPending } from './features/cash/CashPending'
 import { Home } from './features/home/Home'
 import { PdfViewer } from './features/pdf/PdfViewer'
 import { MobileView } from './features/mobile/MobileView'
@@ -102,7 +92,19 @@ function PhoneGate() {
     window.matchMedia('(max-width: 767px) and (pointer: coarse)').matches
   let optedOut = false
   try { optedOut = sessionStorage.getItem('shiv-panel:full-panel') === '1' } catch { /* ignore */ }
-  return phone && !optedOut ? <Navigate to="/m" replace /> : <AppLayout />
+
+  /**
+   * The one screen whose whole purpose is a phone in someone's hand.
+   *
+   * The gate exists so a customer opening the website gets the books to read
+   * rather than the counter's controls. The camera is the exception: it is a
+   * phone screen by definition, and sending it to the read-only view meant the
+   * shop's own link opened the wrong thing. Sorting the backlog has its own
+   * site now and never reaches this router at all.
+   */
+  const forThePhone = new URLSearchParams(window.location.search).has('capture')
+
+  return phone && !optedOut && !forThePhone ? <Navigate to="/m" replace /> : <AppLayout />
 }
 
 // HashRouter keeps routing working when packaged as a desktop (file://) app.
@@ -137,38 +139,11 @@ const router = createHashRouter([
       { index: true, element: <Navigate to="/home" replace /> },
       { path: 'home',           element: <Home /> },
       { path: 'paper',          element: <DayPaper /> },
-      { path: 'quote-options',  element: <QuotationOptions /> },
-      { path: 'quote',          element: <QuotationBuilder /> },
-      { path: 'quote/:id',      element: <QuotationBuilder /> },
-      { path: 'product/:category', element: <QuotationBuilder /> },
-      { path: 'history',        element: <QuoteHistory /> },
-      { path: 'history/:id',    element: <QuoteHistory /> },
-      { path: 'guarantee/card',        element: <GuaranteeBuilder layout="card" /> },
-      { path: 'guarantee/a4',          element: <GuaranteeBuilder layout="a4" /> },
-      { path: 'guarantee/history',     element: <GuaranteeHistory /> },
-      { path: 'guarantee/history/:id', element: <GuaranteeHistory /> },
-      { path: 'guarantee/select-bill',  element: <BillSelectPage /> },
-      { path: 'guarantee/bill/:billId', element: <BillBrandCardsPage /> },
-      /**
-       * Shop-machine tools, kept out of the counter's daily menu.
-       *
-       * Both talk to the print server on the shop's own network rather than to
-       * Convex: the scanner reads a photographed bill through it, and the queue
-       * shows what it is printing. Nothing in the panel puts a job in that
-       * queue yet, so they live under Settings until the shop PC runs them.
-       */
-      { path: 'scan',           element: <BillScanner /> },
-      { path: 'rates',          element: <RateManager /> },
-      { path: 'rates/:category', element: <RateManager /> },
-      { path: 'inventory',      element: <Inventory /> },
-      { path: 'inventory/:tab', element: <Inventory /> },
-      { path: 'inventory/:tab/:openId', element: <Inventory /> },
-      { path: 'transport',      element: <Transport /> },
-      { path: 'transport/:view', element: <Transport /> },
       { path: 'ledgers',        element: <LedgersPage /> },
       { path: 'ledgers/:tab',   element: <LedgersPage /> },
       { path: 'ledger',         element: <Ledger /> },
       { path: 'ledger/trash',   element: <Navigate to="/trash" replace /> },
+      { path: 'profit',         element: <Profit /> },
       { path: 'ledger/:tab',    element: <Ledger /> },
       { path: 'ledger/:tab/:partyId', element: <Ledger /> },
       /**
@@ -187,12 +162,14 @@ const router = createHashRouter([
       { path: 'bills/voucher/:voucherId', element: <BillBuilder /> },
       { path: 'bills/:id',      element: <BillBuilder /> },
       { path: 'cash-review',    element: <CashReview /> },
+      // The accounting side of the drawer: notes still needing an account.
+      // Deliberately not in the menu — cash and the books are kept apart.
+      { path: 'cash-pending',   element: <CashPending /> },
       { path: 'trash',          element: <BillTrash /> },
       { path: 'printer-queue',  element: <PrinterQueue /> },
       // The quotation half's own customer list. Not the books' party list —
       // these are people who may only ever have had a quotation. Named for
       // what it is in the menu until the two lists are actually merged.
-      { path: 'customers',      element: <Customers /> },
       // Links from older versions of the panel, kept working rather than 404.
       { path: 'voucher/:kind',  element: <VoucherRedirect /> },
       { path: 'pdf-viewer',     element: <PdfViewer /> },

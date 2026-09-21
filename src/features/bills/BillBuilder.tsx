@@ -320,10 +320,19 @@ interface SmartItemRowProps {
   onRowDone: (idx: number) => void
   /** Enter on an untouched row: discard it and finish entering lines. */
   onBlankRowDone: (id: string) => void
+  /** My Items entries this bill made, and what this line may do to them. */
+  myItems: {
+    made: (entryId: string) => void
+    rename: (entryId: string, lineId: string, name: string) => boolean
+    drop: (entryId: string, lineId: string) => boolean
+    sweep: () => void
+  }
+  /** Which side of the books this line is on — see saveCustomEntryRate. */
+  kind: BillKind
   disabled?: boolean
 }
 
-function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, disabled }: SmartItemRowProps) {
+function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, myItems, kind, disabled }: SmartItemRowProps) {
   const { sets, hardwareCatalog, setHardwareCatalog, customCatalog, addCustomEntry, updateCustomEntry, units, addUnit } = useStore()
 
   /** Stored units plus an "add" row, so the list only holds what the shop uses. */
@@ -418,7 +427,13 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     if (item.customEntryId) return customCatalog   // already selected → show all for switching
     const q = search.toLowerCase().trim()
     if (!q) return customCatalog
-    return customCatalog.filter(e => e.name.toLowerCase().includes(q))
+    // An item folded in from a supplier's own entry keeps that wording as a
+    // spelling that finds it, so an SRT bill can be typed as it is printed.
+    return customCatalog.filter(
+      e =>
+        e.name.toLowerCase().includes(q) ||
+        (e.alsoKnownAs ?? []).some(also => also.toLowerCase().includes(q)),
+    )
   }, [search, item.customEntryId, customCatalog])
 
   /**
@@ -503,6 +518,33 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
 
   const setPanelList = useContext(ListPanelContext)
 
+  /**
+   * What a pick from the panel does, kept where the effect below can reach it
+   * without depending on it.
+   *
+   * The handler closes over the row — its item, its search, the catalogue — so
+   * it is a different function on every render. Naming it in the effect's
+   * dependencies would put the list back into the panel on every render, and
+   * the panel is the parent's state, so that is a render that causes a render.
+   * A ref is one box whose contents are replaced; the box itself never
+   * changes, so the effect can be left alone.
+   */
+  const pickFromPanel = useRef<(v: string) => void>(() => {})
+  useEffect(() => {
+    pickFromPanel.current = (v) => {
+      if (v === 'roundup') { pickRoundup(); return }
+      if (v === 'fare') { pickFare(); return }
+      if (v === 'add') { addItemFromSearch(); return }
+      if (v.startsWith('c:')) {
+        const opt = filtered.find(o => o.category === v.slice(2))
+        if (opt) selectCategory(opt)
+        return
+      }
+      const entry = customFiltered.find(e => e.id === v.slice(2))
+      if (entry) selectCustomEntry(entry)
+    }
+  })
+
   // Mirror the open list into the right-hand panel, Tally-style. Cleared on
   // close so the panel never shows a stale list from a field you have left.
   useEffect(() => {
@@ -517,21 +559,10 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
         : o.kind === 'fare' ? { value: 'fare', label: 'Fare / cartage' }
         : { value: 'add', label: `Create "${search.trim()}"` },
       ),
-      onPick: (v) => {
-        if (v === 'roundup') { pickRoundup(); return }
-        if (v === 'fare') { pickFare(); return }
-        if (v === 'add') { addItemFromSearch(); return }
-        if (v.startsWith('c:')) {
-          const opt = filtered.find(o => o.category === v.slice(2))
-          if (opt) selectCategory(opt)
-          return
-        }
-        const entry = customFiltered.find(e => e.id === v.slice(2))
-        if (entry) selectCustomEntry(entry)
-      },
+      onPick: (v) => pickFromPanel.current(v),
     })
     return () => setPanelList(null)
-  })
+  }, [showDrop, navOptions, search, highlight, setPanelList])
 
   const dropRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -705,6 +736,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     // Already in My Items — pick it rather than creating a duplicate.
     if (duplicateEntry) { selectCustomEntry(duplicateEntry); return }
     const newId = addCustomEntry(name)
+    myItems.made(newId)
     selectCustomEntry({ id: newId, name, sizes: [], brands: [] })
     addingNewRef.current = false
     setShowDrop(false)
@@ -732,13 +764,27 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     onUpdate(item.id, { fieldValues: fv, description: customDesc({ fieldValues: fv }) })
   }
 
+  /**
+   * What an item was just billed at, remembered for next time.
+   *
+   * With one division that costs real money. `rate` is the figure a fresh line
+   * starts at, and it must only ever be learned from selling. Typing a
+   * supplier's bill used to set it too — enter SRT's 12mm SG 8 X 4 at 1,888
+   * and the next customer's line opened at 1,888 against the 3,072 the shop
+   * asks. Nobody is told; the bill simply goes out at cost.
+   *
+   * The figure is still worth keeping either way, so it joins `rates` — the
+   * list offered on the row — whichever side of the books it came from. Only
+   * the default stays a selling price.
+   */
   function saveCustomEntryRate(entryId: string, rate: number) {
     if (!rate) return
     const entry = customCatalog.find(e => e.id === entryId)
     // Keep the figure at the front and drop any earlier copy of it, so the list
     // reads newest-first without repeats. Capped so it stays scannable.
     const rates = [rate, ...(entry?.rates ?? []).filter(r => r !== rate)].slice(0, 8)
-    updateCustomEntry(entryId, { rate, rates })
+    const buying = kind === 'purchase' || kind === 'grn'
+    updateCustomEntry(entryId, buying ? { rates } : { rate, rates })
   }
 
   /** Add a new value to an existing custom field (e.g. add "Blue" to the Color field). */
@@ -793,10 +839,8 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
         <div className="flex-1 min-w-0 space-y-2">
 
           {/* Description / product search */}
-          {/* Wraps on a phone, stays on one line from md up — a laptop has
-              the width, and a bill reads as a ledger only if each item is
-              one line. */}
-          <div className="flex flex-wrap items-start gap-2 md:flex-nowrap">
+          {/* Wrap against the space left by the navigation and options panel. */}
+          <div className="flex flex-wrap items-start gap-2">
             <div className="relative flex-1 min-w-[140px]">
               <input
                 type="text"
@@ -822,7 +866,25 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                   if (atEnd && v !== el.value) {
                     requestAnimationFrame(() => el.setSelectionRange(v.length, v.length))
                   }
-                  if (isCatalog) {
+                  const mine = item.customEntryId
+                  if (mine && !v.trim() && myItems.drop(mine, item.id)) {
+                    // Clearing the name of an item this bill made takes the
+                    // item with it: it was never anything but this line.
+                    onUpdate(item.id, {
+                      category: undefined,
+                      customEntryId: undefined,
+                      brandName: undefined,
+                      sizeIn: undefined,
+                      heightIn: undefined,
+                      widthIn: undefined,
+                      description: v,
+                    })
+                  } else if (mine && v.trim() && myItems.rename(mine, item.id, v)) {
+                    // Correcting the name of an item this bill made corrects
+                    // that item, and the line stays on it — otherwise Enter
+                    // would add a second entry beside the misspelt first.
+                    onUpdate(item.id, { description: v })
+                  } else if (isCatalog) {
                     // Editing a picked name is editing text: the line lets go
                     // of the catalogue item but keeps its qty, unit, rate and
                     // amount — renaming "1" Baffer" must not unprice it.
@@ -1136,6 +1198,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                               const sizes  = newSizeInput.trim()  ? [...newItemSizes,  newSizeInput.trim()]  : newItemSizes
                               const brands = newBrandInput.trim() ? [...newItemBrands, newBrandInput.trim()] : newItemBrands
                               const newId = addCustomEntry(name)
+                              myItems.made(newId)
                               updateCustomEntry(newId, {
                                 ...(newRate  ? { rate: newRate }  : {}),
                                 ...(sizes.length   ? { sizes }   : {}),
@@ -1257,7 +1320,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                     <IndianRupee size={11} className="absolute left-2 top-2.5 text-muted" />
                     <input
                       type="number"
-                      placeholder="Amt" data-bill-row={idx} data-bill-col="amt"
+                      placeholder="Amt" data-bill-nav="1" data-bill-row={idx} data-bill-col="amt"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') { e.preventDefault(); onRowDone(idx); return }
                       billArrowKeys(e)
@@ -1629,7 +1692,7 @@ function TallyListPanel({ list }: { list: PanelList | null }) {
   }, [list?.highlight, list?.rows.length])
 
   return (
-    <aside className="no-print fixed right-0 top-0 z-30 hidden h-screen w-80 flex-col border-l border-stone-300 bg-stone-50 dark:border-white/15 dark:bg-stone-900 lg:flex xl:w-96">
+    <aside className="no-print fixed right-0 top-0 z-30 hidden h-screen w-80 flex-col border-l border-stone-300 bg-stone-50 dark:border-white/15 dark:bg-stone-900 xl:flex 2xl:w-96">
       <div className="border-b border-stone-300 bg-stone-100 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-muted dark:border-white/15 dark:bg-white/5">
         {list?.title ?? 'List'}
       </div>
@@ -1703,6 +1766,13 @@ function UnitField({ value, options, onPick, onNavKey, onCommit }: {
 
   useEffect(() => { setHl(0) }, [text])
 
+  // See the note on pickFromPanel in SmartItemRow: naming the handler in the
+  // dependencies would set the parent's state on every render, for ever.
+  const pickUnitFromPanel = useRef<(v: string) => void>(() => {})
+  useEffect(() => {
+    pickUnitFromPanel.current = (v) => { commit(v === '__new__' ? text.trim() : v); onCommit() }
+  })
+
   useEffect(() => {
     if (!open || !text.trim()) return
     const rows = [
@@ -1714,10 +1784,10 @@ function UnitField({ value, options, onPick, onNavKey, onCommit }: {
       title: 'List of Units',
       highlight: hl,
       rows,
-      onPick: (v) => { commit(v === '__new__' ? text.trim() : v); onCommit() },
+      onPick: (v) => pickUnitFromPanel.current(v),
     })
     return () => setPanelList(null)
-  })
+  }, [open, text, matches, exact, hl, setPanelList])
 
   function commit(v: string) {
     const unit = v.trim()
@@ -2053,7 +2123,7 @@ const postingBills = new Set<string>()
 export function BillBuilder() {
   const { id, voucherId } = useParams<{ id?: string; voucherId?: string }>()
   const navigate = useNavigate()
-  const { bills, saveBill, deleteBill, nextBillNumber } = useStore()
+  const { bills, saveBill, deleteBill, nextBillNumber, updateCustomEntry, removeCustomEntry } = useStore()
 
   const existing = id ? bills.find((b) => b.id === id) : undefined
   const [draft, setDraft] = useState<Bill>(() => (existing ? forEditing(existing) : emptyBill(nextBillNumber())))
@@ -2183,6 +2253,16 @@ export function BillBuilder() {
   }, [draft.customerName, liveCustomers])
   useEffect(() => { setCustHl(0) }, [draft.customerName])
 
+  // See the note on pickFromPanel in SmartItemRow: naming the handler in the
+  // dependencies would set the parent's state on every render, for ever.
+  const pickPartyFromPanel = useRef<(id: string) => void>(() => {})
+  useEffect(() => {
+    pickPartyFromPanel.current = (id) => {
+      const c = custMatches.find((x) => x.id === id)
+      if (c) pickCustomer(c)
+    }
+  })
+
   // Same panel, different list — Tally shows "List of Ledgers" here.
   useEffect(() => {
     if (!showCust || !custMatches.length || !(draft.customerName ?? '').trim()) return
@@ -2194,13 +2274,10 @@ export function BillBuilder() {
         label: c.name,
         hint: [kind === 'return' ? c.side : '', c.mobile].filter(Boolean).join(' · ') || (c.account ? '' : 'not in books'),
       })),
-      onPick: (id) => {
-        const c = custMatches.find((x) => x.id === id)
-        if (c) pickCustomer(c)
-      },
+      onPick: (id) => pickPartyFromPanel.current(id),
     })
     return () => setPanelList(null)
-  })
+  }, [showCust, custMatches, draft.customerName, custHl, kind, partyGroup, setPanelList])
 
   function pickCustomer(c: typeof liveCustomers[number]) {
     setDraft((d) => ({
@@ -2596,7 +2673,78 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     })
   }
 
+  /**
+   * My Items entries this bill created, and what may be done to them.
+   *
+   * Typing a name that is not on the list makes an entry there and then, so
+   * that billing need not stop to fill a form. Going back to that line and
+   * correcting the name — or clearing it — should correct or remove the entry
+   * just made, not leave a misspelling in My Items for ever and add a second
+   * entry beside it.
+   *
+   * It must go no further than that. An entry the shop already uses is not
+   * this line's to rename: typing over a picked "12mm SG 8 X 4" is editing a
+   * line, and renaming the item under every bill that names it would be a
+   * different and much larger act. So an entry follows the line only while it
+   * was made on this bill and nothing else has claimed it — no other line
+   * here, and no other bill anywhere.
+   */
+  const madeHere = useRef<Set<string>>(new Set())
+
+  const entryIsThisLineAlone = useCallback(
+    (entryId: string, lineId: string) => {
+      if (!madeHere.current.has(entryId)) return false
+      if (draft.items.some((i) => i.id !== lineId && i.customEntryId === entryId)) return false
+      return !bills.some(
+        (b) => b.id !== draft.id && (b.items ?? []).some((i) => i.customEntryId === entryId),
+      )
+    },
+    [draft.items, draft.id, bills],
+  )
+
+  const myItems = useMemo(
+    () => ({
+      made: (entryId: string) => { madeHere.current.add(entryId) },
+      /** Renamed if it is still this line's alone; says whether it was. */
+      rename: (entryId: string, lineId: string, name: string) => {
+        if (!entryIsThisLineAlone(entryId, lineId)) return false
+        updateCustomEntry(entryId, { name })
+        return true
+      },
+      /** Removed if it is still this line's alone; says whether it was. */
+      drop: (entryId: string, lineId: string) => {
+        if (!entryIsThisLineAlone(entryId, lineId)) return false
+        removeCustomEntry(entryId)
+        madeHere.current.delete(entryId)
+        return true
+      },
+      /**
+       * The bill is being abandoned: take its new items with it.
+       *
+       * Typing a name that is not on the list adds it to My Items at once, so
+       * that billing need not stop. Walk away from the bill and that item has
+       * no bill behind it and never will — a name nobody chose to keep, on the
+       * list for ever, offered at every counter. Only what no saved bill has
+       * claimed goes: a bill saved and then reopened and cancelled leaves its
+       * items exactly where they are.
+       */
+      sweep: () => {
+        for (const entryId of [...madeHere.current]) {
+          const claimed = bills.some((b) =>
+            (b.items ?? []).some((i) => i.customEntryId === entryId),
+          )
+          if (!claimed) removeCustomEntry(entryId)
+          madeHere.current.delete(entryId)
+        }
+      },
+    }),
+    [entryIsThisLineAlone, updateCustomEntry, removeCustomEntry, bills],
+  )
+
   function removeItem(itemId: string) {
+    // A line thrown away takes with it an entry it alone had made.
+    const held = draft.items.find((i) => i.id === itemId)
+    if (held?.customEntryId) myItems.drop(held.customEntryId, itemId)
     setDraft((d) => ({ ...d, items: d.items.filter((i) => i.id !== itemId) }))
   }
 
@@ -2763,6 +2911,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     const unsaved =
       !bills.find((b) => b.id === draft.id) && hasMeaningfulContent({ ...draft, total })
     if (unsaved) { setAsking('leave'); return }
+    myItems.sweep()
     setView('list')
     navigate('/day', { replace: true })
   }
@@ -2770,6 +2919,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   /** Leaves the bill for good — what Alt+D and a discarded draft both end in. */
   function leave() {
     committedRef.current = true
+    myItems.sweep()
     setView('list')
     navigate('/day', { replace: true })
   }
@@ -2852,7 +3002,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
         />
       )}
 
-      <div className="mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-1 md:pt-2 lg:max-w-none lg:pl-8 lg:pr-[21rem] xl:pr-[25rem]">
+      <div className="mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-1 md:pt-2 xl:max-w-none xl:pl-8 xl:pr-[21rem] 2xl:pr-[25rem]">
 
         <div className="flex items-center gap-1">
           <Button
@@ -3234,18 +3384,18 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
           {/* No overflow-hidden here: the item and unit dropdowns are absolutely
               positioned inside these rows and would be clipped by it. */}
           <div className="rounded-lg border border-stone-300 dark:border-white/15">
-            <div className="flex items-center gap-2 rounded-t-lg border-b border-stone-300 bg-stone-100 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted dark:border-white/15 dark:bg-white/5">
+            <div className="flex flex-wrap items-center gap-2 rounded-t-lg border-b border-stone-300 bg-stone-100 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted dark:border-white/15 dark:bg-white/5">
               {/* Mirrors a row exactly: index, particulars, then the control
                   group with its own tighter gap, then the actions column. */}
               <span className="w-5 shrink-0 text-center">#</span>
-              <span className="flex-1 min-w-[190px]">Particulars</span>
+              <span className="flex-1 min-w-[140px]">Particulars</span>
               <span className="flex shrink-0 items-center gap-1.5">
                 <span className="w-12 text-center">Qty</span>
                 <span className="w-16 text-center">Unit</span>
                 <span className="w-24 text-right">Amount</span>
                 <span className="w-[4.5rem] text-center">Rate</span>
               </span>
-              <span className="w-9 shrink-0" />
+              <span className="hidden w-9 shrink-0 sm:block" />
             </div>
 
           <div className="divide-y divide-stone-200 dark:divide-white/10">
@@ -3258,6 +3408,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 onRemove={removeItem}
                 onRowDone={rowDone}
                 onBlankRowDone={finishItemEntry}
+                myItems={myItems}
+                kind={draft.kind ?? 'sale'}
                 disabled={draft.items.length === 1}
               />
             ))}
@@ -3373,30 +3525,31 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
         <ChecksNotice checks={checkList} />
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Cancel — intentionally small to avoid accidental taps */}
-          <button
+          <Button
+            variant="ghost"
             onClick={cancel}
-            className="shrink-0 rounded-lg px-3 py-2.5 text-xs font-medium text-muted hover:text-stone-600 dark:text-muted dark:hover:text-stone-300"
+            className="px-3"
           >
             Cancel
-          </button>
+          </Button>
 
           {/* Save + Print */}
-          <div className="flex flex-1 gap-2">
-            <button
+          <div className="flex flex-[1_1_250px] items-center gap-2">
+            <Button
               data-bill-save="1"
               onClick={save}
-              className="flex-1 rounded-xl bg-shiv-green py-3 text-sm font-bold text-stone-950 hover:bg-[#c6a15a]"
+              className="min-w-0 flex-1"
             >
               Save {BILL_KINDS[draft.kind ?? 'sale'].title}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
               onClick={handlePrint}
-              className="flex shrink-0 items-center gap-1.5 rounded-xl bg-stone-800 px-4 py-3 text-sm font-bold text-white hover:bg-stone-700 dark:bg-stone-700 dark:hover:bg-stone-600"
             >
               <Printer size={15} /> Print
-            </button>
+            </Button>
           </div>
         </div>
 

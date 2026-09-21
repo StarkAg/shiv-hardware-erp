@@ -1,0 +1,105 @@
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
+import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import './index.css'
+import { CounterLayout } from './components/CounterLayout'
+import { ConvexSync } from './components/ConvexSync'
+import { QuotationBuilder } from './features/quotation/QuotationBuilder'
+import { QuotationOptions } from './features/quotation/QuotationOptions'
+import { QuoteHistory } from './features/quotation/QuoteHistory'
+import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
+import { GuaranteeHistory } from './features/guarantee/GuaranteeHistory'
+import { BillSelectPage } from './features/guarantee/BillSelectPage'
+import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
+import { Inventory } from './features/inventory/Inventory'
+import { RateManager } from './features/rates/RateManager'
+import { Transport } from './features/transport/Transport'
+import { Customers } from './features/customers/Customers'
+import { AppError, NotFound } from './components/RouteFallbacks'
+import { startProperInputs } from './lib/properInputs'
+import { useStore } from './lib/store'
+
+/**
+ * The counter, as its own site.
+ *
+ * Everything a customer is standing in front of you for: a quotation, a
+ * guarantee card, what a sheet costs, what the toto charges. None of it posts
+ * to an account, which is why it can live apart from the books at all.
+ *
+ * The same `src/` as the panel — this is a second entry point of one project,
+ * not a second copy of it.
+ */
+
+startProperInputs()
+useStore.getState().normalizeCustomerNames()
+
+const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
+const convex = CONVEX_URL ? new ConvexReactClient(CONVEX_URL) : null
+
+// Same wheel rule as the panel: a trackpad nudge must never change an amount.
+document.addEventListener(
+  'wheel',
+  (e) => {
+    const field = document.activeElement
+    if (field instanceof HTMLInputElement && field.type === 'number' && e.target === field) {
+      field.blur()
+    }
+  },
+  { passive: true, capture: true },
+)
+
+const router = createHashRouter([
+  {
+    path: '/',
+    element: <CounterLayout />,
+    errorElement: <AppError />,
+    children: [
+      { index: true, element: <Navigate to="/quote-options" replace /> },
+      { path: 'quote-options', element: <QuotationOptions /> },
+      { path: 'quote', element: <QuotationBuilder /> },
+      { path: 'quote/:id', element: <QuotationBuilder /> },
+      { path: 'product/:category', element: <QuotationBuilder /> },
+      { path: 'history', element: <QuoteHistory /> },
+      { path: 'history/:id', element: <QuoteHistory /> },
+      { path: 'guarantee/card', element: <GuaranteeBuilder layout="card" /> },
+      { path: 'guarantee/a4', element: <GuaranteeBuilder layout="a4" /> },
+      { path: 'guarantee/history', element: <GuaranteeHistory /> },
+      { path: 'guarantee/history/:id', element: <GuaranteeHistory /> },
+      { path: 'guarantee/select-bill', element: <BillSelectPage /> },
+      { path: 'guarantee/bill/:billId', element: <BillBrandCardsPage /> },
+      // The catalogue and its rates are what a quotation is built out of, so
+      // they live beside it rather than with the books.
+      { path: 'inventory', element: <Inventory /> },
+      { path: 'inventory/:tab', element: <Inventory /> },
+      { path: 'inventory/:tab/:openId', element: <Inventory /> },
+      { path: 'rates', element: <RateManager /> },
+      { path: 'rates/:category', element: <RateManager /> },
+      { path: 'transport', element: <Transport /> },
+      { path: 'transport/:view', element: <Transport /> },
+      { path: 'customers', element: <Customers /> },
+      { path: '*', element: <NotFound /> },
+    ],
+  },
+], { future: { v7_relativeSplatPath: true } })
+
+/**
+ * <ConvexSync> is not optional here.
+ *
+ * The quotation catalogue — every item, rate and brand set a quotation is built
+ * from — lives in the Zustand store, and this is the only thing that fills it
+ * from Convex. Without it the counter opens with an empty product list and no
+ * way to know why, which is exactly how it shipped the first time.
+ */
+const app = convex
+  ? (
+    <ConvexProvider client={convex}>
+      <ConvexSync />
+      <RouterProvider router={router} future={{ v7_startTransition: true }} />
+    </ConvexProvider>
+  )
+  : <RouterProvider router={router} future={{ v7_startTransition: true }} />
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>{app}</React.StrictMode>,
+)

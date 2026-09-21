@@ -10,6 +10,7 @@ import type { MutationCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { record } from "./lib/history";
+import { enrol } from "./filing";
 import type { Doc } from "./_generated/dataModel";
 
 /* ------------------------------------------------------------------ */
@@ -225,6 +226,33 @@ export const queue = query({
         : all.filter((r) => r.status !== "doubt");
     readings.sort((a, b) => b.at - a.at);
 
+    /**
+     * Where each slip sits in the pile it was photographed from.
+     *
+     * Counted over every bill ever shot into that stack, named or not — the
+     * ones already filed have left the inbox and are in the sorting queue, so
+     * both are counted. A number over only what is left would count down to
+     * one and find no paper; this one says the seventh slip of stack A and goes
+     * on saying it after the six before it are filed.
+     */
+    const filed = await ctx.db.query("filing").collect();
+    const inPile = await ctx.db.query("inbox").collect();
+    const firstSheet = new Map<string, { stack: string; at: number }>();
+    for (const p of inPile) {
+      const key = p.groupId ? `g:${p.groupId}` : `p:${p._id}`;
+      const seen = firstSheet.get(key);
+      if (!seen || p.at < seen.at) firstSheet.set(key, { stack: p.stack ?? "", at: p.at });
+    }
+    const shotInStack = new Map<string, number[]>();
+    const add = (stack: string, at: number) => {
+      const list = shotInStack.get(stack) ?? [];
+      list.push(at);
+      shotInStack.set(stack, list);
+    };
+    for (const r of filed) add(r.stack ?? "", r.capturedAt);
+    for (const b of firstSheet.values()) add(b.stack, b.at);
+    for (const list of shotInStack.values()) list.sort((a, b) => a - b);
+
     const out = [];
     for (const reading of readings) {
       const photo = await ctx.db.get(reading.inboxId);
@@ -252,6 +280,14 @@ export const queue = query({
         // When the first sheet was photographed — the order the pile was
         // actually worked through, which is not the order it was read in.
         shotAt: pageRows[0]?.at ?? reading.at,
+        // Which pile the paper is in, and how far down it — the two things
+        // needed to put a hand on this slip again.
+        stack: photo.stack ?? null,
+        index:
+          (shotInStack.get(photo.stack ?? "") ?? []).findIndex(
+            (at) => at === (pageRows[0]?.at ?? photo.at)
+          ) + 1,
+        inStack: (shotInStack.get(photo.stack ?? "") ?? []).length,
         // The marks on the bill, which live on the photograph while it is in
         // the pile and move onto the voucher when it is approved.
         tags: photo.tags ?? [],
@@ -1004,6 +1040,20 @@ export const approve = mutation({
       if (marks.length) {
         await ctx.db.patch(voucherId, { tags: [...new Set(marks)] });
       }
+      // The slip is a piece of paper somewhere, and this is the last moment
+      // anyone knows where in the stack it sits: the inbox rows carry the time
+      // it was photographed and they are about to be deleted. Approval order is
+      // not stack order — a pile is worked at the counter in whatever order the
+      // reads finish — so the sort would send every bill to the wrong customer
+      // if it read the voucher's own timestamp instead. Pages of one bill take
+      // the earliest of them, which is when the bill itself was reached.
+      await enrol(ctx, {
+        voucherId,
+        partyLedgerId,
+        capturedAt: Math.min(...pageRows.map((p) => p.at)),
+        // Which stack the paper went onto, as the phone that shot it was set.
+        stack: pageRows.find((p) => p.stack)?.stack,
+      });
       for (const page of pageRows) await ctx.db.delete(page._id);
     }
 

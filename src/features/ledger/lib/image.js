@@ -155,7 +155,18 @@ export async function shrink(file, max = MAX_EDGE) {
   bitmap.close?.();
 
   const blob = await new Promise((done) => canvas.toBlob(done, 'image/jpeg', QUALITY));
-  if (!blob || blob.size >= file.size) return file;   // no gain, keep the original
+  /**
+   * Keep the original only when it is already a JPEG and no bigger.
+   *
+   * The size test alone let a PNG through whenever its re-encode happened not
+   * to be smaller, and a photograph that arrives as PNG — a file picker, a
+   * screenshot, a chat app that re-wraps what it is given — is several times
+   * the weight of the same picture as a JPEG, on every upload and every read.
+   * Worse, a PNG carries an alpha channel a JPEG cannot, so anything that
+   * assumed the type downstream was wrong about it.
+   */
+  const alreadyJpeg = file.type === 'image/jpeg';
+  if (!blob || (alreadyJpeg && blob.size >= file.size)) return file;
 
   return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
     type: 'image/jpeg',

@@ -501,6 +501,16 @@ export interface CustomCatalogEntry {
    * the previous figures are offered rather than overwritten.
    */
   rates?: number[]
+  /**
+   * Other wordings that should find this item.
+   *
+   * Left behind when a supplier's own entry is folded into the shop's — SRT
+   * bills "12mm S 8 X 4" for what the shop sells as "12mm SG 8 X 4", and
+   * whoever types the supplier's bill should be able to type what is printed
+   * on it. Searched, never shown on a bill: the name that goes on the line is
+   * always `name`. See `convex/itemFold.ts`.
+   */
+  alsoKnownAs?: string[]
 }
 
 // ---------------------------------------------------------------------------

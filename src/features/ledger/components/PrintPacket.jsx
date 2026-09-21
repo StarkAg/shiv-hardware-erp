@@ -12,9 +12,11 @@ function Head({ title }) {
       <div className="lh-shop">
         <div className="lh-name">{SHOP}</div>
         <div className="lh-line">Shivaji Road, Near Gandhi Highschool, Ramgarh Cantt – 829122</div>
-        <div className="lh-line">
-          GSTIN 20AGEPG3564B1Z6 &nbsp;·&nbsp; 8092850954, 9835350954
-        </div>
+        {/* No GSTIN on the letterhead. Nothing printed from here is a tax
+            invoice — these are statements of account — and a GST number at the
+            top of one reads as a claim that it is. The number belongs on the
+            bill itself, which is printed elsewhere. */}
+        <div className="lh-line">8092850954, 9835350954</div>
       </div>
       <div className="lh-doc">
         <div className="lh-title">{title}</div>
@@ -39,7 +41,7 @@ function Foot({ left }) {
   return (
     <div className="sheet-foot">
       <span>{left}</span>
-      <span>{SHOP} · Shivaji Road, Ramgarh Cantt · GSTIN 20AGEPG3564B1Z6</span>
+      <span>{SHOP} · Shivaji Road, Ramgarh Cantt</span>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { flush, queue, pendingCount } from './sync.js'
+import { convex, flush, queue, pendingCount } from './sync.js'
+import { anyApi } from 'convex/server'
 import { registerPdf } from './pdf.js'
+import StaffPayments from './StaffPayments.jsx'
 
 // Shiv Hardware cash book.
 //
@@ -22,6 +24,22 @@ const LOG_KEY = 'shiv-cash:log'
 const DEVICE_KEY = 'shiv-cash:device-id'
 const LOG_MAX = 500 // the oldest fall off rather than filling the phone's storage
 const DRAFT_KEY = 'shiv-cash:count-draft'
+// When a name's count was last put back to zero.
+//
+// A key is earned by being typed three times, and some names cross that line
+// without being worth a button — a dealer paid off, a note that happened to
+// repeat for a week. Clearing one does not hide it for ever: it forgets what
+// came before, so the name has to be written three more times to come back. A
+// name still in daily use returns within the week; one that was a passing phase
+// never does, and nobody had to decide which it was.
+//
+// Nothing about the entries changes. This is a mark in time, and the lines it
+// stops counting are still in the book, on the register and in every total.
+//
+// It lives on the device rather than in the book: a preference about one
+// person's keypad, not a fact about the shop's day, and two counters write
+// different names often enough to want different keys.
+const KEYRESET_KEY = 'shiv-cash:key-resets' 
 // Every note and coin still in circulation. One row per value, not per piece —
 // a ten-rupee note and a ten-rupee coin are ten rupees either way, and counting
 // them into one box is one job instead of two.
@@ -139,6 +157,7 @@ const fmtDay = (dateStr) => {
 
 export default function App() {
   const [mode, setMode] = useState('entry')
+  const [staffFocus, setStaffFocus] = useState('')
   const [cursor, setCursor] = useState(new Date())
   const [todayKey, setTodayKey] = useState(() => dateKey(new Date()))
 
@@ -214,6 +233,7 @@ export default function App() {
     }
   }
   const updateEntry = (entry) => {
+    if (entry.staffPaymentId) { setStaffFocus(entry.name); setMode('staff'); return }
     // Read the old row before it is replaced, so the log can say what changed
     // rather than only what it ended up as.
     const before = (store[entry.date.slice(0, 7)] || []).find((e) => e.id === entry.id)
@@ -225,6 +245,8 @@ export default function App() {
     record('edit', entry.date, describeEntry(entry), { changes: diffEntry(before, entry) })
   }
   const removeEntries = (batch) => {
+    const staffEntry = batch.find(e => e.staffPaymentId)
+    if (staffEntry) { setStaffFocus(staffEntry.name); setMode('staff'); return }
     mutate((prev) => {
       const next = { ...prev }
       for (const entry of batch) {
@@ -328,7 +350,7 @@ export default function App() {
         const i = list.findIndex((e) => e.id === r.entryId)
         if (r.deleted) { if (i >= 0) list.splice(i, 1) }
         else {
-          const row = { id: r.entryId, date: r.date, kind: r.kind, mode: r.mode, name: r.name, amount: r.amount, at: r.at, updatedAt: r.updatedAt, dealer: !!r.dealer }
+          const row = { id: r.entryId, date: r.date, kind: r.kind, mode: r.mode, name: r.name, amount: r.amount, at: r.at, updatedAt: r.updatedAt, dealer: !!r.dealer, staffPaymentId: r.staffPaymentId }
           if (i < 0) list.push(row)
           else if (r.updatedAt > (list[i].updatedAt || 0)) list[i] = row
         }
@@ -430,7 +452,28 @@ export default function App() {
   const closePw = () => { setPending(null); setPw({ open: false, error: '' }) }
 
   // Tapping edit on a line hands it to the entry form and brings that screen up.
-  const startEdit = (entry) => { setEditing(entry); setMode('entry') }
+  const startEdit = (entry) => {
+    if (entry.staffPaymentId) { setStaffFocus(entry.name); setMode('staff'); return }
+    setEditing(entry); setMode('entry')
+  }
+
+  /**
+   * A saved line shows itself in the register, marked, for a few seconds.
+   *
+   * Writing a note and being returned to an empty keypad leaves nothing to look
+   * at, and the only way to be sure it went in was to go and check. Now it
+   * takes you to the page it landed on and points at the line.
+   */
+  const [flash, setFlash] = useState(null)
+  const showInRegister = (id) => {
+    setMode('report')
+    setFlash(id)
+  }
+  useEffect(() => {
+    if (!flash) return undefined
+    const t = setTimeout(() => setFlash(null), 2600)
+    return () => clearTimeout(t)
+  }, [flash])
 
   const dealerNames = useMemo(() => {
     const names = new Set()
@@ -454,7 +497,9 @@ export default function App() {
     onAdd: addEntries, onUpdate: updateEntry, onRemove: removeEntries,
     onClose: closeDay, onReopen: reopenDay, onShut: shutDay,
     onSetOpening: setOpening, onRemoveOpening: removeOpening,
-    dealerNames,
+    dealerNames, onSaved: showInRegister, flash,
+    onSync: runSync,
+    onEditOpenings: () => setMode('edit'),
   }
 
   return (
@@ -491,7 +536,8 @@ export default function App() {
       </header>
 
       <div className="card fitcard">
-        {mode === 'entry' ? <CashEntry {...shared} />
+        {mode === 'staff' ? <StaffPayments today={todayKey} date={viewing || todayKey} onDate={setViewing} onSaved={runSync} guard={guard} initialStaff={staffFocus} />
+          : mode === 'entry' ? <CashEntry {...shared} />
           : mode === 'totals' ? <CashTotals {...shared} />
             : mode === 'report' ? <CashReport {...shared} />
               : mode === 'analytics' ? <CashAnalytics {...shared} />
@@ -525,6 +571,11 @@ export default function App() {
 // solid brass silhouette, and the children after it are re-stroked in the ink
 // colour so they read as knocked out of it instead of vanishing into the fill.
 const NAV_ICONS = {
+  staff: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="7" r="4" /><path d="M2 21v-2a7 7 0 0 1 14 0v2M17 4a4 4 0 0 1 0 8M22 21v-2a7 7 0 0 0-4-6" />
+    </svg>
+  ),
   analytics: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="5" />
@@ -561,7 +612,7 @@ const NAV_ITEMS = [
   { id: 'entry', label: 'Entry' },
   { id: 'totals', label: 'Totals' },
   { id: 'report', label: 'Register' },
-  { id: 'edit', label: 'Edit' },
+  { id: 'staff', label: 'Staff' },
   { id: 'analytics', label: 'Analytics' },
 ]
 
@@ -572,8 +623,8 @@ function TabBar({ mode, setMode }) {
         <button
           key={item.id}
           className="tabitem"
-          data-on={mode === item.id ? 'true' : undefined}
-          aria-current={mode === item.id ? 'page' : undefined}
+          data-on={mode === item.id || (mode === 'edit' && item.id === 'totals') ? 'true' : undefined}
+          aria-current={mode === item.id || (mode === 'edit' && item.id === 'totals') ? 'page' : undefined}
           onClick={() => setMode(item.id)}
         >
           {NAV_ICONS[item.id]}
@@ -639,19 +690,65 @@ function PhoneIcon() {
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M10.5 5.5h3" /><path d="M10 12.5h4M12 10.5v4" /></svg>
   )
 }
-function LineModal({ entry, onEdit, onDelete, onClose }) {
+function LineModal({ entry, onEdit, onDelete, onReverse, onClose }) {
+  const staff = !!entry.staffPaymentId
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  /**
+   * A staff payment cannot simply be struck out of the register.
+   *
+   * It is one of three records written together — the drawer line, the wage or
+   * advance against that person, and a voucher in the books — so deleting the
+   * line alone would leave the other two saying money went out that the drawer
+   * says never did. Reversing undoes all three, which is why this asks rather
+   * than just doing it, and why it does not go through the ordinary delete.
+   */
+  const reverse = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await convex().mutation(anyApi.staffPay.reverse, { requestId: entry.staffPaymentId })
+      await onReverse?.()
+      onClose()
+    } catch (e) {
+      setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
+      setBusy(false)
+    }
+  }
+
   return (
-    <div className="modal" onClick={onClose}>
+    <div className="modal" onClick={busy ? undefined : onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="lineamt">{inr(entry.amount)}</div>
         <div className="sheetsub">
           {entry.kind === 'in' ? 'Received' : 'Paid'} · {entry.mode === 'online' ? 'Online' : 'Cash'}
           {entry.dealer ? ' · Dealer' : ''} · {entry.name}
         </div>
+
+        {staff && asking && (
+          <p className="sheetnote">
+            This also takes back {entry.name}’s wage or advance and removes its voucher from
+            the books. It cannot be undone from here.
+          </p>
+        )}
+        {error && <p className="sheetnote bad">{error}</p>}
+
         <div className="sheetbtns">
-          <button className="ghostbtn" onClick={onClose}>Cancel</button>
-          <button className="delbtn" onClick={onDelete}>Delete</button>
-          <button className="primbtn" onClick={onEdit}>Edit</button>
+          <button className="ghostbtn" disabled={busy} onClick={asking ? () => setAsking(false) : onClose}>
+            {asking ? 'Keep it' : 'Cancel'}
+          </button>
+          {staff ? (
+            <button className="delbtn" disabled={busy} onClick={asking ? reverse : () => setAsking(true)}>
+              {busy ? 'Deleting…' : asking ? 'Yes, delete' : 'Delete'}
+            </button>
+          ) : (
+            <button className="delbtn" onClick={onDelete}>Delete</button>
+          )}
+          {!asking && (
+            <button className="primbtn" onClick={onEdit}>{staff ? 'Staff payments' : 'Edit'}</button>
+          )}
         </div>
       </div>
     </div>
@@ -815,7 +912,7 @@ function balanceClose(store, closes, openings, date, mode) {
 
 function CashEntry({
   todayKey, store, closes, openings, guard, viewing, setViewing, base,
-  editing, setEditing, onAdd, onUpdate, dealerNames,
+  editing, setEditing, onAdd, onUpdate, dealerNames, onSaved,
 }) {
   const closedToday = !!closes[todayKey]
   const dk = viewing || base
@@ -849,6 +946,37 @@ function CashEntry({
   const reset = () => {
     setAmount(''); setKind(''); setMode('cash')
     setName(''); setDealer(false); setEditing(null)
+    setNaming(false); noteRef.current?.blur()
+  }
+
+  /**
+   * Which keyboard the bottom of the screen is showing.
+   *
+   * A line is written in one direction — figure, then which way it went, then
+   * who it was — and the keyboard needed changes twice on the way. So it
+   * changes itself: the pad is up for the amount, and choosing Received or Paid
+   * hands over to the phone's own keyboard for the name.
+   *
+   * The phone's keyboard rather than a QWERTY drawn in here, because it is the
+   * one that already knows this person's autocorrect, their Hindi, and where
+   * their thumbs expect the letters to be.
+   *
+   * Touching either box overrides all of it. The amount box takes the pad back,
+   * the name box brings the letters up, and nothing is ever more than one tap
+   * from the keys you want.
+   */
+  const noteRef = useRef(null)
+  const [naming, setNaming] = useState(false)
+
+  const toName = () => {
+    setNaming(true)
+    // A tick, so the field is on screen before the keyboard is asked for —
+    // iOS ignores focus() on an element that is still being laid out.
+    setTimeout(() => noteRef.current?.focus(), 0)
+  }
+  const toAmount = () => {
+    setNaming(false)
+    noteRef.current?.blur()
   }
 
   // Only a payment can be to a dealer. Switching to Received takes the mark off
@@ -856,10 +984,12 @@ function CashEntry({
   const pickKind = (k) => {
     setKind(k)
     if (k !== 'out') setDealer(false)
+    // The figure is in and the direction is settled; what is left is the name.
+    if (value > 0) toName()
   }
 
-  // The amount is typed on the pad below, not on the phone keyboard, so the
-  // keyboard never slides up over the screen mid-entry.
+  // The amount is typed on the pad, not on the phone keyboard, so a half-typed
+  // figure is never hidden behind one.
   const tap = (d) => setAmount((a) => {
     if (!a && (d === '0' || d === '00')) return a // no leading zeros to strip later
     const next = a + d
@@ -917,18 +1047,85 @@ function CashEntry({
   const value = Math.round(Number(amount) || 0)
   const ready = value > 0 && !!kind && !!name.trim()
 
+  /**
+   * The names this counter writes again and again, as buttons.
+   *
+   * Three is the threshold: twice is a coincidence, three times is a habit —
+   * a majduri, a tempo, a regular. Nobody maintains this list; a name earns its
+   * button by being typed, and loses it by not being.
+   *
+   * Kept to the direction being written, because "Bhabhi ji" is always money
+   * out and offering her under Received would only be in the way. The spelling
+   * shown is the most recent one, so correcting a name once corrects the chip.
+   */
+  const [resets, setResets] = useState(() => readCache(KEYRESET_KEY, {}))
+  const [askClear, setAskClear] = useState(null)
+
+  /**
+   * Hold a key down to clear its count.
+   *
+   * There is nowhere else to offer this — the keys have no settings screen and
+   * should not grow one — and a long press is what a phone already means by
+   * "do something to this thing rather than with it". Half a second, and
+   * sliding a thumb off cancels it, because these keys sit right above a keypad
+   * that is being tapped at speed.
+   */
+  const holdTimer = useRef(null)
+  const heldOpen = useRef(false)
+  const holdStart = (f) => {
+    heldOpen.current = false
+    clearTimeout(holdTimer.current)
+    holdTimer.current = setTimeout(() => {
+      heldOpen.current = true
+      setAskClear(f)
+    }, 500)
+  }
+  const holdEnd = () => clearTimeout(holdTimer.current)
+  useEffect(() => () => clearTimeout(holdTimer.current), [])
+  const clearCount = (key) => setResets((prev) => {
+    const next = { ...prev, [`${kind}:${key}`]: Date.now() }
+    writeCache(KEYRESET_KEY, next)
+    return next
+  })
+
+  const frequent = useMemo(() => {
+    const seen = new Map()
+    for (const e of allEntries(store)) {
+      const written = (e.name || '').trim()
+      if (!written || e.kind !== kind) continue
+      const key = written.toLowerCase()
+      // A bill number is not a payee. "10" turns up constantly and means a
+      // different bill every time, so a key for it would be a key for nothing.
+      if (/^[0-9\s/-]+$/.test(key)) continue
+      // W/B has its own button an inch away; a second one is just a second one.
+      if (key === 'w/b' || key === 'wb') continue
+      // Written before this key's count was cleared, so it does not go towards
+      // earning it back. The entry itself is untouched and still in the book.
+      if (e.at <= (resets[`${kind}:${key}`] || 0)) continue
+      const row = seen.get(key) || { key, name: written, n: 0, last: 0 }
+      row.n += 1
+      if (e.at >= row.last) { row.last = e.at; row.name = written }
+      seen.set(key, row)
+    }
+    return [...seen.values()]
+      .filter((r) => r.n >= 3)
+      .sort((a, b) => b.n - a.n || b.last - a.last)
+      .slice(0, 12)
+  }, [store, kind, resets])
+
   const commit = () => {
     if (!ready) return
     const clean = name.trim()
     if (editing) { // the password was already given when the edit started
       onUpdate({ ...editing, kind, mode, name: clean, amount: value, dealer })
       reset()
+      onSaved?.(editing.id)
       return
     }
     const at = Date.now()
     const id = `c-${at}-${Math.random().toString(36).slice(2, 7)}`
     const batch = [{ id, date: dk, kind, mode, name: clean, amount: value, at, dealer }]
-    const done = () => { onAdd(batch); reset() }
+    const done = () => { onAdd(batch); reset(); onSaved?.(id) }
     // The log carries corrections, so a line added to the open register goes
     // straight in. Writing into any other day — behind or ahead — asks first.
     if (!onClosed) done(); else guard(done)
@@ -958,12 +1155,18 @@ function CashEntry({
         </div>
       )}
 
-      <div className={`amtshow ${value ? '' : 'empty'}`} aria-live="polite">
+      <button
+        type="button"
+        className={`amtshow ${value ? '' : 'empty'}${naming ? '' : ' live'}`}
+        aria-live="polite"
+        aria-label="Edit the amount"
+        onClick={toAmount}
+      >
         <span className="amtcur">₹</span>
         <span className={`amtnum${fit(value ? value.toLocaleString('en-IN') : '0')}`}>
           {value ? value.toLocaleString('en-IN') : '0'}
         </span>
-      </div>
+      </button>
 
       <div className="dirrow">
         <button className={`dirbtn in ${kind === 'in' ? 'sel' : ''}`} onClick={() => pickKind('in')}>
@@ -983,10 +1186,44 @@ function CashEntry({
         </button>
       </div>
 
+      {frequent.length > 0 && (
+        <div className="freqrow">
+          {frequent.map((f) => (
+            <button
+              key={f.key}
+              className={`freqchip${name.trim().toLowerCase() === f.key ? ' sel' : ''}`}
+              onPointerDown={() => holdStart(f)}
+              onPointerUp={holdEnd}
+              onPointerLeave={holdEnd}
+              onPointerCancel={holdEnd}
+              onContextMenu={(e) => { e.preventDefault(); setAskClear(f) }}
+              onClick={() => {
+                // A press long enough to open the menu already did its job; the
+                // click the browser sends afterwards must not also fill the name.
+                if (heldOpen.current) { heldOpen.current = false; return }
+                setName((cur) => (cur.trim().toLowerCase() === f.key ? '' : f.name))
+              }}
+            >
+              {f.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="advrow">
         <input
-          className="noteinput" value={name}
-          onChange={(e) => setName(e.target.value)} placeholder="NOTE"
+          ref={noteRef}
+          className={`noteinput${naming ? ' live' : ''}`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onFocus={() => setNaming(true)}
+          onBlur={() => setNaming(false)}
+          placeholder="NOTE"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="words"
+          enterKeyHint={ready ? 'done' : 'next'}
+          onKeyDown={(e) => { if (e.key === 'Enter' && ready) commit() }}
         />
         <button className={`wbbtn ${hasWB ? 'sel' : ''}`} onClick={toggleWB}>W/B</button>
         {kind === 'out' && (
@@ -1008,7 +1245,29 @@ function CashEntry({
 
       {/* Backspace takes the twelfth cell now that the tick has its own bar.
           Clear went with it: holding a wrong amount is two taps from gone. */}
-      <div className="pad">
+      {askClear && (
+        <div className="modal" onClick={() => setAskClear(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="lineamt small">{askClear.name}</div>
+            <div className="sheetsub">
+              Written {askClear.n} times. Clearing puts the count back to nil and
+              takes the key away — write it three more times and it comes back.
+              Every one of those entries stays exactly where it is.
+            </div>
+            <div className="sheetbtns">
+              <button className="ghostbtn" onClick={() => setAskClear(null)}>Cancel</button>
+              <button
+                className="delbtn"
+                onClick={() => { clearCount(askClear.key); setAskClear(null) }}
+              >
+                Clear the count
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="pad" hidden={naming}>
         <div className="padkeys">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'].map((d) => (
             <button key={d} className="padkey" onClick={() => tap(d)}>{d}</button>
@@ -1117,7 +1376,7 @@ function CloseDayModal({ date, bookCash, onCancel, onConfirm }) {
 // against the ones before it. Paid out is here too, because without it the
 // closing balance is a figure that cannot be checked against anything.
 function CashTotals({
-  todayKey, store, closes, openings, guard, viewing, setViewing, base, onClose, onReopen, onShut,
+  todayKey, store, closes, openings, guard, viewing, setViewing, base, onClose, onReopen, onShut, onEditOpenings,
 }) {
   const [asking, setAsking] = useState(false)
   const dk = viewing || base
@@ -1143,15 +1402,29 @@ function CashTotals({
   const paidOnline = sumCash(lines, 'online', 'out')
 
   const openCash = balanceOpen(store, closes, openings, dk, 'cash')
-  const openOnline = balanceOpen(store, closes, openings, dk, 'online')
   const closeCash = balanceClose(store, closes, openings, dk, 'cash')
-  const closeOnline = balanceClose(store, closes, openings, dk, 'online')
   const counted = !!closes[dk]
   // Once the drawer is counted the big figure is the count, not the sum — so
   // the line under it has to stop showing a sum that no longer reaches it.
   const bookCash = openCash + salesCash - paidCash
   const off = counted ? closeCash - bookCash : 0
-  const carried = closeCash + closeOnline
+
+  /**
+   * What online did today, which is a movement and not a balance.
+   *
+   * There used to be a figure here called the online closing balance, worked
+   * out as opening + in − out and added to the drawer under the heading "cash
+   * and online together". Nobody has ever typed an online opening, so that sum
+   * started from zero every time and what it actually showed was the day's
+   * online in minus its online out — a number that is neither the money in the
+   * bank nor the money taken online, sitting in the one place on the screen
+   * that is supposed to say what the shop is holding.
+   *
+   * The bank balance is not knowable from this book: money reaches and leaves
+   * those accounts without passing the counter. So the book says what it knows
+   * — what came in, what went out — and stops.
+   */
+  const onlineNet = salesOnline - paidOnline
 
   // The week behind today, so a good day is visibly a good day rather than a
   // number with nothing to sit against.
@@ -1185,6 +1458,7 @@ function CashTotals({
         <button onClick={() => step(1)} aria-label="Next day" disabled={isToday}>›</button>
       </div>
 
+      <button className="sp-button sp-secondary sp-opening" onClick={onEditOpenings}>Edit opening balances</button>
       <div className="hero green">
         <div className="herolabel">{isToday ? 'Sales today' : 'Sales'}</div>
         <div className={`heronum${fit(inr(sales))}`}>{inr(sales)}</div>
@@ -1227,14 +1501,16 @@ function CashTotals({
         <em>cash {inr(paidCash)} · online {inr(paidOnline)}</em>
       </div>
 
-      <div className="hero gold">
-        <div className="herolabel">Cash and online together</div>
-        <div className={`heronum${fit(inr(carried))}`}>{inr(carried)}</div>
-        <div className="herosplit">
-          <span className="hs cash"><i />{inr(closeCash)}</span>
-          <span className="hs online"><i />{inr(closeOnline)}</span>
+      <div className="hero onlinehero">
+        <div className="herolabel">Online today</div>
+        <div className={`heronum${fit(inr(Math.abs(onlineNet)))}`}>
+          {onlineNet < 0 ? '−' : '+'}{inr(Math.abs(onlineNet))}
         </div>
-        <div className="herofoot">{isToday ? 'Tomorrow opens here' : 'Carried into the next day'}</div>
+        <div className="herosplit">
+          <span className="hs in"><i />Received {inr(salesOnline)}</span>
+          <span className="hs out"><i />Paid {inr(paidOnline)}</span>
+        </div>
+        <div className="herofoot">bank and UPI — none of this is in the drawer</div>
       </div>
 
       <div className="hero drawer">
@@ -1256,11 +1532,15 @@ function CashTotals({
             </>
           )}
         </div>
-        {counted && (
-          <div className="herofoot">
-            {closes[dk].shut ? 'shop closed — nothing traded' : 'counted and closed'}
-          </div>
-        )}
+        <div className="herofoot">
+          {counted
+            ? closes[dk].shut
+              ? 'shop closed — nothing traded'
+              : `counted and closed · ${isToday ? 'tomorrow opens here' : 'carried into the next day'}`
+            : isToday
+              ? 'tomorrow opens here'
+              : 'carried into the next day'}
+        </div>
       </div>
 
       {/* Directly under the figure it is counted against. */}
@@ -1452,7 +1732,7 @@ async function shareSheet(data, filename) {
 
 function CashReport({
   todayKey, store, closes, openings, viewing, setViewing, base,
-  onRemove, onStartEdit, dealerNames,
+  onRemove, onStartEdit, dealerNames, flash, onSync,
 }) {
   // Counting the drawer finishes the day, so the register moves on with the
   // entry screen: once today is closed, the day the book is open at is
@@ -1481,12 +1761,24 @@ function CashReport({
   // than leaving it sitting on the day that was just finished.
 
   const opening = balanceOpen(store, closes, openings, dk, 'cash')
+  // The bank side of the book, for the printed sheet. The screen does not show
+  // a bank balance — nobody types an opening for it, so it would be a running
+  // total wearing a balance's clothes — but the cash book on paper has a Bank
+  // column and a column has to close somewhere.
+  const openingBank = balanceOpen(store, closes, openings, dk, 'online')
 
-  // This is a cash register, and online money never reaches the drawer. The
-  // page deals with that the way the book does: an online line is written on
-  // BOTH sides — once where it happened, once against itself — and both copies
-  // are run through with the highlighter. Subtract the columns and what is left
-  // is cash, which is the only thing the evening count can be checked against.
+  // This is a cash register, and online money never reaches the drawer.
+  //
+  // It used to be written on BOTH sides — once where it happened, once against
+  // itself — so that the columns still subtracted to cash. That is a bookkeeping
+  // trick, and it read as one: every online receipt appeared as a payment out,
+  // every online payment as a receipt in, and both totals were inflated by money
+  // nobody could count. The columns are cash now. Online is a section of its own
+  // with its own total, below.
+  //
+  // The cash figure is unchanged by this — the mirrored copies only ever
+  // cancelled each other — so a day closed under the old page still tallies.
+  //
   // A line written before the name was known to be a dealer still belongs to
   // that dealer, so the page reads the name rather than only the flag.
   const isDealer = useCallback(
@@ -1494,52 +1786,59 @@ function CashReport({
     [dealerNames],
   )
 
-  const { ins, outs, dealerPaid } = useMemo(() => {
+  const { ins, outs, onlineIn, onlineOut } = useMemo(() => {
     const ins = []
     const outs = []
-    // Money sent to a dealer online is not the shop's cash by any reading: it
-    // never reached the drawer and it is not what the counter is paying out of
-    // it. Rather than write it twice to cancel it, the page keeps it out of the
-    // column altogether and lists it on its own underneath.
-    const dealerPaid = []
+    const onlineIn = []
+    const onlineOut = []
     for (const e of lines) {
-      if (e.kind === 'out' && e.mode === 'online' && isDealer(e)) { dealerPaid.push(e); continue }
-      const own = e.kind === 'in' ? ins : outs
-      own.push(e)
-      if (e.mode === 'online') (e.kind === 'in' ? outs : ins).push({ ...e, mirror: true })
+      if (e.mode === 'online') (e.kind === 'in' ? onlineIn : onlineOut).push(e)
+      else (e.kind === 'in' ? ins : outs).push(e)
     }
-    return { ins, outs, dealerPaid }
-  }, [lines, isDealer])
+    return { ins, outs, onlineIn, onlineOut }
+  }, [lines])
 
   const sum = (list) => list.reduce((t, e) => t + Number(e.amount || 0), 0)
   const received = opening + sum(ins)
   const paid = sum(outs)
-  // Identical to opening + cash in − cash out: every online amount left in the
-  // columns is on both sides and cancels itself, and what was taken out of them
-  // never touched cash to begin with.
+  // Opening + cash in − cash out. Nothing else can reach the drawer, so nothing
+  // else belongs in the figure the evening count is checked against.
   const book = received - paid
-  const dealerTotal = sum(dealerPaid)
+  const onlineInTotal = sum(onlineIn)
+  const onlineOutTotal = sum(onlineOut)
+  const onlineNet = onlineInTotal - onlineOutTotal
   const close = closes[dk]
   const diff = close ? Number(close.counted || 0) - book : 0
 
   const remove = (e) => { onRemove([e]); setPicked(null) }
 
-  // The figures exactly as the page above worked them out, so the file and the
-  // screen can never disagree about the day.
-  const asLine = (e) => ({
-    amount: num(e.amount), name: e.name, online: e.mode === 'online', dealer: isDealer(e),
+  /**
+   * The day handed to the printer.
+   *
+   * The screen is the shop's bahi; the sheet is a double column cash book, which
+   * is what anybody outside the shop expects to be given. Both are the same day
+   * and the same figures — the receipts and payments go across whole, each line
+   * carrying whether it was bank or drawer, and the sheet puts it in its column.
+   * Nothing is added up twice in two places.
+   */
+  const asRow = (e) => ({
+    name: e.name,
+    amount: Number(e.amount || 0),
+    bank: e.mode === 'online',
+    dealer: isDealer(e),
   })
   const sheetData = () => ({
     dateLabel: `${pad(day.getDate())}/${pad(day.getMonth() + 1)}/${String(day.getFullYear()).slice(2)}`,
-    opening: num(opening),
-    ins: ins.map(asLine),
-    outs: outs.map(asLine),
-    dealerPaid: dealerPaid.map(asLine),
-    dealerTotal: num(dealerTotal),
-    received: num(received), paid: num(paid), book: num(book),
-    counted: close ? num(close.counted) : null,
+    dayLabel: `${WD[day.getDay()]}, ${day.getDate()} ${MON[day.getMonth()]} ${day.getFullYear()}`,
+    openCash: opening,
+    openBank: openingBank,
+    receipts: lines.filter((e) => e.kind === 'in').map(asRow),
+    payments: lines.filter((e) => e.kind === 'out').map(asRow),
+    closeCash: book,
+    closeBank: openingBank + onlineInTotal - onlineOutTotal,
+    counted: close ? Number(close.counted || 0) : null,
     diff: {
-      amount: num(Math.abs(diff)),
+      amount: Math.abs(diff),
       word: diff === 0 ? 'TALLIED' : diff < 0 ? 'SHORT' : 'OVER',
       ok: diff === 0,
     },
@@ -1584,9 +1883,9 @@ function CashReport({
         <div className="pagebody">
           <div className="pcol">
             {ins.map((e) => (
-              <div className="pline" key={`${e.id}${e.mirror ? '-m' : ''}`}>
+              <div className="pline" key={e.id}>
                 <button
-                  className={`pentry ${e.mode === 'online' ? 'on' : ''} ${isDealer(e) ? 'dealer' : ''}`}
+                  className={`pentry ${isDealer(e) ? 'dealer' : ''}${e.id === flash ? ' justsaved' : ''}`}
                   onClick={() => setPicked(e)}
                 >
                   <span className="pamt">{num(e.amount)}</span>
@@ -1613,9 +1912,9 @@ function CashReport({
 
           <div className="pcol right">
             {outs.map((e) => (
-              <div className="pline" key={`${e.id}${e.mirror ? '-m' : ''}`}>
+              <div className="pline" key={e.id}>
                 <button
-                  className={`pentry out ${e.mode === 'online' ? 'on' : ''} ${isDealer(e) ? 'dealer' : ''}`}
+                  className={`pentry out ${isDealer(e) ? 'dealer' : ''}${e.id === flash ? ' justsaved' : ''}`}
                   onClick={() => setPicked(e)}
                 >
                   <span className="pamt">{num(e.amount)}</span>
@@ -1630,25 +1929,70 @@ function CashReport({
               <div className="tnum top out">{num(paid)}</div>
             </div>
 
-            {dealerPaid.length > 0 && (
-              <div className="aside">
-                <div className="asidettl">Online payment</div>
-                {dealerPaid.map((e) => (
+          </div>
+        </div>
+
+        {/* Online money, kept out of the columns above and totalled on its own.
+            It is written here because it happened and has to be findable, not
+            because the drawer has anything to do with it. */}
+        {(onlineIn.length > 0 || onlineOut.length > 0) && (
+          <div className="onlineblk">
+            <div className="onlinehdr">
+              <span>Online</span>
+              <em>bank and UPI — never in the drawer</em>
+            </div>
+
+            <div className="pagebody">
+              <div className="pcol">
+                {onlineIn.map((e) => (
                   <div className="pline" key={e.id}>
-                    <button className="pentry out on dealer" onClick={() => setPicked(e)}>
+                    <button
+                      className={`pentry on${e.id === flash ? ' justsaved' : ''}`}
+                      onClick={() => setPicked(e)}
+                    >
                       <span className="pamt">{num(e.amount)}</span>
                       <span className="peq">=</span>
                       <span className="pname" title={e.name}>{e.name}</span>
                     </button>
                   </div>
                 ))}
-                <div className="tally">
-                  <div className="tnum top out">{num(dealerTotal)}</div>
-                </div>
+                {onlineIn.length > 0 && (
+                  <div className="tally">
+                    <div className="tnum top">{num(onlineInTotal)}</div>
+                  </div>
+                )}
               </div>
-            )}
+
+              <div className="pcol right">
+                {onlineOut.map((e) => (
+                  <div className="pline" key={e.id}>
+                    <button
+                      className={`pentry out on ${isDealer(e) ? 'dealer' : ''}${e.id === flash ? ' justsaved' : ''}`}
+                      onClick={() => setPicked(e)}
+                    >
+                      <span className="pamt">{num(e.amount)}</span>
+                      <span className="peq">=</span>
+                      <span className="pname" title={e.name}>{e.name}</span>
+                    </button>
+                  </div>
+                ))}
+                {onlineOut.length > 0 && (
+                  <div className="tally">
+                    <div className="tnum top out">{num(onlineOutTotal)}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="onlinenet">
+              <span>Received {num(onlineInTotal)}</span>
+              <span>Paid {num(onlineOutTotal)}</span>
+              <b className={onlineNet < 0 ? 'neg' : ''}>
+                {onlineNet < 0 ? '−' : '+'}{num(Math.abs(onlineNet))}
+              </b>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <button className="printbar" onClick={() => shareSheet(sheetData(), `register-${dk}.pdf`)}>
@@ -1660,6 +2004,7 @@ function CashReport({
           entry={picked}
           onEdit={() => { onStartEdit(picked); setPicked(null) }}
           onDelete={() => remove(picked)}
+          onReverse={onSync}
           onClose={() => setPicked(null)}
         />
       )}

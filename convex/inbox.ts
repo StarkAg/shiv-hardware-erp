@@ -15,6 +15,7 @@ export const list = query({
         at: r.at,
         note: r.note ?? "",
         groupId: r.groupId,
+        stack: r.stack,
         url: await ctx.storage.getUrl(r.storageId),
       }))
     );
@@ -27,8 +28,9 @@ export const add = mutation({
     storageId: v.id("_storage"),
     note: v.optional(v.string()),
     groupId: v.optional(v.string()),
+    stack: v.optional(v.string()),
   },
-  handler: async (ctx, { storageId, note, groupId }) => {
+  handler: async (ctx, { storageId, note, groupId, stack }) => {
     // Same rule at the other door: nothing enters the inbox as a PDF either.
     const meta = await ctx.db.system.get(storageId);
     if (meta?.contentType === "application/pdf") {
@@ -45,6 +47,7 @@ export const add = mutation({
       at: Date.now(),
       note,
       groupId,
+      stack,
       tags,
     });
     await record(ctx, "inbox.add", "Photo taken on the phone", { entity: "inbox", entityId: id });

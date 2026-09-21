@@ -207,17 +207,30 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
                         ↗
                       </button>
                       <button className="xbtn" aria-label="Edit" onClick={() => setEditing(l)}><Pencil size={14} aria-hidden="true" /></button>
-                      {/* Offered only where it can succeed. An account with
-                          anything posted to it can never be deleted — the
-                          books would lose the other side of those entries. */}
+                      {/* An account with anything posted to it can never be
+                          deleted — the books would lose the other side of
+                          those entries.
+
+                          It still has to answer the tap. This was a <span>
+                          wearing the delete button's own X, so pressing it did
+                          nothing and said nothing, and the only explanation was
+                          a title tooltip — which a phone never shows and a
+                          finger never triggers. A control that looks live and
+                          ignores you reads as broken, and on these books most
+                          accounts are in exactly that state. */}
                       {usage[l._id] ? (
-                        <span
+                        <button
                           className="xbtn muted"
+                          aria-label={`${l.name} cannot be deleted`}
                           title={`${usage[l._id]} vouchers are posted to this account — it cannot be deleted`}
-                          aria-hidden="true"
+                          onClick={() =>
+                            setError(
+                              `${l.name} has ${usage[l._id]} ${usage[l._id] === 1 ? 'voucher' : 'vouchers'} posted to it, so it cannot be deleted — the books would lose the other side of those entries. If it is a second spelling of an account you already have, merge it instead.`,
+                            )
+                          }
                         >
                           <X size={14} aria-hidden="true" />
-                        </span>
+                        </button>
                       ) : (
                         <button className="xbtn del" aria-label="Delete" onClick={() => setDeleting(l)}><X size={14} aria-hidden="true" /></button>
                       )}

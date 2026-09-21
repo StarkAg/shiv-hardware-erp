@@ -48,6 +48,18 @@ export default defineConfig({
     sourcemap: false,
     cssCodeSplit: true,
     rollupOptions: {
+      /**
+       * Two sites, one project.
+       *
+       * The counter's screens and the books share every helper in src/, so they
+       * are two entry points rather than two codebases — a copied one drifts,
+       * which is how the sorting site ended up with its own name matching.
+       * Each is deployed as its own Vercel project from this one dist.
+       */
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        counter: path.resolve(__dirname, 'counter.html'),
+      },
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],

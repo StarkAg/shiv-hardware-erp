@@ -1,48 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useShortcuts } from '../lib/useShortcuts'
 import { isDarkMode, toggleTheme } from '../lib/theme'
 import { assetPath } from '../lib/assets'
 import {
-  AppWindow,
-  ChevronDown,
-  ChevronRight,
   ChevronLeft,
-  CreditCard,
-  DoorClosed,
-  FileText,
-  History,
-  Layers,
   Moon,
-  Package,
   Trash2,
   Users,
   ReceiptText,
-  ShieldCheck,
   Sun,
   Wrench,
   type LucideIcon,
-  CarTaxiFront,
   PanelLeft,
   PanelLeftClose,
   BookOpen,
   Wallet,
   LayoutDashboard,
   NotebookPen,
-  ScanLine,
-  Printer,
   Scale,
-  IndianRupee, Undo2, HandCoins, CalendarClock, PackageCheck, PackageOpen } from 'lucide-react'
-import { CATEGORY_META, CATEGORY_ORDER, GROUP_ORDER, type CategoryIcon } from '../lib/types'
+  TrendingUp, HandCoins, CalendarClock, PackageCheck, PackageOpen,
+  ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp } from 'lucide-react'
 import { UpdateBanner } from './UpdateBanner'
 import { Toaster } from './Toast'
 import { BUILD_ID, CURRENT_VERSION } from '../lib/appUpdate'
-
-const CATEGORY_ICONS: Record<CategoryIcon, LucideIcon> = {
-  door: DoorClosed,
-  board: Layers,
-  window: AppWindow,
-}
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${
@@ -52,12 +33,6 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
   }`
 
 /** The same, one level in. It was written out by hand six times. */
-const subLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium ${
-    isActive
-      ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
-      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
-  }`
 
 /**
  * The menu, by the work being done rather than by which of the two apps used
@@ -92,15 +67,45 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     items: [
       { to: '/paper', label: 'Day Paper', icon: NotebookPen },
       { to: '/day', label: 'Day Book', icon: ReceiptText },
-      { to: '/bills?new=sale', label: 'Sale', icon: ReceiptText, key: 'F8' },
-      { to: '/bills?new=purchase', label: 'Purchase', icon: Package, key: 'F9' },
-      { to: '/bills?new=receipt', label: 'Receipt', icon: IndianRupee, key: 'F6' },
-      { to: '/bills?new=payment', label: 'Payment', icon: CreditCard, key: 'F5' },
-      { to: '/bills?new=grn', label: 'Goods Received', icon: PackageCheck },
-      { to: '/bills?new=return', label: 'Goods Return', icon: Undo2 },
-      { to: '/bills?new=refund', label: 'Refund', icon: HandCoins },
-      { to: '/cash-review', label: 'Cash Review', icon: Wallet },
+      /**
+       * Three families, so a glance tells you what a line is about before you
+       * read it: a receipt is a bill, a box is goods, a banknote is money. The
+       * pairs that are opposites are the same drawing with the sign reversed —
+       * money in and money out are one note with the arrow turned over, goods
+       * counted in and goods sent back are one box with a tick or a cross.
+       *
+       * What this replaced was three visual languages in one column: a bare ₹
+       * glyph beside a credit card beside a plain undo arrow, and Sale wearing
+       * the very icon Day Book already had.
+       */
+      { to: '/bills?new=sale', label: 'Sale', icon: ReceiptIndianRupee, key: 'F8' },
+      { to: '/bills?new=purchase', label: 'Purchase', icon: PackagePlus, key: 'F9' },
+      { to: '/bills?new=receipt', label: 'Receipt', icon: BanknoteArrowDown, key: 'F6' },
+      // A card, in a shop that deals in cash, was the odd one out twice over.
+      { to: '/bills?new=payment', label: 'Payment', icon: BanknoteArrowUp, key: 'F5' },
+      /**
+       * Alt on the key of the voucher each one belongs to.
+       *
+       * F4, F7 and F10 are free in this panel but not in the shop's head —
+       * they are Contra, Journal and Other in Tally, and this menu already
+       * matches Tally exactly on F5, F6, F8 and F9. Handing a Tally-trained
+       * hand F7 for a goods return would be teaching it a second meaning for a
+       * key it already knows.
+       *
+       * So the base key stays the voucher it goes with and Alt says "the goods
+       * side of it": a purchase is F9, the goods arriving against it Alt+F9; a
+       * sale is F8, goods coming back Alt+F8; a receipt is F6, money handed
+       * back Alt+F6. Alt+F4 is never used — on Windows it closes the panel.
+       */
+      { to: '/bills?new=grn', label: 'Goods Received', icon: PackageCheck, key: 'Alt+F9' },
+      { to: '/bills?new=return', label: 'Goods Return', icon: PackageX, key: 'Alt+F8' },
+      { to: '/bills?new=refund', label: 'Refund', icon: HandCoins, key: 'Alt+F6' },
     ],
+  },
+  {
+    // Kept apart on purpose: the drawer is its own job, not a voucher.
+    label: 'Cash',
+    items: [{ to: '/cash-review', label: 'Cash', icon: Wallet }],
   },
   {
     label: 'Accounts',
@@ -110,35 +115,21 @@ const AREAS: { label: string; items: NavItem[] }[] = [
       { to: '/ledger/monthly', label: 'Salary & Rent', icon: CalendarClock },
       { to: '/ledgers', label: 'Account Masters', icon: Users },
       { to: '/ledger/trial', label: 'Trial Balance', icon: Scale },
-      { to: '/customers', label: 'Quotation Customers', icon: Users },
-    ],
-  },
-  {
-    label: 'Stock',
-    items: [
-      { to: '/inventory', label: 'Inventory', icon: Package },
-      { to: '/rates', label: 'Rates', icon: IndianRupee },
-    ],
-  },
-  {
-    label: 'Documents',
-    items: [
-      { to: '/quote-options', label: 'Quotations', icon: FileText, match: ['/quote-options', '/quote', '/product'] },
-      { to: '/history', label: 'Quote History', icon: History },
-      { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck },
-      { to: '/guarantee/a4', label: 'Guarantee A4', icon: FileText },
-      { to: '/guarantee/history', label: 'Guarantee History', icon: History },
-      { to: '/transport', label: 'Toto', icon: CarTaxiFront },
+      { to: '/profit', label: 'Profit', icon: TrendingUp },
     ],
   },
   {
     label: 'Settings',
     items: [
       { to: '/trash', label: 'Trash', icon: Trash2 },
-      // Shop-machine tools. Both need the print server on the shop's own
-      // network, so they sit here rather than in the counter's daily areas.
-      { to: '/scan', label: 'Bill Scanner', icon: ScanLine },
-      { to: '/printer-queue', label: 'Printer Queue', icon: Printer },
+      /*
+       * Bill Scanner and Printer Queue are not listed.
+       *
+       * Both are shop-machine tools that only work with the print server
+       * running on the shop's own network, and neither is part of anybody's
+       * day. They kept their addresses — /scan and /printer-queue — so the one
+       * person who needs them can still get there.
+       */
     ],
   },
 ]
@@ -154,6 +145,11 @@ const VOUCHERS = [
   { to: '/bills?new=receipt',  label: 'Receipt',  key: 'F6', kind: 'receipt' },
   { to: '/bills?new=sale',     label: 'Sales',    key: 'F8', kind: 'sale' },
   { to: '/bills?new=purchase', label: 'Purchase', key: 'F9', kind: 'purchase' },
+  // The goods and refund side of the four above — see the note in AREAS for
+  // why these are Alt of their own voucher's key rather than F4, F7 and F10.
+  { to: '/bills?new=grn',      label: 'Goods Received', key: 'alt+F9', kind: 'grn' },
+  { to: '/bills?new=return',   label: 'Goods Return',   key: 'alt+F8', kind: 'return' },
+  { to: '/bills?new=refund',   label: 'Refund',         key: 'alt+F6', kind: 'refund' },
 ] as const
 
 /**
@@ -164,8 +160,7 @@ const MOBILE_NAV_ITEMS = [
   { to: '/home', label: 'Home', icon: LayoutDashboard, match: ['/home'] },
   { to: '/day', label: 'Day Book', icon: ReceiptText, match: ['/day', '/bills', '/cash-review'] },
   { to: '/ledger', label: 'Accounts', icon: BookOpen, match: ['/ledger', '/ledgers'] },
-  { to: '/inventory', label: 'Stock', icon: Package, match: ['/inventory', '/rates'] },
-  { to: '/quote-options', label: 'Documents', icon: FileText, match: ['/quote', '/product', '/guarantee', '/history', '/transport'] },
+  { to: '/cash-review', label: 'Cash', icon: Wallet, match: ['/cash-review'] },
 ] as const
 
 /**
@@ -227,9 +222,6 @@ export function AppLayout() {
   useShortcuts(
     Object.fromEntries(VOUCHERS.map((v) => [v.key, () => navigate(v.to)])),
   )
-  const [open, setOpen] = useState(
-    location.pathname.startsWith('/quote') || location.pathname.startsWith('/product'),
-  )
   // dark: just a re-render trigger — the real source of truth is the DOM class.
   const [dark, setDark] = useState(isDarkMode)
   // Desktop sidebar collapse, remembered so the shop's laptop keeps its choice.
@@ -244,9 +236,6 @@ export function AppLayout() {
     })
   }
 
-  useEffect(() => {
-    if (location.pathname.startsWith('/quote') || location.pathname.startsWith('/product')) setOpen(true)
-  }, [location.pathname])
 
   const sidebar = (
     <>
@@ -255,15 +244,15 @@ export function AppLayout() {
           <button
             onClick={toggleRail}
             aria-label={railed ? 'Open sidebar' : 'Collapse sidebar'}
-            className={`rounded-lg p-1.5 text-muted hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto' : 'ml-auto order-last'}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto' : 'ml-auto order-last'}`}
           >
             {railed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
           </button>
-          <div className={`h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-white shadow-inner shadow-stone-400/30 ${railed ? 'hidden' : 'flex'}`}>
+          <div className={`h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white shadow-inner shadow-stone-400/30 ${railed ? 'hidden' : 'flex'}`}>
             <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 object-contain" />
           </div>
-          <div className={`min-w-0 ${railed ? 'hidden' : ''}`}>
-            <div className="whitespace-nowrap text-[15px] font-bold leading-tight tracking-tight text-stone-950 dark:text-white">
+          <div className={`min-w-0 flex-1 ${railed ? 'hidden' : ''}`}>
+            <div className="text-sm font-bold leading-tight tracking-tight text-stone-950 dark:text-white">
               Shiv Hardware Store
             </div>
             <div className="text-xs font-medium text-shiv-green">Panel</div>
@@ -298,37 +287,6 @@ export function AppLayout() {
 
             {/* Quotations open onto the shop's own product list — the fastest
                 way into a quote is picking what it is for. */}
-            {area.label === 'Documents' && !railed && (
-              <div>
-                <button
-                  onClick={() => setOpen((o) => !o)}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white"
-                >
-                  <span className="flex items-center gap-3"><Layers size={18} /> By product</span>
-                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                </button>
-                {open && (
-                  <div className="mt-1 ml-3 space-y-2 border-l border-stone-200 py-1 pl-2 dark:border-white/10">
-                    {GROUP_ORDER.map((g) => (
-                      <div key={g}>
-                        <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
-                          {g}
-                        </div>
-                        {CATEGORY_ORDER.filter((c) => CATEGORY_META[c].group === g).map((c) => {
-                          const Icon = CATEGORY_ICONS[CATEGORY_META[c].icon]
-                          return (
-                            <NavLink key={c} to={`/product/${c}`} className={subLinkClass}>
-                              <Icon size={14} />
-                              {CATEGORY_META[c].short}
-                            </NavLink>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         ))}
       </nav>

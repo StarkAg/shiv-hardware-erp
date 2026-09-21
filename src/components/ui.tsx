@@ -49,7 +49,7 @@ export function PageHeader({
           <h1 className="text-lg font-bold leading-tight text-stone-950 dark:text-stone-50 md:text-xl">{title}</h1>
           {subtitle && <p className="text-sm font-medium text-muted">{subtitle}</p>}
         </div>
-        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+        {actions && <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
       {children && <div className="mt-3">{children}</div>}
     </div>
@@ -63,15 +63,15 @@ export function Button({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' | 'outline' }) {
   const styles = {
-    primary: 'bg-shiv-green text-stone-950 shadow-sm shadow-amber-900/10 hover:bg-[#c6a15a]',
-    ghost: 'text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/10',
-    danger: 'bg-shiv-red text-white hover:bg-[#851719]',
+    primary: 'border-transparent bg-[var(--brass)] text-[var(--brass-ink)] shadow-sm enabled:hover:brightness-105',
+    ghost: 'border-transparent text-[var(--muted)] enabled:hover:bg-[var(--card2)] enabled:hover:text-[var(--fg)]',
+    danger: 'border-transparent bg-shiv-red text-white enabled:hover:bg-[#851719]',
     outline:
-      'border border-stone-300 bg-stone-50 text-stone-700 hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10',
+      'border-stone-300 bg-stone-50 text-stone-700 enabled:hover:border-shiv-green enabled:hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:enabled:hover:bg-white/10',
   }[variant]
   return (
     <button
-      className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${styles} ${className}`}
+      className={`panel-button ${styles} ${className}`}
       {...props}
     >
       {children}
