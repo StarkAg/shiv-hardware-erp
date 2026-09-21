@@ -192,6 +192,22 @@ export function DropDown({
 
   const selected = normalised.find((o) => o.value === value)
 
+  /**
+   * Opening on a value already chosen lands on that value, not the top of the
+   * list. The highlight is both what Enter takes and the only thing saying
+   * where you are, so starting at the first row made a list of twenty units
+   * say nothing about which one the line was already using — and Enter would
+   * swap it for whichever sorts first.
+   */
+  useEffect(() => {
+    if (!open) return
+    const at = normalised.findIndex((o) => o.value === value)
+    setHl(at >= 0 ? at : 0)
+    // Only when it opens, and when the value beneath it changes: `normalised`
+    // is rebuilt every render and would put the highlight back continuously.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, value])
+
   useEffect(() => {
     if (!open) return
     listRef.current?.querySelector('[data-hl="1"]')?.scrollIntoView({ block: 'nearest' })

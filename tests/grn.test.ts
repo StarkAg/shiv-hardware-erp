@@ -6,7 +6,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api, internal } from '../convex/_generated/api'
-import { deliveryChecks } from '../src/features/bills/Deliveries'
+import { deliveryChecks, withDeliveryLines } from '../src/features/bills/Deliveries'
 import { readNote } from '../src/features/receive/readNote'
 
 const modules = import.meta.glob('../convex/**/*.ts')
@@ -166,5 +166,78 @@ describe('a delivery written as a note', () => {
         { name: 'Door Hinges SS', qty: 10, unit: 'Pc' },
         { name: 'Screw', qty: 2, unit: 'Box' },
       ])
+  })
+})
+
+/**
+ * A delivery's lines, brought onto the bill that pays for it.
+ *
+ * A line the shop can name gets attached to its My Items entry, which is what
+ * puts a rate box on it and remembers what is typed there. A line it cannot
+ * name is still written — it just asks for a total.
+ */
+describe('delivery lines on the bill', () => {
+  const entry = (id: string, name: string, alsoKnownAs?: string[]) =>
+    ({ id, name, sizes: [], brands: [], ...(alsoKnownAs ? { alsoKnownAs } : {}) }) as never
+
+  const delivery = (descriptions: string[]) =>
+    ({
+      voucherId: 'v1', vchLabel: 'GRN-0007', date: 1, days: 0, partyLedgerId: 'p1',
+      party: 'M/s Orpet Laminates', receivedBy: 'Harsh', billedHere: false, estimate: 0, unpricedLines: 0,
+      items: descriptions.map((description) => ({ description, qty: 2, unit: 'Sheet', rate: 0, value: 0, from: null })),
+    }) as never
+
+  const catalog = [
+    entry('c1', 'Sunmica 0.8mm LW 8340'),
+    entry('c2', 'Sunmica 0.8mm HG 8008', ['0.8 HG 8008 Orpet']),
+  ]
+
+  it('attaches a line the item list already knows', () => {
+    const out = withDeliveryLines([], [delivery(['Sunmica 0.8mm LW 8340'])], catalog)
+    expect(out).toHaveLength(1)
+    expect(out[0].customEntryId).toBe('c1')
+  })
+
+  it('finds it by the supplier wording the shop has been taught', () => {
+    const out = withDeliveryLines([], [delivery(['0.8 HG 8008 Orpet'])], catalog)
+    expect(out[0].customEntryId).toBe('c2')
+  })
+
+  it('matches through case and spacing', () => {
+    const out = withDeliveryLines([], [delivery(['SUNMICA 0.8MM  LW 8340'])], catalog)
+    expect(out[0].customEntryId).toBe('c1')
+  })
+
+  /**
+   * foldName deletes punctuation rather than spacing it, so "LW-8340" folds to
+   * "lw8340" and "LW 8340" to "lw 8340". A supplier who hyphenates is not
+   * matched, and should not be: teaching the entry that wording once, as an
+   * alsoKnownAs, is the deliberate way in. Loosening the fold to close this
+   * would start matching things that only look alike.
+   */
+  it('does not match a hyphenated wording it has not been taught', () => {
+    const out = withDeliveryLines([], [delivery(['Sunmica 0.8mm LW-8340'])], catalog)
+    expect(out[0].customEntryId).toBeUndefined()
+  })
+
+  it('leaves a line it cannot name attached to nothing, rather than guessing', () => {
+    const out = withDeliveryLines([], [delivery(['Sunmica 0.8mm HG 8348'])], catalog)
+    expect(out).toHaveLength(1)
+    expect(out[0].customEntryId).toBeUndefined()
+    expect(out[0].description).toBe('Sunmica 0.8mm HG 8348')
+  })
+
+  it('keeps what was counted, and prices nothing', () => {
+    const out = withDeliveryLines([], [delivery(['Sunmica 0.8mm LW 8340'])], catalog)
+    expect(out[0].qty).toBe(2)
+    expect(out[0].unit).toBe('Sheet')
+    expect(out[0].amount).toBe(0)
+  })
+
+  it('does not write a line the bill already carries twice', () => {
+    const already = [{ id: 'x', description: 'Sunmica 0.8mm LW 8340', qty: 1, unit: 'Sheet', amount: 500 }] as never
+    const out = withDeliveryLines(already, [delivery(['Sunmica 0.8mm LW 8340'])], catalog)
+    expect(out).toHaveLength(1)
+    expect(out[0].amount).toBe(500)
   })
 })

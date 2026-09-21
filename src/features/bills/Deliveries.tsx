@@ -2,9 +2,10 @@ import { useEffect } from 'react'
 import { useQuery } from 'convex/react'
 import { Check, PackageCheck, TriangleAlert } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
-import type { Bill, BillItem } from '../../lib/types'
+import type { Bill, BillItem, CustomCatalogEntry } from '../../lib/types'
 import { isAmountOnlyLine, isRoundupLine } from '../../lib/types'
 import { foldName } from '../../../convex/lib/text'
+import { useStore } from '../../lib/store'
 
 /**
  * Deliveries on the bill screen.
@@ -81,14 +82,51 @@ const lineId = () => `grn${Date.now().toString(36)}${(lineSeq++).toString(36)}`
  * joins a line of the same item already there, otherwise it is added with
  * no amount, for the bill's rate to be typed in.
  */
-function withDeliveryLines(items: BillItem[], rows: DeliveryRow[]): BillItem[] {
+/**
+ * The My Items entry a delivery line is for, where the shop already knows.
+ *
+ * A delivery note records what arrived as plain words, so its lines used to
+ * arrive on the bill attached to nothing — and a line attached to nothing has
+ * no rate box, only a total. The shop's own two wordings for an item are
+ * enough to find it: the name it is listed under, and the supplier spellings
+ * already taught to it (`alsoKnownAs`, see convex/itemFold.ts).
+ *
+ * Matched on the exact fold and nothing looser. `foldName` sets aside case,
+ * spacing, punctuation and the "M/s"; it does not guess. A near miss here
+ * would quietly file a rate against the wrong item and go on doing it, which
+ * is far worse than a line that simply asks for its total.
+ */
+function entryFor(description: string, catalog: CustomCatalogEntry[]) {
+  const key = foldName(description)
+  if (!key) return undefined
+  return catalog.find(
+    (e) => foldName(e.name) === key || (e.alsoKnownAs ?? []).some((a) => foldName(a) === key)
+  )
+}
+
+export function withDeliveryLines(items: BillItem[], rows: DeliveryRow[], catalog: CustomCatalogEntry[]): BillItem[] {
   const out = items.filter((i) => String(i.description ?? '').trim() || Number(i.amount))
   for (const row of rows) {
     for (const line of row.items) {
       const key = foldName(line.description)
       const same = out.find((i) => foldName(i.description) === key && !i.auto)
       if (same) continue
-      out.push({ id: lineId(), description: line.description, qty: line.qty || 1, unit: line.unit || 'Pc', amount: 0 })
+      const entry = entryFor(line.description, catalog)
+      out.push({
+        id: lineId(),
+        description: line.description,
+        // What was counted stands: the delivery's own quantity and unit are
+        // the record of what came through the door, not the item list's.
+        qty: line.qty || 1,
+        unit: line.unit || 'Pc',
+        // Deliberately no rate. Knowing the item is what puts the rate box on
+        // the line and remembers what is typed into it; filling the figure in
+        // would price the purchase at last time's rate before anybody has
+        // looked at the bill — and would answer the rate check that exists to
+        // catch exactly that.
+        amount: 0,
+        ...(entry ? { customEntryId: entry.id } : {}),
+      })
     }
   }
   return out.length ? out : items
@@ -110,6 +148,7 @@ export function AgainstDeliveries({
   pendingGrn: string | null
   onPendingDone: () => void
 }) {
+  const { customCatalog } = useStore()
   // Arrived from "Enter bill" on a delivery: tick it and bring its lines in
   // once the deliveries have loaded.
   useEffect(() => {
@@ -120,11 +159,11 @@ export function AgainstDeliveries({
         ...d,
         customerName: d.customerName || row.party,
         grnIds: Array.from(new Set([...(d.grnIds ?? []), row.voucherId])),
-        items: withDeliveryLines(d.items, [row]),
+        items: withDeliveryLines(d.items, [row], customCatalog),
       }))
     }
     onPendingDone()
-  }, [pendingGrn, rows, setDraft, onPendingDone])
+  }, [pendingGrn, rows, setDraft, onPendingDone, customCatalog])
 
   const linked = new Set(draft.grnIds ?? [])
   const mine = (rows ?? []).filter((r) => linked.has(r.voucherId) || (ledgerId && r.partyLedgerId === ledgerId))
@@ -138,7 +177,7 @@ export function AgainstDeliveries({
         return { ...d, grnIds: [...ids] }
       }
       ids.add(row.voucherId)
-      return { ...d, grnIds: [...ids], items: withDeliveryLines(d.items, [row]) }
+      return { ...d, grnIds: [...ids], items: withDeliveryLines(d.items, [row], customCatalog) }
     })
 
   return (

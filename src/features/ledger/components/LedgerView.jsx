@@ -147,6 +147,9 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const totals = data?.totals ?? { debit: 0, credit: 0 };
   const pending = data?.pending ?? [];
   const received = data?.received ?? [];
+  // Deliveries first, then what is posted, then what is still waiting for a
+  // figure. Only ever compared against each other, so the numbers are ranks.
+  const SAME_DAY = { received: 0, entry: 1, pending: 2 };
   // Unpriced bills belong on their own dates, among the entries, not heaped at
   // the top. They carry no amount and no balance, so interleaving them is
   // presentation only — the running balance is worked out on the server and is
@@ -156,11 +159,20 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
     ...pending.map((p) => ({ kind: 'pending', key: p._id, date: p.date, p })),
     // Deliveries sit on their dates like unpriced bills: no amount, no balance.
     ...received.map((g) => ({ kind: 'received', key: g._id, date: g.date, g })),
-  ].sort(
-    (a, b) =>
-      a.date - b.date ||
-      (a.kind === 'entry' ? 0 : 1) - (b.kind === 'entry' ? 0 : 1)
-  );
+  ]
+    /**
+     * Same day: the goods move, then the bill for them.
+     *
+     * A delivery was sorting under the purchase that billed it, so BILL-59
+     * arrived beneath the PUR-0106 that says "billed in" it — the paperwork
+     * read backwards against the day it describes. Deliveries now sit first,
+     * which is the server's own rule for a day (see SAME_DAY_ORDER in
+     * reports.ts: the goods move, then any adjustment, then the money) and
+     * puts a delivery above its bill without having to pair the two.
+     *
+     * Unpriced bills keep their place after the posted ones.
+     */
+    .sort((a, b) => a.date - b.date || SAME_DAY[a.kind] - SAME_DAY[b.kind]);
 
   const groupName = (masters?.ledgers ?? []).find((l) => l._id === ledgerId)?.groupName;
   const isCustomer = groupName === 'Sundry Debtors';

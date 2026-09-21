@@ -513,8 +513,27 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   }
 
   const [highlight, setHighlight] = useState(0)
-  // Any change to the query puts the highlight back on the first row.
-  useEffect(() => { setHighlight(0) }, [search, navOptions.length])
+  /**
+   * Where the item this line already holds sits in the open list, or -1.
+   *
+   * Opening the list on a line that already has an item used to land on the
+   * first row, so the list said nothing about what the line was: you had to
+   * read every row to find the one you were on, and Enter would quietly
+   * replace it with whatever happened to sort first.
+   */
+  const selectedIndex = useMemo(
+    () =>
+      item.customEntryId
+        ? navOptions.findIndex((o) => o.kind === 'custom' && o.entry.id === item.customEntryId)
+        : -1,
+    [navOptions, item.customEntryId],
+  )
+  // The line's own item if the list is showing it; otherwise the first row —
+  // which is what typing a fresh query wants, since the best match sorts first
+  // and the old item has usually dropped out of the list by then.
+  useEffect(() => {
+    setHighlight(selectedIndex >= 0 ? selectedIndex : 0)
+  }, [search, navOptions.length, selectedIndex])
 
   const setPanelList = useContext(ListPanelContext)
 
@@ -2749,10 +2768,17 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   /**
-   * Tally's voucher keys, as documented by Tally: Ctrl+A accepts and saves the
-   * screen, Esc closes it, Ctrl+Q exits, Alt+D deletes the voucher. Enter and
-   * the arrows already walk the fields, so this covers the screen-level actions
-   * a counter operator reaches for without looking up.
+   * Tally's voucher keys: Esc closes the screen, Ctrl+Q exits, Alt+D deletes
+   * the voucher. Enter and the arrows already walk the fields, so this covers
+   * the screen-level actions a counter operator reaches for without looking
+   * up.
+   *
+   * Ctrl+A is deliberately NOT among them, though Tally accepts a voucher with
+   * it. This screen is a browser, and Ctrl+A is select-all everywhere else in
+   * one: binding it meant you could not select the text of a line you were
+   * halfway through correcting without posting the bill. Saving is the button,
+   * which is one key away by Tab and cannot be hit by muscle memory meant for
+   * the text.
    */
   /**
    * There is no draft.
@@ -2772,7 +2798,6 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   useShortcuts({
     'mod+z': () => undo(),
     'mod+shift+z': () => redo(),
-    'mod+a': () => save(),
     'mod+q': () => cancel(),
     'alt+d': () => setAsking('delete'),
     Escape: () => {

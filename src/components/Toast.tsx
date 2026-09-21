@@ -6,8 +6,8 @@ import { AlertTriangle, Check, Info, X } from 'lucide-react'
  *
  * It used `alert()` — an operating-system dialog that stops the browser dead
  * and has to be dismissed with the mouse. In a till app driven from the
- * keyboard, where saving a bill is Ctrl+A and the next customer is already at
- * the counter, that is the worst interruption available: the shop learns to
+ * keyboard, with the next customer already at the counter, that is the worst
+ * interruption available: the shop learns to
  * hit Enter through it without reading, which is exactly how a failed save
  * goes unnoticed.
  *
