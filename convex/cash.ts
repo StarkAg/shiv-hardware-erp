@@ -326,6 +326,63 @@ export const all = query({
  * `near` is what lets the arrows know when to stop: the first and last day the
  * drawer has anything written on, so paging cannot wander off into empty dates.
  */
+/**
+ * What the drawer and the bank hold at the START of a day.
+ *
+ * Mirrors the rule the cash book itself uses (cash-web's `anchorFor` /
+ * `balanceOpen`), because the two are views of one drawer and must not
+ * disagree: start from the most recent figure that is KNOWN rather than
+ * inferred — an opening somebody typed, or, for cash, a drawer somebody
+ * counted — then roll every entry since it forward.
+ *
+ * A counted drawer beats a typed opening on the same date, because the count
+ * happened at the end of that day and the opening at the start of it. A day
+ * the shop never opened still anchors: `shutDay` writes the book balance into
+ * `counted`, so a shut Sunday carries Saturday's notes into Monday rather
+ * than wiping them.
+ *
+ * Without this the panel opened every day at nothing, so a drawer still
+ * holding yesterday's cash read as tens of thousands "more in the drawer than
+ * there should be" every single morning.
+ */
+function openingFor(
+  entries: { date: string; mode: string; kind: string; amount: number }[],
+  closes: { date: string; counted: number }[],
+  openings: { date: string; cash: number; online: number }[],
+  date: string,
+  mode: 'cash' | 'online'
+): number {
+  let anchor: { date: string; value: number; startOfDay: boolean } | null = null
+
+  for (const o of openings) {
+    if (o.date > date) continue
+    if (!anchor || o.date > anchor.date) {
+      anchor = { date: o.date, value: mode === 'cash' ? o.cash : o.online, startOfDay: true }
+    }
+  }
+  // Only cash is ever counted; the bank has nothing to count against, so the
+  // book stands for it.
+  if (mode === 'cash') {
+    for (const c of closes) {
+      if (c.date >= date) continue
+      if (!anchor || c.date >= anchor.date) {
+        anchor = { date: c.date, value: c.counted, startOfDay: false }
+      }
+    }
+  }
+
+  let balance = anchor ? anchor.value : 0
+  for (const e of entries) {
+    if (e.mode !== mode || e.date >= date) continue
+    // Entries already inside the anchor are not added twice: a typed opening
+    // is the start of its day, so that day's own entries still count; a count
+    // is the end of its day, so they do not.
+    if (anchor && (anchor.startOfDay ? e.date < anchor.date : e.date <= anchor.date)) continue
+    balance += e.kind === 'in' ? e.amount : -e.amount
+  }
+  return balance
+}
+
 export const forDay = query({
   args: { date: v.string() },
   handler: async (ctx, { date }) => {
@@ -351,10 +408,14 @@ export const forDay = query({
       .query('cashOpenings')
       .withIndex('by_date', (q) => q.eq('date', date))
       .first()
-    if (opening && !opening.deleted) {
-      cash.opening = opening.cash
-      bank.opening = opening.online
-    }
+    const setHere = opening && !opening.deleted ? opening : null
+
+    // Yesterday's closing is today's opening. An opening typed against this
+    // very day still wins — somebody counted the drawer and said so.
+    const allOpenings = (await ctx.db.query('cashOpenings').collect()).filter((r) => !r.deleted)
+    const allCloses = (await ctx.db.query('cashCloses').collect()).filter((r) => !r.deleted)
+    cash.opening = setHere ? setHere.cash : openingFor(live, allCloses, allOpenings, date, 'cash')
+    bank.opening = setHere ? setHere.online : openingFor(live, allCloses, allOpenings, date, 'online')
     cash.expected = cash.opening + cash.in - cash.out
     bank.closing = bank.opening + bank.in - bank.out
 
@@ -386,7 +447,9 @@ export const forDay = query({
       // What the drawer is over or short by. Null until somebody has counted:
       // an uncounted day is not a day that balanced.
       difference: close && !close.shut ? close.counted - cash.expected : null,
-      hasOpening: !!(opening && !opening.deleted),
+      // A figure carried from the last known drawer counts as an opening: the
+      // dash is for a book with nothing behind it, not for a quiet morning.
+      hasOpening: !!setHere || cash.opening !== 0 || bank.opening !== 0,
       count: rows.length,
       near: { first: dates[0] ?? null, last: dates[dates.length - 1] ?? null },
     }

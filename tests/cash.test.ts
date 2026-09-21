@@ -153,3 +153,89 @@ describe('drawer notes in the books', () => {
     expect(await t.query(api.cash.unposted, {})).toHaveLength(1)
   })
 })
+
+/**
+ * Yesterday's closing is today's opening.
+ *
+ * The panel used to open every day at nothing, so a drawer still holding
+ * yesterday's notes read as tens of thousands over.
+ */
+describe('what the drawer opens with', () => {
+  const entry = (date: string, kind: 'in' | 'out', amount: number, mode = 'cash') => ({
+    entryId: `${date}-${kind}-${amount}-${mode}`,
+    date, kind, mode, name: 'x', amount, at: 1, updatedAt: 1,
+  })
+
+  const day = (t: ReturnType<typeof convexTest>, date: string) =>
+    t.query(api.cash.forDay, { date } as never)
+
+  it('carries a counted drawer into the next day', async () => {
+    const { t } = await shop()
+    await t.run(async (ctx) => {
+      await ctx.db.insert('cashEntries', entry('2026-09-18', 'in', 5000) as never)
+      await ctx.db.insert('cashCloses', { date: '2026-09-18', counted: 5000, at: 1, updatedAt: 1 })
+      await ctx.db.insert('cashEntries', entry('2026-09-19', 'in', 300) as never)
+    })
+    const d = await day(t, '2026-09-19')
+    expect(d.cash.opening).toBe(5000)
+    expect(d.cash.expected).toBe(5300)
+    expect(d.hasOpening).toBe(true)
+  })
+
+  it('a count beats the book, so a short drawer is not carried twice', async () => {
+    const { t } = await shop()
+    await t.run(async (ctx) => {
+      // The book says 5,000; only 4,000 was actually there.
+      await ctx.db.insert('cashEntries', entry('2026-09-18', 'in', 5000) as never)
+      await ctx.db.insert('cashCloses', { date: '2026-09-18', counted: 4000, at: 1, updatedAt: 1 })
+    })
+    expect((await day(t, '2026-09-19')).cash.opening).toBe(4000)
+  })
+
+  it('rolls entries forward across an uncounted day', async () => {
+    const { t } = await shop()
+    await t.run(async (ctx) => {
+      await ctx.db.insert('cashOpenings', { date: '2026-09-17', cash: 1000, online: 0, at: 1, updatedAt: 1 })
+      await ctx.db.insert('cashEntries', entry('2026-09-17', 'in', 500) as never)
+      // Nobody counted the 18th.
+      await ctx.db.insert('cashEntries', entry('2026-09-18', 'out', 200) as never)
+    })
+    expect((await day(t, '2026-09-19')).cash.opening).toBe(1300)
+  })
+
+  it('a shut day carries the drawer through, it does not wipe it', async () => {
+    const { t } = await shop()
+    await t.run(async (ctx) => {
+      await ctx.db.insert('cashEntries', entry('2026-09-18', 'in', 5000) as never)
+      // shutDay writes the book balance into counted, so it still anchors.
+      await ctx.db.insert('cashCloses', { date: '2026-09-19', counted: 5000, at: 1, updatedAt: 1, shut: true })
+    })
+    expect((await day(t, '2026-09-20')).cash.opening).toBe(5000)
+  })
+
+  it('an opening typed for the day itself wins', async () => {
+    const { t } = await shop()
+    await t.run(async (ctx) => {
+      await ctx.db.insert('cashCloses', { date: '2026-09-18', counted: 5000, at: 1, updatedAt: 1 })
+      await ctx.db.insert('cashOpenings', { date: '2026-09-19', cash: 60, online: 0, at: 1, updatedAt: 1 })
+    })
+    expect((await day(t, '2026-09-19')).cash.opening).toBe(60)
+  })
+
+  it('the bank carries on the book, having nothing to count', async () => {
+    const { t } = await shop()
+    await t.run(async (ctx) => {
+      await ctx.db.insert('cashEntries', entry('2026-09-18', 'in', 900, 'online') as never)
+      // A counted drawer says nothing about the bank.
+      await ctx.db.insert('cashCloses', { date: '2026-09-18', counted: 0, at: 1, updatedAt: 1 })
+    })
+    const d = await day(t, '2026-09-19')
+    expect(d.bank.opening).toBe(900)
+    expect(d.cash.opening).toBe(0)
+  })
+
+  it('still shows a dash for a book with nothing behind it', async () => {
+    const { t } = await shop()
+    expect((await day(t, '2026-09-19')).hasOpening).toBe(false)
+  })
+})
