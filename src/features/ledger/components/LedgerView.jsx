@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Paperclip, Pencil, ReceiptText, Trash2, X } from 'lucide-react'
+import { ChevronLeft, Paperclip, Pencil, Printer, ReceiptText, Trash2, X } from 'lucide-react'
 import { useStore } from '../../../lib/store'
 import VoucherBillPreview from './VoucherBillPreview'
 import { api } from '../../../../convex/_generated/api';
@@ -28,17 +28,24 @@ const figure = (n) => Number(n).toLocaleString('en-IN', { maximumFractionDigits:
  * listed — a priced row needs none of this, and a priced line on a half-priced
  * bill is not what anyone is waiting for.
  */
-function Goods({ bill, all = false }) {
+function Goods({ bill, all = false, first = false }) {
   const waiting = goodsOn(bill).filter((i) => all || !Number(i.amount));
   if (!waiting.length) return null;
+  // A delivery of a dozen lines was printing a dozen lines into one ledger
+  // row, pushing the dates and the balance apart. One line says what came;
+  // the count says there was more, and the bill itself is a click away on the
+  // same row for anyone who needs the rest.
+  const shown = first ? waiting.slice(0, 1) : waiting;
+  const rest = waiting.length - shown.length;
   return (
     <div className="billgoods">
-      {waiting.map((i) => (
+      {shown.map((i) => (
         <span key={i.id} className="good">
           {i.description}
           {Number(i.qty) ? ` ${figure(i.qty)} ${i.unit ?? ''}` : ''}
         </span>
       ))}
+      {rest > 0 && <span className="good more">+{rest} more</span>}
     </div>
   );
 }
@@ -89,6 +96,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const [deleting, setDeleting] = useState(null);
   const [editParty, setEditParty] = useState(false);
   const removeVoucher = useMutation(api.vouchers.remove);
+  const setCommissionPaid = useMutation(api.vouchers.setCommissionPaid);
   // Deleting the account itself, from its own page — the same rule as Account
   // Masters: only an empty account, behind the shop's code, and the bin's hold
   // on it asked about separately.
@@ -97,6 +105,9 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const [purgingParty, setPurgingParty] = useState(null);
   const data = useLive(api.reports.ledger, { ledgerId }, `ledger:${ledgerId}`);
   const papers = useLive(api.review.papersFor, { ledgerId }, `papers:${ledgerId}`) ?? [];
+  // Where this party's paper physically is. The books answer what is owed; only
+  // this answers "Raj Kumar ka bill dikhao" with a drawer to open.
+  const paper = useLive(api.filing.whereIs, { partyLedgerId: ledgerId }, `filing:${ledgerId}`);
 
   if (data === undefined) {
     return (
@@ -122,6 +133,17 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
 
   const account = data?.account;
   const rows = data?.rows ?? [];
+  /**
+   * Commission is only somebody's business on an account that names the
+   * carpenter who brings this customer in. Everywhere else the column does not
+   * exist — most accounts owe nobody a cut, and a ledger of empty ticks is a
+   * column asking a question nobody has.
+   */
+  const commissionTo = account?.commissionTo ?? '';
+  const showComm = Boolean(commissionTo);
+  const commOwed = showComm
+    ? rows.filter((r) => r.vchType === 'Sale' && !r.commissionPaid).length
+    : 0;
   const totals = data?.totals ?? { debit: 0, credit: 0 };
   const pending = data?.pending ?? [];
   const received = data?.received ?? [];
@@ -190,6 +212,20 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                 .join(' · ')}
             </div>
           )}
+          {(paper?.folder || paper?.card) && (
+            <div className="ref">
+              {[
+                paper.folder &&
+                  `Folder ${paper.folder.cabinet} / ${paper.folder.drawer} / ${paper.folder.no}`,
+                // Mid-sort, the bundle is still on a table rather than in its
+                // folder — so say which card, because that is where it is today.
+                paper.card && `on card ${paper.card}`,
+                paper.bills && `${paper.bills} bills`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
+          )}
           {account?.notes && <div className="note inline">{account.notes}</div>}
         </div>
         <div className="partyhead-figure">
@@ -197,46 +233,50 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
           <div className="card-amt">
             {rupees(data?.closing ?? 0)} <span className="side">{data?.closingSide ?? 'Cr'}</span>
           </div>
-          <div className="partyhead-actions">
-            {/* Every voucher that can be written on this side of the books,
-                with the account already named. */}
-            {isMonthly ? (
+        </div>
+        <div className="partyhead-actions">
+          {/* Every voucher that can be written on this side of the books,
+              with the account already named. */}
+          {isMonthly ? (
+            <button className="btn" onClick={() => onAddVoucher('payment', settles)}>
+              + Payment
+            </button>
+          ) : isCustomer ? (
+            <>
+              <button className="btn" onClick={() => onAddVoucher('sale')}>+ Sale</button>
+              <button className="btn" onClick={() => onAddVoucher('receipt', settles)}>
+                + Receipt
+              </button>
+              <button className="btn" onClick={() => onAddVoucher('return')}>+ Goods Return</button>
+              <button className="btn" onClick={() => onAddVoucher('refund')}>+ Refund</button>
+            </>
+          ) : (
+            <>
+              <button className="btn" onClick={() => onAddVoucher('grn')}>+ Goods Received</button>
+              <button className="btn" onClick={() => onAddVoucher('purchase')}>+ Purchase</button>
               <button className="btn" onClick={() => onAddVoucher('payment', settles)}>
                 + Payment
               </button>
-            ) : isCustomer ? (
-              <>
-                <button className="btn" onClick={() => onAddVoucher('sale')}>+ Sale</button>
-                <button className="btn" onClick={() => onAddVoucher('receipt', settles)}>
-                  + Receipt
-                </button>
-                <button className="btn" onClick={() => onAddVoucher('return')}>+ Goods Return</button>
-                <button className="btn" onClick={() => onAddVoucher('refund')}>+ Refund</button>
-              </>
-            ) : (
-              <>
-                <button className="btn" onClick={() => onAddVoucher('grn')}>+ Goods Received</button>
-                <button className="btn" onClick={() => onAddVoucher('purchase')}>+ Purchase</button>
-                <button className="btn" onClick={() => onAddVoucher('payment', settles)}>
-                  + Payment
-                </button>
-                <button className="btn" onClick={() => onAddVoucher('return')}>+ Goods Return</button>
-              </>
-            )}
+              <button className="btn" onClick={() => onAddVoucher('return')}>+ Goods Return</button>
+            </>
+          )}
+          <div className="partyhead-tools">
             <button
               className="btn ghost"
               onClick={() => onPrint({ scope: 'party', ledgerId })}
             >
-              Print
+              <Printer size={16} aria-hidden="true" /> Print
             </button>
             {rows.length || pending.length ? (
-              <span
-                className="btn ghost muted"
+              <button
+                type="button"
+                disabled
+                className="btn ghost del"
                 title={`${rows.length + pending.length} vouchers are posted to this account — it cannot be deleted`}
                 aria-disabled="true"
               >
-                <Trash2 size={14} aria-hidden="true" />
-              </span>
+                <Trash2 size={14} aria-hidden="true" /> Delete
+              </button>
             ) : (
               <button className="btn ghost del" onClick={() => setDeletingParty(true)} aria-label="Delete account">
                 <Trash2 size={14} aria-hidden="true" /> Delete
@@ -292,6 +332,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
       <div className="toolbar">
         <div className="count">
           {rows.length} vouchers
+          {showComm && ` · ${commOwed} owing ${commissionTo} commission`}
           {pending.length > 0 && ` · ${pending.length} awaiting an amount`}
           {papers.length > 0 && ` · ${papers.length} statement${papers.length > 1 ? 's' : ''} on file`}
         </div>
@@ -359,6 +400,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                 <th className="num">Debit</th>
                 <th className="num">Credit</th>
                 <th className="num">Balance</th>
+                {showComm && <th className="w-comm" title={`Commission to ${commissionTo}`}>Comm</th>}
                 <th className="w-clip" />
                 <th className="w-acts" />
               </tr>
@@ -378,6 +420,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                   {rupees(data?.opening ?? 0)}{' '}
                   <span className="side">{data?.openingSide ?? 'Cr'}</span>
                 </td>
+                {showComm && <td className="w-comm" />}
                 <td className="hide-sm" />
                 <td className="hide-sm" />
               </tr>
@@ -394,7 +437,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                     <td className="ref mono" data-label="Ref">{item.g.refNo || '—'}</td>
                     <td className="particulars" data-label="Particulars">
                       {goodsOn(billFor(item.g)).length ? (
-                        <Goods bill={billFor(item.g)} all />
+                        <Goods bill={billFor(item.g)} all first />
                       ) : (
                         <span className="ref">no lines written</span>
                       )}
@@ -421,6 +464,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       )}
                     </td>
                     <td className="num" data-label="Balance" />
+                    {showComm && <td className="w-comm" />}
                     <td className="w-clip" data-label="">
                       {item.g.attachmentUrls.length > 0 && (
                         <button
@@ -475,6 +519,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       )}
                     </td>
                     <td className="num" data-label="Balance" />
+                    {showComm && <td className="w-comm" />}
                     <td className="w-clip" data-label="">
                       {item.p.attachmentUrls.length > 0 && (
                         <button
@@ -529,6 +574,25 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       {rupees(Math.abs(item.r.balance))}{' '}
                       <span className="side">{item.r.balanceSide}</span>
                     </td>
+                    {showComm && (
+                      <td className="w-comm" data-label="Comm">
+                        {/* Only a sale earns anybody a commission. A receipt
+                            against it is the customer paying the shop, which
+                            is a different matter entirely. */}
+                        {item.r.vchType === 'Sale' ? (
+                          <input
+                            type="checkbox"
+                            className="commtick"
+                            checked={item.r.commissionPaid}
+                            aria-label={`Commission to ${commissionTo} paid on ${item.r.vchLabel}`}
+                            title={item.r.commissionPaid ? `Paid to ${commissionTo}` : `Not yet paid to ${commissionTo}`}
+                            onChange={(e) =>
+                              setCommissionPaid({ id: item.r.voucherId, paid: e.target.checked })
+                            }
+                          />
+                        ) : null}
+                      </td>
+                    )}
                     <td className="w-clip" data-label="">
                       {item.r.attachmentUrls.length > 0 && (
                         <button

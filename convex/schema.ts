@@ -236,6 +236,7 @@ export default defineSchema({
   attendanceDays: defineTable({
     date: v.string(), // 'YYYY-MM-DD'
     marks: v.any(),
+    unpaidLeaves: v.optional(v.any()), // leave is an unpaid N in the older attendance app
     locked: v.optional(v.boolean()), // true once saved — edits then need the password
     updatedAt: v.number(),
   }).index('by_date', ['date']),
@@ -254,7 +255,33 @@ export default defineSchema({
     amount: v.number(),
     note: v.optional(v.string()),
     at: v.number(),
+    staffPaymentId: v.optional(v.string()),
   }).index('by_date', ['date']),
+
+  // Tracking starts explicitly so previously settled wages are never invented
+  // from old attendance. Rates are dated; a raise cannot reprice old work.
+  staffPayProfiles: defineTable({
+    staff: v.string(),
+    startDate: v.string(),
+    openingDue: v.number(),
+    openingAdvance: v.number(),
+    rates: v.array(v.object({ from: v.string(), rate: v.number() })),
+    ledgerId: v.id('ledgers'),
+    createdAt: v.number(),
+  }).index('by_staff', ['staff']),
+
+  staffPayments: defineTable({
+    requestId: v.string(),
+    staff: v.string(),
+    date: v.string(),
+    kind: v.union(v.literal('wage'), v.literal('advance')),
+    amount: v.number(),
+    mode: v.union(v.literal('cash'), v.literal('online')),
+    note: v.string(),
+    at: v.number(),
+    voided: v.optional(v.boolean()),
+    voidedAt: v.optional(v.number()),
+  }).index('by_request', ['requestId']).index('by_staff_date', ['staff', 'date']),
 
   // ── Attendance change history (audit log) ─────────────────────────────────
   attendanceLog: defineTable({
@@ -281,6 +308,7 @@ export default defineSchema({
     updatedAt: v.number(),
     deleted: v.optional(v.boolean()),
     dealer: v.optional(v.boolean()),   // a payment to a supplier, marked on the page
+    staffPaymentId: v.optional(v.string()),
     /**
      * The books' side of this note. The drawer used to be a second, separate
      * record of the shop's money: cash came in here and nowhere else, so Cash
@@ -394,6 +422,18 @@ export default defineSchema({
     // runs its own arrears.
     monthly: v.optional(v.number()),
     payee: v.optional(v.string()),
+    // The carpenter or mistri who brings this customer in, and is owed a cut
+    // of what they buy. Most accounts have nobody: a walk-in owes no
+    // commission to anybody, so this is unset for them and the ledger shows
+    // nothing about commission at all. Naming somebody here is what turns the
+    // per-bill tick on for this account.
+    commissionTo: v.optional(v.string()),
+    // Where this party's bills physically live once they are sorted, stapled
+    // and filed — the answer to "Raj Kumar ka bill dikhao" that no amount of
+    // searching the books can give. Set once, when the folder is made.
+    folder: v.optional(
+      v.object({ cabinet: v.string(), drawer: v.string(), no: v.number() })
+    ),
     active: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -430,6 +470,11 @@ export default defineSchema({
     attachments,
     // Carried over from the photograph when the bill was approved.
     tags: v.optional(v.array(v.string())),
+    // Whether the commission on this bill has been handed over to whoever
+    // brought the customer (ledgers.commissionTo). Unset means not yet — and
+    // on an account that owes nobody a commission it stays unset forever and
+    // is never asked about.
+    commissionPaid: v.optional(v.boolean()),
     ...receiptFields,
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -514,6 +559,15 @@ export default defineSchema({
     // the moment of shooting, because that is the only place anyone knows the
     // second sheet belongs to the first.
     groupId: v.optional(v.string()),
+    /**
+     * Which physical stack this photograph's slip went onto — "A", "B".
+     *
+     * Two people can photograph a thousand bills each at the same time, each
+     * building their own stack, and the stack a slip is in is known here and
+     * nowhere else: it is decided by whose hand is holding the phone, before
+     * the shutter. Carried onto the filing row when the bill is approved.
+     */
+    stack: v.optional(v.string()),
   })
     .index("by_at", ["at"])
     .index("by_group", ["groupId"]),
@@ -639,6 +693,134 @@ export default defineSchema({
     vouchers: v.optional(v.number()),
     error: v.optional(v.string()),
   }).index("by_at", ["at"]),
+
+  /**
+   * Two My Items entries the shop has said are one item.
+   *
+   * The same board is bought and sold under different names — SRT bills it
+   * "12mm S 8 X 4" and the counter sells "12mm SG 8 X 4" — and a customer's
+   * bill must keep the name the customer was given. Most of that is settled by
+   * renaming the supplier's entry into the shop's (see `itemFold.ts`), but not
+   * all of it can be: the shop sells one door under two names of its own, and
+   * a line here and there points at an entry since deleted. Those are said
+   * outright, one pair at a time.
+   *
+   * `from` and `to` are the references `src/lib/profit.ts` builds — "id:<My
+   * Items id>" for a line picked from the list, "name:<folded name>" for one
+   * typed freehand. Chains are followed to the end, so it does not matter
+   * which way round a pair was added.
+   */
+  itemSame: defineTable({
+    from: v.string(),
+    to: v.string(),
+    /** What each was called when the shop paired them, for the list. */
+    fromLabel: v.string(),
+    toLabel: v.string(),
+    updatedAt: v.number(),
+  }).index("by_from", ["from"]),
+
+  /**
+   * What an item cost, where the bills cannot say it by themselves.
+   *
+   * Not the same as saying two entries are one item. A 20 kg drum of Fevicol
+   * is not a 1 kg pack — it is twenty of them, and `per` says so. This is for
+   * one thing priced from another, and for stock bought before the panel
+   * existed, where there is no purchase to point at and a rate has to be
+   * typed.
+   */
+  itemCosts: defineTable({
+    ref: v.string(),
+    /** The name it was carrying when the shop set this, for the list. */
+    label: v.string(),
+    /** A rate per unit as sold, typed at the counter. */
+    cost: v.optional(v.number()),
+    /** The item it is bought as, when it is bought as another. */
+    sameAs: v.optional(v.string()),
+    /** That item's name, so the row reads without a second lookup. */
+    sameAsLabel: v.optional(v.string()),
+    /** How many of that item make one of this. One if not said. */
+    per: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_ref", ["ref"]),
+
+  /**
+   * Sorting the paper: one row per photographed bill, saying where it goes.
+   *
+   * The books know what every bill says; this is the only thing that knows
+   * where the paper itself is. It exists because a few thousand loose slips
+   * cannot be turned into customer bundles by hand without the app calling out
+   * a card number for each one — see `src/lib/filing.ts` for why that is done
+   * in two sweeps rather than one card per customer.
+   */
+  filing: defineTable({
+    voucherId: v.id("vouchers"),
+    partyLedgerId: v.id("ledgers"),
+    /**
+     * When the slip was photographed — which is the order the physical stack
+     * is in, and the whole reason this field exists rather than reading
+     * `_creationTime`. Bills are approved at the counter in whatever order the
+     * reads finish and the shop gets to them, so approval order and stack
+     * order are different orders. Sorting on the wrong one would send every
+     * bill after the first mismatch to the wrong customer.
+     */
+    capturedAt: v.number(),
+    /**
+     * The slot this bill was put in, given when the paper itself was placed.
+     *
+     * Not when it was named. A customer holds their slot until their packet
+     * goes into their folder, so a slot given out at naming time would be held
+     * for a customer whose paper is still in the stack — name two hundred bills
+     * before placing any and forty slots are gone with nothing on the table.
+     * Spending a slot only as paper reaches it is what keeps the table small.
+     *
+     * Empty means not placed yet, or placed while every slot was full.
+     */
+    slot: v.optional(v.number()),
+    stage: v.union(
+      // Named and back on the stack. The books know whose it is; the paper has
+      // not moved yet and no slot is being held for it.
+      v.literal("named"),
+      // In a slot on the table, gathering the rest of that customer's bills.
+      v.literal("slotted"),
+      // Named while every slot was taken; waiting for one to come free.
+      v.literal("waiting"),
+      // The packet has gone into the customer's folder and the slot is free.
+      v.literal("filed")
+    ),
+    /**
+     * Which physical stack this slip is in — "A", "B", "C".
+     *
+     * One shared stack would have three people reaching into the same pile and
+     * the quick ones waiting on the slow. So the paper is cut into stacks of a
+     * size a person can hold, each wearing a lettered card, and whoever is free
+     * takes the next one nobody is on. Stacks are contiguous runs of
+     * `capturedAt`, which is what lets a boundary be nudged when it turns out
+     * to be a slip or two off.
+     */
+    stack: v.optional(v.string()),
+    at: v.number(),
+  })
+    .index("by_capturedAt", ["capturedAt"])
+    .index("by_stage_capturedAt", ["stage", "capturedAt"])
+    .index("by_stack_capturedAt", ["stack", "capturedAt"])
+    .index("by_slot", ["slot"])
+    .index("by_party", ["partyLedgerId"])
+    .index("by_voucher", ["voucherId"]),
+
+  /**
+   * The sorting plan in force, one row keyed "current".
+   *
+   * Which customers were put in which bucket is written onto the filing rows
+   * themselves, and which bucket is on whose table is on the station. This is
+   * the rest of it: how many cards the plan was drawn for, and how far through
+   * the sweeps the shop has got.
+   */
+  filingPlan: defineTable({
+    key: v.string(),
+    /** How many slots are laid out on the table — thirty or forty, reused. */
+    slotCount: v.number(),
+    madeAt: v.number(),
+  }).index("by_key", ["key"]),
 
   counters: defineTable({
     name: v.string(),

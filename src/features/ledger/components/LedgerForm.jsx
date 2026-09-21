@@ -28,8 +28,13 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
   const [phone, setPhone] = useState(edit?.phone ?? '');
   const [aadhaar, setAadhaar] = useState(aadhaarGroups(edit?.aadhaar ?? ''));
   const [notes, setNotes] = useState(edit?.notes ?? '');
+  // Only customers are brought in by anybody — a supplier owes the shop no
+  // commission, so the field is not offered on that side of the books.
+  const [commissionTo, setCommissionTo] = useState(edit?.commissionTo ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const isCustomer = groups.find((g) => g._id === groupId)?.name === 'Sundry Debtors';
 
   const createLedger = useMutation(api.masters.createLedger);
   const updateLedger = useMutation(api.masters.updateLedger);
@@ -51,6 +56,9 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
           openingSide: side,
           openingAsOf: fromInputDate(asOf),
           notes: notes.trim() || undefined,
+          // Sent even when empty: the server turns a blank into an unset, so
+          // taking the carpenter off an account actually takes him off.
+          commissionTo: isCustomer ? commissionTo.trim() : '',
         });
         onClose();
         return undefined;
@@ -64,6 +72,7 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
         openingSide: side,
         openingAsOf: fromInputDate(asOf),
         notes: notes.trim() || undefined,
+        commissionTo: (isCustomer && commissionTo.trim()) || undefined,
       });
       onClose();
     } catch (err) {
@@ -165,6 +174,20 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
           Note
           <input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
+
+        {/* Naming somebody here is what turns the per-bill commission tick on
+            for this account. Left empty — which is most accounts — the ledger
+            never mentions commission at all. */}
+        {isCustomer && (
+          <label>
+            Commission to
+            <input
+              value={commissionTo}
+              onChange={(e) => setCommissionTo(e.target.value)}
+              placeholder="the carpenter who brings them, if any"
+            />
+          </label>
+        )}
 
         {error && <p className="error">{error}</p>}
 

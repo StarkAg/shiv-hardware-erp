@@ -192,6 +192,7 @@ export const ledger = query({
         amount: line.amount,
         balance: running,
         balanceSide: sideOf(running),
+        commissionPaid: voucher.commissionPaid === true,
         attachmentUrls: await urlsFor(ctx, voucher.attachments),
       });
     }

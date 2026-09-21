@@ -308,6 +308,7 @@ export const price = mutation({
     if (!(amount > 0)) throw new Error("Enter an amount above zero");
     const voucher = await ctx.db.get(id);
     if (!voucher) throw new Error("Voucher not found");
+    if (voucher.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
     const type = await ctx.db.get(voucher.typeId);
     const sides = SIDES[type?.name ?? ""];
     if (!sides) throw new Error(`Cannot price a ${type?.name ?? "unknown"} voucher`);
@@ -328,6 +329,36 @@ export const price = mutation({
       entityId: id,
       detail: { amount: round2(amount), refNo },
     });
+  },
+});
+
+/**
+ * The commission tick on one bill.
+ *
+ * Only asked about on a party whose account names somebody in `commissionTo` —
+ * a walk-in owes nobody a cut, and their ledger never shows the column. Kept
+ * as a plain yes/no rather than a figure: the shop settles these in cash by
+ * arrangement, and what is wanted here is which jobs are still outstanding,
+ * not a second set of books.
+ *
+ * Written to the history like any other change to a voucher, because "did we
+ * pay Ramesh for that job" is exactly the question asked three months later.
+ */
+export const setCommissionPaid = mutation({
+  args: { id: v.id("vouchers"), paid: v.boolean() },
+  handler: async (ctx, { id, paid }) => {
+    const voucher = await ctx.db.get(id);
+    if (!voucher) throw new Error("Voucher not found");
+    if ((voucher.commissionPaid === true) === paid) return;
+    await ctx.db.patch(id, { commissionPaid: paid, updatedAt: Date.now() });
+    const party = await ctx.db.get(voucher.partyLedgerId);
+    await record(
+      ctx,
+      "voucher.commission",
+      `Commission on ${await describeVoucher(ctx, id)} marked ${paid ? "paid" : "not paid"}` +
+        (party?.commissionTo ? ` to ${party.commissionTo}` : ""),
+      { entity: "voucher", entityId: id, detail: { paid } }
+    );
   },
 });
 
@@ -397,6 +428,7 @@ export const edit = mutation({
   handler: async (ctx, args) => {
     const voucher = await ctx.db.get(args.id);
     if (!voucher) throw new Error("Voucher not found");
+    if (voucher.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
     const type = await ctx.db.get(voucher.typeId);
     const sides = SIDES[type?.name ?? ""];
     if (!sides) throw new Error(`Cannot edit a ${type?.name ?? "unknown"} voucher`);
@@ -475,6 +507,8 @@ export const update = mutation({
     narration: v.optional(v.string()),
   },
   handler: async (ctx, { id, ...patch }) => {
+    const voucher = await ctx.db.get(id);
+    if (voucher?.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
     await ctx.db.patch(id, { ...patch, updatedAt: Date.now() });
     if (patch.date !== undefined) {
       const lines = await ctx.db
@@ -629,6 +663,10 @@ export const remove = mutation({
   handler: async (ctx, { id }) => {
     const voucher = await ctx.db.get(id);
     if (!voucher) return null;
+    if (voucher.refNo?.startsWith('CASH-staff-pay-')) {
+      const cash = await ctx.db.query('cashEntries').withIndex('by_entry_id', q => q.eq('entryId', voucher.refNo!.slice(5))).unique();
+      if (!cash?.deleted) throw new Error('Reverse this payment in Cashier → Staff Payments.');
+    }
 
     const lines = await ctx.db
       .query("voucherEntries")
@@ -680,6 +718,7 @@ export const retype = mutation({
   handler: async (ctx, { id, to, accountLedgerId }) => {
     const voucher = await ctx.db.get(id);
     if (!voucher) throw new Error("Voucher not found");
+    if (voucher.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
 
     const was = await ctx.db.get(voucher.typeId);
     if (was?.name === to) return { changed: false };

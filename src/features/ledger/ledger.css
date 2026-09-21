@@ -38,14 +38,20 @@
 .ledger-root .sub{color: var(--muted); font-size: 11px; margin-top: 3px;
   text-transform: uppercase; letter-spacing: 0.2em;}
 .ledger-root .actions{display: flex; gap: 9px; flex-wrap: wrap; align-items: center;}
-.ledger-root .btn{border: none; background: var(--brass); color: var(--brass-ink);
-  padding: 12px 18px; border-radius: 12px; font-size: 15px; font-weight: 800;
-  transition: transform 0.12s ease, filter 0.15s ease;}
-.ledger-root .btn:active{transform: scale(0.97); filter: brightness(0.96);}
-.ledger-root .btn:disabled{background: var(--card2); color: var(--muted); border: 1px solid var(--line);}
+.ledger-root .btn{display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--control-height); max-width: 100%; vertical-align: middle;
+  border: 1px solid transparent; background: var(--brass); color: var(--brass-ink);
+  padding: 9px 14px; border-radius: var(--control-radius); font-size: 14px; line-height: 20px; font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease, filter 0.15s ease;}
+.ledger-root .btn > svg{flex: none; width: 16px; height: 16px;}
+.ledger-root .btn:hover:enabled{filter: brightness(1.06);}
+.ledger-root .btn:active:enabled{filter: brightness(0.96);}
+.ledger-root .btn:disabled, .ledger-root .btn[aria-disabled='true']{opacity: 0.5; cursor: not-allowed;}
 .ledger-root .btn.ghost{background: transparent; border: 1px solid var(--line); color: var(--fg);}
 .ledger-root .btn.danger{background: var(--red); color: #fff;}
-.ledger-root .iconbtn{width: 46px; height: 46px; border-radius: 12px; border: 1px solid var(--line);
+.ledger-root .btn.ghost:hover:enabled{background: var(--card2); border-color: var(--brass);}
+.ledger-root .btn.ghost.del{color: var(--red);}
+.ledger-root .iconbtn{width: var(--control-height); height: var(--control-height); flex: none; border-radius: var(--control-radius); border: 1px solid var(--line);
   background: var(--card); color: var(--fg); font-size: 20px;
   display: inline-flex; align-items: center; justify-content: center;}
 .ledger-root .iconbtn:active{background: var(--card2);}
@@ -67,23 +73,24 @@
   color: var(--muted); font-weight: 800;}
 .ledger-root .card-amt{font-size: 25px; font-weight: 800; font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em; line-height: 1.15;}
-.ledger-root .card.total .card-amt{color: var(--brass);}
+.ledger-root .card.total .card-amt{color: var(--brass-text);}
 .ledger-root .card-meta{font-size: 12px; color: var(--muted); font-weight: 600;}
 .ledger-root .card-meta .warn{color: var(--amber); font-style: normal; font-weight: 800;}
 .ledger-root .toolbar{display: flex; justify-content: space-between; align-items: center;
   gap: 12px; flex-wrap: wrap; margin-bottom: 12px;}
 .ledger-root .filters{display: flex; align-items: center; gap: 14px; flex-wrap: wrap;}
-.ledger-root select, .ledger-root input[type='text'], .ledger-root input[type='number'], .ledger-root input[type='date'], .ledger-root input[type='file'], .ledger-root input:not([type]){font: inherit; padding: 11px 13px; border: 1px solid var(--line);
-  border-radius: 12px; background: var(--card); color: var(--fg);}
+.ledger-root select, .ledger-root input[type='text'], .ledger-root input[type='number'], .ledger-root input[type='date'], .ledger-root input[type='file'], .ledger-root input:not([type]){font: inherit; padding: 8px 12px; border: 1px solid var(--line);
+  min-height: var(--control-height); max-width: 100%; min-width: 0;
+  border-radius: var(--control-radius); background: var(--card); color: var(--fg);}
 .ledger-root select{appearance: none; -webkit-appearance: none; padding-right: 34px;
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2378716c' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 12px center; background-size: 11px;}
 .ledger-root.dark select{background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%23a8a29e' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");}
-.ledger-root select:focus, .ledger-root input:focus{outline: none; border-color: var(--brass);}
+.ledger-root select:focus, .ledger-root input:focus{border-color: var(--brass);}
 .ledger-root .check{display: inline-flex; align-items: center; gap: 9px; font-size: 14px;
   font-weight: 600; cursor: pointer;}
 .ledger-root .check input[type='checkbox']{width: 19px; height: 19px; accent-color: var(--brass);}
-.ledger-root .pill{background: var(--amber); color: #fff; border-radius: 999px;
+.ledger-root .pill{background: var(--amber-tint); color: var(--amber-text); border-radius: 999px;
   padding: 2px 9px; font-size: 12px; font-weight: 900;}
 .ledger-root .count{color: var(--muted); font-size: 13px; font-weight: 600;}
 .ledger-root .table-wrap{background: var(--card); border: 1px solid var(--line);
@@ -121,6 +128,10 @@
 .ledger-root .w-date{width: 100px;}
 .ledger-root .w-ref{width: 132px;}
 .ledger-root .w-clip{width: 64px;}
+/* The commission tick. Only drawn on accounts that name somebody to pay, so
+   the column is absent — not empty — on every other ledger. */
+.ledger-root .w-comm{width: 58px; text-align: center; white-space: nowrap;}
+.ledger-root .commtick{width: 17px; height: 17px; accent-color: var(--go, #2f7d4f); cursor: pointer;}
 /* The mark and its count sit on one line. The button is narrow, so the count
    wrapped under the icon and read as two things rather than "two sheets". */
 .ledger-root .clip{position: relative; border: 1px solid var(--line); background: var(--card2); border-radius: 10px;
@@ -146,12 +157,12 @@
   font-size: 14px; letter-spacing: 0; text-transform: none;
   background: var(--amber-tint); border: 1px solid var(--line);
   border-radius: 12px; padding: 12px 13px;}
-.ledger-root .modal .row{display: flex; gap: 12px; align-items: flex-end;}
-.ledger-root .modal .row label, .ledger-root .modal .row .labelled{flex: 1;}
+.ledger-root .modal .row{display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;}
+.ledger-root .modal .row label, .ledger-root .modal .row .labelled{flex: 1 1 140px; min-width: 0;}
 .ledger-root .modal .row .labelled .chips{padding-bottom: 2px;}
 .ledger-root .hint{color: var(--muted); font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0;}
 .ledger-root .error{color: var(--red); font-size: 14px; font-weight: 700; margin: 0;}
-.ledger-root .modal-actions{display: flex; gap: 9px; margin-top: 4px;}
+.ledger-root .modal-actions{display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px;}
 .ledger-root .modal-actions .btn{flex: 1;}
 .ledger-root .lightbox{position: fixed; inset: 0; z-index: 60; background: rgba(10, 9, 8, 0.92);
   display: flex; align-items: center; justify-content: center; padding: 20px;}
@@ -277,10 +288,10 @@
 .ledger-root .sheet:last-child{page-break-after: auto;}
 .ledger-root .sign{padding-top: 12mm;}
 .ledger-root .bill-page img{max-height: 210mm;}}
-.ledger-root .tabs{display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
-  border-bottom: 1px solid var(--line); padding-bottom: 2px;}
+.ledger-root .tabs{display: flex; flex-wrap: nowrap; gap: 6px; margin-bottom: 16px;
+  overflow-x: auto; border-bottom: 1px solid var(--line); padding: 2px 2px 3px;}
 .ledger-root .tab{border: none; background: none; color: var(--muted);
-  font-size: 14px; font-weight: 800; letter-spacing: 0.01em;
+  flex: none; min-height: var(--control-height); font-size: 14px; font-weight: 600; letter-spacing: 0.01em;
   padding: 10px 14px; border-radius: 11px 11px 0 0; white-space: nowrap;
   display: inline-flex; align-items: center; gap: 8px;
   border-bottom: 2px solid transparent; margin-bottom: -3px;}
@@ -288,11 +299,11 @@
 .ledger-root .stages{display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px;
   background: var(--card2); border: 1px solid var(--line);
   border-radius: 13px; padding: 5px;}
-.ledger-root .stage{border: none; background: none; color: var(--muted);
+.ledger-root .stages .stage{border: none; background: none; color: var(--muted);
   font-size: 14px; font-weight: 800; padding: 8px 13px; border-radius: 9px;
   display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;}
-.ledger-root .stage:hover{color: var(--fg);}
-.ledger-root .stage.on{background: var(--card); color: var(--fg);
+.ledger-root .stages .stage:hover{color: var(--fg);}
+.ledger-root .stages .stage.on{background: var(--card); color: var(--fg);
   box-shadow: var(--shadow); border: 1px solid var(--line);
   padding: 7px 12px;}
 .ledger-root .ind{min-width: 20px; text-align: center; border-radius: 999px;
@@ -301,18 +312,22 @@
 .ledger-root .ind.amber{background: var(--amber-tint); color: var(--amber);}
 .ledger-root .ind.red{background: var(--red); color: #fff;}
 @media (max-width: 640px){
-.ledger-root .stage{padding: 8px 10px; font-size: 13px; gap: 5px;}
-.ledger-root .stage.on{padding: 7px 9px;}}
-.ledger-root .partyhead{display: flex; justify-content: space-between; align-items: flex-start;
-  gap: 20px; flex-wrap: wrap; margin-bottom: 18px;
+.ledger-root .stages .stage{padding: 8px 10px; font-size: 13px; gap: 5px;}
+.ledger-root .stages .stage.on{padding: 7px 9px;}}
+.ledger-root .partyhead{display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start;
+  gap: 16px 24px; margin-bottom: 18px;
   background: var(--card); border: 1px solid var(--line);
   border-radius: 18px; padding: 18px 20px; box-shadow: var(--shadow);}
+.ledger-root .partyhead-main{min-width: 0; overflow-wrap: anywhere;}
 .ledger-root .partyname{display: flex; align-items: center; gap: 10px;}
 .ledger-root .partyname .xbtn{flex: none;}
 .ledger-root .partyhead h1{margin: 8px 0 4px; font-size: 25px; font-weight: 800; letter-spacing: -0.01em;}
 .ledger-root .partyhead-figure{text-align: right;}
-.ledger-root .partyhead-figure .card-amt{color: var(--brass);}
-.ledger-root .partyhead-actions{display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; justify-content: flex-end;}
+.ledger-root .partyhead-figure .card-amt{color: var(--brass-text);}
+.ledger-root .partyhead-actions{grid-column: 1 / -1; display: flex; align-items: center;
+  gap: 8px; padding-top: 16px; border-top: 1px solid var(--line); flex-wrap: wrap;}
+.ledger-root .partyhead-actions .btn{white-space: nowrap;}
+.ledger-root .partyhead-tools{display: flex; align-items: center; gap: 8px; margin-left: auto;}
 .ledger-root .backbtn{display: inline-flex; align-items: center; gap: 5px;
   padding: 6px 13px 6px 9px; border-radius: 999px;
   border: 1px solid var(--line); background: var(--card2); color: var(--muted);
@@ -323,7 +338,7 @@
 .ledger-root .backbtn:hover svg{transform: translateX(-2px);}
 .ledger-root .backbtn:active{transform: scale(0.97);}
 .ledger-root .side{font-size: 0.72em; font-weight: 800; color: var(--muted); letter-spacing: 0.04em;}
-.ledger-root .btn.small{padding: 7px 12px; font-size: 12.5px; border-radius: 9px; white-space: nowrap;}
+.ledger-root .btn.small{min-height: 32px; padding: 5px 10px; font-size: 12px; border-radius: 6px; white-space: nowrap;}
 .ledger-root .ledger tr.unpriced .btn.small{margin-left: auto;}
 .ledger-root .pendinggrid{display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 13px;}
 .ledger-root .pendingcard{background: var(--card); border: 1px solid var(--line); border-radius: 16px;
@@ -613,11 +628,13 @@
 .ledger-root .billhead-acts{justify-content: flex-start;}
 .ledger-root .billhead-party{font-size: 15px;}
 .ledger-root .packet-bar{flex-wrap: wrap;}
-.ledger-root .partyhead{padding: 14px; border-radius: 16px;}
+.ledger-root .partyhead{grid-template-columns: minmax(0, 1fr); padding: 14px; border-radius: 16px;}
 .ledger-root .partyhead h1{font-size: 21px;}
 .ledger-root .partyhead-figure{text-align: left; width: 100%;}
 .ledger-root .partyhead-actions{justify-content: flex-start;}
-.ledger-root .partyhead-actions .btn{flex: 1;}
+.ledger-root .partyhead-actions > .btn{flex: 1 1 140px;}
+.ledger-root .partyhead-tools{width: 100%; margin-left: 0;}
+.ledger-root .partyhead-tools .btn{flex: 1;}
 .ledger-root .pendinggrid{grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;}
 .ledger-root .shot img, .ledger-root .shot.blank{height: 128px;}
 .ledger-root .tabs{gap: 2px;}
@@ -767,7 +784,6 @@ to{opacity: 0}}
   border-radius: 10px; display: block;}
 .ledger-root .shotbtn{border: none; background: none; padding: 0; display: block;
   width: auto; max-width: 100%; line-height: 0; cursor: zoom-in;}
-.ledger-root .btn.small{padding: 6px 12px; font-size: 12px;}
 .ledger-root .rev-shot-acts{display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;}
 .ledger-root .rev-big{display: flex; flex-direction: column; align-items: center; gap: 12px;}
 .ledger-root .rev-big .stage img{max-height: 82vh;}
@@ -1145,6 +1161,9 @@ to{opacity: 0}}
 .ledger-root .billgoods{display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px;
   font-size: 12.5px; font-weight: 500; color: var(--muted);}
 .ledger-root tr.unpriced .billgoods{font-size: 13.5px; font-weight: 700; color: var(--fg); margin-top: 0;}
+/* "+2 more": a count, not a line of goods — said quietly so the one line that
+   is named stays the thing being read. */
+.ledger-root .billgoods .more{font-weight: 400; opacity: 0.75; font-variant-numeric: tabular-nums;}
 
 /* A settled account, in green: its header, and its row or card in the lists */
 .ledger-root .partyhead.settled{background: linear-gradient(var(--green-tint), var(--green-tint)), var(--card);
@@ -1174,3 +1193,136 @@ to{opacity: 0}}
 .ledger-root .waited{font-weight: 700; font-variant-numeric: tabular-nums;}
 .ledger-root .waited.due{color: var(--amber-text);}
 .ledger-root .waited.late{color: var(--red);}
+
+/* ── The scanning screen ───────────────────────────────────────────────────
+ *
+ * One shutter and a count, over as much viewfinder as the screen will give.
+ * Everything is sized for a thumb on a phone held in one hand, because the
+ * other one is holding the bill — and placed low, where the thumb already is,
+ * rather than centred where it looks tidiest.
+ */
+/*
+ * A real height, not a minimum.
+ *
+ * `min-height` leaves the box free to be only as tall as its contents, so the
+ * flex children had nothing definite to fill and the viewfinder collapsed to
+ * the size of the shutter bar under it. `100dvh` rather than `100vh` because a
+ * phone's address bar slides away as you scroll and `vh` keeps counting the
+ * space it used to occupy — which puts the shutter below the bottom of the
+ * screen on exactly the phones this is for.
+ */
+.ledger-root.shoot{display: flex; flex-direction: column; background: #000; padding: 0;
+  height: 100vh; height: 100dvh; overflow: hidden;}
+.ledger-root.shoot .cam{gap: 0; flex: 1 1 auto; justify-content: space-between; width: 100%;
+  min-height: 0;}
+/* The viewfinder takes everything the shutter bar does not. */
+.ledger-root.shoot .cam-stage{flex: 1 1 auto; aspect-ratio: auto; border: none; border-radius: 0;
+  width: 100%; min-height: 0; height: auto;}
+.ledger-root.shoot .cam-stage video{height: 100%; width: 100%; object-fit: cover;}
+.ledger-root.shoot .shoot-bar{flex: 0 0 auto;}
+.ledger-root.shoot .cam-hint{display: none;}
+.ledger-root.shoot .cam-controls{gap: 0;}
+
+.ledger-root .shoot-stack{position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 50; padding: 7px 18px; border-radius: 999px;
+  background: rgba(0,0,0,0.62); color: #fff; border: 1px solid rgba(255,255,255,0.28);
+  font-size: 14px; font-weight: 800; letter-spacing: 0.04em; backdrop-filter: blur(6px);}
+
+.ledger-root .shoot-bar{display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  width: 100%; padding: 10px 18px calc(12px + env(safe-area-inset-bottom)); background: #000;}
+
+/* The one control. Big enough to hit without looking, which is the point —
+   the eyes are on the paper, not the phone. */
+.ledger-root .shoot-btn{width: 88px; height: 88px; border-radius: 50%; padding: 0;
+  border: 5px solid rgba(255,255,255,0.9); background: #fff;
+  transition: transform 60ms ease;}
+.ledger-root .shoot-btn:active{transform: scale(0.9); background: var(--brass);}
+.ledger-root .shoot-btn:disabled{opacity: 0.35;}
+
+.ledger-root .shoot-count{font-size: 30px; font-weight: 900; color: #fff;
+  font-variant-numeric: tabular-nums; text-align: left;}
+/* The number jumps on the press itself, never on the upload finishing. */
+.ledger-root .shoot-count.bump{animation: shootbump 140ms ease-out;}
+@keyframes shootbump{
+from{transform: scale(1.35); color: var(--brass)}
+to{transform: scale(1); color: #fff}}
+
+.ledger-root .shoot-status{font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.6);
+  text-transform: uppercase; letter-spacing: 0.1em; text-align: right;}
+
+@media (prefers-reduced-motion: reduce){
+.ledger-root .shoot-count.bump{animation: none}
+.ledger-root .shoot-btn:active{transform: none}}
+
+.ledger-root .shoot-nocam{position: fixed; inset: 0; z-index: 60; display: flex;
+  flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  padding: 32px; background: #000; color: #fff; text-align: center;}
+.ledger-root .shoot-nocam p{font-size: 16px; font-weight: 600; max-width: 22rem;}
+.ledger-root .shoot-nocam button{padding: 12px 26px; border-radius: 999px;
+  background: var(--brass); color: var(--brass-ink); font-weight: 800;}
+
+/*
+ * Where the paper is: which stack a slip came off, and how far down it sits.
+ *
+ * Counted over the whole pile as photographed, so it does not count down as
+ * bills are filed — the seventh slip of stack A is still the seventh
+ * afterwards, which is what makes it possible to put a hand on it again.
+ */
+.ledger-root .rev-place{display: inline-block; padding: 4px 12px; border-radius: 999px;
+  background: var(--brass); color: var(--brass-ink);
+  font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;}
+
+
+/* ── The cash screen ───────────────────────────────────────────────────────
+ *
+ * A day of the drawer, read the way the paper register is read: what was in it
+ * to start, what moved, what should be there now, and what was actually
+ * counted. Cash and bank are laid out side by side and never added together —
+ * only one of them can be counted at the end of the day.
+ */
+.ledger-root .cash-head{display: flex; align-items: baseline; justify-content: space-between; gap: 12px;}
+
+.ledger-root .cash-day{display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 0 0 14px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--card);}
+.ledger-root .cash-day-name{display: flex; align-items: center; gap: 10px;
+  font-size: 17px; text-align: center;}
+.ledger-root .cash-day .xbtn{width: 40px; height: 40px; display: grid; place-items: center;}
+.ledger-root .cash-day .xbtn:disabled{opacity: 0.3;}
+
+.ledger-root .cash-panels{display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px; margin-bottom: 14px;}
+.ledger-root .cash-panel{border: 1px solid var(--line); border-radius: 14px;
+  background: var(--card); padding: 14px 16px;}
+.ledger-root .cash-panel h2{margin: 0 0 9px; font-size: 12px; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);}
+.ledger-root .cash-panel dl{margin: 0; display: flex; flex-direction: column; gap: 5px;}
+.ledger-root .cash-panel dl > div{display: flex; justify-content: space-between; gap: 16px;}
+.ledger-root .cash-panel dt{color: var(--muted); font-size: 14px;}
+.ledger-root .cash-panel dd{margin: 0; font-variant-numeric: tabular-nums; font-size: 15px;}
+.ledger-root .cash-panel dd b{font-size: 18px;}
+/* The line the eye stops at: everything above it adds up to this. */
+.ledger-root .cash-panel dl > div.rule{border-top: 1px solid var(--line);
+  margin-top: 4px; padding-top: 7px;}
+
+.ledger-root .cash-verdict{margin: 11px 0 0; display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 700; color: var(--muted);}
+.ledger-root .cash-verdict.ok{color: var(--green, #2f7a44);}
+.ledger-root .cash-verdict.bad{color: var(--red);}
+.ledger-root .cash-verdict.waiting{color: var(--amber, #a8760f);}
+
+.ledger-root .cash-find{width: 100%; max-width: 320px; margin-bottom: 10px;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px;
+  background: var(--card); color: var(--fg); font-size: 14px;}
+
+.ledger-root .ledger td.pos{color: var(--green, #2f7a44);}
+.ledger-root .ledger td.neg{color: var(--red);}
+/* A bank row is in the day but never in the drawer, so it reads one step back. */
+.ledger-root .ledger tr.viabank td{opacity: 0.72;}
+
+@media print{
+  .ledger-root .cash-day{border: none; padding: 0; justify-content: flex-start;}
+  .ledger-root .cash-day .xbtn{display: none;}
+  .ledger-root .cash-panel{break-inside: avoid;}
+}

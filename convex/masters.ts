@@ -75,6 +75,7 @@ export const createLedger = mutation({
     openingSide: v.union(v.literal("Dr"), v.literal("Cr")),
     openingAsOf: v.number(),
     notes: v.optional(v.string()),
+    commissionTo: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const group = await ctx.db.get(args.groupId);
@@ -125,6 +126,7 @@ export const updateLedger = mutation({
     openingSide: v.optional(v.union(v.literal("Dr"), v.literal("Cr"))),
     openingAsOf: v.optional(v.number()),
     notes: v.optional(v.string()),
+    commissionTo: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     monthly: v.optional(v.number()),
     payee: v.optional(v.string()),
@@ -134,6 +136,11 @@ export const updateLedger = mutation({
     const before = await ctx.db.get(id);
     if (patch.aadhaar !== undefined) {
       patch.aadhaar = patch.aadhaar.replace(/\D/g, "") || undefined;
+    }
+    // A blank means nobody is owed a commission on this account any more.
+    // Patching the field to undefined is what removes it.
+    if (patch.commissionTo !== undefined) {
+      patch.commissionTo = patch.commissionTo.trim() || undefined;
     }
     if (patch.name && before) {
       const group = await ctx.db.get(before.groupId);
