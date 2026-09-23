@@ -1,5 +1,5 @@
 import { internalMutation, mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { record } from "./lib/history";
@@ -884,6 +884,59 @@ export const deleteBill = mutation({
   },
 });
 
+/** Return bill photos to Name at their original stack position and undo the entry. */
+export const revertBill = mutation({
+  args: { filingId: v.id("filing") },
+  handler: async (ctx, { filingId }) => {
+    const row = await ctx.db.get(filingId);
+    if (!row) return { reverted: false as const, pages: 0 };
+
+    const party = await ctx.db.get(row.partyLedgerId);
+    const voucher = await ctx.db.get(row.voucherId);
+
+    if (!voucher) throw new ConvexError("This bill entry is no longer available.");
+
+    // Only bill photos return to Name; other documents stay with the archived entry.
+    const shots = (voucher?.attachments ?? []).filter((a) =>
+      typeof a === "string" ? true : a.kind === "bill"
+    );
+    const storageIds = shots.map((a) => (typeof a === "string" ? a : a.storageId));
+
+    if (!storageIds.length) throw new ConvexError("This bill has no photos to send back to Name.");
+
+    // Keep all pages together when the bill is named again.
+    const groupId = storageIds.length > 1 ? `revert-${row.voucherId}` : undefined;
+
+    for (const storageId of storageIds) {
+      await ctx.db.insert("inbox", {
+        storageId,
+        // Preserve the original position in the stack.
+        at: row.capturedAt,
+        tags: voucher?.tags,
+        groupId,
+        stack: row.stack,
+      });
+    }
+
+    // Trash purging must not delete photos now owned by the inbox.
+    await ctx.db.patch(row.voucherId, {
+      attachments: voucher.attachments.filter((a) => !shots.includes(a)),
+      updatedAt: Date.now(),
+    });
+
+    await ctx.runMutation(api.vouchers.remove, { id: row.voucherId });
+    await ctx.db.delete(filingId);
+
+    await record(
+      ctx,
+      "filing.revertBill",
+      `Sent a bill of ${party?.name ?? "a customer"} back to be named again`,
+      { entity: "voucher", entityId: row.voucherId }
+    );
+    return { reverted: true as const, pages: storageIds.length };
+  },
+});
+
 export const partyBills = query({
   args: { partyLedgerId: v.id("ledgers") },
   handler: async (ctx, { partyLedgerId }) => {
@@ -898,12 +951,17 @@ export const partyBills = query({
     const bills = [];
     for (const r of rows) {
       const voucher = await ctx.db.get(r.voucherId);
-      const first = voucher?.attachments?.[0];
-      const storageId = first
-        ? typeof first === "string"
-          ? first
-          : first.storageId
-        : undefined;
+      // Preserve attachment order across every page of the bill.
+      const shots = (voucher?.attachments ?? []).filter((a) =>
+        typeof a === "string" ? true : a.kind === "bill"
+      );
+      const photos = (
+        await Promise.all(
+          shots.map((a) =>
+            ctx.storage.getUrl(typeof a === "string" ? a : a.previewStorageId ?? a.storageId)
+          )
+        )
+      ).filter((url): url is string => Boolean(url));
       bills.push({
         id: r._id,
         voucherId: r.voucherId,
@@ -917,7 +975,8 @@ export const partyBills = query({
         stack: r.stack ?? null,
         slot: r.slot ?? null,
         slotLabel: r.slot === undefined ? null : slotLabel(r.slot),
-        photo: storageId ? await ctx.storage.getUrl(storageId) : null,
+        photo: photos[0] ?? null,
+        photos,
       });
     }
     bills.sort((a, b) => a.date - b.date);

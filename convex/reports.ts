@@ -43,6 +43,35 @@ async function context(ctx: QueryCtx) {
   };
 }
 
+/**
+ * Vouchers that exist only because a slip was named on the sorting side.
+ *
+ * Naming a bill in the sorter opens the customer's account and writes a
+ * pending voucher to hang the photographs on — it carries no amount and no
+ * entries, so it has never touched a balance. What it did do was appear: two
+ * hundred-odd blank SAL- lines in the day book and on the customers' own
+ * ledgers, for paper that has only been sorted, not yet read.
+ *
+ * So the books ignore them until somebody prices one. The moment an amount is
+ * entered the voucher becomes final and every report treats it as the ordinary
+ * sale it now is — nothing is hidden from the books, only from the pages that
+ * are meant to show what has actually been entered.
+ *
+ * The pricing queue (`pendingBills`, and the `unpriced` count on the front
+ * page) is deliberately NOT filtered: that queue is the list of these very
+ * bills, and it is how they get priced.
+ */
+async function sortingOnly(ctx: QueryCtx): Promise<Set<string>> {
+  const filed = await ctx.db.query("filing").collect();
+  return new Set(filed.map((row) => String(row.voucherId)));
+}
+
+/** A voucher the books should not show yet: sorted, but not priced. */
+const unpricedFromSorting = (
+  vch: { _id: unknown; status: string },
+  sorted: Set<string>
+) => vch.status === "pending" && sorted.has(String(vch._id));
+
 const openingSigned = (l: Doc<"ledgers">) => signed(l.openingSide, l.openingBalance);
 
 type Attachment =
@@ -197,12 +226,13 @@ export const ledger = query({
       });
     }
 
+    const fromSorting = await sortingOnly(ctx);
     const pending = (
       await ctx.db
         .query("vouchers")
         .withIndex("by_party", (q) => q.eq("partyLedgerId", ledgerId))
         .collect()
-    ).filter((vch) => vch.status === "pending");
+    ).filter((vch) => vch.status === "pending" && !unpricedFromSorting(vch, fromSorting));
 
     /**
      * Deliveries from this supplier. They carry no entries, so they never touch
@@ -261,11 +291,14 @@ export const dayBook = query({
   args: { from: v.optional(v.number()), to: v.optional(v.number()) },
   handler: async (ctx, { from, to }) => {
     const { ledgerById, typeById, groupById } = await context(ctx);
+    const sorted = await sortingOnly(ctx);
     const all = await ctx.db.query("vouchers").withIndex("by_date").collect();
     const inWindow = all.filter(
       (vch) =>
         (from === undefined || vch.date >= from) &&
-        (to === undefined || vch.date <= to)
+        (to === undefined || vch.date <= to) &&
+        // A slip that has only been sorted is not a day's work yet.
+        !unpricedFromSorting(vch, sorted)
     );
     inWindow.sort(
       (a, b) =>
@@ -326,10 +359,15 @@ async function partyRows(ctx: QueryCtx, groupName: string) {
     byLedger.get(key)!.push(line);
   }
 
-  const pendingAll = await ctx.db
-    .query("vouchers")
-    .withIndex("by_status", (q) => q.eq("status", "pending"))
-    .collect();
+  // Sorted-but-unpriced slips are left out here too, so a party's "3 pending"
+  // badge can never disagree with the empty list behind it.
+  const sorted = await sortingOnly(ctx);
+  const pendingAll = (
+    await ctx.db
+      .query("vouchers")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .collect()
+  ).filter((vch) => !unpricedFromSorting(vch, sorted));
 
   return parties.map((account) => {
     const lines = byLedger.get(account._id as string) ?? [];

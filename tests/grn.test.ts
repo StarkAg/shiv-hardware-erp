@@ -6,7 +6,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api, internal } from '../convex/_generated/api'
-import { deliveryChecks, withDeliveryLines } from '../src/features/bills/Deliveries'
+import { dateForDeliveries, deliveryChecks, withDeliveryLines } from '../src/features/bills/Deliveries'
 import { readNote } from '../src/features/receive/readNote'
 
 const modules = import.meta.glob('../convex/**/*.ts')
@@ -239,5 +239,46 @@ describe('delivery lines on the bill', () => {
     const out = withDeliveryLines(already, [delivery(['Sunmica 0.8mm LW 8340'])], catalog)
     expect(out).toHaveLength(1)
     expect(out[0].amount).toBe(500)
+  })
+})
+
+/**
+ * A supplier's bill is dated when the goods went out, not when somebody got
+ * round to entering it. Before this, the form opened on today and nobody
+ * thought to change it — so a Friday spent entering last week's bills dated
+ * the lot Friday, and the supplier's statement then disagreed with the books
+ * by a week.
+ */
+describe('the date a bill against deliveries carries', () => {
+  const on = (y: number, m: number, d: number) => ({ date: Date.UTC(y, m, d) })
+
+  it('takes the delivery\'s own day', () => {
+    expect(dateForDeliveries([on(2026, 8, 14)])).toBe('2026-09-14')
+  })
+
+  it('takes the latest when one bill covers several deliveries', () => {
+    // Goods cannot be billed before they have arrived, so the bill is dated
+    // by the last of them rather than the first.
+    expect(dateForDeliveries([on(2026, 8, 14), on(2026, 8, 18), on(2026, 8, 11)]))
+      .toBe('2026-09-18')
+  })
+
+  it('gives nothing back when no delivery is ticked, so the typed date stands', () => {
+    expect(dateForDeliveries([])).toBeNull()
+  })
+
+  it('ignores a row with no usable date rather than dating the bill 1970', () => {
+    expect(dateForDeliveries([{ date: Number.NaN }, on(2026, 8, 14)])).toBe('2026-09-14')
+    expect(dateForDeliveries([{ date: Number.NaN }])).toBeNull()
+  })
+
+  /**
+   * GRN dates are stored as UTC day boundaries and the bill's date is read
+   * back as YYYY-MM-DD, so the two have to agree at the edges of a day or a
+   * delivery booked in the evening comes back dated the day before.
+   */
+  it('does not slip a day at either end of one', () => {
+    expect(dateForDeliveries([{ date: Date.UTC(2026, 0, 1, 0, 0, 0) }])).toBe('2026-01-01')
+    expect(dateForDeliveries([{ date: Date.UTC(2026, 0, 1, 23, 59, 59) }])).toBe('2026-01-01')
   })
 })

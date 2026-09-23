@@ -58,6 +58,7 @@ import { billSqft, isFootSized } from '../../lib/pricing'
 import { readBoardSize, sizeLabel, sqftFields, withSqft } from '../../lib/boardSize'
 import { keepTyped } from '../../lib/linePick'
 import { canonicalUnit, foldName } from '../../../convex/lib/text'
+import { catalogChangesFor } from '../../lib/learnCatalog'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
@@ -2142,7 +2143,7 @@ const postingBills = new Set<string>()
 export function BillBuilder() {
   const { id, voucherId } = useParams<{ id?: string; voucherId?: string }>()
   const navigate = useNavigate()
-  const { bills, saveBill, deleteBill, nextBillNumber, updateCustomEntry, removeCustomEntry } = useStore()
+  const { bills, saveBill, deleteBill, nextBillNumber, customCatalog, addCustomEntry, updateCustomEntry, removeCustomEntry } = useStore()
 
   const existing = id ? bills.find((b) => b.id === id) : undefined
   const [draft, setDraft] = useState<Bill>(() => (existing ? forEditing(existing) : emptyBill(nextBillNumber())))
@@ -2886,6 +2887,26 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     }, !borrowed)
   }
 
+  /**
+   * Hand the bill to the catalogue.
+   *
+   * What is worth learning — which lines are products, which figure may become
+   * a default price, what counts as already known — is decided in
+   * src/lib/learnCatalog.ts, where it is tested. This only applies the answer.
+   */
+  function learnItemsFrom(items: BillItem[], kind: BillKind) {
+    for (const change of catalogChangesFor(items, customCatalog, kind)) {
+      if (change.op === 'add') {
+        const { op: _op, name, ...rest } = change
+        const id = addCustomEntry(name)
+        if (Object.keys(rest).length) updateCustomEntry(id, rest)
+      } else {
+        const { op: _op, id, ...rest } = change
+        if (Object.keys(rest).length) updateCustomEntry(id, rest)
+      }
+    }
+  }
+
   async function save() {
     if (readOnly) { toast(`This bill is open on ${lockedBy}.`, 'error'); return }
     // A second Accept while this bill is still posting would post it twice:
@@ -2914,6 +2935,9 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
      */
     const partyTab = sideGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
+    // The catalogue learns from the bill before it is filed, so the next
+    // person to type this item finds it waiting with its unit and its rate.
+    learnItemsFrom(priced.items, (draft.kind ?? 'sale') as BillKind)
     if (!borrowed) saveBill({ ...priced, items: priced.items.map(withSqft), total, checks: checksRef.current.length ? checksRef.current : undefined })
     setView('list')
     // The party's own account when the bill already names one; a party

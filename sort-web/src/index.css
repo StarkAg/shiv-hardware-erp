@@ -537,7 +537,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* The two buttons that destroy something draw an icon rather than a glyph. A
    button centres its text on the baseline, which leaves an icon sitting low,
    so these two centre their contents properly instead. */
-.btn.slim, .lg-bin { display: inline-flex; align-items: center; justify-content: center; }
+.btn.slim, .lg-bin, .lg-undo { display: inline-flex; align-items: center; justify-content: center; }
 .btn.bin { background: var(--warn); border-color: var(--warn); color: #fff; }
 
 .full.sheet { display: flex; align-items: flex-end; justify-content: center;
@@ -617,7 +617,33 @@ button:disabled { cursor: default; }
 .photo-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .photo-canvas { display: flex; align-items: center; justify-content: center; }
 .photo-canvas img { width: 100%; height: 100%; object-fit: contain; }
+/* Send-back, under the picture rather than up in the toolbar. The toolbar is
+   where Close and the zoom live and a thumb reaches it by accident; this one
+   takes a bill off a customer, so it sits on its own with room around it. */
+.photo-foot { flex: none; display: flex; justify-content: center; gap: 10px; padding: 8px 12px 0; }
+.photo-undo { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 10px 16px; border: 1px solid #494941; border-radius: 11px;
+  background: #262620; color: #fff; font-size: 14px; }
+.photo-undo:active { background: #3a3a31; }
+
 .photo-help { flex: none; text-align: center; font-size: 12px; color: #c0bdb0; margin: 10px; }
+
+/* Which sheet of whose bill, between Close and the zoom. It is the only thing
+   in the viewer that says the picture has changed. */
+.photo-which { align-self: center; min-width: 0; overflow: hidden; white-space: nowrap;
+  text-overflow: ellipsis; font-size: 13px; color: #c0bdb0; }
+
+/* The two arrows sit over the picture, against the edges, where a thumb
+   already is when the phone is held — not in the toolbar, which the other
+   hand has to reach for. Half-transparent so they never hide the paper. */
+.photo-turn { position: absolute; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 46px; height: 64px; border: 1px solid #494941; border-radius: 12px;
+  background: rgba(17, 17, 14, .55); color: #fff; padding: 0; }
+.photo-turn.back { left: 8px; }
+.photo-turn.on { right: 8px; }
+.photo-turn:disabled { opacity: .25; }
+.photo-turn:active:not(:disabled) { background: rgba(38, 38, 32, .95); }
 .photo-error { padding: 24px; }
 @media (max-height: 500px) and (orientation: landscape) {
   .bar { padding-block: 4px; }
@@ -639,6 +665,20 @@ button:disabled { cursor: default; }
   border: 1px solid var(--line); border-radius: 10px; background: var(--card);
   font-size: 17px; color: var(--muted); }
 .lg-bin:active { background: var(--warn); border-color: var(--warn); color: #fff; }
+
+/* Send-back sits exactly where the bin sat, and is the same size — but it
+   presses in the ordinary colour, because it undoes rather than destroys. */
+.lg-undo { flex: 0 0 auto; align-self: center; width: 44px; min-height: 44px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+  color: var(--muted); }
+.lg-undo:active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+/* How many sheets are behind this one, on the corner of the thumbnail. */
+.lg-photo { position: relative; }
+.lg-sheets { position: absolute; right: 3px; bottom: 3px; min-width: 18px; padding: 0 4px;
+  border-radius: 6px; background: rgba(17, 17, 14, .78); color: #fff;
+  font-size: 11px; line-height: 18px; text-align: center; }
+
 .ask .field { margin-top: 14px; }
 
 /* The new-account row is not another customer in the list — it is the way out

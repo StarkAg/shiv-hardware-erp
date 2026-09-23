@@ -41,6 +41,31 @@ const RUN_AT_IST_HOUR = 2
 // Room a full copy needs, with margin, before one is attempted.
 const MIN_FREE_BYTES = 600 * 1024 * 1024
 
+/**
+ * What has to be in a copy before it counts as a backup.
+ *
+ * This used to be two tables — vouchers and ledgers — which meant a copy could
+ * be missing the item list, every bill, the cash book or the whole attendance
+ * register and still report itself healthy. A backup that is quietly missing
+ * half the shop is worse than no backup, because it is trusted.
+ *
+ * These are the tables that cannot legitimately be empty in a working shop.
+ * Anything that can be empty on an ordinary day — the pile, the print queue,
+ * the trash — is deliberately not here, so a true empty never cries wolf.
+ */
+const MUST_HAVE = [
+  'vouchers',        // the books
+  'voucherEntries',  // the Dr/Cr behind them — balances are nothing without these
+  'ledgers',         // the accounts
+  'groups',          // the chart of accounts they hang from
+  'voucherTypes',    // the series
+  'bills',           // what the counter wrote
+  'billLines',       // the lines on them
+  'catalogStore',    // the item list
+  'customers',
+  'counters',        // the numbering — a restore without these repeats bill numbers
+]
+
 const log = (...a) => console.log(new Date().toISOString(), ...a)
 const istNow = () => new Date(Date.now() + IST)
 
@@ -64,7 +89,7 @@ function sh(args, { quiet = false } = {}) {
  * entry is inflated — a photo export runs to hundreds of megabytes and none
  * of that needs reading to know the vouchers are there.
  */
-function countRows(file, table) {
+function readTable(file, table) {
   const want = `${table}/documents.jsonl`
   const fd = fs.openSync(file, 'r')
   try {
@@ -115,14 +140,71 @@ function countRows(file, table) {
         const start = local + 30 + head.readUInt16LE(26) + head.readUInt16LE(28)
         const body = Buffer.alloc(compressed)
         fs.readSync(fd, body, 0, compressed, start)
-        const text = (method === 0 ? body : zlib.inflateRawSync(body)).toString('utf8')
-        return text.split('\n').filter((l) => l.trim()).length
+        return (method === 0 ? body : zlib.inflateRawSync(body)).toString('utf8')
       }
       p += 46 + nameLen + extraLen + commentLen
     }
     return null
   } finally {
     fs.closeSync(fd)
+  }
+}
+
+/** How many rows one table has in a copy, or null when the table is not in it. */
+function countRows(file, table) {
+  const text = readTable(file, table)
+  return text === null ? null : text.split('\n').filter((l) => l.trim()).length
+}
+
+/**
+ * What the copy holds of the item list.
+ *
+ * Counted separately from the rows because the whole inventory lives inside a
+ * single `catalogStore` document — so the row count is 1 whether the list has
+ * two hundred items in it or none. That is exactly how the hardware list
+ * emptied on 10 September 2026 without anything noticing: eight groups of
+ * screw sizes, hinges and handles went, the row was still there, and every
+ * backup that night and after reported itself healthy.
+ */
+function countInventory(file) {
+  const text = readTable(file, 'catalogStore')
+  if (!text) return null
+  let items = 0
+  let groups = 0
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const row = JSON.parse(line)
+      items += (row.customCatalog ?? []).length
+      groups += Object.keys(row.hardwareCatalog ?? {}).length
+    } catch { /* a row we cannot read is one we cannot count */ }
+  }
+  return { items, groups }
+}
+
+/**
+ * What the last copy held, so this one can be compared with it.
+ *
+ * A single small file on the volume rather than a query back to the books:
+ * the point of this check is to notice when the books have lost something, and
+ * asking the books how much they hold would answer with whatever they hold
+ * now — which is the very figure in doubt.
+ */
+const MARK = () => path.join(DATA, 'last-contents.json')
+
+function lastInventory() {
+  try {
+    return JSON.parse(fs.readFileSync(MARK(), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function rememberInventory(stock) {
+  try {
+    fs.writeFileSync(MARK(), JSON.stringify({ ...stock, at: Date.now() }))
+  } catch (e) {
+    log('could not note what this copy held:', e.message)
   }
 }
 
@@ -158,11 +240,34 @@ export async function backup(full) {
     log(`backing up (${kind})`)
     await sh(['export', '--path', tmp, ...(full ? ['--include-file-storage'] : [])])
 
-    // A copy that cannot be opened, or has no vouchers in it, is not a backup —
-    // keep it aside for a look and leave the older good copies alone.
+    // A copy that cannot be opened, or is missing part of the shop, is not a
+    // backup — keep it aside for a look and leave the older good copies alone.
+    const missing = MUST_HAVE.filter((t) => !countRows(tmp, t))
+    if (missing.length) {
+      throw new Error(`the copy is missing ${missing.join(', ')} — kept in tmp/ for inspection`)
+    }
     const vouchers = countRows(tmp, 'vouchers')
     const ledgers = countRows(tmp, 'ledgers')
-    if (!vouchers || !ledgers) throw new Error(`the copy has no ${vouchers ? 'ledgers' : 'vouchers'} in it — kept in tmp/ for inspection`)
+
+    /**
+     * The item list is counted inside its row, not by rows.
+     *
+     * A warning rather than a refusal: the copy is an honest record of what
+     * the books hold, and refusing to keep it because the shop lost something
+     * would throw away the evidence. So it is saved either way and the drop is
+     * said out loud, here and in the books, where Home can show it.
+     */
+    const stock = countInventory(tmp)
+    const before = lastInventory()
+    let warning
+    if (stock && before && before.items > 0 && stock.items < before.items * 0.8) {
+      warning = `the item list has dropped from ${before.items} to ${stock.items}`
+    }
+    if (stock && before && before.groups > 0 && stock.groups === 0) {
+      warning = `${warning ? warning + '; ' : ''}the hardware list has gone from ${before.groups} groups to none`
+    }
+    if (warning) log('WARNING:', warning)
+    if (stock) rememberInventory(stock)
 
     const bytes = fs.statSync(tmp).size
     const ist = istNow()
@@ -180,8 +285,9 @@ export async function backup(full) {
       }
       prune(path.join(DATA, 'daily'), KEEP.daily)
     }
-    log(`backed up ${file} — ${(bytes / 1048576).toFixed(1)} MB, ${vouchers} vouchers, ${ledgers} accounts`)
-    await report({ ok: true, kind, file, bytes, vouchers })
+    log(`backed up ${file} — ${(bytes / 1048576).toFixed(1)} MB, ${vouchers} vouchers, `
+      + `${ledgers} accounts, ${stock ? stock.items : '?'} items`)
+    await report({ ok: true, kind, file, bytes, vouchers, ...(stock ? { items: stock.items } : {}), ...(warning ? { warning } : {}) })
     return true
   } catch (e) {
     log('BACKUP FAILED:', e.message)
@@ -253,10 +359,14 @@ try {
   else if (cmd === 'verify') {
     // Any zip, on the volume or not — for checking a copy fetched to another machine.
     const file = fs.existsSync(String(args[0])) ? String(args[0]) : onVolume(args[0])
-    const vouchers = countRows(file, 'vouchers')
-    const ledgers = countRows(file, 'ledgers')
-    console.log(`${file}: ${vouchers ?? 'NO'} vouchers, ${ledgers ?? 'NO'} accounts`)
-    process.exit(vouchers && ledgers ? 0 : 1)
+    const missing = MUST_HAVE.filter((t) => !countRows(file, t))
+    const stock = countInventory(file)
+    console.log(`${file}`)
+    for (const t of MUST_HAVE) console.log(`  ${String(countRows(file, t) ?? 'MISSING').padStart(7)}  ${t}`)
+    console.log(`  ${String(stock ? stock.items : 'MISSING').padStart(7)}  inventory items`)
+    console.log(`  ${String(stock ? stock.groups : 'MISSING').padStart(7)}  hardware groups`)
+    if (missing.length) console.log(`\nMISSING: ${missing.join(', ')}`)
+    process.exit(missing.length ? 1 : 0)
   }
   else if (cmd === 'send') process.stdout.write(fs.readFileSync(onVolume(args[0])).toString('base64'))
   else if (cmd === 'restore') {

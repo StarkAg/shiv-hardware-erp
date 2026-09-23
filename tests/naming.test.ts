@@ -261,3 +261,85 @@ describe('placing the stack', () => {
     expect((await t.query(api.filing.placeState, { stack: 'A' })).left).toBe(1)
   })
 })
+
+describe('correcting a ledger bill', () => {
+  it('returns every page to its original stack, reverses postings, and can be named to another customer', async () => {
+    const t = await shop()
+    const first = await shoot(t, 1000, 'B', 'packet')
+    await shoot(t, 1001, 'B', 'packet')
+    await t.mutation(api.filing.nameIt, { inboxId: first, partyName: 'M/s Raj Kumar' })
+    await t.mutation(api.filing.placeNext, { stack: 'B' })
+    const [row] = await t.run(ctx => ctx.db.query('filing').collect())
+    const original = await t.run(ctx => ctx.db.get(row.voucherId))
+    const billIds = original!.attachments.map(a => typeof a === 'string' ? a : a.storageId)
+    const receipt = await t.run(async ctx => {
+      const storageId = await ctx.storage.store(new Blob(['receipt']))
+      await ctx.db.patch(row.voucherId, {
+        status: 'final', amount: 500,
+        attachments: [...original!.attachments, { storageId, kind: 'receipt' }],
+      })
+      const sales = await ctx.db.query('ledgers').withIndex('by_name', q => q.eq('name', 'Sales')).unique()
+      for (const [ledgerId, side] of [[row.partyLedgerId, 'Dr'], [sales!._id, 'Cr']] as const) {
+        await ctx.db.insert('voucherEntries', { voucherId: row.voucherId, ledgerId, side, amount: 500, date: 1000 })
+      }
+      return storageId
+    })
+
+    expect(await t.mutation(api.filing.revertBill, { filingId: row._id })).toEqual({ reverted: true, pages: 2 })
+    expect(await t.run(ctx => ctx.db.get(row.voucherId))).toBeNull()
+    expect(await t.run(ctx => ctx.db.query('voucherEntries').collect())).toHaveLength(0)
+    expect((await t.query(api.filing.partyBills, { partyLedgerId: row.partyLedgerId }))?.bills).toHaveLength(0)
+    expect((await t.query(api.filing.slots, {})).used).toBe(0)
+    const inbox = await t.run(ctx => ctx.db.query('inbox').collect())
+    expect(inbox.map(p => p.storageId)).toEqual(billIds)
+    expect(inbox.every(p => p.stack === 'B' && p.at === 1000)).toBe(true)
+    expect(new Set(inbox.map(p => p.groupId)).size).toBe(1)
+    expect(inbox[0].groupId).toBeTruthy()
+    const [archived] = await t.run(ctx => ctx.db.query('trash').collect())
+    expect(archived.attachments).toEqual([{ storageId: receipt, kind: 'receipt' }])
+    expect(archived.entries).toHaveLength(2)
+    for (const id of billIds) expect(await t.run(async ctx => (await ctx.storage.get(id)) !== null)).toBe(true)
+
+    // Retrying an already completed revert must not duplicate photos.
+    expect(await t.mutation(api.filing.revertBill, { filingId: row._id })).toEqual({ reverted: false, pages: 0 })
+    expect(await t.run(ctx => ctx.db.query('inbox').collect())).toHaveLength(2)
+    await t.mutation(api.filing.nameIt, { inboxId: inbox[0]._id, partyName: 'Correct Customer' })
+    const [renamed] = await t.run(ctx => ctx.db.query('vouchers').collect())
+    expect(renamed.partyLedgerId).not.toBe(row.partyLedgerId)
+    expect(renamed.attachments.map(a => typeof a === 'string' ? a : a.storageId)).toEqual(billIds)
+  })
+
+  it('leaves the entry intact when there are no bill photos to return', async () => {
+    const t = await shop()
+    const first = await shoot(t, 1000, 'A')
+    await t.mutation(api.filing.nameIt, { inboxId: first, partyName: 'M/s Raj Kumar' })
+    const [row] = await t.run(ctx => ctx.db.query('filing').collect())
+    await t.run(ctx => ctx.db.patch(row.voucherId, { attachments: [] }))
+    await expect(t.mutation(api.filing.revertBill, { filingId: row._id })).rejects.toThrow('no photos')
+    expect(await t.run(ctx => ctx.db.get(row.voucherId))).not.toBeNull()
+    expect(await t.run(ctx => ctx.db.get(row._id))).not.toBeNull()
+    expect(await t.run(ctx => ctx.db.query('trash').collect())).toHaveLength(0)
+  })
+
+  it('returns all bill pages in date order for the ledger gallery, excluding receipts', async () => {
+    const t = await shop()
+    const later = await shoot(t, 3000, 'A')
+    await t.mutation(api.filing.nameIt, { inboxId: later, partyName: 'M/s Raj Kumar' })
+    const first = await shoot(t, 1000, 'A', 'multi')
+    await shoot(t, 1001, 'A', 'multi')
+    await t.mutation(api.filing.nameIt, { inboxId: first, partyName: 'M/s Raj Kumar' })
+    const rows = await t.run(ctx => ctx.db.query('filing').collect())
+    const row = rows.find(r => r.capturedAt === 1000)!
+    const urls = await t.run(async ctx => {
+      const voucher = (await ctx.db.get(row.voucherId))!
+      const storageId = await ctx.storage.store(new Blob(['receipt']))
+      await ctx.db.patch(row.voucherId, { attachments: [{ storageId, kind: 'receipt' }, ...voucher.attachments] })
+      return Promise.all(voucher.attachments.map(a => ctx.storage.getUrl(typeof a === 'string' ? a : a.storageId)))
+    })
+    const ledger = await t.query(api.filing.partyBills, { partyLedgerId: row.partyLedgerId })
+    expect(ledger!.bills.map(b => b.date)).toEqual([1000, 3000])
+    expect(ledger!.bills[0].photos).toEqual(urls)
+    expect(ledger!.bills[0].photo).toBe(urls[0])
+    expect(ledger!.bills[1].photos).toHaveLength(1)
+  })
+})

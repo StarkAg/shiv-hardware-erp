@@ -701,6 +701,11 @@ export default defineSchema({
     file: v.optional(v.string()),
     bytes: v.optional(v.number()),
     vouchers: v.optional(v.number()),
+    /** Items the copy held. The whole inventory is one row, so a row count
+     *  cannot tell an empty list from a full one. */
+    items: v.optional(v.number()),
+    /** Saved, but holding noticeably less than the copy before it. */
+    warning: v.optional(v.string()),
     error: v.optional(v.string()),
   }).index("by_at", ["at"]),
 

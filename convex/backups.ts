@@ -16,6 +16,12 @@ export const record = internalMutation({
     file: v.optional(v.string()),
     bytes: v.optional(v.number()),
     vouchers: v.optional(v.number()),
+    /** How many items the copy held — the inventory lives inside one row, so
+     *  the row count says nothing about whether the list is still there. */
+    items: v.optional(v.number()),
+    /** A copy that saved cleanly but holds noticeably less than the last one.
+     *  Kept, because it is an honest record — but said out loud. */
+    warning: v.optional(v.string()),
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -36,9 +42,20 @@ export const latest = query({
     const good = recent.find((r) => r.ok) ?? null
     const lastFull = recent.find((r) => r.ok && r.kind === 'full') ?? null
     return {
-      lastGood: good && { at: good.at, kind: good.kind, bytes: good.bytes ?? null, vouchers: good.vouchers ?? null },
+      lastGood: good && {
+        at: good.at, kind: good.kind, bytes: good.bytes ?? null,
+        vouchers: good.vouchers ?? null, items: good.items ?? null,
+      },
       lastFull: lastFull && { at: lastFull.at, bytes: lastFull.bytes ?? null },
       lastFailed: recent[0] && !recent[0].ok ? { at: recent[0].at, error: recent[0].error ?? '' } : null,
+      /**
+       * A copy that saved but lost something. Surfaced beside the failures
+       * because a backup that quietly holds less than last night's is the
+       * thing nobody goes looking for.
+       */
+      lastWarning: recent.find((r) => r.ok && r.warning)
+        ? { at: recent.find((r) => r.ok && r.warning)!.at, warning: recent.find((r) => r.ok && r.warning)!.warning ?? '' }
+        : null,
     }
   },
 })

@@ -6,15 +6,16 @@
  * count alone cannot settle "is this the last of his?" — so tapping a customer
  * opens every slip they have, oldest first, with the bookmark it is sitting on.
  *
- * Read-only. Nothing here moves paper or touches an account; placing is the
- * other tab's job and pricing is the books'.
+ * Nearly read-only. The one thing it can do is take a bill back off a customer
+ * — because this screen, with the photographs side by side under one name, is
+ * where a bill filed to the wrong man is actually spotted.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import PhotoViewer from './PhotoViewer.jsx'
 import { clean } from './match.js'
-import { TrashIcon } from './icons.jsx'
+import { RevertIcon } from './icons.jsx'
 
 const money = (n) =>
   n === null || n === undefined ? null : `₹${Number(n).toLocaleString('en-IN')}`
@@ -39,15 +40,32 @@ export default function Ledger() {
 
   const rows = useQuery(anyApi.filing.folders, {})
   const one = useQuery(anyApi.filing.partyBills, open ? { partyLedgerId: open } : 'skip')
-  const deleteBill = useMutation(anyApi.filing.deleteBill)
+  const revertBill = useMutation(anyApi.filing.revertBill)
+  const [sending, setSending] = useState(null)
+  const [said, setSaid] = useState('')
+  const [error, setError] = useState('')
 
-  // The bill being taken out of the books, and the code that has to be typed
-  // before it goes. Kept per attempt rather than remembered — this is the gate
-  // on an entry leaving the books, and a remembered code is no gate at all.
-  const [binning, setBinning] = useState(null)
-  const [pin, setPin] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [wrong, setWrong] = useState('')
+  const sendBack = async (b) => {
+    if (!b || sending) return
+    setSending(b.id)
+    setSaid('')
+    setError('')
+    try {
+      const result = await revertBill({ filingId: b.id })
+      setSaid(result.reverted ? `${day(b.date)} sent back to Name` : 'This entry has already been removed')
+    } catch (e) {
+      setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
+    } finally {
+      setSending(null)
+    }
+  }
+
+  // Same 1.6 seconds as the naming flash, so the two screens feel like one app.
+  useEffect(() => {
+    if (!said) return undefined
+    const t = setTimeout(() => setSaid(''), 1600)
+    return () => clearTimeout(t)
+  }, [said])
 
   const shown = useMemo(() => {
     const q = clean(find)
@@ -55,6 +73,35 @@ export default function Ledger() {
     if (!q) return all
     return all.filter((r) => clean(r.name).includes(q))
   }, [rows, find])
+
+  /**
+   * Every sheet this customer has, in one flat run, oldest first — and where
+   * each bill's first sheet lands in it.
+   *
+   * The viewer turns pages through this, so opening any bill and pressing on
+   * walks the whole packet: sheet two of a bill, then the next bill, in the
+   * order the list on screen is already in.
+   */
+  const shots = useMemo(() => {
+    const flat = []
+    const opensAt = new Map()
+    for (const b of one?.bills ?? []) {
+      const pages = b.photos?.length ? b.photos : b.photo ? [b.photo] : []
+      if (!pages.length) continue
+      opensAt.set(b.id, flat.length)
+      pages.forEach((url, i) => {
+        flat.push({
+          url,
+          label: pages.length > 1 ? `${day(b.date)} · sheet ${i + 1}` : day(b.date),
+          // Which bill this sheet is of, so the viewer's send-back knows what
+          // it is sending back without the row being on screen.
+          billId: b.id,
+          bill: b,
+        })
+      })
+    }
+    return { flat, opensAt }
+  }, [one])
 
   /* ---------------- one customer ---------------- */
   if (open) {
@@ -95,8 +142,13 @@ export default function Ledger() {
               {one.bills.map((b) => (
                 <div key={b.id} className="lg-bill">
                   {b.photo ? (
-                    <button className="lg-photo" aria-label={`View bill from ${day(b.date)}`} onClick={() => setPhoto(b.photo)}>
+                    <button
+                      className="lg-photo"
+                      aria-label={`View bill from ${day(b.date)}`}
+                      onClick={() => setPhoto(shots.opensAt.get(b.id) ?? 0)}
+                    >
                       <img src={b.photo} alt="" loading="lazy" />
+                      {b.photos?.length > 1 && <span className="lg-sheets">{b.photos.length}</span>}
                     </button>
                   ) : (
                     <div className="lg-nophoto" />
@@ -114,13 +166,14 @@ export default function Ledger() {
                     </span>
                   </div>
                   {/* Beside the picture, because the picture is what tells you
-                      it is the wrong bill. */}
+                      it is the wrong man's bill. */}
                   <button
-                    className="lg-bin"
-                    aria-label={`Delete the bill from ${day(b.date)}`}
-                    onClick={() => { setBinning(b); setPin(''); setWrong('') }}
+                    className="lg-undo"
+                    aria-label={`Send the bill from ${day(b.date)} back to be named again`}
+                    disabled={sending !== null}
+                    onClick={() => sendBack(b)}
                   >
-                    <TrashIcon />
+                    <RevertIcon />
                   </button>
                 </div>
               ))}
@@ -128,62 +181,18 @@ export default function Ledger() {
             </div>
           </>
         )}
-        {photo && <PhotoViewer src={photo} onClose={() => setPhoto(null)} />}
-
-        {binning && (
-          <div className="full sheet" onClick={() => !busy && setBinning(null)}>
-            <div className="ask" onClick={(e) => e.stopPropagation()}>
-              <h3>Take this bill out of the books?</h3>
-              <p className="hint">
-                {day(binning.date)} · {binning.unpriced ? 'unpriced' : money(binning.amount)} ·{' '}
-                {one?.name}
-              </p>
-              <p className="hint">
-                It goes to the trash with its photograph, so the panel can put it back. Type
-                the code to confirm.
-              </p>
-              <input
-                className="field search"
-                type="password"
-                inputMode="numeric"
-                autoComplete="off"
-                autoFocus
-                placeholder="Code"
-                aria-label="Code"
-                value={pin}
-                disabled={busy}
-                onChange={(e) => { setPin(e.target.value); setWrong('') }}
-              />
-              {wrong && <p className="error">{wrong}</p>}
-              <div className="ask-acts">
-                <button className="btn ghost" disabled={busy} onClick={() => setBinning(null)}>
-                  Keep it
-                </button>
-                <button
-                  className="btn bin"
-                  disabled={busy || !pin.trim()}
-                  onClick={async () => {
-                    setBusy(true)
-                    setWrong('')
-                    try {
-                      await deleteBill({ filingId: binning.id, pin: pin.trim() })
-                      setBinning(null)
-                      setPin('')
-                    } catch (e) {
-                      // The server says "Wrong code." in words; anything else
-                      // is a real fault and is shown as it came.
-                      setWrong(String(e?.data ?? e?.message ?? e).split('\n')[0])
-                    } finally {
-                      setBusy(false)
-                    }
-                  }}
-                >
-                  {busy ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          </div>
+        {photo !== null && shots.flat.length > 0 && (
+          <PhotoViewer
+            shots={shots.flat}
+            start={photo}
+            onClose={() => setPhoto(null)}
+            onRevert={(shot) => { setPhoto(null); sendBack(shot.bill) }}
+            reverting={sending !== null}
+          />
         )}
+
+        {error && <p className="error pad" role="alert">{error}</p>}
+        {said && <div className="flash" role="status">{said}</div>}
       </div>
     )
   }

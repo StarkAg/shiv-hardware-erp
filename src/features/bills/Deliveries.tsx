@@ -132,6 +132,29 @@ export function withDeliveryLines(items: BillItem[], rows: DeliveryRow[], catalo
   return out.length ? out : items
 }
 
+/**
+ * The day a bill against deliveries carries.
+ *
+ * A supplier's bill is dated when the goods went out, so a purchase written
+ * against a delivery should carry the delivery's own date rather than the day
+ * somebody got round to entering it — which is what it used to take, because
+ * the form opened on today and nobody thought to change it. Entering last
+ * week's bills on a Friday quietly dated the lot Friday, and the supplier's
+ * statement then disagreed with the books by a week.
+ *
+ * With more than one delivery on the same bill it is the latest of them: goods
+ * cannot be billed before they have arrived.
+ *
+ * The date is stored as YYYY-MM-DD in UTC, which is how `today()` in the
+ * builder writes it, and GRN dates are stored as UTC day boundaries — so the
+ * slice lands on the right day rather than a day either side of it.
+ */
+export function dateForDeliveries(rows: { date: number }[]): string | null {
+  const days = rows.map((r) => r.date).filter((d) => Number.isFinite(d))
+  if (!days.length) return null
+  return new Date(Math.max(...days)).toISOString().slice(0, 10)
+}
+
 /** A purchase's "which deliveries is this the bill for". */
 export function AgainstDeliveries({
   draft,
@@ -160,6 +183,7 @@ export function AgainstDeliveries({
         customerName: d.customerName || row.party,
         grnIds: Array.from(new Set([...(d.grnIds ?? []), row.voucherId])),
         items: withDeliveryLines(d.items, [row], customCatalog),
+        date: dateForDeliveries([row]) ?? d.date,
       }))
     }
     onPendingDone()
@@ -169,15 +193,28 @@ export function AgainstDeliveries({
   const mine = (rows ?? []).filter((r) => linked.has(r.voucherId) || (ledgerId && r.partyLedgerId === ledgerId))
   if (!mine.length) return null
 
+  const byId = new Map((rows ?? []).map((r) => [r.voucherId, r]))
+  /** The bill's date, once this set of deliveries is on it. */
+  const dateFor = (ids: Set<string>, fallback: string) =>
+    dateForDeliveries([...ids].map((id) => byId.get(id)).filter((r): r is DeliveryRow => Boolean(r)))
+    ?? fallback
+
   const toggle = (row: DeliveryRow) =>
     setDraft((d) => {
       const ids = new Set(d.grnIds ?? [])
       if (ids.has(row.voucherId)) {
         ids.delete(row.voucherId)
-        return { ...d, grnIds: [...ids] }
+        // Unticking the last one leaves the date where it is rather than
+        // springing back to today: it may well have been typed by hand.
+        return { ...d, grnIds: [...ids], date: dateFor(ids, d.date) }
       }
       ids.add(row.voucherId)
-      return { ...d, grnIds: [...ids], items: withDeliveryLines(d.items, [row], customCatalog) }
+      return {
+        ...d,
+        grnIds: [...ids],
+        items: withDeliveryLines(d.items, [row], customCatalog),
+        date: dateFor(ids, d.date),
+      }
     })
 
   return (
