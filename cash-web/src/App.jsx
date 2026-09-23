@@ -121,6 +121,18 @@ const isShutDay = (closes, store, todayKey, date) => {
   if (dateFromKey(date).getDay() !== 2) return false
   return !(store[date.slice(0, 7)] || []).some((e) => e.date === date)
 }
+// Whether the register PAGE should be stamped closed, which is a looser
+// question than whether the books count the day as shut. A Tuesday that is
+// still running has nothing written on it to contradict the stamp, so it
+// carries one; the first entry of the day takes it straight off again, which
+// is what happens when the shutters go up after all. The books stay strict —
+// the worked-day counts should not assume a holiday that may not happen.
+const looksShut = (closes, store, todayKey, date) => {
+  if (isShutDay(closes, store, todayKey, date)) return true
+  if (closes[date]) return false
+  if (dateFromKey(date).getDay() !== 2) return false
+  return !(store[date.slice(0, 7)] || []).some((e) => e.date === date)
+}
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
@@ -1744,6 +1756,9 @@ function CashReport({
   const isToday = dk === base
   const day = dateFromKey(dk)
   const [picked, setPicked] = useState(null)
+  // Tuesday, or any day marked shut, is stamped across the page rather than
+  // left looking like a day somebody forgot to write up.
+  const shut = looksShut(closes, store, todayKey, dk)
 
   useEffect(() => { setPicked(null) }, [dk])
 
@@ -1828,6 +1843,7 @@ function CashReport({
     dealer: isDealer(e),
   })
   const sheetData = () => ({
+    shut,
     dateLabel: `${pad(day.getDate())}/${pad(day.getMonth() + 1)}/${String(day.getFullYear()).slice(2)}`,
     dayLabel: `${WD[day.getDay()]}, ${day.getDate()} ${MON[day.getMonth()]} ${day.getFullYear()}`,
     openCash: opening,
@@ -1851,13 +1867,25 @@ function CashReport({
         <div className="dcenter">
           <div className="dbig">{WD[day.getDay()]}, {day.getDate()} {MON[day.getMonth()]}</div>
           {isToday
-            ? <div className="daysub">{closedToday ? 'New day' : 'Register'}</div>
+            ? <div className={`daysub ${shut ? 'away' : ''}`}>
+                {shut ? 'Shop closed' : closedToday ? 'New day' : 'Register'}
+              </div>
             : <button className="todaybtn" onClick={() => setViewing(null)}>Go to today</button>}
         </div>
         <button onClick={() => step(1)} aria-label="Next day" disabled={isToday}>›</button>
       </div>
 
       <div className="page">
+        {/* Angled across the sheet like a rubber stamp, because a closed day
+            and a day nobody has written up yet look identical otherwise. */}
+        {shut && (
+          <div className="shutstamp">
+            <div className="ssbox">
+              <span className="ssmain">SHOP CLOSED</span>
+              <span className="sssub">दुकान बंद</span>
+            </div>
+          </div>
+        )}
         <div className="pagetop">
           <div className="pagestamp">
             <span>Date</span>
