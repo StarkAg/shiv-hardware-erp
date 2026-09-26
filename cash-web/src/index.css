@@ -1088,3 +1088,26 @@ body {
 /* What a staff delete is about to take with it, said before it is confirmed. */
 .sheetnote { margin: 10px 0 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
 .sheetnote.bad { color: var(--red, #9a3412); font-weight: 600; }
+
+/* Saved counting detail and search across the complete cash book. */
+.saved-counts { flex: none; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); color: var(--fg); text-align: left; font-size: 13px; }
+.saved-counts summary { cursor: pointer; font-weight: 700; }
+.saved-counts div { margin-top: 5px; font-variant-numeric: tabular-nums; }
+.wrap.fit.edit .card { overflow-y: auto; }
+.cash-search { display: flex; flex-direction: column; flex: 1; min-height: 0; color: var(--fg); }
+.search-heading { flex: none; padding: 6px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.search-heading h2 { margin: 0; font-size: 18px; }
+.cash-search input { flex: none; width: 100%; min-height: 44px; margin: 10px 0; padding: 10px 12px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+.search-filters { flex: none; display: flex; gap: 8px; }
+.search-filters button, .search-more { min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); color: var(--fg); font: inherit; }
+.search-filters button[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); }
+.search-summary { flex: none; margin: 12px 0; font-size: 13px; color: var(--muted); }
+.search-results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.search-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 13px 0; min-height: 60px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--fg); text-align: left; font: inherit; }
+.search-result span { min-width: 0; }
+.search-result strong { display: block; overflow-wrap: anywhere; }
+.search-result small { display: block; margin-top: 5px; color: var(--muted); }
+.search-result > b { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.search-result:hover, .search-result:focus-visible { background: var(--card2); }
+.search-more { display: block; margin: 12px auto; }
+@media print { .cash-search { display: none !important; } }

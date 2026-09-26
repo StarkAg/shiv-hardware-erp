@@ -3,6 +3,7 @@ import { convex, flush, queue, pendingCount } from './sync.js'
 import { anyApi } from 'convex/server'
 import { registerPdf } from './pdf.js'
 import StaffPayments from './StaffPayments.jsx'
+import CashSearch from './CashSearch.jsx'
 
 // Shiv Hardware cash book.
 //
@@ -57,6 +58,12 @@ function writeCache(key, val) {
 // The book began as a tab inside the attendance app and used to carry that
 // storage over on first run. Nothing was ever written there for real, so the
 // import is gone — the shop starts from an empty book and fills it from Convex.
+function clearCountDraft(key) {
+  const drafts = readCache(DRAFT_KEY, {})
+  delete drafts[key]
+  writeCache(DRAFT_KEY, drafts)
+}
+
 function loadCash(key) {
   return readCache(key, null) || {}
 }
@@ -265,17 +272,19 @@ export default function App() {
   }
 
   const [closes, setCloses] = useState(() => loadCash(CLOSES_KEY))
-  const closeDay = (date, counted) => {
+  const closeDay = (date, counted, cashCounts) => {
+    const at = Date.now()
     setCloses((prev) => {
-      const next = { ...prev, [date]: { counted, at: Date.now() } }
+      const next = { ...prev, [date]: { counted, cashCounts, at, updatedAt: at } }
       writeCache(CLOSES_KEY, next)
       return next
     })
-    queue({ t: 'close', date, counted, at: Date.now(), updatedAt: Date.now() })
+    queue({ t: 'close', date, counted, cashCounts, at, updatedAt: at })
+    clearCountDraft(`close:${date}`)
     const book = bookAtEnd(store, closes, openings, date, 'cash')
     const off = counted - book
     record('close', date, `Counted ${inr(counted)}, register ${inr(book)}`,
-      { changes: off === 0 ? ['Tallied'] : [`${off < 0 ? 'Short' : 'Over'} ${inr(Math.abs(off))}`] })
+      { changes: [...(off === 0 ? ['Tallied'] : [`${off < 0 ? 'Short' : 'Over'} ${inr(Math.abs(off))}`]), ...describeCounts(cashCounts)] })
   }
   const reopenDay = (date) => {
     setCloses((prev) => {
@@ -308,19 +317,22 @@ export default function App() {
   // What the shop was holding when the book was started, or on any day it needs
   // correcting. Both sides at once, because a day has one starting position.
   const [openings, setOpenings] = useState(() => loadCash(OPENINGS_KEY))
-  const setOpening = (date, cash, online) => {
+  const setOpening = (date, cash, online, cashCounts = null, bankBalances = null) => {
+    const at = Date.now()
     const before = openings[date]
     setOpenings((prev) => {
-      const next = { ...prev, [date]: { cash, online, at: Date.now() } }
+      const next = { ...prev, [date]: { cash, online, cashCounts, bankBalances, at, updatedAt: at } }
       writeCache(OPENINGS_KEY, next)
       return next
     })
-    queue({ t: 'opening', date, cash, online, at: Date.now(), updatedAt: Date.now() })
+    queue({ t: 'opening', date, cash, online, cashCounts, bankBalances, at, updatedAt: at })
+    clearCountDraft(`open-cash:${date}`)
+    clearCountDraft(`open-online:${date}`)
     record('opening', date, `Opening cash ${inr(cash)}, online ${inr(online)}`, {
-      changes: before
+      changes: [...(before
         ? [`cash ${inr(before.cash)} → ${inr(cash)}`, `online ${inr(before.online)} → ${inr(online)}`]
             .filter((_, i) => (i ? before.online !== online : before.cash !== cash))
-        : undefined,
+        : []), ...describeCounts(cashCounts), ...describeCounts(bankBalances, true)],
     })
   }
   const removeOpening = (date) => {
@@ -364,7 +376,7 @@ export default function App() {
       const next = { ...prev }
       for (const r of server.closes) {
         if (r.deleted) delete next[r.date]
-        else if (r.updatedAt > (next[r.date]?.updatedAt || 0)) next[r.date] = { counted: r.counted, at: r.at, updatedAt: r.updatedAt, shut: !!r.shut }
+        else if (r.updatedAt > (next[r.date]?.updatedAt || 0)) next[r.date] = { counted: r.counted, cashCounts: r.cashCounts, at: r.at, updatedAt: r.updatedAt, shut: !!r.shut }
       }
       writeCache(CLOSES_KEY, next)
       return next
@@ -374,7 +386,7 @@ export default function App() {
       const next = { ...prev }
       for (const r of server.openings) {
         if (r.deleted) delete next[r.date]
-        else if (r.updatedAt > (next[r.date]?.updatedAt || 0)) next[r.date] = { cash: r.cash, online: r.online, at: r.at, updatedAt: r.updatedAt }
+        else if (r.updatedAt > (next[r.date]?.updatedAt || 0)) next[r.date] = { cash: r.cash, online: r.online, cashCounts: r.cashCounts, bankBalances: r.bankBalances, at: r.at, updatedAt: r.updatedAt }
       }
       writeCache(OPENINGS_KEY, next)
       return next
@@ -537,6 +549,10 @@ export default function App() {
 
       <div className="card fitcard">
         {mode === 'staff' ? <StaffPayments today={todayKey} date={viewing || todayKey} onDate={setViewing} onSaved={runSync} guard={guard} initialStaff={staffFocus} />
+          : mode === 'search' ? <CashSearch store={store} onPick={(entry) => {
+            setViewing(entry.date)
+            showInRegister(entry.id)
+          }} />
           : mode === 'entry' ? <CashEntry {...shared} />
           : mode === 'totals' ? <CashTotals {...shared} />
             : mode === 'report' ? <CashReport {...shared} />
@@ -571,6 +587,11 @@ export default function App() {
 // solid brass silhouette, and the children after it are re-stroked in the ink
 // colour so they read as knocked out of it instead of vanishing into the fill.
 const NAV_ICONS = {
+  search: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="10" cy="10" r="6.5" /><path d="m15 15 6 6" />
+    </svg>
+  ),
   staff: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="9" cy="7" r="4" /><path d="M2 21v-2a7 7 0 0 1 14 0v2M17 4a4 4 0 0 1 0 8M22 21v-2a7 7 0 0 0-4-6" />
@@ -612,6 +633,7 @@ const NAV_ITEMS = [
   { id: 'entry', label: 'Entry' },
   { id: 'totals', label: 'Totals' },
   { id: 'report', label: 'Register' },
+  { id: 'search', label: 'Search' },
   { id: 'staff', label: 'Staff' },
   { id: 'analytics', label: 'Analytics' },
 ]
@@ -969,10 +991,10 @@ function CashEntry({
   const [naming, setNaming] = useState(false)
 
   const toName = () => {
-    setNaming(true)
-    // A tick, so the field is on screen before the keyboard is asked for —
-    // iOS ignores focus() on an element that is still being laid out.
-    setTimeout(() => noteRef.current?.focus(), 0)
+    // The Note field is already mounted. Focus during the tap itself so the
+    // PWA can open the software keyboard; a timer loses that user gesture.
+    // onFocus hides the number pad only once focus actually reaches the field.
+    noteRef.current?.focus()
   }
   const toAmount = () => {
     setNaming(false)
@@ -1286,10 +1308,11 @@ function CashEntry({
 // coins; the bank balance is however many accounts the shop keeps. One list,
 // one running total, and every keystroke written down — because counting a
 // drawer or reading four bank apps both get interrupted.
-function SplitModal({ title, items, draftKey, compare, confirmLabel, onCancel, onConfirm }) {
-  const [vals, setVals] = useState(() => readCache(DRAFT_KEY, {})[draftKey] || {})
+function SplitModal({ title, items, draftKey, initialValues, compare, confirmLabel, onCancel, onConfirm }) {
+  const [vals, setVals] = useState(() => readCache(DRAFT_KEY, {})[draftKey] ?? initialValues ?? {})
   const setOne = (key, raw) => setVals((prev) => {
-    const v = raw.replace(/[^0-9]/g, '')
+    if (raw !== '' && !/^\d+$/.test(raw)) return prev
+    const v = raw
     const next = { ...prev }
     if (v === '') delete next[key]
     else next[key] = v
@@ -1302,14 +1325,12 @@ function SplitModal({ title, items, draftKey, compare, confirmLabel, onCancel, o
   const n = (it) => parseInt(vals[it.key], 10) || 0
   const total = items.reduce((sum, it) => sum + it.mult * n(it), 0)
   const pieces = items.reduce((sum, it) => sum + (it.plain ? 0 : n(it)), 0)
-  const ready = Object.keys(vals).length > 0
+  const ready = Object.keys(vals).length > 0 && items.every((it) => Number.isSafeInteger(n(it)) && n(it) >= 0) && Number.isSafeInteger(total)
   const diff = compare == null ? 0 : total - compare
 
   const done = () => {
-    const all = readCache(DRAFT_KEY, {})
-    delete all[draftKey]           // the working-out is spent once it is committed
-    writeCache(DRAFT_KEY, all)
-    onConfirm(total)
+    // Opening counts remain a draft until the opening balance itself is saved.
+    onConfirm(total, Object.fromEntries(items.map((it) => [it.key, n(it)])))
   }
 
   return (
@@ -1324,6 +1345,7 @@ function SplitModal({ title, items, draftKey, compare, confirmLabel, onCancel, o
               <span className="dx">{it.plain ? '₹' : '×'}</span>
               <input
                 type="number" inputMode="numeric" min="0"
+                aria-label={it.plain ? `${it.label} balance` : `${it.label} count`}
                 autoFocus={i === 0}
                 value={vals[it.key] ?? ''}
                 onChange={(e) => setOne(it.key, e.target.value)}
@@ -1358,6 +1380,24 @@ function SplitModal({ title, items, draftKey, compare, confirmLabel, onCancel, o
 const DENOM_ITEMS = DENOMS.map((d) => ({ key: String(d), label: `₹${d}`, mult: d }))
 // `plain` rows take a rupee figure read off an app, not a count of pieces.
 const BANK_ITEMS = BANKS.map((b) => ({ key: b, label: b, mult: 1, plain: true }))
+
+function describeCounts(counts, bank = false) {
+  if (!counts) return []
+  return (bank ? BANKS : DENOMS.map(String)).map((key) => bank
+    ? `${key}: ${inr(counts[key] || 0)}`
+    : `₹${key} × ${counts[key] || 0} = ${inr(Number(key) * (counts[key] || 0))}`)
+}
+
+function CountBreakdown({ cashCounts, bankBalances }) {
+  if (!cashCounts && !bankBalances) return null
+  return (
+    <details className="saved-counts">
+      <summary>Denominations and bank breakdown</summary>
+      {describeCounts(cashCounts).map((line) => <div key={line}>{line}</div>)}
+      {describeCounts(bankBalances, true).map((line) => <div key={line}>{line}</div>)}
+    </details>
+  )
+}
 
 function CloseDayModal({ date, bookCash, onCancel, onConfirm }) {
   return (
@@ -1543,6 +1583,8 @@ function CashTotals({
         </div>
       </div>
 
+      {counted && <CountBreakdown cashCounts={closes[dk].cashCounts} />}
+
       {/* Directly under the figure it is counted against. */}
       {counted
         ? (
@@ -1568,7 +1610,7 @@ function CashTotals({
         <CloseDayModal
           date={dk} bookCash={bookCash}
           onCancel={() => setAsking(false)}
-          onConfirm={(c) => { onClose(dk, c); setAsking(false) }}
+          onConfirm={(c, counts) => { onClose(dk, c, counts); setAsking(false) }}
         />
       )}
     </>
@@ -1583,6 +1625,8 @@ function CashEdit({ todayKey, openings, guard, onSetOpening, onRemoveOpening }) 
   const [date, setDate] = useState(todayKey)
   const [cash, setCash] = useState('')
   const [online, setOnline] = useState('')
+  const [cashCounts, setCashCounts] = useState(null)
+  const [bankBalances, setBankBalances] = useState(null)
   const [assist, setAssist] = useState(null)   // 'cash' | 'online'
 
   const existing = openings[date]
@@ -1592,12 +1636,14 @@ function CashEdit({ todayKey, openings, guard, onSetOpening, onRemoveOpening }) 
     const cur = openings[date]
     setCash(cur ? String(cur.cash ?? '') : '')
     setOnline(cur ? String(cur.online ?? '') : '')
+    setCashCounts(cur?.cashCounts ?? null)
+    setBankBalances(cur?.bankBalances ?? null)
   }, [date, openings])
 
   const ready = !!date && (cash.trim() !== '' || online.trim() !== '')
   const save = () => {
     if (!ready) return
-    guard(() => onSetOpening(date, Math.round(Number(cash) || 0), Math.round(Number(online) || 0)))
+    guard(() => onSetOpening(date, Math.round(Number(cash) || 0), Math.round(Number(online) || 0), cashCounts, bankBalances))
   }
 
   const list = useMemo(() => Object.keys(openings || {}).sort().reverse(), [openings])
@@ -1622,7 +1668,7 @@ function CashEdit({ todayKey, openings, guard, onSetOpening, onRemoveOpening }) 
               <SplitIcon />
             </button>
           </span>
-          <input type="number" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value)} placeholder="0" />
+          <input type="number" inputMode="numeric" value={cash} onChange={(e) => { setCash(e.target.value); setCashCounts(null); clearCountDraft(`open-cash:${date}`) }} placeholder="0" />
         </label>
         <label className="balfield online">
           <span>
@@ -1631,27 +1677,28 @@ function CashEdit({ todayKey, openings, guard, onSetOpening, onRemoveOpening }) 
               <SplitIcon />
             </button>
           </span>
-          <input type="number" inputMode="numeric" value={online} onChange={(e) => setOnline(e.target.value)} placeholder="0" />
+          <input type="number" inputMode="numeric" value={online} onChange={(e) => { setOnline(e.target.value); setBankBalances(null); clearCountDraft(`open-online:${date}`) }} placeholder="0" />
         </label>
       </div>
 
       {assist === 'cash' && (
         <SplitModal
-          title="Count the drawer" items={DENOM_ITEMS} draftKey={`open-cash:${date}`}
+          title="Count the drawer" items={DENOM_ITEMS} draftKey={`open-cash:${date}`} initialValues={cashCounts}
           confirmLabel="Use this total"
           onCancel={() => setAssist(null)}
-          onConfirm={(t) => { setCash(String(t)); setAssist(null) }}
+          onConfirm={(t, counts) => { setCash(String(t)); setCashCounts(counts); setAssist(null) }}
         />
       )}
       {assist === 'online' && (
         <SplitModal
-          title="Bank balances" items={BANK_ITEMS} draftKey={`open-online:${date}`}
+          title="Bank balances" items={BANK_ITEMS} draftKey={`open-online:${date}`} initialValues={bankBalances}
           confirmLabel="Use this total"
           onCancel={() => setAssist(null)}
-          onConfirm={(t) => { setOnline(String(t)); setAssist(null) }}
+          onConfirm={(t, balances) => { setOnline(String(t)); setBankBalances(balances); setAssist(null) }}
         />
       )}
 
+      <CountBreakdown cashCounts={cashCounts} bankBalances={bankBalances} />
       <button className="allbtn" onClick={save} disabled={!ready}>
         {existing ? 'Update opening balance' : 'Set opening balance'}
       </button>
@@ -1746,6 +1793,11 @@ function CashReport({
   const [picked, setPicked] = useState(null)
 
   useEffect(() => { setPicked(null) }, [dk])
+  useEffect(() => {
+    if (!flash) return
+    const frame = requestAnimationFrame(() => document.querySelector('.justsaved')?.scrollIntoView({ block: 'center' }))
+    return () => cancelAnimationFrame(frame)
+  }, [flash, dk])
 
   const lines = useMemo(
     () => (store[dk.slice(0, 7)] || []).filter((e) => e.date === dk).slice().sort((a, b) => a.at - b.at),

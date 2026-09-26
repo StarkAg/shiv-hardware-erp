@@ -239,3 +239,47 @@ describe('what the drawer opens with', () => {
     expect((await day(t, '2026-09-19')).hasOpening).toBe(false)
   })
 })
+
+describe('saved cash counts', () => {
+  const closing = { t: 'close', date: '2026-09-23', counted: 1205, cashCounts: { '500': 2, '200': 1, '5': 1, '1': 0 }, at: 1000, updatedAt: 1000 }
+
+  it('syncs denomination and bank breakdowns to a fresh device and keeps retries idempotent', async () => {
+    const { t } = await shop()
+    const opening = { t: 'opening', date: closing.date, cash: 1205, online: 3000, cashCounts: closing.cashCounts, bankBalances: { 'SBI CA': 1000, PNB: 2000 }, at: 1000, updatedAt: 1000 }
+    await t.mutation(api.cash.push, { ops: [closing, opening] })
+    await t.mutation(api.cash.push, { ops: [closing, opening] })
+    const pulled = await t.query(api.cash.pull, {})
+    expect(pulled.closes).toHaveLength(1)
+    expect(pulled.closes[0]).toMatchObject({ counted: 1205, cashCounts: closing.cashCounts })
+    expect(pulled.openings[0]).toMatchObject({ cashCounts: closing.cashCounts, bankBalances: opening.bankBalances })
+  })
+
+  it('rejects totals that disagree with their counts without saving a partial batch', async () => {
+    const { t } = await shop()
+    await expect(t.mutation(api.cash.push, { ops: [closing, { ...closing, date: '2026-09-24', counted: 999 }] })).rejects.toThrow('match its saved total')
+    expect((await t.query(api.cash.pull, {})).closes).toHaveLength(0)
+    for (const cashCounts of [{ '500': -1 }, { '500': 1.5 }, { '999': 1 }, ['500']]) {
+      await expect(t.mutation(api.cash.push, { ops: [{ ...closing, cashCounts }] })).rejects.toThrow()
+    }
+  })
+
+  it('keeps breakdowns from older clients only while totals match, and clears manually replaced counts', async () => {
+    const { t } = await shop()
+    await t.mutation(api.cash.push, { ops: [closing] })
+    const { cashCounts, ...legacy } = closing
+    await t.mutation(api.cash.push, { ops: [{ ...legacy, updatedAt: 2000 }] })
+    expect((await t.query(api.cash.pull, {})).closes[0].cashCounts).toEqual(cashCounts)
+    await t.mutation(api.cash.push, { ops: [{ ...legacy, counted: 1500, updatedAt: 3000 }] })
+    expect((await t.query(api.cash.pull, {})).closes[0].cashCounts).toBeUndefined()
+    await t.mutation(api.cash.push, { ops: [{ ...closing, updatedAt: 4000 }] })
+    await t.mutation(api.cash.push, { ops: [{ ...closing, cashCounts: null, updatedAt: 5000 }] })
+    expect((await t.query(api.cash.pull, {})).closes[0].cashCounts).toBeUndefined()
+  })
+
+  it('does not let stale offline counts overwrite a newer correction', async () => {
+    const { t } = await shop()
+    await t.mutation(api.cash.push, { ops: [{ ...closing, counted: 1500, cashCounts: { '500': 3 }, updatedAt: 2000 }] })
+    await t.mutation(api.cash.push, { ops: [closing] })
+    expect((await t.query(api.cash.pull, {})).closes[0]).toMatchObject({ counted: 1500, cashCounts: { '500': 3 } })
+  })
+})

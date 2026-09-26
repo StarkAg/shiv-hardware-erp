@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
@@ -154,6 +154,23 @@ function newer(existing: { updatedAt: number } | null, updatedAt: number) {
   return !existing || updatedAt >= existing.updatedAt
 }
 
+function checkedBreakdown(value: unknown, total: number, bank = false): Record<string, number> | undefined {
+  if (value == null) return undefined
+  if (typeof value !== 'object' || Array.isArray(value)) throw new ConvexError('Invalid count breakdown')
+  const allowed = bank ? ['SBI CA', 'SBI CC', 'PNB', 'Union Bank'] : ['500', '200', '100', '50', '20', '10', '5', '2', '1']
+  const counts: Record<string, number> = {}
+  let sum = 0
+  for (const [key, count] of Object.entries(value)) {
+    if (!allowed.includes(key) || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+      throw new ConvexError('Counts must be whole, non-negative numbers for the listed denominations or banks')
+    }
+    counts[key] = count
+    sum += count * (bank ? 1 : Number(key))
+  }
+  if (!Number.isSafeInteger(sum) || sum !== total) throw new ConvexError('The count breakdown must match its saved total')
+  return counts
+}
+
 export const push = mutation({
   args: { ops: v.array(v.any()) },
   handler: async (ctx, { ops }) => {
@@ -202,9 +219,24 @@ export const push = mutation({
           updatedAt: Number(op.updatedAt) || Date.now(),
           deleted: !!op.deleted,
         }
+        if (existing && !newer(existing, base.updatedAt)) { skipped++; continue }
+        // Older clients may send only totals. Preserve a breakdown only while
+        // its total still matches; explicit null means a manually entered total.
+        const previous = existing as { counted?: number; cash?: number; online?: number; cashCounts?: Record<string, number>; bankBalances?: Record<string, number> } | null
+        const cashTotal = Number(op.t === 'close' ? op.counted : op.cash) || 0
+        const cashCounts = base.deleted || op.shut ? undefined : checkedBreakdown(
+          op.cashCounts === undefined && cashTotal === (op.t === 'close' ? previous?.counted : previous?.cash)
+            ? previous?.cashCounts : op.cashCounts,
+          cashTotal,
+        )
         const row = op.t === 'close'
-          ? { ...base, counted: Number(op.counted) || 0, shut: !!op.shut }
-          : { ...base, cash: Number(op.cash) || 0, online: Number(op.online) || 0 }
+          ? { ...base, counted: cashTotal, cashCounts, shut: !!op.shut }
+          : { ...base, cash: cashTotal, cashCounts, online: Number(op.online) || 0,
+              bankBalances: base.deleted ? undefined : checkedBreakdown(
+                op.bankBalances === undefined && (Number(op.online) || 0) === previous?.online
+                  ? previous?.bankBalances : op.bankBalances,
+                Number(op.online) || 0, true,
+              ) }
         if (!existing) await ctx.db.insert(table, row as any)
         else if (newer(existing, row.updatedAt)) await ctx.db.patch(existing._id, row as any)
         else { skipped++; continue }

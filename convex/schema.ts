@@ -49,6 +49,12 @@ const receiptFields = {
 };
 
 export default defineSchema({
+  // Preserve the existing production jobs table and its indexes. Its document
+  // shape is managed outside this checkout, so do not constrain it here.
+  jobs: defineTable(v.any())
+    .index('by_number', ['number'])
+    .index('by_updated_at', ['updatedAt'])
+    .index('by_job_id', ['jobId']),
   // ── Bills backup (single-row snapshot; all bills incl. drafts) ────────────
   // Now only the running bill number and when a bill last changed; the bills
   // themselves are in `bills`. `bills` here is what is left from before the
@@ -338,6 +344,7 @@ export default defineSchema({
   cashCloses: defineTable({
     date: v.string(),
     counted: v.number(),
+    cashCounts: v.optional(v.record(v.string(), v.number())),
     at: v.number(),
     updatedAt: v.number(),
     deleted: v.optional(v.boolean()),   // a reopened day
@@ -351,6 +358,8 @@ export default defineSchema({
     date: v.string(),
     cash: v.number(),
     online: v.number(),
+    cashCounts: v.optional(v.record(v.string(), v.number())),
+    bankBalances: v.optional(v.record(v.string(), v.number())),
     at: v.number(),
     updatedAt: v.number(),
     deleted: v.optional(v.boolean()),
