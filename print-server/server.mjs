@@ -3,6 +3,7 @@
 // POST /print      { quote, copies }                -> PDF -> printer
 // GET  /whatsapp-print                              -> mobile upload page
 // POST /whatsapp-print/jobs { files, copies }       -> uploaded PDFs/images -> printer
+// DROP_PRINT_DIR ("~/Print Drop")                   -> dropped PDFs/images -> printer
 
 import { existsSync, readFileSync } from 'fs'
 try {
@@ -16,9 +17,9 @@ import express from 'express'
 import cors from 'cors'
 import Anthropic from '@anthropic-ai/sdk'
 import { execFile } from 'child_process'
-import { appendFile, writeFile, unlink, mkdir, rm } from 'fs/promises'
+import { appendFile, writeFile, unlink, mkdir, rm, readdir, readFile, rename, stat, open } from 'fs/promises'
 import { networkInterfaces, tmpdir, homedir } from 'os'
-import { join } from 'path'
+import { join, basename, extname } from 'path'
 import { fileURLToPath } from 'url'
 import {
   buildGuaranteeHtml, buildQuotationHtml, buildBillHtml,
@@ -1450,7 +1451,8 @@ async function printFileWithLp(filePath, copies, title, printer = PRINT_PRINTER,
       ]
 
       console.log(`[windows-print] printer="${printer}" settings="${settings}" file="${filePath}"`)
-      execFile(SUMATRA_PDF_PATH, args, { windowsHide: true }, (err, stdout, stderr) => {
+      // Time limit so a hung SumatraPDF can't block the serial print queue forever.
+      execFile(SUMATRA_PDF_PATH, args, { windowsHide: true, timeout: 3 * 60 * 1000 }, (err, stdout, stderr) => {
         if (err) {
           fail(err)
           return
@@ -1645,9 +1647,19 @@ async function renderUploadedImagePdf(file) {
         if (img.decode) await img.decode()
       } catch {}
 
-      return { width: img.naturalWidth || 0, height: img.naturalHeight || 0 }
+      const width = img.naturalWidth || 0
+      const height = img.naturalHeight || 0
+      // Landscape image on portrait A4: turn it 90° so it fills the sheet
+      // instead of printing as a thin strip across the middle.
+      const rotated = width > height
+      if (rotated) {
+        img.style.width = '297mm'
+        img.style.height = '210mm'
+        img.style.transform = 'rotate(90deg)'
+      }
+      return { width, height, rotated }
     })
-    console.log(`[image-pdf] ${file.name} ${size.width}x${size.height} fit=A4`)
+    console.log(`[image-pdf] ${file.name} ${size.width}x${size.height} fit=A4${size.rotated ? ' rotated=90' : ''}`)
     return await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -1663,6 +1675,204 @@ function printUploadedFile(file, copies, printerOverride = null, printSettingsOv
     `upload ${file?.name ?? 'file'}`,
     () => printUploadedFileImpl(file, copies, printerOverride, printSettingsOverride),
   )
+}
+
+// ── Drop-folder printing ─────────────────────────────────────────────────────
+// Any PDF/image dropped into DROP_PRINT_DIR prints by itself, fitted to A4 with
+// the orientation picked per page. "Color" subfolder → EPSON, "Black & White" →
+// HP, the folder itself → auto (images color, PDFs B/W). Handled files are moved
+// into _Printed / _Failed / _Not supported, grouped by day.
+const DROP_PRINT_ENABLED = parseBoolean(process.env.DROP_PRINT_ENABLED ?? 'true')
+const DROP_PRINT_DIR = process.env.DROP_PRINT_DIR || join(homedir(), 'Print Drop')
+const DROP_PRINT_SUBFOLDERS = [['', null], ['Color', 'color'], ['Black & White', 'bw']]
+const DROP_PRINT_MEDIA_TYPES = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+}
+const dropPrintSeen = new Map() // path -> "size:mtime" from the previous scan
+const dropPrintWaiting = new Map() // path -> { name, reason, since }: held until a printer is back
+const dropPrintRecent = [] // latest results, newest first, for /drop-print/status
+let dropPrintScanning = false
+
+// SumatraPDF auto-rotates each page to the paper unless portrait/landscape is forced.
+function withoutForcedOrientation(settings) {
+  return (settings ?? []).filter(setting => !/^(portrait|landscape)$/i.test(setting))
+}
+
+async function moveDropFile(src, folder, name) {
+  const now = new Date()
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const dayDir = join(DROP_PRINT_DIR, folder, day)
+  await mkdir(dayDir, { recursive: true })
+  const time = now.toTimeString().slice(0, 8).replace(/:/g, '')
+  const dest = join(dayDir, `${time}-${name}`)
+  await rename(src, dest)
+  return dest
+}
+
+// Explorer keeps the file locked while it is still copying in.
+async function dropFileIsUnlocked(path) {
+  try {
+    const handle = await open(path, 'r+')
+    await handle.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+function recordDropPrintResult(entry) {
+  dropPrintRecent.unshift({ ...entry, at: new Date().toISOString() })
+  dropPrintRecent.length = Math.min(dropPrintRecent.length, 50)
+}
+
+// The printer to use if `printer` fails mid-job, with settings suited to it.
+function dropPrintAlternative(printer, mode) {
+  if (printer === COLOR_PRINTER && COLOR_FALLBACK_PRINTER !== COLOR_PRINTER) {
+    return { printer: COLOR_FALLBACK_PRINTER, printSettings: COLOR_FALLBACK_PRINT_SETTINGS }
+  }
+  if (printer === BW_PRINTER && BW_FALLBACK_PRINTER !== BW_PRINTER) {
+    return {
+      printer: BW_FALLBACK_PRINTER,
+      printSettings: BW_FALLBACK_PRINTER === COLOR_PRINTER && mode === 'color' ? WHATSAPP_COLOR_PRINT_SETTINGS : BW_FALLBACK_PRINT_SETTINGS,
+    }
+  }
+  return null
+}
+
+async function printDroppedFile({ path, name, mode }) {
+  const mediaType = DROP_PRINT_MEDIA_TYPES[extname(name).toLowerCase()]
+  if (!mediaType) {
+    console.log(`[drop-print] not a PDF/image, skipped: ${name}`)
+    await moveDropFile(path, '_Not supported', name).catch(() => {})
+    recordDropPrintResult({ name, result: 'unsupported' })
+    return
+  }
+
+  // Auto = photos in colour, PDFs in B/W. Resolving it up front lets the colour
+  // and B/W fallback routes pick the other printer when the first is offline.
+  const printMode = mode ?? (mediaType.startsWith('image/') ? 'color' : 'bw')
+  const route = await routeWhatsAppPrintJob(printMode, { name, mediaType })
+  const health = await getWindowsPrinterHealth(route.printer)
+  if (!health.ok) {
+    // Neither printer is usable: leave the file where it is and retry on later
+    // scans, so it prints by itself as soon as a printer comes back.
+    if (!dropPrintWaiting.has(path)) {
+      console.warn(`[drop-print] no printer available for ${name}, waiting (${health.reason || health.status})`)
+      dropPrintWaiting.set(path, { name, reason: health.reason || health.status, since: new Date().toISOString() })
+    }
+    return
+  }
+  dropPrintWaiting.delete(path)
+
+  // Claim the file before printing so a server restart mid-print can't print it twice.
+  const claimed = join(DROP_PRINT_DIR, '_Printing', `${Date.now()}-${name}`)
+  try {
+    await mkdir(join(DROP_PRINT_DIR, '_Printing'), { recursive: true })
+    await rename(path, claimed)
+  } catch (err) {
+    console.warn(`[drop-print] could not pick up ${name}, will retry`, err?.message ?? err)
+    return
+  }
+
+  let file
+  try {
+    const buffer = await readFile(claimed)
+    file = { name, mediaType, buffer, data: buffer.toString('base64'), savedPath: claimed }
+  } catch (err) {
+    console.error(`[drop-print] could not read ${name}`, err?.message ?? err)
+    await moveDropFile(claimed, '_Failed', name).catch(() => {})
+    recordDropPrintResult({ name, result: 'failed', error: String(err?.message ?? err) })
+    return
+  }
+
+  const attempts = [route]
+  const alternative = dropPrintAlternative(route.printer, printMode)
+  if (alternative) attempts.push({ ...alternative, fallback: { from: route.printer, to: alternative.printer, reason: 'print failed' } })
+
+  let lastError = null
+  for (const attempt of attempts) {
+    try {
+      if (attempt !== route) {
+        const altHealth = await getWindowsPrinterHealth(attempt.printer)
+        if (!altHealth.ok) break
+        console.warn(`[drop-print] retrying ${name} on "${attempt.printer}"`)
+      }
+      const result = await printUploadedFile(file, 1, attempt.printer, withoutForcedOrientation(attempt.printSettings))
+      const fallback = attempt.fallback || route.fallback || null
+      console.log(`[drop-print] printed ${name} mode=${mode ?? 'auto'} printer="${result.printer}"${fallback ? ' fallback=true' : ''}`)
+      await moveDropFile(claimed, '_Printed', name).catch(() => {})
+      recordDropPrintResult({ name, result: 'printed', printer: result.printer, fallback })
+      return
+    } catch (err) {
+      lastError = err
+      printerHealthCache.delete(attempt.printer) // re-check this printer next time
+      console.error(`[drop-print] failed to print ${name} on "${attempt.printer}"`, err?.message ?? err)
+    }
+  }
+
+  await moveDropFile(claimed, '_Failed', name).catch(() => {})
+  recordDropPrintResult({ name, result: 'failed', error: String(lastError?.message ?? lastError ?? 'no printer available') })
+}
+
+async function scanDropPrintFolder() {
+  if (dropPrintScanning) return
+  dropPrintScanning = true
+  try {
+    const ready = []
+    const present = new Set()
+    for (const [subfolder, mode] of DROP_PRINT_SUBFOLDERS) {
+      const dir = join(DROP_PRINT_DIR, subfolder)
+      const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+      for (const entry of entries) {
+        if (!entry.isFile()) continue
+        if (/^(~\$|\.)|\.(tmp|crdownload|part)$|^desktop\.ini$|^thumbs\.db$/i.test(entry.name)) continue
+        const path = join(dir, entry.name)
+        const info = await stat(path).catch(() => null)
+        if (!info || info.size === 0) continue
+        present.add(path)
+        // Print only once size/mtime held steady across two scans (copy finished).
+        const signature = `${info.size}:${info.mtimeMs}`
+        if (dropPrintSeen.get(path) === signature && await dropFileIsUnlocked(path)) {
+          ready.push({ path, name: entry.name, mode })
+        }
+        dropPrintSeen.set(path, signature)
+      }
+    }
+    for (const path of dropPrintSeen.keys()) if (!present.has(path)) dropPrintSeen.delete(path)
+    for (const path of dropPrintWaiting.keys()) if (!present.has(path)) dropPrintWaiting.delete(path)
+
+    for (const item of ready) {
+      dropPrintSeen.delete(item.path)
+      await printDroppedFile(item)
+    }
+  } finally {
+    dropPrintScanning = false
+  }
+}
+
+async function startDropPrintFolder() {
+  if (!DROP_PRINT_ENABLED) return
+  try {
+    for (const [subfolder] of DROP_PRINT_SUBFOLDERS) await mkdir(join(DROP_PRINT_DIR, subfolder), { recursive: true })
+    // Anything still in _Printing was cut off by a restart: park it in _Failed
+    // rather than risk printing it twice. Drop it in again to reprint.
+    const leftovers = await readdir(join(DROP_PRINT_DIR, '_Printing')).catch(() => [])
+    for (const name of leftovers) {
+      await moveDropFile(join(DROP_PRINT_DIR, '_Printing', name), '_Failed', name.replace(/^\d+-/, '')).catch(() => {})
+    }
+  } catch (err) {
+    console.warn('[drop-print] could not prepare folder', err?.message ?? err)
+    return
+  }
+  setInterval(() => {
+    scanDropPrintFolder().catch(err => console.warn('[drop-print] scan failed', err?.message ?? err))
+  }, 2000)
+  console.log(`   Drop-folder print: ${DROP_PRINT_DIR}`)
 }
 
 async function printUploadedFileImpl(file, copies, printerOverride = null, printSettingsOverride = null) {
@@ -1803,6 +2013,14 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
 
   if (!jid.endsWith('@g.us')) return
 
+  // A message that failed to decrypt arrives as an empty stub; WhatsApp then
+  // re-sends it with the SAME id. Don't remember the stub's id, or the real
+  // (decrypted) retry would be dropped as a duplicate and never print.
+  if (!msg.message) {
+    console.log(`[whatsapp-web] group message ${msg.key.id || '?'} arrived without content (stub=${msg.messageStubType ?? '-'}), waiting for retry`)
+    return
+  }
+
   const messageId = msg.key.id || ''
   if (rememberWhatsAppMessageId(messageId)) return
 
@@ -1826,6 +2044,7 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
   const directPrintMode = parseWhatsAppPrintMode(text)
 
   const mediaType = getBaileysMediaMimetype(msg)
+  console.log(`[whatsapp-web] group="${groupName}" msg=${messageId} keys=${Object.keys(unwrapBaileysMessage(msg) || {}).join(',')} media=${mediaType || '-'}`)
 
   if (!mediaType) {
     if (directPrintMode) {
@@ -3003,6 +3222,16 @@ function whatsappWebStatusPayload() {
   }
 }
 
+app.get('/drop-print/status', (_req, res) => {
+  res.json({
+    ok: true,
+    enabled: DROP_PRINT_ENABLED,
+    folder: DROP_PRINT_DIR,
+    waiting: [...dropPrintWaiting.values()],
+    recent: dropPrintRecent,
+  })
+})
+
 app.get('/whatsapp-web/status', (_req, res) => {
   res.json(whatsappWebStatusPayload())
 })
@@ -3523,6 +3752,7 @@ app.listen(PORT, '0.0.0.0', () => {
   }, 2 * 60 * 1000)
   prepareEpsonPlainA4ColorDefaults(COLOR_PRINTER, 'startup')
   warmUpBrowser()
+  startDropPrintFolder()
   if (!process.env.ANTHROPIC_API_KEY) console.warn('⚠  ANTHROPIC_API_KEY not set')
   console.log()
 })
