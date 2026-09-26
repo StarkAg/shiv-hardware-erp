@@ -41,7 +41,7 @@ const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
   onClose: () => void
 }) => JSX.Element
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
-import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS } from '../../lib/types'
+import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS, isQuotation, nextQuoteNumber } from '../../lib/types'
 import type { BillKind } from '../../lib/types'
 import { DEFAULT_GST_RATE, GST_RATES, handLines, withCharges, type BillCharges } from '../../lib/billCharges'
 import { buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
@@ -52,11 +52,13 @@ import { api } from '../../../convex/_generated/api'
 // formatters rather than a second set that would drift from them.
 import '../ledger/ledger.css'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
+import { useLive } from '../ledger/lib/cache'
 import { rupees } from '../ledger/lib/format'
 import { TableSkeleton } from '../ledger/components/Skeleton'
 import { billSqft, isFootSized } from '../../lib/pricing'
 import { readBoardSize, sizeLabel, sqftFields, withSqft } from '../../lib/boardSize'
-import { keepTyped } from '../../lib/linePick'
+import { keepTyped, rateForUnit, withUnitRate } from '../../lib/linePick'
+import { itemHistory, recallList, type ItemHistory, type RecalledItem } from '../../lib/itemHistory'
 import { canonicalUnit, foldName } from '../../../convex/lib/text'
 import { catalogChangesFor } from '../../lib/learnCatalog'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
@@ -280,6 +282,58 @@ const HARDWARE_CATS: ProductCategory[] = ['hinge', 'screw', 'aldrop', 'handle', 
 // HARDWARE_SIZES and HARDWARE_BRANDS are now managed via the Inventory page
 // and stored in the hardwareCatalog slice of the store.
 
+/** "₹250/Pkt · ₹3/Pc" for an item sold in more than one unit, else its one rate. */
+function rateHint(e: { rate?: number; unitRates?: Record<string, number> }, cur = '₹'): string | undefined {
+  const byUnit = Object.entries(e.unitRates ?? {})
+  if (byUnit.length > 1) return byUnit.map(([u, r]) => `${cur}${r}/${u}`).join(' · ')
+  return e.rate ? `${cur}${e.rate}` : undefined
+}
+
+/**
+ * Sheets of one thickness go out at one square-foot rate.
+ *
+ * Price one 30mm line and every other 30mm line still waiting for a price takes
+ * the same ₹/sqft, worked to its own size and qty. A line with the same name
+ * besides its size ("30mm S") is followed first, so two kinds of 19mm on one
+ * bill keep their own rates; failing that any line of the thickness will do.
+ *
+ * Only empty lines are filled, and the ones filled this way (`auto`) keep
+ * following the rate until someone prices them by hand (`hand`) — a line
+ * someone typed a price into is never overwritten.
+ */
+function fillSheetRates(items: BillItem[], editedId: string, auto: Set<string>, hand: Set<string>): BillItem[] {
+  const sheets = new Map<string, NonNullable<ReturnType<typeof readBoardSize>>>()
+  for (const i of items) {
+    if (isRoundupLine(i) || isAmountOnlyLine(i)) continue
+    const s = readBoardSize(i.description)
+    if (s) sheets.set(i.id, s)
+  }
+  const donors = items.filter(i => sheets.has(i.id) && !auto.has(i.id) && sqftFields(i).sqftRate)
+  if (!donors.length) return items
+  // The line just edited leads, so changing a rate carries to the others.
+  donors.sort((a, b) => Number(b.id === editedId) - Number(a.id === editedId))
+  const kind = (s: { rest: string }) => s.rest.toLowerCase()
+
+  let changed = false
+  const next = items.map(i => {
+    const s = sheets.get(i.id)
+    if (!s || hand.has(i.id)) return i
+    // Catalog boards work their own price from the area pickers.
+    if (i.category && !HARDWARE_CATS.includes(i.category)) return i
+    if (i.amount && !auto.has(i.id)) return i
+    const same = donors.filter(d => d.id !== i.id && sheets.get(d.id)!.thicknessMm === s.thicknessMm)
+    const donor = same.find(d => kind(sheets.get(d.id)!) === kind(s)) ?? same[0]
+    if (!donor) return i
+    const qty = i.qty || 1
+    const amount = Math.round(sqftFields(donor).sqftRate! * s.exactSqft * qty)
+    auto.add(i.id)
+    if (amount === i.amount) return i
+    changed = true
+    return withSqft({ ...i, amount, rateSqft: Math.round((amount / qty) * 100) / 100 })
+  })
+  return changed ? next : items
+}
+
 const HARDWARE_DEFAULT_UNIT: Partial<Record<ProductCategory, string>> = {
   fevicol: 'kg',
   mica:    'Ply',
@@ -331,9 +385,13 @@ interface SmartItemRowProps {
   /** Which side of the books this line is on — see saveCustomEntryRate. */
   kind: BillKind
   disabled?: boolean
+  /** What this side of the books has billed lately — units, and Up's recall. */
+  history: ItemHistory
+  /** The lines above this one, which Up offers first. */
+  linesAbove: BillItem[]
 }
 
-function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, myItems, kind, disabled }: SmartItemRowProps) {
+function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, myItems, kind, disabled, history, linesAbove }: SmartItemRowProps) {
   const { sets, hardwareCatalog, setHardwareCatalog, customCatalog, addCustomEntry, updateCustomEntry, units, addUnit } = useStore()
 
   /** Stored units plus an "add" row, so the list only holds what the shop uses. */
@@ -360,7 +418,20 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   function handleUnitPick(v: string) {
     const unit = pickUnit(v)
     if (!unit) return
-    onUpdate(item.id, { unit })
+    // A screw sells by the packet and by the piece at two figures: switching
+    // the unit brings back the rate last used for that unit. With none saved
+    // for it, a rate that was only the old unit's remembered one is cleared
+    // rather than billing a packet's price per piece; a typed one stays.
+    const remembered = item.customEntryId
+      ? customCatalog.find(e => e.id === item.customEntryId)
+      : item.category && HARDWARE_CATS.includes(item.category) ? hardwareCatalog[item.category] : undefined
+    const rate = remembered ? rateForUnit(remembered, unit) : 0
+    const oldRate = remembered ? rateForUnit(remembered, item.unit) : 0
+    const qty = item.qty || 1
+    const figures = rate
+      ? { rateSqft: rate, amount: Math.round(rate * qty) }
+      : oldRate && item.rateSqft === oldRate ? { rateSqft: undefined, amount: 0 } : {}
+    onUpdate(item.id, { unit, ...figures })
     if (item.customEntryId) {
       updateCustomEntry(item.customEntryId, { unit })
     } else if (item.category && HARDWARE_CATS.includes(item.category)) {
@@ -378,7 +449,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   function saveRateToCatalog(cat: ProductCategory, rate: number) {
     if (!rate) return
     const current = hardwareCatalog[cat] ?? { sizes: [], brands: [] }
-    setHardwareCatalog({ ...hardwareCatalog, [cat]: { ...current, rate } })
+    setHardwareCatalog({ ...hardwareCatalog, [cat]: { ...current, rate, unitRates: withUnitRate(current.unitRates, item.unit, rate) } })
   }
 
   function handleFieldValue(label: string, value: string) {
@@ -574,7 +645,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       highlight,
       rows: navOptions.map((o) =>
         o.kind === 'category' ? { value: `c:${o.opt.category}`, label: o.opt.label }
-        : o.kind === 'custom' ? { value: `e:${o.entry.id}`, label: formatItemDescription(o.entry.name), hint: o.entry.rate ? `Rs ${o.entry.rate}` : undefined }
+        : o.kind === 'custom' ? { value: `e:${o.entry.id}`, label: formatItemDescription(o.entry.name), hint: rateHint(o.entry, 'Rs ') }
         : o.kind === 'roundup' ? { value: 'roundup', label: 'Roundup (minus)' }
         : o.kind === 'fare' ? { value: 'fare', label: 'Fare / cartage' }
         : { value: 'add', label: `Create "${search.trim()}"` },
@@ -634,6 +705,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
         ...keepTyped(item, {
           rate: savedRate,
           unit: hardwareCatalog[opt.category]?.unit ?? HARDWARE_DEFAULT_UNIT[opt.category] ?? 'Pc',
+          unitRates: hardwareCatalog[opt.category]?.unitRates,
         }),
         description: [opt.label, defaultSize, defaultBrand, fieldStr].filter(Boolean).join(' '),
       })
@@ -710,7 +782,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
 
 
   // ── Custom entry helpers ─────────────────────────────────────────────────
-  function selectCustomEntry(entry: { id: string; name: string; sizes: string[]; brands: string[]; rate?: number; unit?: string }) {
+  function selectCustomEntry(entry: { id: string; name: string; sizes: string[]; brands: string[]; rate?: number; unit?: string; unitRates?: Record<string, number> }) {
     const same = item.customEntryId === entry.id
     const name = formatItemDescription(entry.name)
     // "Discount", "CGST 9%", "Fare" saved in My Items are charges, not goods:
@@ -738,7 +810,12 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       // it — passing back through the field is navigation, not a fresh choice.
       // What is typed on the line wins; the item's remembered rate and unit
       // only fill a line that has none yet. See keepTyped.
-      ...(same ? {} : keepTyped(item, { rate: entry.rate, unit: entry.unit })),
+      // The unit it went out in last time, then whatever the item remembers.
+      ...(same ? {} : keepTyped(item, {
+        rate: entry.rate,
+        unit: history.unitOfEntry.get(entry.id) ?? history.unitOf.get(foldName(entry.name)) ?? entry.unit,
+        unitRates: entry.unitRates,
+      })),
       heightIn:  undefined,
       widthIn:   undefined,
     })
@@ -750,6 +827,63 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
    * afterwards — at the counter the point is to keep billing, not to stop and
    * fill a form for every new item.
    */
+  /**
+   * Up in an empty item box brings back the last item entered — the line
+   * above first, then what was billed lately — and each further Up goes one
+   * older; Down comes back, and past the newest the box is empty again.
+   *
+   * The item comes back whole: its My Items link, size and brand, the unit it
+   * went out in and the rate it went at. Each step replaces the last, so the
+   * walk never leaves one item's price on another. Typing ends the walk.
+   */
+  const walk = useRef<{ at: number; list: RecalledItem[] } | null>(null)
+  function recallItem(older: boolean): boolean {
+    let w = walk.current
+    if (!w) {
+      if (!older || search.trim() || isCatalog) return false
+      const list = recallList(linesAbove, history.recent)
+      if (!list.length) return false
+      w = walk.current = { at: -1, list }
+    }
+    const next = w.at + (older ? 1 : -1)
+    if (next < 0) {
+      walk.current = null
+      applyRecalled(null)
+      return true
+    }
+    // At the oldest it stops rather than wrapping, so the end is findable.
+    if (next >= w.list.length) return true
+    w.at = next
+    applyRecalled(w.list[next])
+    return true
+  }
+
+  function applyRecalled(r: RecalledItem | null) {
+    const entry = r?.customEntryId ? customCatalog.find(e => e.id === r.customEntryId) : undefined
+    const unit = r?.unit || entry?.unit || 'Pc'
+    // The price it last went at on this side of the books; failing that, a
+    // sale falls back on the item's remembered selling rate for that unit.
+    const buying = kind === 'purchase' || kind === 'grn'
+    const rate = r ? (r.rate || (entry && !buying ? rateForUnit(entry, unit) : 0)) : 0
+    const qty = item.qty || 1
+    const description = r?.description ?? ''
+    onUpdate(item.id, {
+      category: undefined,
+      customEntryId: entry?.id,
+      description,
+      sizeIn: r?.sizeIn,
+      brandName: r?.brandName,
+      fieldValues: r?.fieldValues,
+      heightIn: undefined,
+      widthIn: undefined,
+      unit,
+      rateSqft: rate || undefined,
+      amount: rate ? Math.round(rate * qty) : 0,
+    })
+    setSearch(description)
+    setShowDrop(false)
+  }
+
   function addItemFromSearch() {
     const name = formatItemDescription(search.trim())
     if (!name) return
@@ -804,7 +938,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     // reads newest-first without repeats. Capped so it stays scannable.
     const rates = [rate, ...(entry?.rates ?? []).filter(r => r !== rate)].slice(0, 8)
     const buying = kind === 'purchase' || kind === 'grn'
-    updateCustomEntry(entryId, buying ? { rates } : { rate, rates })
+    updateCustomEntry(entryId, buying ? { rates } : { rate, rates, unitRates: withUnitRate(entry?.unitRates, item.unit, rate) })
   }
 
   /** Add a new value to an existing custom field (e.g. add "Blue" to the Color field). */
@@ -878,6 +1012,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                 }}
                 onChange={(e) => {
                   const el = e.target
+                  walk.current = null
                   // Proper case is case-only, so it never disturbs the caret.
                   // The 8x4 -> 8 X 4 spacing changes length, so only apply it
                   // while typing at the end; mid-edit it would jump the cursor.
@@ -930,9 +1065,11 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                 onKeyDown={(e) => {
                   if (addingNew) return
                   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                    // Dropdown closed → the arrows belong to the bill, not the list.
+                    // Dropdown closed → the arrows belong to the bill, not the
+                    // list: recall on an empty box, else move between boxes.
                     if (!showDrop || !navOptions.length) {
                       e.preventDefault()
+                      if (recallItem(e.key === 'ArrowUp')) return
                       moveBillFocus(e.key === 'ArrowDown' ? 1 : -1)
                       return
                     }
@@ -952,6 +1089,13 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                   }
                   if (e.key !== 'Enter') return
                   e.preventDefault()
+                  // A recalled item is already whole on the line: Enter takes
+                  // it and carries on, rather than filing its name as new.
+                  if (walk.current && !showDrop) {
+                    walk.current = null
+                    moveBillFocus(1)
+                    return
+                  }
                   // A blank stock-item field is Tally's signal that item entry
                   // is over. Do not create a made-up line or make the operator
                   // erase it manually before finishing the bill.
@@ -977,6 +1121,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                   requestAnimationFrame(() => moveBillFocus(1))
                 }}
                 onBlur={() => {
+                  walk.current = null
                   setTimeout(() => { if (!addingNewRef.current) setShowDrop(false) }, 150)
                 }}
                 className={`w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-sm dark:border-white/10 dark:text-white ${
@@ -1017,7 +1162,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                           className={`flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 dark:text-stone-200 ${highlight === filtered.length + ci ? 'bg-stone-100 dark:bg-white/10' : ''}`}
                         >
                           <span className="flex-1 truncate">{formatItemDescription(entry.name)}</span>
-                          {entry.rate ? <span className="text-xs text-muted">₹{entry.rate}</span> : null}
+                          {rateHint(entry) ? <span className="text-xs text-muted">{rateHint(entry)}</span> : null}
                         </button>
                       ))}
                     </div>
@@ -1927,6 +2072,8 @@ const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier' | 'both'> = {
   refund: 'customer',
   // Goods in from a supplier, ahead of their bill.
   grn: 'supplier',
+  // A price given to a customer, not yet a sale.
+  quotation: 'customer',
 }
 
 function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
@@ -2147,6 +2294,11 @@ export function BillBuilder() {
 
   const existing = id ? bills.find((b) => b.id === id) : undefined
   const [draft, setDraft] = useState<Bill>(() => (existing ? forEditing(existing) : emptyBill(nextBillNumber())))
+  // What this side of the books has billed lately, newest first.
+  const historyKind = (draft.kind ?? 'sale') === 'purchase' || draft.kind === 'grn' ? 'purchase' : 'sale'
+  const history = useMemo(() => itemHistory(bills, historyKind), [bills, historyKind])
+  /** A quotation takes the next Q- number; everything else the next bill number. */
+  const numberFor = (k: BillKind) => (k === 'quotation' ? nextQuoteNumber(bills) : nextBillNumber())
   const [panelList, setPanelList] = useState<PanelList | null>(null)
 
 
@@ -2319,7 +2471,7 @@ export function BillBuilder() {
   const [view, setView] = useState<'list' | 'form'>(existing ? 'form' : 'list')
   // What the screen is waiting to be told: Alt+D, or walking away from a bill
   // that was never saved. Both used the browser's own dialog.
-  const [asking, setAsking] = useState<null | 'delete' | 'leave'>(null)
+  const [asking, setAsking] = useState<null | 'delete' | 'leave' | 'quote'>(null)
 
   /**
    * What the party's account stands at, shown under their name the way Tally's
@@ -2427,8 +2579,10 @@ export function BillBuilder() {
      */
     setDraft((d) => {
       const started = view === 'form' && hasMeaningfulContent({ ...d, total: calcTotal(d.items) })
-      if (!started) {
-        const fresh = emptyBill(nextBillNumber(), kind)
+      // A bill already in the books cannot become a quotation by switching —
+      // its voucher would stay posted behind it — so that starts a fresh one.
+      if (!started || (kind === 'quotation' && d.postedAt)) {
+        const fresh = emptyBill(numberFor(kind), kind)
         return newParty ? { ...fresh, customerName: toProperCase(newParty) } : fresh
       }
       // Into a goods return the party always carries — it takes either side.
@@ -2436,6 +2590,8 @@ export function BillBuilder() {
       return {
         ...d,
         kind,
+        // Moving into or out of a quotation moves between the two series.
+        ...(isQuotation({ kind }) !== isQuotation(d) ? { number: numberFor(kind) } : {}),
         ...(newParty
           ? { customerName: toProperCase(newParty) }
           : crossed
@@ -2471,6 +2627,8 @@ export function BillBuilder() {
     if (!bill) return
     openedFor.current = id
     setDraft(forEditing(bill))
+    // "Convert to sale" from the customer's account lands here ready to save.
+    if (pageParams.get('convert') === 'sale' && isQuotation(bill)) convertToSale()
     setView('form')
   }, [id, bills])
 
@@ -2481,6 +2639,7 @@ export function BillBuilder() {
    * tab or a flat battery frees the bill on its own.
    */
   const postToLedger = useMutation(api.billLedger.postBill)
+  const ensureParty = useMutation(api.billLedger.ensureParty)
   const claimFromPhone = useMutation(api.inbox.claim)
   const upload = useUploader()
   // Chosen here, not yet uploaded — uploading happens once, on save.
@@ -2492,6 +2651,8 @@ export function BillBuilder() {
   // What the paperwork on this kind of voucher is called, and how much of it
   // is already on the bill — counted here so the button can say so while shut.
   const isMoneyVoucher = MONEY_KINDS.includes(draft.kind ?? 'sale')
+  /** A delivery with its rates already in: it files as a purchase too. */
+  const pricedGrn = draft.kind === 'grn' && draft.items.some((i) => Number(i.amount) > 0 && !i.auto)
   /** Written against a supplier: a purchase or a payment. */
   const isSupplierVoucher = PARTY_SIDE[draft.kind ?? 'sale'] === 'supplier'
 
@@ -2651,14 +2812,39 @@ export function BillBuilder() {
    */
   function startNew(kind: BillKind = 'sale') {
     if (onDayBook) { navigate(`/bills?new=${kind}`); return }
-    setDraft(emptyBill(nextBillNumber(), kind))
+    setDraft(emptyBill(numberFor(kind), kind))
     setView('form')
   }
 
+  // Lines priced from another sheet's rate, and lines priced by hand — see fillSheetRates.
+  const autoPriced = useRef(new Set<string>())
+  const handPriced = useRef(new Set<string>())
+  /**
+   * Delivery lines arrive at what was last paid for each. A size never bought
+   * before has no such figure, so it takes the square-foot rate of a sheet of
+   * the same thickness on the bill — the same rule as typing one in.
+   */
+  const setDraftFromDeliveries = useCallback((fn: (d: Bill) => Bill) => {
+    setDraft((d) => {
+      const next = fn(d)
+      return next.items === d.items
+        ? next
+        : { ...next, items: fillSheetRates(next.items, '', autoPriced.current, handPriced.current) }
+    })
+  }, [])
+
 function updateItem(itemId: string, patch: Partial<BillItem>) {
+    // A price typed in, rather than one re-worked for a new qty or size, makes
+    // the line the operator's own: it stops following other lines' rates.
+    const byHand = ('amount' in patch || 'rateSqft' in patch)
+      && !('qty' in patch || 'description' in patch || 'heightIn' in patch || 'widthIn' in patch)
+    if (byHand) { autoPriced.current.delete(itemId); handPriced.current.add(itemId) }
     // Every edit to a line passes here, so a sheet's square-foot rate is
     // re-read from its name, qty and amount whichever of them just changed.
-    setDraft((d) => ({ ...d, items: d.items.map((i) => (i.id === itemId ? withSqft({ ...i, ...patch }) : i)) }))
+    setDraft((d) => {
+      const items = d.items.map((i) => (i.id === itemId ? withSqft({ ...i, ...patch }) : i))
+      return { ...d, items: fillSheetRates(items, itemId, autoPriced.current, handPriced.current) }
+    })
   }
 
   function addItem() {
@@ -2846,7 +3032,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   /** The open bill: photographs up first, then the one posting call. */
-  async function postDraft() {
+  async function postDraft(over?: Partial<Bill> & { total?: number }) {
     // The photographs go up first: a bill that saved without them would leave
     // the paper it was written from nowhere, and the ledger showing a voucher
     // with no document against it.
@@ -2880,10 +3066,11 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // saved before sheets carried a square-foot rate and not touched since.
     return postStored({
       ...priced,
-      items: priced.items.map(withSqft),
       total,
-      attachments,
       ...((draft.kind ?? 'sale') === 'purchase' ? { checks: checksRef.current } : {}),
+      ...over,
+      items: (over?.items ?? priced.items).map(withSqft),
+      attachments,
     }, !borrowed)
   }
 
@@ -2924,6 +3111,15 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     checksRef.current = found
     committedRef.current = true
 
+    // A quotation opens the customer's account and shows there, but nothing
+    // is posted until it is converted to a sale.
+    if (isQuotation(draft)) {
+      const quote = await saveQuote()
+      setView('list')
+      navigate(quote.ledgerId ? `/ledger/customers/${quote.ledgerId}` : '/day', { replace: true })
+      return
+    }
+
     /**
      * Instant: the counter moves on the moment the bill is accepted, and the
      * books catch up behind it.
@@ -2938,6 +3134,11 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // The catalogue learns from the bill before it is filed, so the next
     // person to type this item finds it waiting with its unit and its rate.
     learnItemsFrom(priced.items, (draft.kind ?? 'sale') as BillKind)
+
+    if (!borrowed && pricedGrn) {
+      await fileGrnWithPurchase()
+      return
+    }
     if (!borrowed) saveBill({ ...priced, items: priced.items.map(withSqft), total, checks: checksRef.current.length ? checksRef.current : undefined })
     setView('list')
     // The party's own account when the bill already names one; a party
@@ -2951,6 +3152,130 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     } finally {
       postingBills.delete(draft.id)
     }
+  }
+
+  /**
+   * Keep a quotation, and open the customer's account for it.
+   *
+   * The account is where the shop looks a customer up, so the quotation is
+   * listed there — as a quotation, with no Dr or Cr: nothing is posted and the
+   * balance does not move. Kept first, so a failure to reach the books loses
+   * nothing; the account opens on the next save instead.
+   */
+  async function saveQuote(): Promise<Bill & { total: number }> {
+    const quote: Bill & { total: number } = { ...priced, items: priced.items.map(withSqft), total }
+    saveBill(quote)
+    const name = quote.customerName.trim()
+    if (!name) return quote
+    try {
+      const ledgerId = String(await ensureParty({ name, phone: quote.customerPhone || undefined }))
+      if (ledgerId === quote.ledgerId) return quote
+      const opened = { ...quote, ledgerId }
+      saveBill(opened)
+      return opened
+    } catch (err) {
+      toast(`Quotation kept, but the account was not opened
+${err instanceof Error ? err.message : String(err)}`, 'error')
+      return quote
+    }
+  }
+
+  /**
+   * A sale that was only ever a price: back out of the books, into a quotation.
+   *
+   * Done as a delete and a new quotation rather than a change of kind, because
+   * the sale's voucher must leave the books in the same step — and a delete
+   * already does that, sending both to Trash where they can be restored. The
+   * quotation is made only once the books have agreed to let the sale go.
+   */
+  async function moveToQuotation() {
+    const sale = bills.find((b) => b.id === draft.id)
+    if (!sale) throw new Error('This bill is not saved yet — switch it to a quotation from the menu instead.')
+    if ((sale.paidAmount ?? 0) > 0) {
+      throw new Error('Money was taken against this bill. Take the payment off it first, then move it to a quotation.')
+    }
+    const gone = await deleteBill(sale.id)
+    if (!gone) throw new Error('Could not reach the books, so the bill was not moved.')
+    const quote: Bill = {
+      ...sale,
+      ...priced,
+      id: uid(),
+      kind: 'quotation',
+      number: nextQuoteNumber(bills),
+      total,
+      paid: false,
+    }
+    for (const k of ['voucherId', 'postedAt', 'postError', 'paidAmount', 'paidDate', 'fromQuote', 'attachments', 'checks'] as (keyof Bill)[]) {
+      delete (quote as Partial<Bill>)[k]
+    }
+    saveBill(quote)
+    toast(`Bill ${sale.number} is now quotation ${quote.number}.`, 'ok')
+    committedRef.current = true
+    navigate(`/bills/${quote.id}`, { replace: true })
+  }
+
+  /**
+   * A goods received note carries no rate: the goods are in, the bill is not.
+   * A delivery whose rates are already known is a purchase as well, so it is
+   * filed as both, on the same day — the note with its counts and nothing
+   * else, and the purchase with the rates, billed against that note. One
+   * record of what came through the door, one of what it cost.
+   */
+  async function fileGrnWithPurchase() {
+    const goods = priced.items
+    const grn = {
+      ...priced,
+      items: goods.map((i) => {
+        const bare = { ...i, amount: 0 }
+        delete bare.rateSqft
+        return bare
+      }),
+      total: 0,
+    }
+    saveBill(grn)
+    setView('list')
+    navigate(draft.ledgerId ? `/ledger/suppliers/${draft.ledgerId}` : '/day', { replace: true })
+
+    postingBills.add(draft.id)
+    let filed: Awaited<ReturnType<typeof postDraft>> = null
+    try {
+      filed = await postDraft(grn)
+    } finally {
+      postingBills.delete(draft.id)
+    }
+    const grnVoucher = filed?.bill.voucherId
+    // The note did not reach the books, so there is nothing to bill against
+    // yet; its rates stay on this screen's history rather than being lost.
+    if (!grnVoucher) {
+      toast('The delivery was not filed, so its purchase was not made. Retry the delivery from the day book, then enter its bill.', 'error')
+      return
+    }
+    const purchase: Bill & { total: number } = {
+      ...priced,
+      id: uid(),
+      kind: 'purchase',
+      number: nextBillNumber(),
+      grnIds: [String(grnVoucher)],
+      items: goods.map((i) => withSqft({ ...i, id: uid() })),
+      total,
+      attachments: [],
+    }
+    for (const k of ['voucherId', 'postedAt', 'postError', 'receivedBy', 'checks', 'ledgerId'] as (keyof Bill)[]) {
+      delete (purchase as Partial<Bill>)[k]
+    }
+    purchase.ledgerId = filed?.ledgerId ?? draft.ledgerId
+    saveBill(purchase)
+    const bought = await postStored(purchase, true)
+    if (bought) toast(`Filed as a delivery and a purchase, both on ${purchase.date}.`, 'ok')
+  }
+
+  function convertToSale() {
+    setDraft((d) => {
+      const sale: Bill = { ...d, number: nextBillNumber(), date: today(), fromQuote: d.number }
+      delete sale.kind
+      return sale
+    })
+    toast('Now a sale with all its lines — check it and press Save Bill.', 'ok')
   }
 
   function cancel() {
@@ -3014,6 +3339,10 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
      * through: that is the shop reprinting an old bill with the internet down,
      * and nothing new is being claimed.
      */
+    if (isQuotation(draft)) {
+      doPrint(await saveQuote())
+      return
+    }
     const done = await postDraft()
     if (done) { doPrint(done.bill); return }
     if (draft.postedAt) doPrint({ ...priced, total })
@@ -3037,6 +3366,16 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             if (!gone) throw new Error('Could not reach the books, so the bill was not deleted.')
             leave()
           }}
+          onClose={() => setAsking(null)}
+        />
+      )}
+      {asking === 'quote' && (
+        <Confirm
+          title={`Move bill ${draft.number} to quotations?`}
+          body="The sale comes out of the books — the customer's balance drops by its amount — and a quotation with the same lines is made in its place. The bill goes to Trash, so it can be restored."
+          confirmLabel="Move to quotation"
+          danger
+          onConfirm={moveToQuotation}
           onClose={() => setAsking(null)}
         />
       )}
@@ -3417,7 +3756,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
         {(draft.kind ?? 'sale') === 'purchase' && (
           <AgainstDeliveries
             draft={draft}
-            setDraft={setDraft}
+            setDraft={setDraftFromDeliveries}
             rows={deliveries}
             ledgerId={namedAccount?._id}
             pendingGrn={pendingGrn}
@@ -3460,6 +3799,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 myItems={myItems}
                 kind={draft.kind ?? 'sale'}
                 disabled={draft.items.length === 1}
+                history={history}
+                linesAbove={draft.items.slice(0, idx)}
               />
             ))}
           </div>
@@ -3488,7 +3829,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
                 where it went. A sale or a purchase asks how much of it was
                 settled now — that amount posts as a line of this same
                 voucher, against the drawer or the bank. */}
-            {!isMoneyVoucher && (draft.kind ?? 'sale') !== 'return' && (draft.kind ?? 'sale') !== 'grn' && (
+            {!isMoneyVoucher && (draft.kind ?? 'sale') !== 'return' && (draft.kind ?? 'sale') !== 'grn' && !isQuotation(draft) && (
               <div className="flex items-center gap-1.5 rounded-xl bg-stone-100 px-3 py-2 dark:bg-stone-800">
                 <span className="text-sm text-muted">
                   {(draft.kind ?? 'sale') === 'purchase' ? 'Paid' : 'Received'}
@@ -3591,7 +3932,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               onClick={save}
               className="min-w-0 flex-1"
             >
-              Save {BILL_KINDS[draft.kind ?? 'sale'].title}
+              {pricedGrn ? 'Save Delivery + Purchase' : `Save ${BILL_KINDS[draft.kind ?? 'sale'].title}`}
             </Button>
             <Button
               variant="outline"
@@ -3600,13 +3941,34 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
               <Printer size={15} /> Print
             </Button>
           </div>
+          {/* A saved quotation the customer has taken up: the same lines, as a
+              sale dated today with the next bill number. Nothing is posted
+              until Save — cancelling leaves the quotation as it was. */}
+          {/* A saved sale that turned out to be only a price. */}
+          {(draft.kind ?? 'sale') === 'sale' && !voucherId && !String(draft.id).startsWith('vch-')
+            && bills.some((b) => b.id === draft.id) && (
+            <Button variant="ghost" onClick={() => setAsking('quote')} className="px-3">
+              Move to Quotation
+            </Button>
+          )}
+          {isQuotation(draft) && bills.some((b) => b.id === draft.id) && (
+            <Button
+              variant="outline"
+              onClick={convertToSale}
+              className="border-shiv-green text-stone-900 dark:text-white"
+            >
+              <ReceiptText size={15} /> Convert to Sale
+            </Button>
+          )}
         </div>
 
         {/* The paper this was written from, if there is any.
             Closed until asked for: the picker lists every photograph the phone
             has sent in and nobody has filed, which is a wall of pictures on a
             bill that has none — and most bills written at the counter have
-            none, because the counter is where the bill is being made. */}
+            none, because the counter is where the bill is being made.
+            A quotation is never filed, so it has no paper to keep. */}
+        {!isQuotation(draft) && (
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -3647,6 +4009,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
             </div>
           )}
         </div>
+        )}
 
         {photoShown != null && (
           <BillViewer voucher={photoShown} onClose={() => setPhotoShown(null)} />
@@ -3694,12 +4057,12 @@ const iso = (d: Date) => {
  * The number is the bill's own until it posts and the books issue theirs.
  */
 const VCH_ABBR: Record<string, string> = {
-  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR', refund: 'REF', grn: 'GRN',
+  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR', refund: 'REF', grn: 'GRN', quotation: 'QTN',
 }
 const billLabel = (b: Bill) =>
   // A voucher opened for editing already carries the books' own label —
   // prefixing it again gave rows reading "SAL-SAL-0003".
-  b.voucherId ? String(b.number) : `${VCH_ABBR[b.kind ?? 'sale']}-${b.number}`
+  b.voucherId ? String(b.number) : `${VCH_ABBR[b.kind ?? 'sale']}-${String(b.number).replace(/^Q-/, '')}`
 
 /**
  * Which tab an account opens on. A sale or a receipt is written against a
@@ -3741,6 +4104,8 @@ type DayRow = {
   onRetry?: () => void
   /** When it was written, which is not the date written on it. */
   entered: number
+  /** A quotation: shown with its amount, but not money the day took in. */
+  quote?: boolean
 }
 
 function BillDayBook({ bills, onNew, onDelete, onRetry }: {
@@ -3770,10 +4135,14 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
 
   // The server already knows how to answer for a window — the ledger's day
   // book has taken from/to since it was written; nothing ever passed them.
-  const vouchers = useQuery(api.reports.dayBook, {
+  //
+  // Opened on the list this device last saw for the same period, the way the
+  // ledger's pages open, and swapped for the live one the moment it lands —
+  // so coming back to the day book shows it at once rather than "Loading…".
+  const vouchers = useLive(api.reports.dayBook, {
     from: from ? startOfDay(from) : undefined,
     to: to ? startOfDay(to) + 86_399_999 : undefined,
-  })
+  }, `daybook:${from}:${to}`) as any[] | undefined
   const loading = vouchers === undefined
 
   // Every bill is a bill: there are no drafts to keep apart any more.
@@ -3815,8 +4184,9 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
       (vouchers ?? []).map((v: any) => String(v.refNo ?? '')).filter((r) => r.startsWith('BILL-')),
     )
     for (const b of finished) {
-      if (b.voucherId && postedIds.has(String(b.voucherId))) continue
-      if (postedRefs.has(`BILL-${b.number}`)) continue
+      const quote = isQuotation(b)
+      if (!quote && b.voucherId && postedIds.has(String(b.voucherId))) continue
+      if (!quote && postedRefs.has(`BILL-${b.number}`)) continue
       const at = startOfDay(b.date)
       if (from && at < startOfDay(from)) continue
       if (to && at > startOfDay(to)) continue
@@ -3828,7 +4198,8 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         partyId: b.ledgerId,
         ref: b.ref || '',
         side: sideOf(billLabel(b)),
-        account: b.postError ? `Not posted — ${b.postError}` : 'Not posted',
+        account: quote ? 'Quotation — not in the books' : b.postError ? `Not posted — ${b.postError}` : 'Not posted',
+        quote,
         amount: b.total,
         photos: [],
         entered: b.updatedAt ?? b.postedAt ?? at,
@@ -3848,7 +4219,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
       : list.sort((a, b) => b.entered - a.entered || b.label.localeCompare(a.label))
   }, [vouchers, finished, from, to, bills, onRetry, byDate])
 
-  const total = rows.reduce((s, r) => s + (r.amount ?? 0), 0)
+  const total = rows.reduce((s, r) => s + (r.quote ? 0 : r.amount ?? 0), 0)
 
   // A day book is read a day at a time: each date opens with its own line and
   // closes with what the day came to, and the date is not repeated down the
@@ -3863,7 +4234,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
       if (last && iso(new Date(last.date)) === key) last.rows.push(r)
       else out.push({ date: r.date, rows: [r], total: 0 })
     }
-    for (const d of out) d.total = d.rows.reduce((s, r) => s + (r.amount ?? 0), 0)
+    for (const d of out) d.total = d.rows.reduce((s, r) => s + (r.quote ? 0 : r.amount ?? 0), 0)
     return out
   }, [rows, byDate])
 

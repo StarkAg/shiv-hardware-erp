@@ -203,6 +203,21 @@ describe('delivery lines on the bill', () => {
     expect(out[0].customEntryId).toBe('c2')
   })
 
+  it('opens each line at the rate its estimate used, and leaves unknown ones empty', () => {
+    const row = {
+      voucherId: 'v1', vchLabel: 'GRN-0017', date: 1, days: 0, partyLedgerId: 'p1',
+      party: 'SRT', receivedBy: 'Anup', billedHere: false, estimate: 0, unpricedLines: 1,
+      items: [
+        { description: '30mm Safari 78 X 38', qty: 2, unit: 'Pc', rate: 3700, value: 7400, from: 'last paid, bill 88' },
+        { description: '30mm Safari 78 X 26', qty: 2, unit: 'Pc', rate: 0, value: 0, from: null },
+      ],
+    } as never
+    const [known, fresh] = withDeliveryLines([], [row], [])
+    expect(known).toMatchObject({ amount: 7400, rateSqft: 3700 })
+    expect(fresh.amount).toBe(0)
+    expect(fresh.rateSqft).toBeUndefined()
+  })
+
   it('matches through case and spacing', () => {
     const out = withDeliveryLines([], [delivery(['SUNMICA 0.8MM  LW 8340'])], catalog)
     expect(out[0].customEntryId).toBe('c1')

@@ -16,11 +16,12 @@
 import type { BillItem, BillKind, CustomCatalogEntry } from './types'
 import { isAmountOnlyLine, isChargeName, isRoundupLine } from './types'
 import { canonicalUnit, foldName } from '../../convex/lib/text'
+import { withUnitRate } from './linePick'
 
 /** One thing to do to the catalogue. The caller applies it to the store. */
 export type CatalogChange =
-  | { op: 'add'; name: string; unit?: string; rate?: number; rates?: number[] }
-  | { op: 'update'; id: string; unit?: string; rate?: number; rates?: number[] }
+  | { op: 'add'; name: string; unit?: string; rate?: number; rates?: number[]; unitRates?: Record<string, number> }
+  | { op: 'update'; id: string; unit?: string; rate?: number; rates?: number[]; unitRates?: Record<string, number> }
 
 /** How many past rates an item keeps. Enough to recognise, short enough to read. */
 export const RATES_KEPT = 8
@@ -85,7 +86,7 @@ export function catalogChangesFor(
       changes.push({
         op: 'update',
         id: known.id,
-        ...(rates ? (buying ? { rates } : { rate, rates }) : {}),
+        ...(rates ? (buying ? { rates } : { rate, rates, unitRates: withUnitRate(known.unitRates, unit, rate) }) : {}),
         // An item learned from a purchase may have arrived with no unit.
         ...(unit && !known.unit ? { unit } : {}),
       })
@@ -97,7 +98,7 @@ export function catalogChangesFor(
       op: 'add',
       name,
       ...(unit ? { unit } : {}),
-      ...(rate ? (buying ? { rates: [rate] } : { rate, rates: [rate] }) : {}),
+      ...(rate ? (buying ? { rates: [rate] } : { rate, rates: [rate], unitRates: withUnitRate(undefined, unit, rate) }) : {}),
     })
   }
 

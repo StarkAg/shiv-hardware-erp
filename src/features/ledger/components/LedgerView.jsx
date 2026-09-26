@@ -5,6 +5,7 @@ import VoucherBillPreview from './VoucherBillPreview'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
+import { useNavigate } from 'react-router-dom';
 import { rupees, shortDate, aadhaarGroups, phoneDisplay } from '../lib/format';
 import PriceDialog from './PriceDialog';
 import Confirm from './Confirm';
@@ -89,6 +90,13 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   };
   const [pricing, setPricing] = useState(null);
   const [editing, setEditing] = useState(null);
+  const navigate = useNavigate();
+  /**
+   * Quotations given to this party. They are the shop's own bills, never
+   * posted, so the books do not return them; they are listed from the bills,
+   * on their dates, with no Dr or Cr and no effect on the balance.
+   */
+  const quotes = bills.filter((b) => b.kind === 'quotation' && b.ledgerId === ledgerId);
 
   // Bill-backed vouchers are redirected inside VoucherEditor, so every edit
   // button here can stay a plain setEditing.
@@ -149,7 +157,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const received = data?.received ?? [];
   // Deliveries first, then what is posted, then what is still waiting for a
   // figure. Only ever compared against each other, so the numbers are ranks.
-  const SAME_DAY = { received: 0, entry: 1, pending: 2 };
+  const SAME_DAY = { received: 0, entry: 1, pending: 2, quote: 3 };
   // Unpriced bills belong on their own dates, among the entries, not heaped at
   // the top. They carry no amount and no balance, so interleaving them is
   // presentation only — the running balance is worked out on the server and is
@@ -159,6 +167,8 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
     ...pending.map((p) => ({ kind: 'pending', key: p._id, date: p.date, p })),
     // Deliveries sit on their dates like unpriced bills: no amount, no balance.
     ...received.map((g) => ({ kind: 'received', key: g._id, date: g.date, g })),
+    // Quotations too: a price given, shown for the record, never a balance.
+    ...quotes.map((q) => ({ kind: 'quote', key: q.id, date: Date.parse(q.date) || 0, q })),
   ]
     /**
      * Same day: the goods move, then the bill for them.
@@ -494,6 +504,40 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       </button>
                       <button className="xbtn del" onClick={() => setDeleting(item.g)} aria-label="Delete">
                         <X size={14} aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                ) : item.kind === 'quote' ? (
+                  <tr className="quote" key={item.key}>
+                    <td className="mono" data-label="Date">{shortDate(item.date)}</td>
+                    <td className="mono entryno" data-label="Vch">QTN-{String(item.q.number).replace(/^Q-/, '')}</td>
+                    <td className="vchtype" data-label="Type">Quotation</td>
+                    <td className="ref mono" data-label="Ref">{item.q.ref || '—'}</td>
+                    <td className="particulars" data-label="Particulars">
+                      <Goods bill={item.q} all first />
+                      <div className="ref">₹{rupees(item.q.total)} quoted · not in the balance</div>
+                    </td>
+                    <td className="num" data-label="Debit" />
+                    <td className="num" data-label="Quotation">
+                      <button className="btn small" onClick={() => navigate(`/bills/${item.q.id}?convert=sale`)}>
+                        Convert to sale
+                      </button>
+                    </td>
+                    <td className="num" data-label="Balance" />
+                    {showComm && <td className="w-comm" />}
+                    <td className="w-clip" data-label="">
+                      <button
+                        className="clip"
+                        onClick={() => setPreviewing(item.q)}
+                        aria-label="Show the quotation"
+                        title="Show the quotation"
+                      >
+                        <ReceiptText size={13} aria-hidden="true" />
+                      </button>
+                    </td>
+                    <td className="rowacts" data-label="">
+                      <button className="xbtn" onClick={() => navigate(`/bills/${item.q.id}`)} aria-label="Edit">
+                        <Pencil size={14} aria-hidden="true" />
                       </button>
                     </td>
                   </tr>

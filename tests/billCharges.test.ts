@@ -77,3 +77,29 @@ describe('discount, GST and round-off written from the goods', () => {
     expect(html).toContain('CGST 9%')
   })
 })
+
+describe('a fare on a bill of several pages', () => {
+  test('prints Sub Total, then the fare, then Total — in that order', () => {
+    // Q-1's shape: sixteen lines of goods over two pages, then a fare.
+    const goods = Array.from({ length: 16 }, (_, n) => line(`Item ${n + 1}`, 5000))
+    const fare = { ...line('Fare', 900), amountOnly: true } as BillItem
+    const items = [...goods, fare]
+    const html = buildBillHtml({
+      id: 'q', number: 'Q-1', kind: 'quotation', date: '2026-09-25', customerName: 'Satyendra Prasad', items,
+      total: sum(items), paid: false,
+    } as never)
+    const lastPage = html.slice(html.lastIndexOf('Q-1'))
+    const at = (text: string) => lastPage.indexOf(text)
+    expect(at('Sub Total')).toBeGreaterThan(-1)
+    expect(at('80,000')).toBeGreaterThan(at('Sub Total'))
+    expect(at('Fare')).toBeGreaterThan(at('80,000'))
+    expect(at('>Total<')).toBeGreaterThan(at('Fare'))
+    expect(at('80,900')).toBeGreaterThan(at('>Total<'))
+  })
+
+  test('a bill with no charges prints no Sub Total', () => {
+    const items = [line('Hinge', 100)]
+    const html = buildBillHtml({ id: 'n', number: '5', date: '2026-09-25', customerName: 'A', items, total: 100, paid: false } as never)
+    expect(html).not.toContain('Sub Total')
+  })
+})

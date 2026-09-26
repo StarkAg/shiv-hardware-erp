@@ -26,6 +26,7 @@ import type * as filing from "../filing.js";
 import type * as history from "../history.js";
 import type * as http from "../http.js";
 import type * as inbox from "../inbox.js";
+import type * as jobs from "../jobs.js";
 import type * as itemCosts from "../itemCosts.js";
 import type * as itemFold from "../itemFold.js";
 import type * as itemSame from "../itemSame.js";
@@ -88,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   history: typeof history;
   http: typeof http;
   inbox: typeof inbox;
+  jobs: typeof jobs;
   itemCosts: typeof itemCosts;
   itemFold: typeof itemFold;
   itemSame: typeof itemSame;

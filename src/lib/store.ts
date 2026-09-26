@@ -334,10 +334,13 @@ export const useStore = create<AppState>((set, get) => ({
       const bills = [...st.bills]
       let billSeq = st.billSeq
       if (i >= 0) {
+        // A quotation converted to a sale has just taken a bill number.
+        if (bills[i].kind === 'quotation' && b.kind !== 'quotation') billSeq = st.billSeq + 1
         bills[i] = b
       } else {
         bills.unshift(b)
-        billSeq = st.billSeq + 1
+        // A quotation numbers in its own series and takes no bill number.
+        if (b.kind !== 'quotation') billSeq = st.billSeq + 1
       }
       return { bills, billSeq }
     })

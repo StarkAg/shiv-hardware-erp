@@ -20,7 +20,7 @@ import {
   NotebookPen,
   Scale,
   TrendingUp, HandCoins, CalendarClock, PackageCheck, PackageOpen,
-  ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp } from 'lucide-react'
+  ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack } from 'lucide-react'
 import { UpdateBanner } from './UpdateBanner'
 import { Toaster } from './Toast'
 import { BUILD_ID, CURRENT_VERSION } from '../lib/appUpdate'
@@ -100,6 +100,10 @@ const AREAS: { label: string; items: NavItem[] }[] = [
       { to: '/bills?new=grn', label: 'Goods Received', icon: PackageCheck, key: 'Alt+F9' },
       { to: '/bills?new=return', label: 'Goods Return', icon: PackageX, key: 'Alt+F8' },
       { to: '/bills?new=refund', label: 'Refund', icon: HandCoins, key: 'Alt+F6' },
+      // A price given, not a sale: kept with the bills, never in the books.
+      // Alt+F10 — F10 is Tally's "Other Vouchers", and a quotation is one.
+      { to: '/bills?new=quotation', label: 'Quotation', icon: FileText, key: 'Alt+F10' },
+      { to: '/quotations', label: 'Quotations List', icon: FileStack },
     ],
   },
   {
@@ -150,6 +154,7 @@ const VOUCHERS = [
   { to: '/bills?new=grn',      label: 'Goods Received', key: 'alt+F9', kind: 'grn' },
   { to: '/bills?new=return',   label: 'Goods Return',   key: 'alt+F8', kind: 'return' },
   { to: '/bills?new=refund',   label: 'Refund',         key: 'alt+F6', kind: 'refund' },
+  { to: '/bills?new=quotation', label: 'Quotation',     key: 'alt+F10', kind: 'quotation' },
 ] as const
 
 /**

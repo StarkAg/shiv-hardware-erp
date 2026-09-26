@@ -846,6 +846,35 @@ export default defineSchema({
     madeAt: v.number(),
   }).index("by_key", ["key"]),
 
+  /**
+   * A fabrication job, from the counter estimate to the finished work order.
+   *
+   * One record, one number, moving through states — because the shop's paper
+   * version is three separate sheets (letterhead estimate, the mechanic's site
+   * measurements, the pink order pad) and the money moves between them without
+   * anybody having to agree to it. Here the jump is a screen somebody presses.
+   *
+   * The document halves are kept loose, the way quotations are: what a job
+   * holds changes as the shop's products do, and a migration per rate change
+   * is not worth the tidiness.
+   */
+  jobs: defineTable({
+    jobId: v.string(),            // the id the device gave it
+    number: v.string(),           // the pad number, e.g. "758"
+    status: v.string(),           // estimate | measured | confirmed | ordered | delivered | billed
+    customer: v.any(),            // { name, mobile, address }
+    estimate: v.any(),            // { lines: [], total } — nominal sizes, counted at the counter
+    openings: v.any(),            // [] — what the mechanic measured on site
+    order: v.any(),               // { lines: [], total, advance, fare, deliveryDate }
+    variance: v.any(),            // what the nominal sizes cost, logged at Accept
+    at: v.number(),
+    updatedAt: v.number(),
+    deleted: v.boolean(),
+  })
+    .index('by_job_id', ['jobId'])
+    .index('by_number', ['number'])
+    .index('by_updated_at', ['updatedAt']),
+
   counters: defineTable({
     name: v.string(),
     value: v.number(),

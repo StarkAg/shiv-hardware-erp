@@ -1,0 +1,16 @@
+# The Vercel panel build only needs the Vite app (src, public, index.html,
+# config, convex types). Exclude server-side, native, and heavy/volatile dirs —
+# print-server holds the live WhatsApp session whose files change mid-upload.
+node_modules
+print-server
+attendance-web
+android
+electron
+release
+dist
+build
+reports
+preview
+cloud-api
+*.log
+*.apk

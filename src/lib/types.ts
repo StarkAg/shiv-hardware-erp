@@ -257,7 +257,7 @@ export type BillPaymentMode = 'cash' | 'online' | 'upi'
  * a supplier. It takes either kind of party; which way it posts follows the
  * party's account.
  */
-export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return' | 'refund' | 'grn'
+export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return' | 'refund' | 'grn' | 'quotation'
 
 /** What each one is called, and what the party on it is called. */
 export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: string }> = {
@@ -268,6 +268,22 @@ export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: s
   return:   { title: 'Goods Return', party: 'Party', ref: 'Ref' },
   refund:   { title: 'Refund',   party: 'Customer', ref: 'Slip no.' },
   grn:      { title: 'Goods Received', party: 'Supplier', ref: 'Challan no.' },
+  quotation: { title: 'Quotation', party: 'Customer', ref: 'Ref' },
+}
+
+/**
+ * A quotation is a price given, not a sale made: it is kept with the bills
+ * but never posted, so no account is opened and no balance moves. It numbers
+ * in a series of its own — Q-1, Q-2 — so it never takes a bill number, and
+ * becomes a sale only when someone converts it.
+ */
+export const isQuotation = (b: { kind?: BillKind }) => b.kind === 'quotation'
+
+/** The next free quotation number, counting ones already turned into sales. */
+export function nextQuoteNumber(bills: { kind?: BillKind; number?: string; fromQuote?: string }[]): string {
+  const n = (v?: string) => Number(String(v ?? '').replace(/^Q-/i, '')) || 0
+  const used = bills.reduce((max, b) => Math.max(max, isQuotation(b) ? n(b.number) : 0, n(b.fromQuote)), 0)
+  return `Q-${used + 1}`
 }
 
 export interface BillItem {
@@ -459,6 +475,8 @@ export interface Bill extends BillCharges {
    * list, and it stays that way until a retry succeeds.
    */
   postError?: string
+  /** The quotation this sale was converted from, e.g. "Q-4". */
+  fromQuote?: string
 }
 
 // ---- Hardware catalog (managed via Inventory page) ------------------------
@@ -473,6 +491,12 @@ export interface HardwareCatalogEntry {
   rate?: number
   /** The unit normally used when this hardware item is added to a bill. */
   unit?: string
+  /**
+   * The rate last sold at in each unit, keyed by canonical unit. A screw goes
+   * out by the packet and by the piece at two different figures, and picking
+   * the unit on a line brings back the figure for that unit.
+   */
+  unitRates?: Record<string, number>
 }
 export type HardwareCatalog = Partial<Record<ProductCategory, HardwareCatalogEntry>>
 
@@ -495,6 +519,12 @@ export interface CustomCatalogEntry {
   rate?: number
   /** The unit used most recently — what a fresh line starts with. */
   unit?: string
+  /**
+   * The rate last sold at in each unit, keyed by canonical unit. A screw goes
+   * out by the packet and by the piece at two different figures, and picking
+   * the unit on a line brings back the figure for that unit.
+   */
+  unitRates?: Record<string, number>
   /**
    * Every distinct rate this item has been billed at, newest first. One item
    * genuinely sells at several prices — trade vs retail, old stock vs new — so
