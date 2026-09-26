@@ -79,8 +79,9 @@ const lineId = () => `grn${Date.now().toString(36)}${(lineSeq++).toString(36)}`
 
 /**
  * The lines of the deliveries picked, added to the bill: a delivery's line
- * joins a line of the same item already there, otherwise it is added with
- * no amount, for the bill's rate to be typed in.
+ * joins a line of the same item already there, otherwise it is added at the
+ * rate its estimate used — what was last paid for it — or with no amount
+ * where there is none, for the bill's rate to be typed in.
  */
 /**
  * The My Items entry a delivery line is for, where the shop already knows.
@@ -112,19 +113,21 @@ export function withDeliveryLines(items: BillItem[], rows: DeliveryRow[], catalo
       const same = out.find((i) => foldName(i.description) === key && !i.auto)
       if (same) continue
       const entry = entryFor(line.description, catalog)
+      const qty = line.qty || 1
+      // The same figure the delivery's estimate was worked at, so the bill
+      // opens at what it is expected to come to. A supplier's bill that says
+      // otherwise is typed over, and the rate check then compares the typed
+      // figure with the last one paid, as before.
+      const rate = line.from && line.rate > 0 ? line.rate : 0
       out.push({
         id: lineId(),
         description: line.description,
         // What was counted stands: the delivery's own quantity and unit are
         // the record of what came through the door, not the item list's.
-        qty: line.qty || 1,
+        qty,
         unit: line.unit || 'Pc',
-        // Deliberately no rate. Knowing the item is what puts the rate box on
-        // the line and remembers what is typed into it; filling the figure in
-        // would price the purchase at last time's rate before anybody has
-        // looked at the bill — and would answer the rate check that exists to
-        // catch exactly that.
-        amount: 0,
+        amount: rate ? Math.round(rate * qty) : 0,
+        ...(rate ? { rateSqft: rate } : {}),
         ...(entry ? { customEntryId: entry.id } : {}),
       })
     }

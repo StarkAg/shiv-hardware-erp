@@ -11,6 +11,7 @@ import { Profit } from './features/profit/Profit'
 import { LedgersPage } from './features/ledger/LedgersPage'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { BillTrash } from './features/bills/BillTrash'
+import { QuotationList } from './features/bills/QuotationList'
 import { PrinterQueue } from './features/print/PrinterQueue'
 import { CashReview } from './features/cash/CashReview'
 import { CashPending } from './features/cash/CashPending'
@@ -161,6 +162,8 @@ const router = createHashRouter([
       // entries and the ones approved from a photograph.
       { path: 'bills/voucher/:voucherId', element: <BillBuilder /> },
       { path: 'bills/:id',      element: <BillBuilder /> },
+      // Every quotation given, open and sold.
+      { path: 'quotations',     element: <QuotationList /> },
       { path: 'cash-review',    element: <CashReview /> },
       // The accounting side of the drawer: notes still needing an account.
       // Deliberately not in the menu — cash and the books are kept apart.

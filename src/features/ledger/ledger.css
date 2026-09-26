@@ -1187,6 +1187,14 @@ to{opacity: 0}}
 .ledger-root .ledger tbody tr.received.open.late td:first-child{box-shadow: inset 3px 0 0 var(--red);}
 .ledger-root .ledger tbody tr.received.open.late .particulars .ref:last-child{color: var(--red); font-weight: 700;}
 .ledger-root .ledger tbody tr.received.billed td{color: var(--muted);}
+/* A quotation: on the record, never in the balance — so it reads quieter than
+   the entries around it, and its type in italics says it is not one of them. */
+.ledger-root .ledger tbody tr.quote td{color: var(--muted);}
+.ledger-root .ledger tbody tr.quote td:first-child{box-shadow: inset 3px 0 0 var(--line);}
+.ledger-root .ledger tbody tr.quote .vchtype{font-style: italic;}
+.ledger-root .ledger tr.quote .btn.small{margin-left: auto;}
+/* The chosen filter on the quotations list, and its main action. */
+.ledger-root .btn.on{background: var(--brass); border-color: var(--brass); color: var(--brass-ink);}
 .ledger-root .ledger tr.received .btn.small{margin-left: auto;}
 
 .ledger-root .pill.calm{background: var(--line); color: var(--fg);}

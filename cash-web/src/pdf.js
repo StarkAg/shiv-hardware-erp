@@ -97,6 +97,22 @@ class Content {
       size, font: bold ? F.figBold : F.fig, gray, rgb,
     })
   }
+  /* Set on a slant, for the one thing on this page that is a stamp rather than
+     a written line. The text matrix carries the rotation: a b c d are the
+     turned axes, e f the point the baseline starts from. */
+  slant(x, y, s, deg, { size = SIZE, font = F.nameBold, rgb = [0, 0, 0] } = {}) {
+    const str = esc(s)
+    if (!str) return this
+    const r = (deg * Math.PI) / 180
+    const cos = Math.cos(r).toFixed(4)
+    const sin = Math.sin(r).toFixed(4)
+    this.ops.push(`${rgb.join(' ')} rg`)
+    this.ops.push(
+      `BT /${font} ${size} Tf ${cos} ${sin} ${-sin} ${cos} `
+      + `${x.toFixed(2)} ${y.toFixed(2)} Tm (${str}) Tj ET`,
+    )
+    return this
+  }
   line(x1, y, x2, { width = 0.6, gray = 0 } = {}) {
     this.ops.push(`${gray} G ${width} w ${x1.toFixed(2)} ${y.toFixed(2)} m ${x2.toFixed(2)} ${y.toFixed(2)} l S`)
     return this
@@ -114,6 +130,7 @@ class Content {
 
 const RED = [0.60, 0.11, 0.13]
 const INK = [0.10, 0.13, 0.22]
+const STAMP = [0.85, 0.66, 0.68]        // the closed stamp, inked thin so the page reads through it
 const BANKWASH = [0.98, 0.95, 0.80]
 const DEALWASH = [0.99, 0.88, 0.75]
 const RULE = 0.55
@@ -129,6 +146,7 @@ export function registerPdf(data) {
     receipts = [], payments = [],
     closeCash = 0, closeBank = 0,
     counted = null, diff = null,
+    shut = false,
   } = data
 
   const c = new Content()
@@ -279,6 +297,23 @@ export function registerPdf(data) {
 
   c.line(RIGHT - 150, footY - 4, RIGHT, { width: 0.5, gray: 0.55 })
   c.text(RIGHT - 150, footY - 14, 'Checked by', { size: 7.5, gray: 0.45 })
+
+  // A day the shop never opened says so across the middle of the sheet. The
+  // book writes it in Hindi as well; this font cannot set Devanagari, so the
+  // sheet carries the English line only. Helvetica-Bold capitals run around
+  // 0.68em each, which is close enough to centre an eleven-letter stamp.
+  if (shut) {
+    const size = 44
+    const deg = -20
+    const word = 'SHOP CLOSED'
+    const r = (deg * Math.PI) / 180
+    const wide = 0.68 * size * word.length
+    c.slant(
+      A4.w / 2 - (wide / 2) * Math.cos(r),
+      A4.h / 2 - (wide / 2) * Math.sin(r) - size * 0.35,
+      word, deg, { size, rgb: STAMP },
+    )
+  }
 
   return assemble(c.toString())
 }

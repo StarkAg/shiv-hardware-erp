@@ -332,12 +332,17 @@ function buildEstimatePages(bill: Bill): string {
       bill.paidDate && bill.paidDate !== bill.date ? ` ${formatDate(bill.paidDate)}` : ''
     }`
 
+    // A fare or any other charge splits the foot into Sub Total, the charges,
+    // then Total — read top to bottom in the order the figure is built.
+    const hasCharges = isLast && charges.length > 0
     const bottomRight = isLast
       ? `<div style="text-align:right">
-          ${prevTotal > 0 ? `<div style="font-size:9.5pt;color:#555;margin-bottom:0.5mm">${fmt(runningTotal)}</div>` : ''}
+          ${prevTotal > 0 && !hasCharges ? `<div style="font-size:9.5pt;color:#555;margin-bottom:0.5mm">${fmt(runningTotal)}</div>` : ''}
           <div style="font-size:12pt;font-weight:900;border-top:1.5px solid #111;${
             received > 0 ? '' : 'border-bottom:3px double #111;'
-          }padding-top:1mm;padding-bottom:1mm;min-width:24mm">${fmt(bill.total)}</div>
+          }padding-top:1mm;padding-bottom:1mm;min-width:24mm">${
+            hasCharges ? '<span style="font-size:9.5pt;font-weight:700;color:#555;margin-right:4mm">Total</span>' : ''
+          }${fmt(bill.total)}</div>
           ${received > 0 ? `
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:9.5pt;color:#555;padding-top:1mm">
               <span>Less ${esc(receivedLabel)}</span><span style="font-weight:600">${fmt(received)}</span>
@@ -350,9 +355,10 @@ function buildEstimatePages(bill: Bill): string {
 
     // Fare and round-off sit just above the total rule — a charge on the bill,
     // not one of the goods, and read right where the figure it changes is.
-    // A discount or tax is worked on the goods, so the goods are shown first.
-    const taxed = charges.some(c => /^(?:discount|less|[csi]?\s*\.?\s*gst)\b/i.test((c.description ?? '').trim()))
-    const subTotal = isLast && taxed && prevTotal === 0
+    // The goods come first as a Sub Total, so a fare reads as added to them.
+    // On a bill of several pages the goods' figure used to print beside the
+    // total instead — below the fare, as if it came after it.
+    const subTotal = hasCharges
       ? `<div style="display:flex;justify-content:flex-end;align-items:baseline;gap:4mm;font-size:10pt;margin-bottom:1.5mm;border-top:0.5px solid #aaa;padding-top:1mm">
           <span style="color:#555">Sub Total</span>
           <span style="font-weight:700;min-width:24mm;text-align:right">${fmt(runningTotal)}</span>
@@ -373,7 +379,7 @@ function buildEstimatePages(bill: Bill): string {
     // showing what comes off the printer. Same gradient as the print server's.
     return `<div style="position:relative;width:148mm;min-height:210mm;margin:0 auto;padding:8mm 7mm 10mm;box-sizing:border-box;background-color:#fff;background-image:repeating-linear-gradient(transparent,transparent 7.8mm,#e8eef5 7.8mm,#e8eef5 8mm);background-position-y:22mm;${breakStyle}">
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;letter-spacing:5px;color:#888;text-transform:uppercase;margin-bottom:2mm;padding-bottom:1mm;border-bottom:0.5px solid #bbb">
-        <span>${bill.kind === 'return' ? 'Goods Return' : bill.kind === 'refund' ? 'Refund' : bill.kind === 'grn' ? 'Goods Received' : 'Estimate'}</span>
+        <span>${bill.kind === 'return' ? 'Goods Return' : bill.kind === 'refund' ? 'Refund' : bill.kind === 'grn' ? 'Goods Received' : bill.kind === 'quotation' ? 'Quotation' : 'Estimate'}</span>
         <span>${esc(bill.number)}${pages.length > 1 ? ` (${pageIdx + 1})` : ''}</span>
       </div>
       <div style="margin-bottom:3mm">
