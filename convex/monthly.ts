@@ -260,6 +260,53 @@ export const board = query({
   },
 });
 
+/**
+ * The rent still to hand over this month, for the reminder every screen shows
+ * from the 1st: each premises with a monthly figure whose payments dated this
+ * month have not reached it yet, and the cash and bank accounts it can be paid
+ * from. A premises drops off the moment its payment is in the books.
+ */
+export const rentReminder = query({
+  args: {},
+  handler: async (ctx) => {
+    const ist = new Date(Date.now() + 5.5 * 3_600_000);
+    const key = `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, "0")}`;
+    const from = monthStart(key);
+    const [y, m] = key.split("-").map(Number);
+    const until = Date.UTC(y, m, 1);
+
+    const unpaid = [];
+    for (const account of await accountsOf(ctx, "rent")) {
+      const monthly = account.monthly ?? 0;
+      if (!(monthly > 0)) continue;
+      const lines = await ctx.db
+        .query("voucherEntries")
+        .withIndex("by_ledger", (q) => q.eq("ledgerId", account._id))
+        .collect();
+      const paidInMonth = lines
+        .filter((l) => l.side === "Dr" && l.date >= from && l.date < until)
+        .reduce((t, l) => t + l.amount, 0);
+      const left = round2(monthly - paidInMonth);
+      if (left > 0) {
+        unpaid.push({ ledgerId: account._id, name: account.name, payee: account.payee ?? null, amount: left });
+      }
+    }
+
+    const accounts = [];
+    for (const name of ["Cash-in-Hand", "Bank Accounts"]) {
+      const group = await groupNamed(ctx, name);
+      if (!group) continue;
+      const list = await ctx.db
+        .query("ledgers")
+        .withIndex("by_group", (q) => q.eq("groupId", group._id))
+        .collect();
+      accounts.push(...list.filter((l) => l.active !== false).map((l) => ({ id: l._id, name: l.name })));
+    }
+
+    return { month: key, label: monthLabel(key), unpaid, accounts };
+  },
+});
+
 /** Puts one month's salary, or one month's rent, on every account that has a figure. */
 export const chargeMonth = mutation({
   args: { kind: KIND, month: v.string() },

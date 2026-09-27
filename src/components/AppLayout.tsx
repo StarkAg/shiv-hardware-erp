@@ -22,6 +22,7 @@ import {
   TrendingUp, HandCoins, CalendarClock, PackageCheck, PackageOpen,
   ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack } from 'lucide-react'
 import { UpdateBanner } from './UpdateBanner'
+import { RentReminder } from './RentReminder'
 import { Toaster } from './Toast'
 import { BUILD_ID, CURRENT_VERSION } from '../lib/appUpdate'
 
@@ -355,6 +356,7 @@ export function AppLayout() {
       </aside>
 
       <main className="mobile-main min-w-0 flex-1 bg-transparent">
+        <RentReminder />
         <BackBar />
         <div className="page-area">
           <Outlet />
