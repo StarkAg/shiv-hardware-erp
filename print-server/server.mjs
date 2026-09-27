@@ -434,6 +434,73 @@ function markAutoReplied(jid) {
   }
 }
 
+// ── WhatsApp "order" → handwritten bill OCR ──────────────────────────────────
+// In ANY chat (DM or any group, from anyone), a message that is exactly "order"
+// reads the bill photo and replies with the plywood/steel/telescopic item list.
+// The photo is: the image the "order" caption is on, the image the "order" text
+// replies to, or the latest image sent in that chat in the last few minutes.
+// Uses Mesh API (OpenAI-compatible gateway) with a cheap vision model.
+const WHATSAPP_ORDER_OCR_ENABLED = parseBoolean(process.env.WHATSAPP_ORDER_OCR_ENABLED ?? 'true')
+const MESH_API_KEY = process.env.MESH_API_KEY || ''
+const MESH_API_BASE_URL = (process.env.MESH_API_BASE_URL || 'https://api.meshapi.ai/v1').replace(/\/+$/, '')
+const MESH_OCR_MODEL = process.env.MESH_OCR_MODEL || 'google/gemini-2.5-flash'
+const WHATSAPP_ORDER_IMAGE_TTL_MS = Math.max(1000, Number(process.env.WHATSAPP_ORDER_IMAGE_TTL_MS) || 15 * 60 * 1000)
+// jid -> [{ sender, msg, at }] most recent last (a few per chat).
+const whatsappRecentOrderImages = new Map()
+
+const ORDER_OCR_PROMPT = `You read handwritten hardware shop bills (photos) and extract items.
+
+OUTPUT FORMAT
+Return one item per line, nothing else (no headings, no bullets, no numbering, no commentary):
+Thickness Brand/Grade Size – Qty unit
+Examples:
+19mm S Solid 8x4 – 12 pc
+12mm S 7x3 – 2 pc
+19mm Amron 8x4 – 1 pc
+30mm S 78x36 – 5 pc
+20" Telescopic SS – 5 set
+If there are no matching items, output exactly: NONE
+
+1. EXTRACT PLYWOOD
+All plywood entries: 6mm, 12mm, 18mm, 19mm, 30mm, and inch-based entries converted to mm.
+Keep sizes exactly as written (8x4, 7x4, 7x3, 6x4, 78x36, 81x38, etc.).
+
+2. ALSO KEEP THESE NON-PLYWOOD ITEMS
+Steel items: "17x20x8 Thali – Qty pc", "17x20x6 Plain – Qty pc", "17x20x4 Cutlery – Qty pc"
+Telescopic SS: "20" Telescopic SS – Qty set" (unit is set)
+
+3. IGNORE COMPLETELY
+Prices, totals, GST, customer names, phone numbers, dates, P.T.O., tempo fare, Fevicol, nails, screws, hinges, handles, wardrobe channels, rollers, cutter blades, tape, Sunmica/Mica, and any other hardware item not listed above.
+
+4. BRAND NORMALIZATION
+Signature -> S ; Signature + Solid -> S Solid ; Amron -> Amron ; Solid (with or without S) -> S Solid
+Remove completely: MR, PF, and a standalone H before brand names.
+Examples: 19mm Signature Solid -> 19mm S Solid ; 19mm Solid MR -> 19mm S Solid ; 19mm MR -> 19mm ; PF Signature -> S
+
+5. THICKNESS CONVERSION
+1¼" (1 1/4 inch) -> 30mm. Keep metric thicknesses unchanged.
+
+6. OCR CORRECTION
+Fix obvious handwriting mistakes (Signatue -> Signature -> S; Amron misspellings -> Amron). Correct obvious digit errors only when clearly identifiable.
+
+7. UNITS
+Exactly "pc" for plywood, Thali, Plain, Cutlery; exactly "set" for Telescopic SS. Always lowercase. Never Pc, Pcs, Set, Nos.
+
+WORKED EXAMPLE
+Handwritten:
+1¼ Signature 78x36 – 5
+19mm Solid MR 7x4 – 4
+19mm MR 7x4 – 2
+17x20x8 Thali – 1
+20" Telescopic SS – 5
+Fevicol Marine – 5kg
+Output:
+30mm S 78x36 – 5 pc
+19mm S Solid 7x4 – 4 pc
+19mm 7x4 – 2 pc
+17x20x8 Thali – 1 pc
+20" Telescopic SS – 5 set`
+
 const whatsappWebState = {
   enabled: WHATSAPP_AUTO_PRINT_ENABLED,
   status: WHATSAPP_AUTO_PRINT_ENABLED ? 'starting' : 'disabled',
@@ -1998,11 +2065,134 @@ async function maybeAutoReplyToDirectMessage(sock, jid, msg) {
   }
 }
 
+function isWhatsAppOrderCommand(text) {
+  return /^\s*order\s*[.!]*\s*$/i.test(String(text ?? ''))
+}
+
+function rememberWhatsAppOrderImage(jid, sender, msg) {
+  const now = Date.now()
+  const list = (whatsappRecentOrderImages.get(jid) || [])
+    .filter(entry => now - entry.at < WHATSAPP_ORDER_IMAGE_TTL_MS && entry.msg.key?.id !== msg.key?.id)
+  list.push({ sender, msg, at: now })
+  whatsappRecentOrderImages.set(jid, list.slice(-5))
+  if (whatsappRecentOrderImages.size > 300) {
+    for (const [key, entries] of whatsappRecentOrderImages) {
+      if (!entries.some(entry => now - entry.at < WHATSAPP_ORDER_IMAGE_TTL_MS)) whatsappRecentOrderImages.delete(key)
+    }
+  }
+}
+
+// Latest recent image in the chat, preferring one sent by the same person.
+function findRecentWhatsAppOrderImage(jid, sender) {
+  const now = Date.now()
+  const list = (whatsappRecentOrderImages.get(jid) || []).filter(entry => now - entry.at < WHATSAPP_ORDER_IMAGE_TTL_MS)
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].sender === sender) return list[i].msg
+  return list.length ? list[list.length - 1].msg : null
+}
+
+async function extractOrderItemsFromImage(buffer, mediaType) {
+  const response = await fetch(`${MESH_API_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${MESH_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: MESH_OCR_MODEL,
+      temperature: 0,
+      messages: [
+        { role: 'system', content: ORDER_OCR_PROMPT },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Extract the items from this handwritten bill.' },
+            { type: 'image_url', image_url: { url: `data:${mediaType};base64,${buffer.toString('base64')}`, detail: 'high' } },
+          ],
+        },
+      ],
+    }),
+    signal: AbortSignal.timeout(90_000),
+  })
+  if (!response.ok) {
+    throw new Error(`Mesh API ${response.status}: ${(await response.text()).slice(0, 300)}`)
+  }
+  const data = await response.json()
+  const content = data.choices?.[0]?.message?.content
+  const raw = Array.isArray(content) ? content.map(part => part?.text ?? '').join('\n') : String(content ?? '')
+  // Strip code fences / bullets / numbering the model may add despite the prompt.
+  return raw
+    .split('\n')
+    .map(line => line.replace(/^\s*(?:```\w*|[-*•]|\d+[.)])\s*/, '').trim())
+    .filter(line => line && line !== '```' && !/^none$/i.test(line))
+}
+
+// Returns true when the message was an "order" command (handled here), false otherwise.
+async function maybeHandleWhatsAppOrder(sock, msg, downloadMediaMessage) {
+  if (!WHATSAPP_ORDER_OCR_ENABLED || !msg.message) return false
+  const jid = msg.key.remoteJid || ''
+  if (!/@(g\.us|s\.whatsapp\.net|lid)$/.test(jid)) return false
+
+  const sender = msg.key.fromMe ? 'me' : (msg.key.participant || jid)
+  const unwrapped = unwrapBaileysMessage(msg)
+  if (!isWhatsAppOrderCommand(getBaileysText(msg))) {
+    if (unwrapped?.imageMessage) rememberWhatsAppOrderImage(jid, sender, msg)
+    return false
+  }
+
+  const messageId = msg.key.id || ''
+  if (rememberWhatsAppMessageId(messageId)) return true
+  console.log(`[whatsapp-order] "order" from=${sender} chat=${jid}`)
+
+  // Which image: this message's own, the one it replies to, or a recent one in the chat.
+  const quoted = unwrapped?.extendedTextMessage?.contextInfo
+  let target = null
+  if (unwrapped?.imageMessage) {
+    target = unwrapped === msg.message ? msg : { ...msg, message: unwrapped }
+  } else if (quoted?.quotedMessage?.imageMessage) {
+    target = {
+      key: { remoteJid: jid, id: quoted.stanzaId, participant: quoted.participant },
+      message: { imageMessage: quoted.quotedMessage.imageMessage },
+    }
+  } else {
+    const recent = findRecentWhatsAppOrderImage(jid, sender)
+    if (recent) {
+      const inner = unwrapBaileysMessage(recent)
+      target = inner === recent.message ? recent : { ...recent, message: inner }
+    }
+  }
+
+  const reply = text => sock.sendMessage(jid, { text }, { quoted: msg })
+    .catch(err => console.error('[whatsapp-order] failed to send reply', err?.message ?? err))
+
+  if (!target) {
+    await reply('Send the bill photo with caption *order*, or reply to the photo with *order*.')
+    return true
+  }
+  if (!MESH_API_KEY) {
+    console.error('[whatsapp-order] MESH_API_KEY not set — cannot read bill')
+    await reply('Bill reading is not set up yet (no API key on the shop PC).')
+    return true
+  }
+
+  try {
+    const buffer = await downloadMediaMessage(target, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage })
+    if (!buffer?.length) throw new Error('empty image download')
+    const mediaType = (target.message.imageMessage.mimetype || 'image/jpeg').split(';')[0].toLowerCase()
+    const items = await extractOrderItemsFromImage(buffer, mediaType)
+    console.log(`[whatsapp-order] extracted ${items.length} item(s) for chat=${jid}`)
+    await reply(items.length ? items.join('\n') : 'No plywood, steel or telescopic items found in this bill.')
+  } catch (err) {
+    console.error('[whatsapp-order] failed', err?.message ?? err)
+    await reply('Could not read this bill. Please send a clearer photo and try *order* again.')
+  }
+  return true
+}
+
 async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
   // fromMe messages are intentionally NOT skipped: the shop owner often sends
   // images and the bw/cp command from the same account that hosts this WhatsApp
   // session, so their own media must buffer and their own commands must flush.
   const jid = msg.key.remoteJid || ''
+
+  // "order" → read the bill photo and reply with the items (any chat, anyone).
+  if (await maybeHandleWhatsAppOrder(sock, msg, downloadMediaMessage)) return
 
   // Direct 1:1 chats: auto-reply with the enquiry redirect, then stop. (Groups
   // fall through to the auto-print handling below.)
@@ -2288,6 +2478,10 @@ async function startWhatsAppWebAutoPrint() {
         for (const msg of messages) {
           const msgTs = (msg.messageTimestamp ?? 0) * 1000
           if (cutoff > 0 && msgTs < cutoff) continue
+          const rjid = msg.key?.remoteJid || ''
+          if (!rjid.endsWith('@g.us') && rjid !== 'status@broadcast') {
+            console.log(`[whatsapp-web] direct ${type} from=${rjid} fromMe=${!!msg.key?.fromMe} content=${msg.message ? Object.keys(msg.message).join(',') : 'none'}`)
+          }
           handleBaileysMessage(sock, msg, downloadMediaMessage).catch(err => {
             console.error('[whatsapp-web] message handling error', err.message ?? err)
           })
@@ -2632,7 +2826,8 @@ async function pollCloudPrintJobs() {
       }
     }
   } catch (err) {
-    console.warn('[cloud-print] poll failed:', err.message ?? err)
+    const cause = err?.cause ? ` (${err.cause.code ?? ''} ${err.cause.message ?? err.cause})` : ''
+    console.warn(`[cloud-print] poll failed: ${err.message ?? err}${cause}`)
   } finally {
     cloudPollRunning = false
   }
