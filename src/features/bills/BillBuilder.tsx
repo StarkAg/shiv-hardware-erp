@@ -59,6 +59,7 @@ import { billSqft, isFootSized } from '../../lib/pricing'
 import { readBoardSize, sizeLabel, sqftFields, withSqft } from '../../lib/boardSize'
 import { keepTyped, rateForUnit, withUnitRate } from '../../lib/linePick'
 import { itemHistory, recallList, type ItemHistory, type RecalledItem } from '../../lib/itemHistory'
+import { lastSoldRates, openingRate, type SoldRate } from '../../lib/rateFill'
 import { canonicalUnit, foldName } from '../../../convex/lib/text'
 import { catalogChangesFor } from '../../lib/learnCatalog'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
@@ -387,11 +388,15 @@ interface SmartItemRowProps {
   disabled?: boolean
   /** What this side of the books has billed lately — units, and Up's recall. */
   history: ItemHistory
+  /** The last price each item was sold at, as Shiv Rates shows it — see rateFill. */
+  sold: Map<string, SoldRate>
+  /** Every line on this bill, whose rates a new line follows first. */
+  lines: BillItem[]
   /** The lines above this one, which Up offers first. */
   linesAbove: BillItem[]
 }
 
-function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, myItems, kind, disabled, history, linesAbove }: SmartItemRowProps) {
+function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, myItems, kind, disabled, history, sold, lines, linesAbove }: SmartItemRowProps) {
   const { sets, hardwareCatalog, setHardwareCatalog, customCatalog, addCustomEntry, updateCustomEntry, units, addUnit } = useStore()
 
   /** Stored units plus an "add" row, so the list only holds what the shop uses. */
@@ -440,6 +445,8 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     }
   }
   const activeSet = sets[0]
+  /** A supplier's side of the books: its prices are never a selling rate. */
+  const buying = kind === 'purchase' || kind === 'grn'
   const catSizes  = (cat: ProductCategory) => hardwareCatalog[cat]?.sizes ?? []
   const catBrands = (cat: ProductCategory) => hardwareCatalog[cat]?.brands ?? []
   const catFields = (cat: ProductCategory) => (hardwareCatalog[cat]?.fields ?? []).filter(f => f.values.length > 0)
@@ -800,6 +807,11 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     }
     setSearch(name)
     setShowDrop(false)
+    // The unit it went out in last time, then whatever the item remembers.
+    const unit = history.unitOfEntry.get(entry.id) ?? history.unitOf.get(foldName(entry.name)) ?? entry.unit
+    // A sale opens at the rate this bill already gives the item, then its last
+    // selling price; only failing both does its own remembered rate fill it.
+    const opening = buying || same ? null : openingRate(name, unit, lines, item.id, sold)
     onUpdate(item.id, {
       customEntryId: entry.id,
       category: undefined,
@@ -810,12 +822,9 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       // it — passing back through the field is navigation, not a fresh choice.
       // What is typed on the line wins; the item's remembered rate and unit
       // only fill a line that has none yet. See keepTyped.
-      // The unit it went out in last time, then whatever the item remembers.
-      ...(same ? {} : keepTyped(item, {
-        rate: entry.rate,
-        unit: history.unitOfEntry.get(entry.id) ?? history.unitOf.get(foldName(entry.name)) ?? entry.unit,
-        unitRates: entry.unitRates,
-      })),
+      ...(same ? {} : keepTyped(item, opening
+        ? { rate: opening.rate, unit: opening.unit }
+        : { rate: entry.rate, unit, unitRates: entry.unitRates })),
       heightIn:  undefined,
       widthIn:   undefined,
     })
@@ -861,10 +870,11 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   function applyRecalled(r: RecalledItem | null) {
     const entry = r?.customEntryId ? customCatalog.find(e => e.id === r.customEntryId) : undefined
     const unit = r?.unit || entry?.unit || 'Pc'
-    // The price it last went at on this side of the books; failing that, a
-    // sale falls back on the item's remembered selling rate for that unit.
-    const buying = kind === 'purchase' || kind === 'grn'
-    const rate = r ? (r.rate || (entry && !buying ? rateForUnit(entry, unit) : 0)) : 0
+    // A sale takes the rate this bill already gives the item, then its last
+    // selling price. Otherwise the price it went at when it was recalled from;
+    // failing that, the item's remembered selling rate for that unit.
+    const opening = r && !buying ? openingRate(r.description, unit, lines, item.id, sold) : null
+    const rate = r ? (opening?.rate || r.rate || (entry && !buying ? rateForUnit(entry, unit) : 0)) : 0
     const qty = item.qty || 1
     const description = r?.description ?? ''
     onUpdate(item.id, {
@@ -937,7 +947,6 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     // Keep the figure at the front and drop any earlier copy of it, so the list
     // reads newest-first without repeats. Capped so it stays scannable.
     const rates = [rate, ...(entry?.rates ?? []).filter(r => r !== rate)].slice(0, 8)
-    const buying = kind === 'purchase' || kind === 'grn'
     updateCustomEntry(entryId, buying ? { rates } : { rate, rates, unitRates: withUnitRate(entry?.unitRates, item.unit, rate) })
   }
 
@@ -2343,6 +2352,15 @@ export function BillBuilder() {
       ? [partyGroup, 'Staff', 'Rent Payable']
       : [partyGroup]
   const masters = useQuery(api.masters.all, {})
+  // What each item last sold at, for a sale line this bill does not already
+  // price: the panel's own sales and the customers' slips read into the books,
+  // read as Shiv Rates reads them.
+  const scanned = useQuery(api.review.goods, historyKind === 'sale' ? { limit: 5000 } : 'skip')
+  const sold = useMemo(() => {
+    if (historyKind !== 'sale') return new Map<string, SoldRate>()
+    const customers = new Set((masters?.ledgers ?? []).filter(l => l.groupName === 'Sundry Debtors').map(l => String(l._id)))
+    return lastSoldRates(bills, scanned?.lines ?? [], (id) => customers.has(id))
+  }, [bills, scanned, masters, historyKind])
   // The deliveries a purchase can be the bill for, and the ones this very
   // purchase already bills.
   const deliveries = useQuery(
@@ -3800,6 +3818,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 kind={draft.kind ?? 'sale'}
                 disabled={draft.items.length === 1}
                 history={history}
+                sold={sold}
+                lines={draft.items}
                 linesAbove={draft.items.slice(0, idx)}
               />
             ))}
