@@ -173,6 +173,40 @@ export default defineSchema({
     .index('by_local_id', ['localId'])
     .index('by_created_at', ['createdAt']),
 
+  /**
+   * A customer's claim on a guarantee card, sent from the card's page (the QR).
+   * Only someone holding the card's secret can file one; the shop reviews it in
+   * the panel and the customer sees its status on the same page.
+   */
+  guaranteeClaims: defineTable({
+    /** GC-2026-0016-C1: the card's number and this card's claim count. */
+    ref: v.string(),
+    cardId: v.id('guaranteeDocuments'),
+    number: v.string(),
+    name: v.string(),
+    phone: v.string(),
+    email: v.string(),
+    address: v.string(),
+    itemIndex: v.number(),
+    itemLabel: v.string(),
+    doors: v.number(),
+    issue: v.union(v.literal('borer'), v.literal('air'), v.literal('cracks')),
+    description: v.string(),
+    /** Proof the claimant holds the originals, and that this door is this card's. */
+    cardPhoto: v.id('_storage'),
+    billPhoto: v.id('_storage'),
+    doorPhoto: v.id('_storage'),
+    /** Close-ups of the damage, 1 to 3. */
+    photos: v.array(v.id('_storage')),
+    status: v.union(v.literal('new'), v.literal('reviewing'), v.literal('approved'), v.literal('rejected'), v.literal('replaced')),
+    /** What the shop tells the customer (shown on the card page). */
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_card', ['cardId', 'createdAt'])
+    .index('by_created_at', ['createdAt']),
+
   // One row per WhatsApp send attempt. Meta's API only returns "accepted" —
   // whether a message actually landed arrives later over the webhook — so this
   // is the shop's record of what was tried, for which card, and why it failed.

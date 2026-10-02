@@ -24,6 +24,7 @@ import type * as customers from "../customers.js";
 import type * as documents from "../documents.js";
 import type * as files from "../files.js";
 import type * as filing from "../filing.js";
+import type * as guaranteeClaims from "../guaranteeClaims.js";
 import type * as history from "../history.js";
 import type * as http from "../http.js";
 import type * as inbox from "../inbox.js";
@@ -92,6 +93,7 @@ declare const fullApi: ApiFromModules<{
   documents: typeof documents;
   files: typeof files;
   filing: typeof filing;
+  guaranteeClaims: typeof guaranteeClaims;
   history: typeof history;
   http: typeof http;
   inbox: typeof inbox;

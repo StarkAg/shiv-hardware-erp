@@ -110,7 +110,7 @@ export const getGuaranteesForQr = query({
   handler: async (ctx, args) => await cardsForQr(ctx, args.number, args.token),
 })
 
-async function cardsForQr(ctx: QueryCtx, number: string, token: string | undefined) {
+export async function cardsForQr(ctx: QueryCtx, number: string, token: string | undefined) {
   const clean = String(number ?? '').trim()
   const given = String(token ?? '').trim()
   // A card with no token was written before this existed and stays shut
