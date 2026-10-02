@@ -4,8 +4,11 @@ contextBridge.exposeInMainWorld('shivDesktop', {
   isElectron: true,
   getPrinters: () => ipcRenderer.invoke('printers:list'),
   printCurrentPage: (options) => ipcRenderer.invoke('print:current-page', options),
-  // PVC guarantee cards straight to the Epson on this PC (no print server).
-  printGuaranteeCardsDirect: (payload) => ipcRenderer.invoke('card:print-direct', payload),
+  // PVC guarantee cards straight to the Epson on this PC (no print server). Windows only:
+  // elsewhere (a Mac) it stays undefined, so the card goes to the shop PC's print server.
+  printGuaranteeCardsDirect: process.platform === 'win32'
+    ? (payload) => ipcRenderer.invoke('card:print-direct', payload)
+    : undefined,
   // Auto-update bridge
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),

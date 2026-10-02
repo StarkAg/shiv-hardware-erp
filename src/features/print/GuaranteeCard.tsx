@@ -211,8 +211,12 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
         </div>
       )}
 
-      <div className="absolute left-[3mm] top-[71mm]">
+      {/* Same place as print-server/template.mjs: QR, then SCAN TO VERIFY ending at 83mm. */}
+      <div className="absolute left-[3mm] top-[69.05mm]">
         <GuaranteeQr value={guaranteeOnlineUrl(document.number, document.token)} size="12mm" />
+      </div>
+      <div className="absolute left-[3mm] top-[81.55mm] w-[12mm] text-center text-[4pt] font-bold leading-none tracking-[0.2pt]">
+        <FitText>SCAN TO VERIFY</FitText>
       </div>
     </>
   )

@@ -52,7 +52,12 @@ type SizeRow = {
   heightSoot: number | ''
   qty: number | ''
   rate: number | ''
+  /** Chosen guarantee; '' follows the brand's years from Rates. */
+  years: GuaranteeYears | ''
 }
+
+// The years we have a wax seal for (assets/seals), offered in the Guarantee column.
+const SEAL_YEARS: GuaranteeYears[] = [1, 3, 7, 10, 25]
 
 const blankRow = (): SizeRow => ({
   id: uid(),
@@ -64,6 +69,7 @@ const blankRow = (): SizeRow => ({
   heightSoot: '',
   qty: '',
   rate: '',
+  years: '',
 })
 const isRowFilled = (r: SizeRow) =>
   r.type.trim() !== '' ||
@@ -96,16 +102,22 @@ function removeSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => voi
   })
 }
 
+/** A row's guarantee: the one chosen in the row, else its brand's, else the default. */
+function rowYears(row: SizeRow, brandOptions: Brand[], fallbackYears: GuaranteeYears): GuaranteeYears {
+  if (row.years !== '') return row.years
+  const matched = brandOptions.find((b) => b.name.toLowerCase() === row.type.trim().toLowerCase())
+  return matched?.guaranteeYears ?? fallbackYears
+}
+
 function rowsToItems(rows: SizeRow[], brandOptions: Brand[], fallbackBrand: string, fallbackYears: GuaranteeYears): GuaranteeCardItem[] {
   const filled = rows.filter(isRowFilled)
   // No fake placeholder row when the table is empty — an empty table prints
   // (and previews) with no item line at all.
   if (!filled.length) return []
   return filled.map((row) => {
-    const matched = brandOptions.find((b) => b.name.toLowerCase() === row.type.trim().toLowerCase())
     return {
       brandName: row.type.trim() || fallbackBrand,
-      guaranteeYears: matched?.guaranteeYears ?? fallbackYears,
+      guaranteeYears: rowYears(row, brandOptions, fallbackYears),
       thickness: row.thickness.trim() || null,
       height: rowDim(row.length, row.lengthSoot),
       width: rowDim(row.height, row.heightSoot),
@@ -229,6 +241,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       heightSoot: it.width?.soot ?? '',
       qty: it.qty ?? '',
       rate: it.amount ?? '',
+      years: it.guaranteeYears ?? '',
     }))
     setRows(imported.length ? [...imported, blankRow()] : [blankRow()])
   }
@@ -263,6 +276,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           heightSoot: height.soot,
           qty: it.qty,
           rate: it.amount || '',
+          years: '' as const,
         }
       })
 
@@ -588,6 +602,32 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   )
 }
 
+function GuaranteeSelect({
+  value,
+  onChange,
+  className,
+}: {
+  value: GuaranteeYears
+  onChange: (years: GuaranteeYears) => void
+  className: string
+}) {
+  // A brand set in Rates to a year with no seal (5, 15…) still shows as its own option.
+  const options = SEAL_YEARS.includes(value) || value === 0 ? SEAL_YEARS : [...SEAL_YEARS, value].sort((a, b) => a - b)
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value) as GuaranteeYears)}
+      className={`${className} cursor-pointer ${value ? 'font-semibold text-shiv-red' : 'text-muted'}`}
+      aria-label="Guarantee"
+    >
+      <option value={0}>None</option>
+      {options.map((y) => (
+        <option key={y} value={y}>{y} {y === 1 ? 'year' : 'years'}</option>
+      ))}
+    </select>
+  )
+}
+
 function SizeTable({
   rows,
   setRows,
@@ -621,7 +661,7 @@ function SizeTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+      <table className="w-full min-w-[820px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-stone-200 bg-stone-100 text-xs font-bold uppercase tracking-wide text-muted dark:border-white/10 dark:bg-white/5">
             <th className="px-2 py-2 text-left">Thickness</th>
@@ -630,6 +670,7 @@ function SizeTable({
             <th className="px-2 py-2 text-right">Height</th>
             <th className="px-2 py-2 text-right">Pcs</th>
             <th className="px-2 py-2 text-right">Rate</th>
+            <th className="px-2 py-2 text-left">Guarantee</th>
             <th className="w-9 px-1 py-2" />
           </tr>
         </thead>
@@ -728,6 +769,13 @@ function SizeTable({
                   onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => updateSizeRow(setRows, row.id, { rate: e.target.value === '' ? '' : Number(e.target.value) })}
                   className={`${cellClass} text-right`}
+                />
+              </td>
+              <td className="p-0.5">
+                <GuaranteeSelect
+                  value={rowYears(row, brandOptions, DEFAULT_YEARS)}
+                  onChange={(years) => updateSizeRow(setRows, row.id, { years })}
+                  className={cellClass}
                 />
               </td>
               <td className="p-0.5 text-center">

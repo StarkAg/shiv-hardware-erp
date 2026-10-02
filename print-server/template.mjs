@@ -18,6 +18,10 @@ export const CARD_H_MM = 86
 export const CARD_SAFE_MM = 3
 export const CARD_PRINT_W_MM = CARD_W_MM - CARD_SAFE_MM * 2  // 48mm
 export const CARD_PRINT_H_MM = CARD_H_MM - CARD_SAFE_MM * 2  // 80mm
+// The card's QR and the "SCAN TO VERIFY" line under it (4pt type, about 1.45mm tall).
+export const CARD_QR_MM = 12
+export const CARD_QR_LABEL_MM = 1.45
+export const CARD_QR_GAP_MM = 0.5
 
 // Inline SVG QR for the guarantee card's online view. Returns '' if there's no
 // URL to encode (so the layout simply omits the QR rather than breaking).
@@ -386,7 +390,11 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
         </div>`
     }).join('')
 
-    const cardQr = await qrSvg(document.qrUrl, 12)
+    // The QR with "SCAN TO VERIFY" under it; the pair ends on the print-area edge
+    // (CARD_SAFE_MM above the card's bottom), so the QR keeps its full 12mm.
+    const qrLabelTop = CARD_H_MM - CARD_SAFE_MM - CARD_QR_LABEL_MM
+    const qrTop = qrLabelTop - CARD_QR_GAP_MM - CARD_QR_MM
+    const cardQr = await qrSvg(document.qrUrl, CARD_QR_MM)
     return cardPage(`
         <div style="position:relative;width:${CARD_W_MM}mm;height:${CARD_H_MM}mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
           <div style="position:absolute;left:${CARD_SAFE_MM}mm;top:4mm;right:${CARD_SAFE_MM}mm;font-size:7pt;font-weight:600;line-height:1.18">
@@ -398,7 +406,8 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
           ${itemRows}
           ${totalAmount ? `
           <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:76.8mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
-          ${cardQr ? `<div style="position:absolute;left:${CARD_SAFE_MM}mm;top:71mm">${cardQr}</div>` : ''}
+          ${cardQr ? `<div style="position:absolute;left:${CARD_SAFE_MM}mm;top:${qrTop.toFixed(2)}mm">${cardQr}</div>
+          <div data-fit style="position:absolute;left:${CARD_SAFE_MM}mm;top:${qrLabelTop.toFixed(2)}mm;width:${CARD_QR_MM}mm;white-space:nowrap;overflow:hidden;text-align:center;font-size:4pt;font-weight:700;letter-spacing:0.2pt;line-height:1">${fitInner('SCAN TO VERIFY')}</div>` : ''}
         </div>
       `)
   }
