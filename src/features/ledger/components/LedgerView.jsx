@@ -368,9 +368,12 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
           {papers.map((paper) => (
             <div className="paper" key={paper._id}>
               {paper.pages[0]?.url ? (
-                <a href={paper.pages[0].url} target="_blank" rel="noreferrer">
+                <button type="button" className="shotbtn" aria-label="Preview statement" onClick={() => onViewBill({
+                  party: account?.name, vchLabel: 'Statement', date: paper.to || paper.at,
+                  attachmentUrls: paper.pages,
+                })}>
                   <img src={paper.pages[0].url} alt="" loading="lazy" />
-                </a>
+                </button>
               ) : (
                 <div className="shot blank">no photo</div>
               )}
@@ -534,6 +537,10 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       >
                         <ReceiptText size={13} aria-hidden="true" />
                       </button>
+                      {!!item.q.attachments?.length && <button type="button" className="clip" aria-label="Preview quotation photos"
+                        onClick={() => onViewBill({ party: account?.name, vchLabel: item.q.number, date: Date.parse(item.q.date), attachmentUrls: item.q.attachments })}>
+                        <Paperclip size={13} aria-hidden="true" />
+                      </button>}
                     </td>
                     <td className="rowacts" data-label="">
                       <button className="xbtn" onClick={() => navigate(`/bills/${item.q.id}`)} aria-label="Edit">

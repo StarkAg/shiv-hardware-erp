@@ -345,7 +345,61 @@ describe('money taken against a bill', () => {
     await t.mutation(api.billLedger.postBill, { bill: aBill({ total: 500, paidAmount: 500 }) })
     const names = await t.run(ctx => ctx.db.query('ledgers').collect())
     const party = names.find(l => l.name === FILED)!
-    expect((await lines(t)).filter(e => e.ledgerId === party._id)).toHaveLength(0)
+    const mine = (await lines(t)).filter(e => e.ledgerId === party._id)
+    const net = mine.reduce((n, e) => n + (e.side === 'Dr' ? e.amount : -e.amount), 0)
+    expect(net).toBe(0)
+  })
+
+  /**
+   * This used to assert the customer had no lines at all. The sale and the
+   * money were netted, and a sale paid in full was worth zero on the account,
+   * so it was dropped — which left a cash customer's ledger blank, and the
+   * counter writing a receipt beside every sale by hand just to see on the
+   * account what had been bought and that it was paid.
+   */
+  it('shows both the sale and the payment on the customer, from one voucher', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ total: 500, paidAmount: 500 }) })
+    const names = await t.run(ctx => ctx.db.query('ledgers').collect())
+    const party = names.find(l => l.name === FILED)!
+    const mine = (await lines(t)).filter(e => e.ledgerId === party._id)
+    expect(mine.map(e => [e.side, e.amount])).toEqual([['Dr', 500], ['Cr', 500]])
+    expect(new Set(mine.map(e => e.voucherId)).size).toBe(1)
+    // One voucher. No receipt was written beside it.
+    const vouchers = await t.run(ctx => ctx.db.query('vouchers').collect())
+    expect(vouchers).toHaveLength(1)
+  })
+
+  it('shows the whole bill and the part paid, owing the difference', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ total: 1000, paidAmount: 400 }) })
+    const names = await t.run(ctx => ctx.db.query('ledgers').collect())
+    const party = names.find(l => l.name === FILED)!
+    const mine = (await lines(t)).filter(e => e.ledgerId === party._id)
+    expect(mine.map(e => [e.side, e.amount])).toEqual([['Dr', 1000], ['Cr', 400]])
+    const net = mine.reduce((n, e) => n + (e.side === 'Dr' ? e.amount : -e.amount), 0)
+    expect(net).toBe(600)
+  })
+
+  it('writes nothing extra on a sale taken entirely on credit', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: aBill({ total: 700, paidAmount: 0 }) })
+    const names = await t.run(ctx => ctx.db.query('ledgers').collect())
+    const party = names.find(l => l.name === FILED)!
+    const mine = (await lines(t)).filter(e => e.ledgerId === party._id)
+    expect(mine.map(e => [e.side, e.amount])).toEqual([['Dr', 700]])
+  })
+
+  it('reopens a ledger-only sale with its actual payment, including zero', async () => {
+    const t = await shop()
+    const credit = await t.mutation(api.billLedger.postBill, {
+      bill: aBill({ id: 'credit', number: '1', total: 700, paidAmount: 0 }),
+    })
+    const paid = await t.mutation(api.billLedger.postBill, {
+      bill: aBill({ id: 'paid', number: '2', total: 500, paidAmount: 500 }),
+    })
+    expect((await t.query(api.vouchers.detail, { id: credit.voucherId })).paidAmount).toBe(0)
+    expect((await t.query(api.vouchers.detail, { id: paid.voucherId })).paidAmount).toBe(500)
   })
 
   it('sends online money to the bank and cash to the drawer', async () => {

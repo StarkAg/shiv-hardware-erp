@@ -8,6 +8,8 @@ import { useStore } from '../../lib/store'
 import type { Bill } from '../../lib/types'
 import { rupees, shortDate } from '../ledger/lib/format'
 import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
+import AttachmentViewer from '../../components/AttachmentViewer'
+import type { Attachment } from '../../lib/attachments'
 import '../ledger/ledger.css'
 
 /**
@@ -37,7 +39,7 @@ type Voucher = {
   status: string
   createdAt?: number
   contra: string[]
-  attachmentUrls: { url?: string }[]
+  attachmentUrls: Attachment[]
 }
 
 type Party = { id: string; name: string; phone: string; group: string; balance: number }
@@ -309,7 +311,7 @@ function VoucherList({ vouchers, loading, bills, onBill, onParty, grouped }: {
           <ul className="space-y-2">
             {d.rows.map((v) => {
               const b = billOf(bills, v._id, v.refNo)
-              const photos = v.attachmentUrls.map((a) => a?.url).filter(Boolean) as string[]
+              const photos = v.attachmentUrls
               return (
                 <li key={v._id} className={card}>
                   <div className="flex items-start justify-between gap-3">
@@ -345,7 +347,8 @@ function VoucherList({ vouchers, loading, bills, onBill, onParty, grouped }: {
   )
 }
 
-function Attachments({ bill, photos, onBill }: { bill?: Bill; photos: string[]; onBill: (b: Bill) => void }) {
+function Attachments({ bill, photos, onBill }: { bill?: Bill; photos: Attachment[]; onBill: (b: Bill) => void }) {
+  const [viewing, setViewing] = useState<number | null>(null)
   if (!bill && photos.length === 0) return null
   const btn = 'inline-flex items-center gap-1.5 rounded-lg bg-stone-100 px-2.5 py-1.5 text-xs font-semibold text-stone-700 dark:bg-white/10 dark:text-stone-200'
   return (
@@ -355,11 +358,12 @@ function Attachments({ bill, photos, onBill }: { bill?: Bill; photos: string[]; 
           <ReceiptText size={14} aria-hidden="true" /> View bill
         </button>
       )}
-      {photos.map((url, i) => (
-        <a key={url} className={btn} href={url} target="_blank" rel="noopener noreferrer">
+      {photos.map((photo, i) => (
+        <button key={photo.url || i} type="button" className={btn} onClick={() => setViewing(i)}>
           <Paperclip size={14} aria-hidden="true" /> Photo{photos.length > 1 ? ` ${i + 1}` : ''}
-        </a>
+        </button>
       ))}
+      {viewing !== null && <AttachmentViewer attachments={photos} initialIndex={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
@@ -376,7 +380,7 @@ type StatementRow = {
   amount: number
   balance: number
   balanceSide: 'Dr' | 'Cr'
-  attachmentUrls: { url?: string }[]
+  attachmentUrls: Attachment[]
 }
 
 function LedgerScreen({ id, bills, onBill }: { id: string; bills: Bill[]; onBill: (b: Bill) => void }) {
@@ -457,7 +461,7 @@ function LedgerScreen({ id, bills, onBill }: { id: string; bills: Bill[]; onBill
               </li>
             )}
             {rows.map((r) => {
-              const photos = r.attachmentUrls.map((a) => a?.url).filter(Boolean) as string[]
+              const photos = r.attachmentUrls
               return (
                 <li key={`${r.voucherId}-${r.side}`} className={card}>
                   <div className="flex items-start justify-between gap-3">

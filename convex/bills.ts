@@ -6,6 +6,7 @@ import { requirePin } from './lib/pin'
 import { linkTrashRows } from './lib/trashLinks'
 import { record } from './lib/history'
 import { dropBill, readBill, readBills, storeMeta, writeBills } from './lib/billRows'
+import { attachmentIds, deleteUnreferencedFiles } from './lib/attachmentFiles'
 
 /**
  * Saves what a device has, without ever deleting what it hasn't.
@@ -235,6 +236,7 @@ export const purge = mutation({
     const voucherTrashId = linkTrashRows(deletedBills, deletedVouchers).get(id)
     if (voucherTrashId) await ctx.runMutation(api.trash.purge, { id: voucherTrashId, pin })
     await ctx.db.delete(id)
+    await deleteUnreferencedFiles(ctx, attachmentIds(row.bill?.attachments ?? []))
     await record(ctx, 'bill.purge', `Permanently deleted bill ${row.bill?.number ?? ''}`)
   },
 })

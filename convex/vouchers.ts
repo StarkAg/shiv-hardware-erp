@@ -7,6 +7,10 @@ import { record, money, day } from "./lib/history";
 import { nextVoucherNo, voucherCounterName } from "./lib/numbering";
 import { writeLines, clearLines } from "./lib/entries";
 import { requirePin } from "./lib/pin";
+import { attachmentIds, deleteUnreferencedFiles } from './lib/attachmentFiles';
+import { GRN_ABBR, GRN_TYPE } from './lib/receipts';
+import { readBills } from './lib/billRows';
+import { ensureVoucherFlow } from './lib/billFlow';
 
 const attachmentKind = v.union(
   v.literal("bill"),
@@ -53,12 +57,20 @@ async function typeByName(ctx: MutationCtx, name: string) {
   return type;
 }
 
+async function goodsReceivedType(ctx: MutationCtx) {
+  const existing = await ctx.db.query('voucherTypes')
+    .withIndex('by_name', (q) => q.eq('name', GRN_TYPE)).unique();
+  if (existing) return existing;
+  const id = await ctx.db.insert('voucherTypes', { name: GRN_TYPE, abbr: GRN_ABBR, sort: 11 });
+  return (await ctx.db.get(id))!;
+}
+
 /**
  * Purchase: Dr Purchase Accounts, Cr the supplier — the supplier is a Sundry
  * Creditor, so buying from them grows a credit balance.
  *
- * With no amount the voucher is filed as pending: no lines, no effect on any
- * balance, and it sits in the pending queue until it is priced.
+ * Without an amount this is a Goods Received Note: no lines or balance, and
+ * it waits under Bills to Come until the supplier's priced bill arrives.
  */
 export const createPurchase = mutation({
   args: {
@@ -71,11 +83,14 @@ export const createPurchase = mutation({
     attachments: attachmentsArg,
   },
   handler: async (ctx, args) => {
-    const type = await typeByName(ctx, "Purchase");
+    if (args.amount !== undefined && args.amount !== null && args.amount < 0) {
+      throw new Error('Enter an amount above zero');
+    }
+    const pending = !(Number(args.amount) > 0);
+    const type = pending ? await goodsReceivedType(ctx) : await typeByName(ctx, "Purchase");
     const fy = fyOf(args.date);
     const now = Date.now();
     const voucherNo = await nextVoucherNo(ctx, type, fy);
-    const pending = args.amount === undefined || args.amount === null;
 
     const voucherId = await ctx.db.insert("vouchers", {
       typeId: type._id,
@@ -85,7 +100,7 @@ export const createPurchase = mutation({
       partyLedgerId: args.partyLedgerId,
       refNo: args.refNo,
       narration: args.narration,
-      status: pending ? "pending" : "final",
+      status: pending ? "received" : "final",
       amount: pending ? undefined : round2(args.amount!),
       attachments: args.attachments ?? [],
       createdAt: now,
@@ -101,9 +116,15 @@ export const createPurchase = mutation({
     await record(
       ctx,
       "voucher.create",
-      `Purchase ${await describe(ctx, type.abbr, voucherNo, args.partyLedgerId, args.amount)} on ${day(args.date)}`,
+      `${type.name} ${await describe(ctx, type.abbr, voucherNo, args.partyLedgerId, args.amount)} on ${day(args.date)}`,
       { entity: "voucher", entityId: voucherId }
     );
+    await ensureVoucherFlow(ctx, {
+      voucherId, kind: pending ? 'grn' : 'purchase',
+      party: (await ctx.db.get(args.partyLedgerId))?.name ?? '',
+      date: new Date(args.date).toISOString().slice(0, 10), amount: args.amount,
+      photos: (args.attachments ?? []).map(a => a.storageId),
+    });
     return voucherId;
   },
 });
@@ -151,6 +172,11 @@ export const createPayment = mutation({
       `Payment ${await describe(ctx, type.abbr, voucherNo, args.partyLedgerId, args.amount)} on ${day(args.date)}`,
       { entity: "voucher", entityId: voucherId }
     );
+    await ensureVoucherFlow(ctx, {
+      voucherId, kind: 'payment', party: (await ctx.db.get(args.partyLedgerId))?.name ?? '',
+      date: new Date(args.date).toISOString().slice(0, 10), amount: args.amount,
+      photos: (args.attachments ?? []).map(a => a.storageId),
+    });
     return voucherId;
   },
 });
@@ -210,6 +236,11 @@ export const createSale = mutation({
       `Sale ${await describe(ctx, type.abbr, voucherNo, args.partyLedgerId, args.amount)} on ${day(args.date)}`,
       { entity: "voucher", entityId: voucherId }
     );
+    await ensureVoucherFlow(ctx, {
+      voucherId, kind: 'sale', party: (await ctx.db.get(args.partyLedgerId))?.name ?? '',
+      date: new Date(args.date).toISOString().slice(0, 10), amount: args.amount,
+      photos: (args.attachments ?? []).map(a => a.storageId),
+    });
     return voucherId;
   },
 });
@@ -375,6 +406,23 @@ export const detail = query({
       .collect();
     const other = lines.find((l) => l.ledgerId !== voucher.partyLedgerId);
 
+    // A ledger-only sale opens in the bill editor. Carry its settlement back
+    // into that editor so a credit sale does not acquire the new default-paid
+    // value merely because somebody opened and saved it. New postings have a
+    // second party line; older netted postings have only the Cash/Bank line.
+    const paymentSide = type?.name === "Sale" ? "Cr" : type?.name === "Purchase" ? "Dr" : null;
+    const partyPayment = paymentSide
+      ? lines.filter((l) => l.ledgerId === voucher.partyLedgerId && l.side === paymentSide)
+          .reduce((sum, l) => sum + l.amount, 0)
+      : 0;
+    const legacyPayment = paymentSide && !partyPayment
+      ? (await Promise.all(lines.map(async (l) => ({ line: l, ledger: await ctx.db.get(l.ledgerId) }))))
+          .filter(({ line, ledger }) => line.ledgerId !== voucher.partyLedgerId
+            && (ledger?.name === "Cash" || ledger?.name === "Bank")
+            && line.side !== paymentSide)
+          .reduce((sum, { line }) => sum + line.amount, 0)
+      : 0;
+
     return {
       _id: voucher._id,
       kind: (type?.name ?? "Purchase").toLowerCase(),
@@ -386,6 +434,7 @@ export const detail = query({
       partyName: (await ctx.db.get(voucher.partyLedgerId))?.name ?? "",
       accountLedgerId: other?.ledgerId ?? null,
       amount: voucher.amount,
+      ...(paymentSide ? { paidAmount: partyPayment || legacyPayment } : {}),
       refNo: voucher.refNo ?? "",
       narration: voucher.narration ?? "",
       status: voucher.status,
@@ -408,12 +457,12 @@ export const detail = query({
 });
 
 /**
- * Rewrites a voucher in place. The number and the type never change — Tally
- * would not renumber a corrected entry either — but both ledgers, the amount,
+ * Rewrites a voucher in place. Correcting a purchase to an unpriced delivery
+ * changes its type and gives it a number from the Goods Received series. Both ledgers, the amount,
  * the date and the wording can all be put right, and the Dr/Cr lines are
  * written again from scratch so no balance is left describing the old version.
  *
- * Clearing the amount on a purchase files it back into the pending queue.
+ * Clearing the amount on a purchase files it as Goods Received.
  */
 export const edit = mutation({
   args: {
@@ -455,6 +504,11 @@ export const edit = mutation({
       throw new Error(`A ${type?.name?.toLowerCase()} needs an amount`);
     }
     if (!pending && !(args.amount! > 0)) throw new Error("Enter an amount above zero");
+    const toGrn = pending && type?.name === 'Purchase';
+    if (toGrn && (await readBills(ctx)).some((bill: any) => String(bill.voucherId) === String(args.id))) {
+      throw new Error('Open the bill and save it without an amount to file it as Goods Received.');
+    }
+    const targetType = toGrn ? await goodsReceivedType(ctx) : type!;
 
     await clearLines(ctx, args.id);
     if (!pending) {
@@ -465,12 +519,13 @@ export const edit = mutation({
     }
 
     await ctx.db.patch(args.id, {
+      ...(toGrn ? { typeId: targetType._id, voucherNo: await nextVoucherNo(ctx, targetType, fyOf(args.date)), fy: fyOf(args.date) } : {}),
       date: args.date,
       partyLedgerId: args.partyLedgerId,
       refNo: args.refNo,
       narration: args.narration,
       amount: pending ? undefined : round2(args.amount!),
-      status: pending ? "pending" : "final",
+      status: toGrn ? "received" : pending ? "pending" : "final",
       updatedAt: Date.now(),
     });
 
@@ -638,7 +693,8 @@ export const replaceAttachment = mutation({
       entity: "voucher",
       entityId: id,
     });
-    await ctx.storage.delete(storageId).catch(() => {});
+    await deleteUnreferencedFiles(ctx, attachmentIds(voucher.attachments.filter((doc) =>
+      (typeof doc === 'string' ? doc : doc.storageId) === storageId)));
   },
 });
 
@@ -654,7 +710,8 @@ export const removeAttachment = mutation({
       ),
       updatedAt: Date.now(),
     });
-    await ctx.storage.delete(storageId).catch(() => {});
+    await deleteUnreferencedFiles(ctx, attachmentIds(voucher.attachments.filter((doc) =>
+      (typeof doc === 'string' ? doc : doc.storageId) === storageId)));
   },
 });
 

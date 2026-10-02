@@ -24,6 +24,7 @@ export const voucherCounterName = (abbr: string, fy: string) => `vno:${abbr}:${f
 
 /** The shop's bill numbers are one unbroken run, not restarted each April. */
 export const BILL_COUNTER = 'bill'
+export const VOUCHER_PHOTO_COUNTER = 'voucher-photo'
 
 /**
  * Take the next value of a counter, never going below what is already used.
@@ -81,4 +82,9 @@ export async function nextBillNo(ctx: MutationCtx): Promise<number> {
     .reduce((max, row) => Math.max(max, numeric(row.bill?.number)), 0)
 
   return bump(ctx, BILL_COUNTER, Math.max(live, deleted, store?.billSeq ?? 0))
+}
+
+/** A stable number for each photo waiting to be attached to a voucher. */
+export async function nextVoucherPhotoNo(ctx: MutationCtx): Promise<number> {
+  return bump(ctx, VOUCHER_PHOTO_COUNTER, 0)
 }

@@ -64,6 +64,10 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     items: [{ to: '/home', label: 'Home', icon: LayoutDashboard }],
   },
   {
+    label: 'Operations',
+    items: [{ to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck }],
+  },
+  {
     label: 'Transactions',
     items: [
       { to: '/paper', label: 'Day Paper', icon: NotebookPen },
@@ -115,7 +119,7 @@ const AREAS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Accounts',
     items: [
-      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly', '/ledger/tocome'] },
+      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly', '/ledger/tocome', '/ledger/bills'] },
       { to: '/ledger/tocome', label: 'Bills to Come', icon: PackageOpen },
       { to: '/ledger/monthly', label: 'Salary & Rent', icon: CalendarClock },
       { to: '/ledgers', label: 'Account Masters', icon: Users },
@@ -164,6 +168,7 @@ const VOUCHERS = [
  */
 const MOBILE_NAV_ITEMS = [
   { to: '/home', label: 'Home', icon: LayoutDashboard, match: ['/home'] },
+  { to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck, match: ['/bill-flow'] },
   { to: '/day', label: 'Day Book', icon: ReceiptText, match: ['/day', '/bills', '/cash-review'] },
   { to: '/ledger', label: 'Accounts', icon: BookOpen, match: ['/ledger', '/ledgers'] },
   { to: '/cash-review', label: 'Cash', icon: Wallet, match: ['/cash-review'] },

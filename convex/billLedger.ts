@@ -8,8 +8,10 @@ import { nextVoucherNo, nextBillNo } from './lib/numbering'
 import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
 import { tidyBill } from './lib/billText'
-import { GRN_ABBR, GRN_TYPE } from './lib/receipts'
+import { GRN_ABBR, GRN_TYPE, isGoods } from './lib/receipts'
 import { readBills, writeBills } from './lib/billRows'
+import { ensureVoucherFlow, flowForVoucher } from './lib/billFlow'
+import { postCashEntry } from './cash'
 
 /**
  * Saving a bill, in one piece.
@@ -100,6 +102,13 @@ function whenOf(date: unknown): number {
  */
 async function billNumberFor(ctx: MutationCtx, bill: any): Promise<string> {
   const wanted = String(bill?.number ?? '').trim()
+  // A photo-conversion retry has a stable bill id but begins with no number.
+  // Reuse the number it received the first time, or a retry would post under
+  // a new BILL-n reference and make a second voucher.
+  if (bill?.id) {
+    const same = (await readBills(ctx)).find((b: any) => b?.id === bill.id)
+    if (same?.number) return String(same.number)
+  }
   if (wanted) {
     const clash = (await readBills(ctx)).some((b: any) => b?.id !== bill.id && String(b?.number) === wanted)
       || (await ctx.db.query('billsTrash').collect())
@@ -127,11 +136,13 @@ export const postBill = mutation({
      * and once as a bill of the same thing.
      */
     keepAsBill: v.optional(v.boolean()),
+    flowId: v.optional(v.id('billFlows')),
+    cashEntryId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Written the shop's way before anything reads it: the party in proper
     // case, item codes in capitals, one spelling per unit.
-    const bill = tidyBill(args.bill ?? {})
+    const bill: any = tidyBill(args.bill ?? {})
     // A borrowed voucher row is filed under `vch-<id>`, which is how the panel
     // has always told the two apart. A bill that has been posted before also
     // carries a voucherId, so that cannot be the test.
@@ -144,7 +155,7 @@ export const postBill = mutation({
     const customerName = String(bill.customerName ?? '').trim()
     if (!customerName) throw new Error('This bill has no customer name, so there is no account to post it to.')
 
-    const total = round2(Number(bill.total) || 0)
+    let total = round2(Number(bill.total) || 0)
     // A bill photograph or an unpriced delivery can be filed before its amount
     // is known. It becomes a pending voucher with no entries, so no balance is
     // changed until a real amount is entered later.
@@ -161,6 +172,25 @@ export const postBill = mutation({
       String(i?.description ?? '').trim() &&
       !i?.isRoundup && !i?.isDiscount &&
       !Number(i?.amount))
+    // A supplier's goods without a complete price are a delivery, not a
+    // purchase. File it in the GRN series so it appears under Bills to Come,
+    // and never let a zero-amount PUR voucher linger in Pending Bills.
+    const unpricedPurchase = bill.kind === 'purchase' && (!(total > 0) || unpricedLine)
+    if (unpricedPurchase) {
+      if (Array.isArray(bill.grnIds) && bill.grnIds.length) {
+        throw new Error('This delivery is already in Goods Received. Enter its bill amount before saving a purchase.')
+      }
+      bill.kind = 'grn'
+      bill.total = 0
+      bill.paid = false
+      delete bill.paidAmount
+      bill.items = items.filter(isGoods).map((item) => {
+        const line = { ...item, amount: 0 }
+        delete line.rateSqft
+        return line
+      })
+      total = 0
+    }
     // A delivery note never carries an amount, whatever its lines say.
     const hasAmount = bill.kind !== 'grn' && total > 0 && !unpricedLine
 
@@ -194,12 +224,14 @@ export const postBill = mutation({
      * Part payment against a bill, taken at the counter.
      *
      * It goes in as a line of the same voucher rather than a receipt beside
-     * it: ₹10,000 sold with ₹4,000 in hand is Dr Customer 6,000, Dr Cash
-     * 4,000, Cr Sales 10,000 — the customer owes what they owe, the drawer
-     * holds what it holds, and there is one document to edit, delete or
+     * it: ₹10,000 sold with ₹4,000 in hand is Dr Customer 10,000, Cr
+     * Customer 4,000, Dr Cash 4,000, Cr Sales 10,000. The customer owes
+     * ₹6,000, and there is one document to edit, delete or
      * restore instead of two that can come apart.
      */
-    const asked = Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0
+    // A cashier entry has already posted the money. The goods voucher must not
+    // post that same cash again, even if the read draft carries "paid".
+    const asked = args.cashEntryId ? 0 : Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0
     // No money changes hands on a goods return; a refund is its own receipt or payment.
     const received = spec.settles || kind === 'return' ? 0 : round2(Math.min(Math.max(asked, 0), Number(bill.total) || 0))
 
@@ -266,6 +298,18 @@ export const postBill = mutation({
       phone: bill.customerPhone || undefined,
       group: spec.group,
     })
+
+    if (args.cashEntryId) {
+      const cash = await ctx.db.query('cashEntries')
+        .withIndex('by_entry_id', q => q.eq('entryId', args.cashEntryId!)).unique()
+      if (!cash || cash.deleted || (cash.kind === 'in') !== (kind === 'sale')) {
+        throw new Error('The linked cashier entry is missing or moves money the other way.')
+      }
+      // The reviewed photo may correct a cashier note that matched the wrong
+      // similarly named account. Repost its existing voucher to this party.
+      if (cash.ledgerId !== ledgerId) await ctx.db.patch(cash._id, { ledgerId })
+      await postCashEntry(ctx, cash.entryId)
+    }
 
     const number = keepAsBill ? await billNumberFor(ctx, bill) : String(bill.number ?? '')
     const now = Date.now()
@@ -344,14 +388,36 @@ export const postBill = mutation({
 
     /**
      * The sides that make it balance, which way round depending on the kind.
-     * Money taken now sits on the party's own side — a customer who paid part
-     * of a sale is debited for less, and the drawer is debited for the rest.
+     *
+     * The party carries the whole bill, and money taken now goes against them
+     * as a second line of the same voucher: ₹49,896 sold and paid on the spot
+     * is Dr Customer 49,896 and Cr Customer 49,896, with Dr Cash and Cr Sales
+     * making the other half.
+     *
+     * It used to net the two — debiting the customer only for what was still
+     * owed. That balanced, but a sale paid in full left the customer's ledger
+     * with nothing on it at all: the line was worth zero and was dropped. So
+     * the counter wrote the sale, then wrote a receipt beside it by hand, for
+     * every cash customer, purely to see on their account what they had bought
+     * and that they had paid. Two vouchers for one event, which could then
+     * drift apart when one was edited and the other was not.
+     *
+     * Now it is one voucher and both halves show. The balance is the same
+     * either way; only the account became readable.
+     *
+     * The party's own line is written first on purpose. Both lines share a
+     * voucher and a date, so the ledger orders them by when they were written
+     * — and the sale has to come before the money, or the running balance dips
+     * into credit for a line before coming back.
+     *
      * Written through the same checked writer the ledger uses, so an
      * unbalanced set is refused here too.
      */
+    const counterSide: 'Dr' | 'Cr' = spec.party === 'Dr' ? 'Cr' : 'Dr'
     if (hasAmount) {
       await writeLines(ctx, voucherId, date, [
-        { ledgerId, side: spec.party, amount: round2(total - received) },
+        { ledgerId, side: spec.party, amount: total },
+        { ledgerId, side: counterSide, amount: received },
         ...(settlement ? [{ ledgerId: settlement._id, side: spec.party, amount: received }] : []),
         // The drawer takes only what was actually handed over; the rest of
         // what the party was cleared for is the discount, on its own account.
@@ -406,6 +472,14 @@ export const postBill = mutation({
         fromReceipts: linked.length ? linked : undefined,
         checks: checks.length ? checks : undefined,
       })
+    } else if (kind === 'grn' && existing?.fromReceipts?.length) {
+      // Reclassifying an edited purchase as a delivery releases the earlier
+      // deliveries it had billed, so they return to Bills to Come.
+      for (const old of existing.fromReceipts) {
+        const delivery = await ctx.db.get(old)
+        if (delivery?.billedIn === voucherId) await ctx.db.patch(old, { billedIn: undefined })
+      }
+      await ctx.db.patch(voucherId, { fromReceipts: undefined, checks: undefined })
     }
 
     /**
@@ -438,6 +512,35 @@ export const postBill = mutation({
         : `${spec.type} ${number || ref} · ${customerName} · ${money(total)} on ${day(date)}`,
       { entity: 'voucher', entityId: voucherId },
     )
+
+    if (kind === 'sale' || kind === 'purchase' || kind === 'grn') {
+      // A priced purchase for an earlier GRN continues its delivery card.
+      let flowId = args.flowId
+      if (!flowId && kind === 'purchase' && Array.isArray(bill.grnIds) && bill.grnIds.length) {
+        const grnId = ctx.db.normalizeId('vouchers', String(bill.grnIds[0]))
+        const grnFlow = grnId ? await flowForVoucher(ctx, grnId) : null
+        flowId = grnFlow?._id
+      }
+      await ensureVoucherFlow(ctx, {
+        voucherId, kind, party: customerName, date: new Date(date).toISOString().slice(0, 10),
+        amount: total || undefined, billId: keepAsBill ? String(bill.id) : undefined,
+        cashEntryId: args.cashEntryId, flowId,
+        photos: attachments.map(a => a.storageId),
+      })
+      if (kind === 'purchase' && Array.isArray(bill.grnIds)) {
+        for (const raw of bill.grnIds.slice(1)) {
+          const grnId = ctx.db.normalizeId('vouchers', String(raw))
+          const other = grnId ? await flowForVoucher(ctx, grnId) : null
+          if (!other) continue
+          const at = Date.now()
+          await ctx.db.patch(other._id, {
+            tasks: { ...(other.tasks as Record<string, boolean>), purchaseLinked: true },
+            stage: 'complete', updatedAt: at,
+            history: [...other.history, { at, action: 'Purchase bill linked to this delivery' }],
+          })
+        }
+      }
+    }
 
     return { ledgerId, voucherId, number, bill: stored }
   },

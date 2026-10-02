@@ -180,7 +180,6 @@ export async function shrink(file, max = MAX_EDGE) {
 // fifth less. A page lands around 250 KB, in line with a phone photo.
 const PDF_WIDTH = 1700;
 const PDF_QUALITY = 0.7;
-const PDF_MAX_PAGES = 12;
 
 /**
  * Turns a PDF into images, here, before anything is uploaded.
@@ -195,45 +194,46 @@ const PDF_MAX_PAGES = 12;
  * from the phone and whether or not the scanner is running.
  */
 export async function pdfToImages(file) {
-  const pdfjs = await import('pdfjs-dist');
-  const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  const { pdfjs } = await import('../../../lib/pdfjs');
 
   const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
   const stem = file.name.replace(/\.pdf$/i, '');
   const out = [];
 
-  for (let n = 1; n <= Math.min(doc.numPages, PDF_MAX_PAGES); n++) {
-    const page = await doc.getPage(n);
-    const base = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: PDF_WIDTH / base.width });
+  try {
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: PDF_WIDTH / base.width });
 
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(viewport.width);
-    canvas.height = Math.round(viewport.height);
-    const ctx = canvas.getContext('2d');
-    // Pages are transparent where nothing is drawn; on a dark viewer that
-    // reads as a black sheet with black ink.
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport }).promise;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      const ctx = canvas.getContext('2d');
+      // Pages are transparent where nothing is drawn; on a dark viewer that
+      // reads as a black sheet with black ink.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
 
-    const blob = await new Promise((done) =>
-      canvas.toBlob(done, 'image/jpeg', PDF_QUALITY)
-    );
-    if (!blob) continue;
-    const suffix = doc.numPages > 1 ? ` p${n}` : '';
-    out.push(
-      new File([blob], `${stem}${suffix}.jpg`, {
-        type: 'image/jpeg',
-        lastModified: file.lastModified,
-      })
-    );
+      const blob = await new Promise((done) =>
+        canvas.toBlob(done, 'image/jpeg', PDF_QUALITY)
+      );
+      if (!blob) throw new Error(`Could not read page ${n} of ${file.name}. No pages were uploaded.`);
+      const suffix = doc.numPages > 1 ? ` p${n}` : '';
+      out.push(
+        new File([blob], `${stem}${suffix}.jpg`, {
+          type: 'image/jpeg',
+          lastModified: file.lastModified,
+        })
+      );
+    }
+
+    if (out.length === 0) throw new Error(`${file.name} has no pages to read`);
+    return out;
+  } finally {
+    await doc.destroy?.();
   }
-
-  doc.destroy?.();
-  if (out.length === 0) throw new Error(`${file.name} has no pages to read`);
-  return out;
 }
 
 /** Anything on its way to storage, as images. A PDF becomes several. */

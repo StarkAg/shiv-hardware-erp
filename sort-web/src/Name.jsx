@@ -2,10 +2,16 @@
  * The first walk: giving every slip a name.
  *
  * Photograph, name, back on the stack in the same order it came off. No paper
- * moves and no slot is spent — that is the second walk's job. Keeping them
- * apart is what lets forty slots sort two thousand bills: a slot is held from
- * the moment it is given until that customer's packet is filed, so handing one
- * out here would hold the table for paper still sitting in the stack.
+ * moves and no bookmark is spent — that is the second walk's job.
+ *
+ * Keeping the two apart used to be what let forty bookmarks sort two thousand
+ * bills, back when forty was all there were: a bookmark is held from the
+ * moment it is given until that customer's packet is filed, so handing one out
+ * here would have held the table for paper still sitting in the stack.
+ *
+ * Bookmarks are unlimited now, so the table can no longer jam — but the split
+ * still stands, for a plainer reason. The app cannot call out a bookmark for a
+ * slip whose customer it does not yet know, and naming is where it finds out.
  */
 import { useEffect, useRef, useState } from 'react'
 import { useAction, useMutation, useQuery } from 'convex/react'
@@ -128,7 +134,15 @@ export default function Name({ onNavigate }) {
         inboxId: photo.id,
         ...(pick.id ? { partyLedgerId: pick.id } : { partyName: pick.name.trim() }),
       })
-      setSaid(`${res.party} — back on the stack`)
+      // The bookmark is decided here now, so it is said here. The slip still
+      // goes back on the stack — the number is where it will go, not where it
+      // has gone — but seeing it while naming is what lets somebody write it
+      // on the slip in pencil and skip the second walk for that one.
+      setSaid(
+        res.slotLabel
+          ? `${res.party} — bookmark ${res.slot}, back on the stack`
+          : `${res.party} — back on the stack`,
+      )
       setFocusWant('field')
     } catch (err) {
       setError(err?.message ?? String(err))

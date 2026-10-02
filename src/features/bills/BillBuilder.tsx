@@ -8,6 +8,7 @@ import { useShortcuts } from '../../lib/useShortcuts'
 // that would drift from it.
 import BillDropUntyped from '../ledger/components/BillDrop'
 import BillViewerUntyped from '../ledger/components/BillViewer'
+import type { Attachment } from '../../lib/attachments'
 import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
 import { useUploader } from '../ledger/lib/upload'
 
@@ -27,6 +28,7 @@ const BillDrop = BillDropUntyped as unknown as (props: {
   picked: { _id: string; storageId: string }[]
   onPick: (picked: { _id: string; storageId: string }[]) => void
   onViewBill?: (shown: unknown) => void
+  attached?: { storageId: string }[]
 }) => JSX.Element
 
 /** The ledger's full-screen photo viewer, likewise plain JSX. */
@@ -62,6 +64,7 @@ import { itemHistory, recallList, type ItemHistory, type RecalledItem } from '..
 import { lastSoldRates, openingRate, type SoldRate } from '../../lib/rateFill'
 import { canonicalUnit, foldName } from '../../../convex/lib/text'
 import { catalogChangesFor } from '../../lib/learnCatalog'
+import { paidByDefault, withPaidDefault } from '../../lib/paidDefault'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
@@ -2228,7 +2231,15 @@ function ChargesPanel({ bill, charges, onChange }: {
  */
 function forEditing(bill: Bill): Bill {
   const items = handLines(bill.items)
-  return { ...bill, items: items.length ? items : [emptyItem()] }
+  return {
+    ...bill,
+    items: items.length ? items : [emptyItem()],
+    // Some older sales have no paidAmount field. Their saved paid flag is the
+    // record; editing one must not apply today's default to yesterday's sale.
+    ...((bill.kind ?? 'sale') === 'sale' && bill.paidAmount == null
+      ? { paidAmount: bill.paid ? bill.total : 0 }
+      : {}),
+  }
 }
 
 function calcTotal(items: BillItem[]) {
@@ -2555,6 +2566,11 @@ export function BillBuilder() {
         ? { moneyAmount: voucher.amount ?? 0 }
         : {}),
       total: voucher.amount ?? 0,
+      // Zero is deliberate here: an older ledger-only credit sale must stay
+      // credit when opened in the bill editor and saved without changes.
+      ...((kindOf[voucher.kind] === 'sale' || kindOf[voucher.kind] === 'purchase')
+        ? { paidAmount: voucher.paidAmount ?? 0, paid: (voucher.paidAmount ?? 0) >= (voucher.amount ?? 0) && (voucher.amount ?? 0) > 0 }
+        : {}),
       attachments: (voucher.attachments ?? []).map((a: any) => ({
         storageId: a.storageId, kind: a.kind ?? 'bill',
       })),
@@ -2658,14 +2674,18 @@ export function BillBuilder() {
    */
   const postToLedger = useMutation(api.billLedger.postBill)
   const ensureParty = useMutation(api.billLedger.ensureParty)
+  const syncQuote = useMutation(api.bills.save)
   const claimFromPhone = useMutation(api.inbox.claim)
+  const claimVoucherPhoto = useMutation(api.voucherInbox.claim)
   const upload = useUploader()
   // Chosen here, not yet uploaded — uploading happens once, on save.
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
-  const [photoPicked, setPhotoPicked] = useState<{ _id: string; storageId: string }[]>([])
+  const [photoPicked, setPhotoPicked] = useState<{ _id: string; storageId: string; source?: 'voucher' | 'legacy' }[]>([])
   const ledgerDark = useLedgerTheme()
   const [photoOpen, setPhotoOpen] = useState(false)
   const [photoShown, setPhotoShown] = useState<unknown>(null)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   // What the paperwork on this kind of voucher is called, and how much of it
   // is already on the bill — counted here so the button can say so while shut.
   const isMoneyVoucher = MONEY_KINDS.includes(draft.kind ?? 'sale')
@@ -2817,6 +2837,9 @@ export function BillBuilder() {
   // so what is previewed, printed and posted is always the same bill.
   const priced = useMemo(() => (isMoneyVoucher ? draft : withCharges(draft)), [draft, isMoneyVoucher])
   const total = isMoneyVoucher ? money + discount : calcTotal(priced.items)
+  const unpricedPurchase = draft.kind === 'purchase' &&
+    (!(total > 0) || priced.items.some((item) =>
+      item.description.trim() && !item.isRoundup && !item.isDiscount && !Number(item.amount)))
   const setCharges = (patch: Partial<BillCharges>) => setDraft((d) => ({ ...d, ...patch }))
 
   /**
@@ -3049,8 +3072,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     }
   }
 
-  /** The open bill: photographs up first, then the one posting call. */
-  async function postDraft(over?: Partial<Bill> & { total?: number }) {
+  /** Attachments belong to quotations and posted vouchers alike. */
+  async function prepareAttachments() {
     // The photographs go up first: a bill that saved without them would leave
     // the paper it was written from nowhere, and the ledger showing a voucher
     // with no document against it.
@@ -3060,21 +3083,28 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
         ? ('receipt' as const)
         : ('bill' as const)
       const uploaded = photoFiles.length ? await upload(photoFiles) : []
-      attachments = [
+      const allAttachments = [
         ...attachments,
         ...uploaded.map((storageId: string) => ({ storageId, kind: docKind })),
         ...photoPicked.map((p) => ({ storageId: p.storageId as string, kind: docKind })),
       ]
-      // Claimed only once they are safely on the voucher's side, so a failure
-      // here leaves the photo in the phone's queue rather than losing it.
-      for (const p of photoPicked) await claimFromPhone({ id: p._id as never })
+      attachments = [...new Map(allAttachments.map((doc) => [doc.storageId, doc])).values()]
+      // An uploaded file belongs to this draft even if posting is refused.
+      // Keep the phone's queue row until the voucher actually owns the photo.
+      setDraft((d) => ({ ...d, attachments }))
       setPhotoFiles([])
-      setPhotoPicked([])
     } catch (err) {
       toast(`Could not attach the photos\n${err instanceof Error ? err.message : String(err)}`, 'error')
       return null
     }
 
+    return attachments
+  }
+
+  /** The open bill: photographs up first, then the one posting call. */
+  async function postDraft(over?: Partial<Bill> & { total?: number }) {
+    const attachments = await prepareAttachments()
+    if (!attachments) return null
     // A voucher opened from the books is edited here, but it is not one of the
     // shop's own bills and must not join their list — it would show twice in
     // the day book, once as the voucher and once as a bill of the same thing.
@@ -3082,14 +3112,34 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
     // Stamped once more on the way out, for lines of an older bill that were
     // saved before sheets carried a square-foot rate and not touched since.
-    return postStored({
+    const result = await postStored({
       ...priced,
+      // A sale with no goods lines goes in as paid unless somebody said
+      // otherwise — see src/lib/paidDefault.ts. Anything in `over` still wins.
+      ...withPaidDefault(priced, total),
       total,
       ...((draft.kind ?? 'sale') === 'purchase' ? { checks: checksRef.current } : {}),
       ...over,
       items: (over?.items ?? priced.items).map(withSqft),
       attachments,
     }, !borrowed)
+    if (!result) return null
+    await claimPhotos()
+    return result
+  }
+
+  async function claimPhotos() {
+    const failedClaims = [] as typeof photoPicked
+    for (const p of photoPicked) {
+      try {
+        if (p.source === 'voucher') await claimVoucherPhoto({ id: p._id as never })
+        else await claimFromPhone({ id: p._id as never })
+      } catch {
+        failedClaims.push(p)
+      }
+    }
+    setPhotoPicked(failedClaims)
+    if (failedClaims.length) toast('Bill saved, but its photo is still in the phone queue.', 'error')
   }
 
   /**
@@ -3113,6 +3163,17 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   async function save() {
+    await whileSaving(saveNow)
+  }
+
+  async function whileSaving(work: () => Promise<void>) {
+    if (savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    try { await work() } finally { savingRef.current = false; setSaving(false) }
+  }
+
+  async function saveNow() {
     if (readOnly) { toast(`This bill is open on ${lockedBy}.`, 'error'); return }
     // A second Accept while this bill is still posting would post it twice:
     // the first call has not handed back a voucher to rewrite yet.
@@ -3121,7 +3182,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // A purchase against deliveries is checked first. What the check finds is
     // shown once; pressing Save again with the same findings saves, and they
     // go on the voucher.
-    const found = (draft.kind ?? 'sale') === 'purchase' ? deliveryChecks({ ...priced, total }, deliveries) : []
+    const found = draft.kind === 'purchase' && !unpricedPurchase
+      ? deliveryChecks({ ...priced, total }, deliveries) : []
     if (found.length && found.join('|') !== checkList.join('|')) {
       setCheckList(found)
       return
@@ -3133,20 +3195,13 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // is posted until it is converted to a sale.
     if (isQuotation(draft)) {
       const quote = await saveQuote()
+      if (!quote) return
       setView('list')
       navigate(quote.ledgerId ? `/ledger/customers/${quote.ledgerId}` : '/day', { replace: true })
       return
     }
 
-    /**
-     * Instant: the counter moves on the moment the bill is accepted, and the
-     * books catch up behind it.
-     *
-     * Waiting for the server cost half a second or more on every bill. The
-     * reason to wait was that walking away from a refused bill hid the
-     * refusal — so a refusal is not hidden: postStored keeps the bill on this
-     * PC marked unposted, says so in red, and the day book offers Retry.
-     */
+    // Keep the editor and selected files available until saving succeeds.
     const partyTab = sideGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
     // The catalogue learns from the bill before it is filed, so the next
@@ -3157,16 +3212,16 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       await fileGrnWithPurchase()
       return
     }
-    if (!borrowed) saveBill({ ...priced, items: priced.items.map(withSqft), total, checks: checksRef.current.length ? checksRef.current : undefined })
-    setView('list')
-    // The party's own account when the bill already names one; a party
-    // opened by this bill has no account until the server answers, so the
-    // day book.
-    navigate(draft.ledgerId ? `/ledger/${partyTab}/${draft.ledgerId}` : '/day', { replace: true })
-
     postingBills.add(draft.id)
     try {
-      await postDraft()
+      const saved = await postDraft()
+      if (!saved) return
+      if (draft.kind === 'purchase' && saved.bill.kind === 'grn') {
+        toast('Filed as Goods Received. Enter the supplier bill amount when it arrives.', 'ok')
+      }
+      setView('list')
+      const party = saved.ledgerId || draft.ledgerId
+      navigate(party ? `/ledger/${partyTab}/${party}` : '/day', { replace: true })
     } finally {
       postingBills.delete(draft.id)
     }
@@ -3180,21 +3235,29 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
    * balance does not move. Kept first, so a failure to reach the books loses
    * nothing; the account opens on the next save instead.
    */
-  async function saveQuote(): Promise<Bill & { total: number }> {
-    const quote: Bill & { total: number } = { ...priced, items: priced.items.map(withSqft), total }
+  async function saveQuote(): Promise<(Bill & { total: number }) | null> {
+    const attachments = await prepareAttachments()
+    if (!attachments) return null
+    let quote: Bill & { total: number } = { ...priced, items: priced.items.map(withSqft), total, attachments }
     saveBill(quote)
     const name = quote.customerName.trim()
-    if (!name) return quote
-    try {
+    if (name) try {
       const ledgerId = String(await ensureParty({ name, phone: quote.customerPhone || undefined }))
-      if (ledgerId === quote.ledgerId) return quote
-      const opened = { ...quote, ledgerId }
-      saveBill(opened)
-      return opened
+      quote = { ...quote, ledgerId }
+      saveBill(quote)
     } catch (err) {
       toast(`Quotation kept, but the account was not opened
 ${err instanceof Error ? err.message : String(err)}`, 'error')
+    }
+    try {
+      const state = useStore.getState()
+      const stored = state.bills.find((bill) => bill.id === quote.id) ?? quote
+      await syncQuote({ bills: [plain(stored)], billSeq: state.billSeq })
+      await claimPhotos()
       return quote
+    } catch (err) {
+      toast('Quotation kept on this PC. Could not finish saving its photos; please retry.\n' + (err instanceof Error ? err.message : String(err)), 'error')
+      return null
     }
   }
 
@@ -3212,6 +3275,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
     if ((sale.paidAmount ?? 0) > 0) {
       throw new Error('Money was taken against this bill. Take the payment off it first, then move it to a quotation.')
     }
+    const attachments = await prepareAttachments()
+    if (!attachments) return
     const gone = await deleteBill(sale.id)
     if (!gone) throw new Error('Could not reach the books, so the bill was not moved.')
     const quote: Bill = {
@@ -3222,11 +3287,20 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
       number: nextQuoteNumber(bills),
       total,
       paid: false,
+      attachments,
     }
-    for (const k of ['voucherId', 'postedAt', 'postError', 'paidAmount', 'paidDate', 'fromQuote', 'attachments', 'checks'] as (keyof Bill)[]) {
+    for (const k of ['voucherId', 'postedAt', 'postError', 'paidAmount', 'paidDate', 'fromQuote', 'checks'] as (keyof Bill)[]) {
       delete (quote as Partial<Bill>)[k]
     }
     saveBill(quote)
+    try {
+      const state = useStore.getState()
+      await syncQuote({ bills: [plain(quote)], billSeq: state.billSeq })
+      await claimPhotos()
+    } catch (err) {
+      toast('Quotation kept on this PC. Reopen and save it to finish syncing its photos.\n' +
+        (err instanceof Error ? err.message : String(err)), 'error')
+    }
     toast(`Bill ${sale.number} is now quotation ${quote.number}.`, 'ok')
     committedRef.current = true
     navigate(`/bills/${quote.id}`, { replace: true })
@@ -3250,10 +3324,6 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
       }),
       total: 0,
     }
-    saveBill(grn)
-    setView('list')
-    navigate(draft.ledgerId ? `/ledger/suppliers/${draft.ledgerId}` : '/day', { replace: true })
-
     postingBills.add(draft.id)
     let filed: Awaited<ReturnType<typeof postDraft>> = null
     try {
@@ -3285,6 +3355,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
     saveBill(purchase)
     const bought = await postStored(purchase, true)
     if (bought) toast(`Filed as a delivery and a purchase, both on ${purchase.date}.`, 'ok')
+    setView('list')
+    navigate(purchase.ledgerId ? `/ledger/suppliers/${purchase.ledgerId}` : '/day', { replace: true })
   }
 
   function convertToSale() {
@@ -3301,7 +3373,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
     // Asked only when there is something to lose: a bill with lines on it and
     // no save behind it goes when you leave, so say so first.
     const unsaved =
-      !bills.find((b) => b.id === draft.id) && hasMeaningfulContent({ ...draft, total })
+      !bills.find((b) => b.id === draft.id) &&
+      (hasMeaningfulContent({ ...draft, total }) || photoFiles.length > 0 || photoPicked.length > 0)
     if (unsaved) { setAsking('leave'); return }
     myItems.sweep()
     setView('list')
@@ -3344,6 +3417,10 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
   }
 
   async function handlePrint() {
+    await whileSaving(printNow)
+  }
+
+  async function printNow() {
     if (readOnly) { toast(`This bill is open on ${lockedBy}.`, 'error'); return }
     committedRef.current = true
 
@@ -3358,7 +3435,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
      * and nothing new is being claimed.
      */
     if (isQuotation(draft)) {
-      doPrint(await saveQuote())
+      const quote = await saveQuote()
+      if (quote) doPrint(quote)
       return
     }
     const done = await postDraft()
@@ -3861,7 +3939,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                   min={0}
                   max={total || undefined}
                   data-bill-nav="1"
-                  value={draft.paidAmount ?? ''}
+                  value={draft.paidAmount ?? (paidByDefault(draft, total) ? total : '')}
                   onChange={(e) => setDraft((d) => ({
                     ...d,
                     paidAmount: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
@@ -3876,10 +3954,18 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 >
                   Full
                 </button>
+                {/* Said out loud, because a customer's account coming out
+                    square with nobody having touched this box would otherwise
+                    look like a mistake. */}
+                {paidByDefault(draft, total) && (
+                  <span className="text-xs text-muted" title="A sale with no goods lines is paid on the spot. Type 0 if it is on credit.">
+                    no goods lines — paid · 0 for credit
+                  </span>
+                )}
                 {/* When the money came in. Blank is the usual counter sale —
                     paid with the bill — so it only asks once there is money to
                     date, and it defaults to the bill's own day. */}
-                {(draft.paidAmount ?? 0) > 0 && (
+                {((draft.paidAmount ?? 0) > 0 || paidByDefault(draft, total)) && (
                   <input
                     type="date"
                     data-bill-nav="1"
@@ -3891,7 +3977,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 )}
               </div>
             )}
-            {(isMoneyVoucher || (draft.paidAmount ?? 0) > 0) && (
+            {(isMoneyVoucher || (draft.paidAmount ?? 0) > 0 || paidByDefault(draft, total)) && (
               <div className="flex items-center gap-1 rounded-xl bg-stone-100 p-1 dark:bg-stone-800">
                 {(['cash', 'online'] as const).map((mode) => (
                   <button
@@ -3950,13 +4036,15 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             <Button
               data-bill-save="1"
               onClick={save}
+              disabled={saving || readOnly}
               className="min-w-0 flex-1"
             >
-              {pricedGrn ? 'Save Delivery + Purchase' : `Save ${BILL_KINDS[draft.kind ?? 'sale'].title}`}
+              {saving ? 'Saving…' : pricedGrn ? 'Save Delivery + Purchase' : unpricedPurchase ? 'Save Goods Received' : `Save ${BILL_KINDS[draft.kind ?? 'sale'].title}`}
             </Button>
             <Button
               variant="outline"
               onClick={handlePrint}
+              disabled={saving || readOnly}
             >
               <Printer size={15} /> Print
             </Button>
@@ -3987,8 +4075,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             has sent in and nobody has filed, which is a wall of pictures on a
             bill that has none — and most bills written at the counter have
             none, because the counter is where the bill is being made.
-            A quotation is never filed, so it has no paper to keep. */}
-        {!isQuotation(draft) && (
+            Quotations can keep the same supporting photos as a bill. */}
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -4021,6 +4108,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             <div className={`ledger-root mt-2 ${ledgerDark ? 'dark' : ''}`}>
               <BillDrop
                 files={photoFiles}
+                attached={draft.attachments ?? []}
                 onChange={setPhotoFiles}
                 picked={photoPicked}
                 onPick={setPhotoPicked}
@@ -4029,7 +4117,6 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             </div>
           )}
         </div>
-        )}
 
         {photoShown != null && (
           <BillViewer voucher={photoShown} onClose={() => setPhotoShown(null)} />
@@ -4103,7 +4190,7 @@ const dayLabel = (ms: number) => {
 }
 
 /** A bill's ISO date to the epoch milliseconds the vouchers are dated in. */
-const startOfDay = (isoDate: string) => Date.parse(`${isoDate}T00:00:00`)
+const startOfDay = (isoDate: string) => Date.parse(`${isoDate}T00:00:00Z`)
 
 type DayRow = {
   key: string
@@ -4115,7 +4202,7 @@ type DayRow = {
   side: 'customers' | 'suppliers'
   account: string
   amount: number | null
-  photos: string[]
+  photos: Attachment[]
   billId?: string
   draft?: boolean
   onDelete?: () => void
@@ -4138,6 +4225,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState<Bill | null>(null)
   const [previewing, setPreviewing] = useState<Bill | null>(null)
+  const [viewingPhotos, setViewingPhotos] = useState<DayRow | null>(null)
 
   // The period lives in the URL, so a day's book is a link someone can send.
   const [params, setParams] = useSearchParams()
@@ -4180,7 +4268,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
       side: v.partyGroup ? (v.partyGroup === 'Sundry Creditors' ? 'suppliers' : 'customers') : sideOf(v.vchLabel),
       account: (v.contra ?? []).join(', '),
       amount: v.status === 'pending' ? null : v.amount,
-      photos: (v.attachmentUrls ?? []).map((a: any) => a?.url).filter(Boolean),
+      photos: v.attachmentUrls ?? [],
       entered: v.createdAt ?? v.date,
       billId: bills.find((b) => b.voucherId === v._id)?.id
         ?? (String(v.refNo ?? '').startsWith('BILL-')
@@ -4221,7 +4309,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         account: quote ? 'Quotation — not in the books' : b.postError ? `Not posted — ${b.postError}` : 'Not posted',
         quote,
         amount: b.total,
-        photos: [],
+        photos: b.attachments ?? [],
         entered: b.updatedAt ?? b.postedAt ?? at,
         billId: b.id,
         problem: b.postError,
@@ -4287,6 +4375,10 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         {previewing && (
           <VoucherBillPreview bill={previewing} onClose={() => setPreviewing(null)} />
         )}
+        {viewingPhotos && <BillViewer voucher={{
+          party: viewingPhotos.party, date: viewingPhotos.date, vchLabel: viewingPhotos.label,
+          refNo: viewingPhotos.ref, amount: viewingPhotos.amount, attachmentUrls: viewingPhotos.photos,
+        }} onClose={() => setViewingPhotos(null)} />}
         <header className="topbar">
           <h1 className="pagetitle">Day Book</h1>
           <div className="actions">
@@ -4382,7 +4474,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                           <button
                             className="clip"
                             aria-label="Bill photo"
-                            onClick={() => window.open(r.photos[0], '_blank', 'noopener')}
+                            onClick={() => setViewingPhotos(r)}
                           >
                             <span aria-hidden="true"><Paperclip size={13} aria-hidden="true" /></span>
                             {r.photos.length > 1 && <span>{r.photos.length}</span>}

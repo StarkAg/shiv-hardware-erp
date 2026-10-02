@@ -4,6 +4,8 @@ import { api } from '../../../../convex/_generated/api';
 import Combo from './Combo';
 import { shortDate, today } from '../lib/format';
 import { groupLabel } from '../lib/groups';
+import BillViewer from './BillViewer';
+import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
 
 /** Fills in the amount on a bill that was filed without one. */
 // Which account the other side of the voucher belongs to.
@@ -17,6 +19,7 @@ export default function PriceDialog({ voucher, ledgers, groups, onClose }) {
   const [accountId, setAccountId] = useState(accounts[0]?._id ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [viewing, setViewing] = useState(false);
   const price = useMutation(api.vouchers.price);
   const createLedger = useMutation(api.masters.createLedger);
 
@@ -59,11 +62,9 @@ export default function PriceDialog({ voucher, ledgers, groups, onClose }) {
         {voucher.narration && <div className="hint">{voucher.narration}</div>}
 
         {voucher.attachmentUrls?.length > 0 && (
-          <img
-            className="thumb"
-            src={voucher.attachmentUrls[0].previewUrl ?? voucher.attachmentUrls[0].url}
-            alt=""
-          />
+          <button type="button" className="shotbtn thumb" aria-label="Preview bill attachments" onClick={() => setViewing(true)}>
+            <AttachmentThumbnail file={voucher.attachmentUrls[0]} />
+          </button>
         )}
 
         <div className="row">
@@ -106,6 +107,7 @@ export default function PriceDialog({ voucher, ledgers, groups, onClose }) {
           </button>
         </div>
       </form>
+      {viewing && <BillViewer voucher={voucher} onClose={() => setViewing(false)} />}
     </div>
   );
 }

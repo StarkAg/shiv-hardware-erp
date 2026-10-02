@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import BillViewer from './BillViewer';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { rupees, shortDate } from '../lib/format';
@@ -66,6 +67,7 @@ function Filed({ shot, onOpen }) {
  * Clicking one opens the photograph itself, whole and uncropped.
  */
 export default function Photos({ onOpen }) {
+  const [viewing, setViewing] = useState(null);
   const live = useLive(api.photos.taken, {}, 'photos');
   const shots = live ?? [];
 
@@ -92,9 +94,9 @@ export default function Photos({ onOpen }) {
             <React.Fragment key={`${shot.storageId}-${i}`}>
               {heads && <h2 className="shotday">{at}</h2>}
               <figure className="shotbig">
-                <a href={shot.fileUrl} target="_blank" rel="noreferrer">
+                <button type="button" className="shotbtn" aria-label={'Preview photo ' + (i + 1)} onClick={() => setViewing(shot)}>
                   <img src={shot.url} alt="" loading="lazy" decoding="async" />
-                </a>
+                </button>
                 <figcaption>
                   <span className="shot-n mono">{i + 1}</span>
                   <span className="shot-at">{shotTime(shot.at)}</span>
@@ -105,6 +107,9 @@ export default function Photos({ onOpen }) {
           );
         })}
       </div>
+      {viewing && <BillViewer voucher={{ ...viewing, attachmentUrls: [{
+        url: viewing.fileUrl, previewUrl: viewing.url, contentType: viewing.contentType,
+      }] }} onClose={() => setViewing(null)} />}
     </>
   );
 }

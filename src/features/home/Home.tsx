@@ -51,10 +51,18 @@ function Figure({
   tone?: 'plain' | 'owed' | 'owing' | 'attention'
   loading?: boolean
 }) {
+  const content = <>
+    <span className="home-tile-label">{label}</span>
+    <span className="home-tile-value">{loading ? <Bar w="60%" h={22} /> : value}</span>
+  </>
+  if (to.startsWith('https://')) return (
+    <a href={to} target="_blank" rel="noopener noreferrer" className={`home-tile home-tile-${tone}`}>
+      {content}
+    </a>
+  )
   return (
     <Link to={to} className={`home-tile home-tile-${tone}`}>
-      <span className="home-tile-label">{label}</span>
-      <span className="home-tile-value">{loading ? <Bar w="60%" h={22} /> : value}</span>
+      {content}
     </Link>
   )
 }
@@ -108,13 +116,13 @@ function FromTheBooks() {
       {waiting > 0 && (
         <div className="home-grid home-waiting">
           {(review?.unread ?? 0) > 0 && (
-            <Figure label="Bills to read" value={String(review!.unread)} to="/ledger/bills" tone="attention" />
+            <Figure label="Bills to read" value={String(review!.unread)} to="https://shivhardware-sort.vercel.app/" tone="attention" />
           )}
           {(review?.ready ?? 0) > 0 && (
-            <Figure label="Bills to price" value={String(review!.ready)} to="/ledger/bills" tone="attention" />
+            <Figure label="Bills to price" value={String(review!.ready)} to="https://shivhardware-sort.vercel.app/" tone="attention" />
           )}
           {(data?.unpriced ?? 0) > 0 && (
-            <Figure label="Vouchers with no amount" value={String(data!.unpriced)} to="/ledger/bills" tone="attention" />
+            <Figure label="Vouchers with no amount" value={String(data!.unpriced)} to="/day" tone="attention" />
           )}
           {backupLate && (
             <Figure
@@ -125,7 +133,7 @@ function FromTheBooks() {
             />
           )}
           {(cashWaiting?.length ?? 0) > 0 && (
-            <Figure label="Cash notes without a party" value={String(cashWaiting!.length)} to="/cash-review" tone="attention" />
+            <Figure label="Cash notes without a party" value={String(cashWaiting!.length)} to="/cash-pending" tone="attention" />
           )}
         </div>
       )}

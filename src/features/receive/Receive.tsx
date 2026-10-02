@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import AttachmentViewer from '../../components/AttachmentViewer'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
 import { Camera, Check, ChevronLeft, Minus, PackageCheck, Plus, Search, X } from 'lucide-react'
@@ -39,6 +40,7 @@ export function Receive() {
     | null
     | undefined
   const [photos, setPhotos] = useState<File[]>([])
+  const [viewing, setViewing] = useState<number | null>(null)
   const [lines, setLines] = useState<Line[]>([])
   const [note, setNote] = useState('')
   const [itemFind, setItemFind] = useState('')
@@ -57,6 +59,7 @@ export function Receive() {
 
   // One object URL per photo, not one per render.
   const previews = useMemo(() => photos.map((f) => URL.createObjectURL(f)), [photos])
+  useEffect(() => () => previews.forEach(url => URL.revokeObjectURL(url)), [previews])
 
   const everything: Known[] = useMemo(
     () => [...(known?.usual ?? []), ...(known?.items ?? [])],
@@ -178,6 +181,9 @@ export function Receive() {
 
   return (
     <div className={shell}>
+      {viewing !== null && <AttachmentViewer title="Challan photos" initialIndex={viewing}
+        attachments={photos.map((file, index) => ({ url: previews[index], name: file.name, contentType: file.type }))}
+        onClose={() => setViewing(null)} />}
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-stone-200 bg-stone-50/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur dark:border-white/10 dark:bg-stone-950/95">
         <Link to="/m" aria-label="Back" className="-ml-1 p-1 text-stone-500"><ChevronLeft size={20} /></Link>
         <PackageCheck size={20} className="text-shiv-green" aria-hidden="true" />
@@ -251,7 +257,9 @@ export function Receive() {
               <div className="flex flex-wrap gap-2">
                 {photos.map((f, i) => (
                   <div key={`${f.name}-${i}`} className="relative h-20 w-20 overflow-hidden rounded-lg border border-stone-200 dark:border-white/10">
-                    <img src={previews[i]} alt={`Challan photo ${i + 1}`} className="h-full w-full object-cover" />
+                    <button type="button" className="h-full w-full" aria-label={'Preview challan photo ' + (i + 1)} onClick={() => setViewing(i)}>
+                      <img src={previews[i]} alt="" className="h-full w-full object-cover" />
+                    </button>
                     <button
                       onClick={() => setPhotos((p) => p.filter((_, n) => n !== i))}
                       aria-label="Remove photo"

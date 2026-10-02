@@ -229,10 +229,11 @@ export default function Ledger() {
                   {r.folder ? ` · ${r.folder.cabinet}/${r.folder.drawer}/${r.folder.no}` : ''}
                 </span>
               </span>
-              {/* The bookmark, when their packet is on the table right now. */}
-              {r.slot !== null && r.slot !== undefined && (
-                <span className="lg-slot">{`S${String(r.slot).padStart(2, '0')}`}</span>
-              )}
+              {/* The bookmark they are holding — from the moment they were
+                  named, not from when the paper reaches the table. Written by
+                  the server so this and the customer's own page cannot
+                  disagree about how a number is spelt. */}
+              {r.slotLabel && <span className="lg-slot">{r.slotLabel}</span>}
             </button>
           ))}
         </div>

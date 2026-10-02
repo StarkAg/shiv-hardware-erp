@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { record, money } from "./lib/history";
 import { requirePin } from "./lib/pin";
 import { linkTrashRows } from './lib/trashLinks';
+import { attachmentIds, deleteUnreferencedFiles, describeAttachments } from './lib/attachmentFiles';
 
 /** One bin for the panel and books. A linked bill/voucher is one deleted event. */
 export const all = query({
@@ -24,10 +25,7 @@ export const all = query({
       refNo: voucher.refNo ?? '',
       amount: voucher.amount ?? null,
       status: voucher.status,
-      attachmentUrls: await Promise.all(voucher.attachments.map(async doc => {
-        const storageId = typeof doc === 'string' ? doc : doc.storageId;
-        return { storageId, kind: typeof doc === 'string' ? 'bill' : doc.kind, url: await ctx.storage.getUrl(storageId) };
-      })),
+      attachmentUrls: await describeAttachments(ctx, voucher.attachments),
     });
     const billRows = await Promise.all(bills.map(async row => {
       const voucher = vouchers.find(v => v._id === links.get(row._id));
@@ -42,9 +40,7 @@ export const all = query({
         amount: row.bill?.total ?? details?.amount ?? null,
         status: details?.status ?? 'final',
         linkedVoucher: details?.label ?? null,
-        attachmentUrls: details?.attachmentUrls ?? await Promise.all((row.bill?.attachments ?? []).map(async (doc: any) => ({
-          storageId: doc.storageId, kind: doc.kind ?? 'bill', url: await ctx.storage.getUrl(doc.storageId),
-        }))),
+        attachmentUrls: details?.attachmentUrls ?? await describeAttachments(ctx, row.bill?.attachments ?? []),
       };
     }));
     const voucherRows = await Promise.all(vouchers.filter(v => !linked.has(v._id)).map(async row => ({
@@ -82,16 +78,7 @@ export const list = query({
           amount: row.amount,
           status: row.status,
           lineCount: row.entries.length,
-          attachmentUrls: await Promise.all(
-            row.attachments.map(async (doc) => {
-              const storageId = typeof doc === "string" ? doc : doc.storageId;
-              return {
-                storageId,
-                kind: typeof doc === "string" ? "bill" : doc.kind,
-                url: await ctx.storage.getUrl(storageId),
-              };
-            })
-          ),
+          attachmentUrls: await describeAttachments(ctx, row.attachments),
         };
       })
     );
@@ -142,10 +129,8 @@ export const purge = mutation({
     requirePin(pin);
     const row = await ctx.db.get(id);
     if (!row) return;
-    for (const doc of row.attachments) {
-      await ctx.storage.delete(typeof doc === "string" ? doc : doc.storageId).catch(() => {});
-    }
     await ctx.db.delete(id);
+    await deleteUnreferencedFiles(ctx, attachmentIds(row.attachments));
     await record(ctx, "trash.purge",
       `Purged voucher no. ${row.voucherNo} · ${money(row.amount)} for good`);
   },
@@ -162,11 +147,9 @@ export const purgeOlderThan = mutation({
       .withIndex("by_deletedAt", (q) => q.lt("deletedAt", cutoff))
       .collect();
     for (const row of old) {
-      for (const doc of row.attachments) {
-        await ctx.storage.delete(typeof doc === "string" ? doc : doc.storageId).catch(() => {});
-      }
       await ctx.db.delete(row._id);
     }
+    await deleteUnreferencedFiles(ctx, old.flatMap(row => attachmentIds(row.attachments)));
     if (old.length) {
       await record(ctx, "trash.purge",
         `Purged ${old.length} deleted voucher(s) older than ${days} days`);

@@ -332,6 +332,43 @@ export default defineSchema({
   })
     .index('by_entry_id', ['entryId'])
     .index('by_date', ['date'])
+    .index('by_voucher', ['voucherId'])
+    .index('by_updated_at', ['updatedAt']),
+
+  /** New work only: one card for a real bill, with accounting and fulfillment
+   * kept separate. Each source id is indexed so retries and later links reuse
+   * the same card instead of creating another. */
+  billFlows: defineTable({
+    flowKey: v.string(),
+    documentKind: v.union(v.literal('sale'), v.literal('purchase'), v.literal('grn'),
+      v.literal('receipt'), v.literal('payment'), v.literal('unknown')),
+    party: v.string(),
+    date: v.string(),
+    amount: v.optional(v.number()),
+    cashEntryId: v.optional(v.string()),
+    voucherId: v.optional(v.id('vouchers')),
+    cashVoucherId: v.optional(v.id('vouchers')),
+    billId: v.optional(v.string()),
+    jobId: v.optional(v.string()),
+    photos: v.array(v.id('_storage')),
+    expectedPhotos: v.optional(v.number()),
+    photoBatchId: v.optional(v.string()),
+    intakeStatus: v.union(v.literal('none'), v.literal('uploading'), v.literal('waiting'), v.literal('reading'),
+      v.literal('ready'), v.literal('failed'), v.literal('converted')),
+    readDraft: v.optional(v.any()),
+    readError: v.optional(v.string()),
+    route: v.union(v.literal('unset'), v.literal('handover'), v.literal('rack'),
+      v.literal('order'), v.literal('fabrication'), v.literal('mixed')),
+    tasks: v.any(),
+    stage: v.string(),
+    measurements: v.optional(v.any()),
+    history: v.array(v.object({ at: v.number(), action: v.string() })),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_key', ['flowKey'])
+    .index('by_cash_entry', ['cashEntryId'])
+    .index('by_voucher', ['voucherId'])
+    .index('by_bill', ['billId'])
     .index('by_updated_at', ['updatedAt']),
 
   // ── The evening count, one per closed day ─────────────────────────────────
@@ -572,6 +609,7 @@ export default defineSchema({
     // the moment of shooting, because that is the only place anyone knows the
     // second sheet belongs to the first.
     groupId: v.optional(v.string()),
+    queueNo: v.optional(v.number()),
     /**
      * Which physical stack this photograph's slip went onto — "A", "B".
      *
@@ -584,6 +622,14 @@ export default defineSchema({
   })
     .index("by_at", ["at"])
     .index("by_group", ["groupId"]),
+
+  /** Photos from the separate voucher shooter, awaiting a bill or voucher. */
+  voucherInbox: defineTable({
+    storageId: v.id("_storage"),
+    at: v.number(),
+    groupId: v.string(),
+    queueNo: v.optional(v.number()),
+  }).index("by_at", ["at"]),
 
   /**
    * The shop's own settings. One row, keyed "shop".
@@ -836,7 +882,15 @@ export default defineSchema({
   filingPlan: defineTable({
     key: v.string(),
     /** How many slots are laid out on the table — thirty or forty, reused. */
-    slotCount: v.number(),
+    /**
+     * How many bookmarks are laid out, when the table is a fixed size.
+     *
+     * Absent means unlimited: a customer new to the table always gets a
+     * bookmark, and the numbers run as high as the sort needs. That is the
+     * default, because the alternative — being told the table is full partway
+     * through a stack of two thousand slips — stops the sorting dead.
+     */
+    slotCount: v.optional(v.number()),
     madeAt: v.number(),
   }).index("by_key", ["key"]),
 

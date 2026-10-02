@@ -4,6 +4,7 @@ import { anyApi } from 'convex/server'
 import { registerPdf } from './pdf.js'
 import StaffPayments from './StaffPayments.jsx'
 import CashSearch from './CashSearch.jsx'
+import { enqueuePhotos, flushPhotos, pendingPhotos } from './photoQueue.js'
 
 // Shiv Hardware cash book.
 //
@@ -415,6 +416,7 @@ export default function App() {
     })
   }
 
+  const [photoPending, setPhotoPending] = useState(0)
   const [sync, setSync] = useState({ pending: pendingCount(), busy: false, at: 0, error: '' })
   const syncing = useRef(false)
   const runSync = async () => {
@@ -422,6 +424,10 @@ export default function App() {
     syncing.current = true
     setSync((p) => ({ ...p, busy: true }))
     const res = await flush(applyPulled)
+    if (res.ok) {
+      try { await flushPhotos() } catch { /* photo pages remain queued */ }
+    }
+    try { setPhotoPending(await pendingPhotos()) } catch { /* storage unavailable */ }
     syncing.current = false
     setSync({ pending: pendingCount(), busy: false, at: res.ok ? Date.now() : 0, error: res.ok ? '' : res.reason })
   }
@@ -544,7 +550,7 @@ export default function App() {
             title={sync.pending ? `${sync.pending} waiting` : sync.error ? `Offline — ${sync.error}` : 'Saved online'}
           >
             <CloudIcon />
-            {sync.pending > 0 && <span className="syncdot">{sync.pending > 99 ? '99+' : sync.pending}</span>}
+            {sync.pending + photoPending > 0 && <span className="syncdot">{sync.pending + photoPending > 99 ? '99+' : sync.pending + photoPending}</span>}
           </button>
           <button className="themebtn" onClick={() => setHistoryOpen(true)} aria-label="Change history" title="Change history">
             <HistoryIcon />
@@ -946,7 +952,7 @@ function balanceClose(store, closes, openings, date, mode) {
 
 function CashEntry({
   todayKey, store, closes, openings, guard, viewing, setViewing, base,
-  editing, setEditing, onAdd, onUpdate, dealerNames, onSaved,
+  editing, setEditing, onAdd, onUpdate, dealerNames, onSaved, onSync,
 }) {
   const closedToday = !!closes[todayKey]
   const dk = viewing || base
@@ -976,10 +982,18 @@ function CashEntry({
   const [mode, setMode] = useState('cash')
   const [name, setName] = useState('')
   const [dealer, setDealer] = useState(false)
+  const [photoFiles, setPhotoFiles] = useState([])
+  const [photoError, setPhotoError] = useState('')
+  const [photoRetryId, setPhotoRetryId] = useState(null)
+  const [savingPhoto, setSavingPhoto] = useState(false)
+  const photoInput = useRef(null)
+  const photoBatchId = useRef(crypto.randomUUID())
 
   const reset = () => {
     setAmount(''); setKind(''); setMode('cash')
     setName(''); setDealer(false); setEditing(null)
+    setPhotoFiles([]); setPhotoError(''); setPhotoRetryId(null)
+    photoBatchId.current = crypto.randomUUID()
     setNaming(false); noteRef.current?.blur()
   }
 
@@ -1147,19 +1161,35 @@ function CashEntry({
       .slice(0, 12)
   }, [store, kind, resets])
 
+  const savePages = async (id) => {
+    if (!photoFiles.length) { reset(); onSaved?.(id); return }
+    setSavingPhoto(true)
+    try {
+      await enqueuePhotos(id, photoFiles, photoBatchId.current)
+      // Cash sync may already have started while the camera compressed these
+      // pages. Give that pass time to finish, then send the durable photo queue.
+      setTimeout(() => { void onSync?.() }, 2000)
+      reset()
+      onSaved?.(id)
+    } catch (error) {
+      setPhotoRetryId(id)
+      setPhotoError(error?.message || 'Could not keep the photo on this phone. Try again.')
+    } finally { setSavingPhoto(false) }
+  }
+
   const commit = () => {
-    if (!ready) return
+    if (!ready || savingPhoto) return
+    if (photoRetryId) { void savePages(photoRetryId); return }
     const clean = name.trim()
     if (editing) { // the password was already given when the edit started
       onUpdate({ ...editing, kind, mode, name: clean, amount: value, dealer })
-      reset()
-      onSaved?.(editing.id)
+      void savePages(editing.id)
       return
     }
     const at = Date.now()
     const id = `c-${at}-${Math.random().toString(36).slice(2, 7)}`
     const batch = [{ id, date: dk, kind, mode, name: clean, amount: value, at, dealer }]
-    const done = () => { onAdd(batch); reset(); onSaved?.(id) }
+    const done = () => { onAdd(batch); setPhotoRetryId(id); void savePages(id) }
     // The log carries corrections, so a line added to the open register goes
     // straight in. Writing into any other day — behind or ahead — asks first.
     if (!onClosed) done(); else guard(done)
@@ -1270,11 +1300,32 @@ function CashEntry({
         )}
       </div>
 
+      <div className="billphoto-row">
+        <input ref={photoInput} type="file" accept="image/*" capture="environment" multiple hidden
+          onChange={(event) => {
+            const picked = [...(event.target.files || [])]
+            setPhotoFiles((current) => [...current, ...picked])
+            setPhotoError('')
+            event.target.value = ''
+          }} />
+        <button type="button" className="billphoto-button" onClick={() => photoInput.current?.click()}>
+          📷 Bill photo{photoFiles.length ? ` · ${photoFiles.length} page${photoFiles.length === 1 ? '' : 's'}` : ''}
+        </button>
+        {photoFiles.map((file, index) => (
+          <div className="billphoto-page" key={`${file.name}-${index}`}>
+            <span>Page {index + 1} · {file.name || 'Photo'}</span>
+            <button type="button" aria-label={`Remove page ${index + 1}`} onClick={() =>
+              setPhotoFiles((current) => current.filter((_, at) => at !== index))}>×</button>
+          </div>
+        ))}
+        {photoError && <div className="billphoto-error" role="alert">Cash saved. {photoError}</div>}
+      </div>
+
       <button
-        className="tickbar" onClick={commit} disabled={!ready}
-        aria-label={editing ? 'Update entry' : 'Save entry'}
+        className="tickbar" onClick={commit} disabled={!ready || savingPhoto}
+        aria-label={photoRetryId ? 'Retry bill photo' : editing ? 'Update entry' : 'Save entry'}
       >
-        ✓
+        {savingPhoto ? '…' : photoRetryId ? 'Retry photo' : '✓'}
       </button>
 
       {/* Backspace takes the twelfth cell now that the tick has its own bar.

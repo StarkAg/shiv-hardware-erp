@@ -4,65 +4,11 @@ import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { bestMatch, similarity, clean, isOwnShop } from '../lib/match';
 import Combo from './Combo';
+import AttachmentViewer from '../../../components/AttachmentViewer';
 
-/**
- * The slip at full size, from the review card.
- *
- * The card shows a cropped thumbnail so that three of them fit across the
- * screen, and no figure should be approved off a crop. This is the whole
- * sheet, as large as the window allows, with the arrow keys walking a bill
- * that runs to several. Zooming is left to the browser — the photo links to
- * itself, and the browser's own viewer pinches and pans better than anything
- * reimplemented here.
- */
-function Enlarged({ pages, at, setAt, onClose }) {
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight') setAt((i) => Math.min(i + 1, pages.length - 1));
-      if (e.key === 'ArrowLeft') setAt((i) => Math.max(i - 1, 0));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [pages.length, onClose, setAt]);
-
-  const shown = pages[Math.min(at, pages.length - 1)];
-
-  return (
-    <div className="lightbox" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="lightbox-inner rev-big">
-        <div className="stage">
-          {shown?.url && (
-            <a href={shown.url} target="_blank" rel="noreferrer">
-              <img src={shown.url} alt="" draggable="false" />
-            </a>
-          )}
-        </div>
-        <div className="rev-big-bar">
-          {pages.length > 1 && (
-            <>
-              <button className="btn ghost" disabled={at === 0} onClick={() => setAt(at - 1)}>
-                ‹
-              </button>
-              <span>
-                {Math.min(at, pages.length - 1) + 1} / {pages.length}
-              </span>
-              <button
-                className="btn ghost"
-                disabled={at >= pages.length - 1}
-                onClick={() => setAt(at + 1)}
-              >
-                ›
-              </button>
-            </>
-          )}
-          <button className="btn" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+/** Review opens the same attachment viewer as every other photo action. */
+function Enlarged({ pages, at, onClose }) {
+  return <AttachmentViewer attachments={pages} initialIndex={at} title="Bill photos" onClose={onClose} />;
 }
 
 /**

@@ -8,6 +8,7 @@ import { findParty, findPartyIn } from './lib/parties'
 import { nextVoucherNo } from './lib/numbering'
 import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
+import { ensureCashFlow, flowForCash } from './lib/billFlow'
 
 /**
  * The drawer, in the books.
@@ -219,6 +220,14 @@ export const push = mutation({
         else { skipped++; continue }
         // The books take the same note, in the same transaction as the drawer.
         await postCashEntry(ctx, row.entryId)
+        const flow = await flowForCash(ctx, row.entryId)
+        if (row.deleted && flow) {
+          await ctx.db.patch(flow._id, { stage: 'cancelled', updatedAt: Date.now() })
+        } else if (!row.deleted && (row.dealer || flow)) {
+          const saved = await ctx.db.query('cashEntries')
+            .withIndex('by_entry_id', q => q.eq('entryId', row.entryId)).unique()
+          if (saved) await ensureCashFlow(ctx, saved)
+        }
         applied++
         continue
       }
@@ -527,8 +536,10 @@ export const totals = query({
 export const unposted = query({
   args: {},
   handler: async (ctx) => {
-    const rows = (await ctx.db.query('cashEntries').collect())
-      .filter((row) => !row.deleted && !row.voucherId)
+    const rows = (await ctx.db.query('cashEntries')
+      .withIndex('by_voucher', q => q.eq('voucherId', undefined))
+      .collect())
+      .filter((row) => !row.deleted)
       .sort((a, b) => b.at - a.at)
 
     const books = await readBooks(ctx)

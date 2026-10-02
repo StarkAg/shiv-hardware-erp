@@ -1,14 +1,34 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useMutation, useQuery } from 'convex/react';
 import { Check, Paperclip, X } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { shortDate } from '../lib/format';
+import Confirm from './Confirm';
+import PhotoHoverZoom, { placeZoomPane, zoomGeometry } from './PhotoHoverZoom';
+import BillViewer from './BillViewer';
+import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
 
 const OK = (f) => f.type.startsWith('image/') || f.type === 'application/pdf';
 const key = (f) => `${f.name}:${f.size}:${f.lastModified}`;
+const SHOOTER_URL = import.meta.env.VITE_VOUCHER_SHOOTER_URL || 'https://shivhardware-voucher.vercel.app';
 
 const size = (bytes) =>
   bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+const queueLabel = (number) => String(number).padStart(4, '0');
+const queueNumbers = (unit) => unit.pages
+  .filter((page) => page.queueNo != null)
+  .map((page) => page.queueNo);
+const queueSummary = (unit) => {
+  const numbers = queueNumbers(unit);
+  if (!numbers.length) return '';
+  if (numbers.length === 1) return `#${queueLabel(numbers[0])}`;
+  const contiguous = numbers.every((number, index) => number === numbers[0] + index);
+  return contiguous
+    ? `#${queueLabel(numbers[0])}–#${queueLabel(numbers.at(-1))}`
+    : `#${queueLabel(numbers[0])} +${numbers.length - 1}`;
+};
 
 /**
  * Where the bill photo goes in: dropped, pasted, or picked. Dropping is what
@@ -16,9 +36,20 @@ const size = (bytes) =>
  * straight onto the voucher — and pasting catches a screenshot without it
  * ever becoming a file.
  */
-export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill }) {
-  // Anything the phone has sent in and nobody has filed yet.
-  const fromPhone = useLive(api.inbox.list, {}, 'inbox') ?? [];
+export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill, attached = [] }) {
+  const saved = useQuery(api.files.describe, attached.length ? { storageIds: attached.map((file) => file.storageId) } : 'skip');
+  // The voucher shooter has its own queue. Keep older unstacked photos from
+  // the panel camera; lettered stacks belong to the sorting site.
+  const voucherPhotosLive = useLive(api.voucherInbox.list, {}, 'voucher-inbox');
+  const legacyPhotosLive = useLive(api.inbox.list, {}, 'inbox');
+  const voucherPhotos = voucherPhotosLive ?? [];
+  const legacyPhotos = legacyPhotosLive ?? [];
+  const discardVoucher = useMutation(api.voucherInbox.discard);
+  const discardLegacy = useMutation(api.inbox.discard);
+  const fromPhone = useMemo(() => [
+    ...voucherPhotos.map((row) => ({ ...row, source: 'voucher' })),
+    ...legacyPhotos.filter((row) => !row.stack).map((row) => ({ ...row, source: 'legacy' })),
+  ].sort((a, b) => b.at - a.at), [voucherPhotos, legacyPhotos]);
   /**
    * A bill of several sheets is one thing to file, so it is one thing here —
    * a stack, not three loose photos scattered down a newest-first list where
@@ -32,13 +63,14 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
         out.push({ key: row._id, pages: [row] });
         continue;
       }
-      if (done.has(row.groupId)) continue;
-      done.add(row.groupId);
+      const groupKey = `${row.source}:${row.groupId}`;
+      if (done.has(groupKey)) continue;
+      done.add(groupKey);
       out.push({
-        key: row.groupId,
+        key: groupKey,
         // Pages read in the order they were shot, whatever order they land in.
         pages: fromPhone
-          .filter((r) => r.groupId === row.groupId)
+          .filter((r) => r.source === row.source && r.groupId === row.groupId)
           .sort((a, b) => a.at - b.at),
       });
     }
@@ -59,18 +91,96 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
       url: r.url,
       previewUrl: r.url,
       kind: 'photo',
-      label: 'photo',
+      label: r.queueNo == null ? 'photo' : `#${queueLabel(r.queueNo)}`,
       contentType: 'image/jpeg',
     }));
 
   const [over, setOver] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
+  const [hovered, setHovered] = useState(null);
+  const [preview, setPreview] = useState(null);
   const input = useRef(null);
+  const hoverClose = useRef(null);
+  const clearHoverClose = () => { if (hoverClose.current) clearTimeout(hoverClose.current); hoverClose.current = null; };
+  const hideMagnifier = () => {
+    clearHoverClose();
+    // The pane sits across a small gap. Give the cursor time to reach it so
+    // the enlarged image can itself be clicked for the full photo modal.
+    hoverClose.current = setTimeout(() => setHovered(null), 180);
+  };
+  useEffect(() => () => { if (hoverClose.current) clearTimeout(hoverClose.current); }, []);
+  const viewBill = (shown) => {
+    setHovered(null);
+    if (onViewBill) onViewBill(shown);
+    else setPreview(shown);
+  };
+
+  useEffect(() => {
+    if (!hovered) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setHovered(null);
+    };
+    const onScrollOrResize = () => setHovered(null);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [hovered]);
+
+  const openViewer = (unit) => {
+    clearHoverClose();
+    setHovered(null);
+    const cover = unit.pages[0];
+    const shown = {
+      party: unit.pages.length > 1 ? `From the phone · ${unit.pages.length} pages` : 'From the phone',
+      date: cover.at,
+      vchLabel: '',
+      attachmentUrls: asAttachments(unit.pages),
+    };
+    viewBill(shown);
+  };
+
+  const showMagnifier = (event, unit) => {
+    if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+    clearHoverClose();
+    const image = event.currentTarget.querySelector('img');
+    if (!image) return;
+    const rect = image.getBoundingClientRect();
+    const tile = {
+      left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom,
+      width: rect.width, height: rect.height,
+    };
+    const pane = placeZoomPane(tile, { width: window.innerWidth, height: window.innerHeight });
+    const zoom = zoomGeometry(
+      tile,
+      { width: image.naturalWidth || rect.width, height: image.naturalHeight || rect.height },
+      pane,
+      { x: event.clientX, y: event.clientY }
+    );
+    setHovered({ unit, pane, zoom });
+  };
+
+  const deleteUnit = async (unit) => {
+    const removed = new Set();
+    try {
+      for (const page of unit.pages) {
+        await (page.source === 'voucher' ? discardVoucher : discardLegacy)({ id: page._id });
+        removed.add(page._id);
+      }
+    } finally {
+      if (removed.size) onPick?.(picked.filter((page) => !removed.has(page._id)));
+    }
+  };
 
   const shots = useMemo(
     () =>
       files.map((file) => ({
         file,
-        url: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+        url: URL.createObjectURL(file),
       })),
     [files]
   );
@@ -109,10 +219,28 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
 
   return (
     <div className="drop-wrap">
-      {fromPhone.length > 0 && onPick && (
+      {attached.length > 0 && <div className="saved-attachments">
+        <div className="fromphone-head">Attached to this bill</div>
+        {!saved ? <p role="status">Loading attachments…</p> : <div className="shots">
+          {saved.map((file, index) => <div className="shot-tile" key={file.storageId}>
+            <button type="button" className="shot-pick" aria-label={'View attached file ' + (index + 1)}
+              onClick={() => viewBill({ attachmentUrls: saved, initialIndex: index })}>
+              <AttachmentThumbnail file={file} />
+            </button>
+          </div>)}
+        </div>}
+      </div>}
+      <div className="voucher-shooter-link">
+        Take a bill photo on your phone: <a href={SHOOTER_URL} target="_blank" rel="noreferrer">Open voucher shooter</a>
+      </div>
+      {onPick && (
         <div className="fromphone">
           <div className="fromphone-head">From the phone</div>
-          <div className="shots">
+          {voucherPhotosLive === undefined || legacyPhotosLive === undefined
+            ? <p className="hint" role="status">Loading phone photos…</p>
+            : units.length === 0
+              ? <p className="hint">No bill photos are waiting. Take photos in the voucher shooter, then return here.</p>
+              : <div className="shots">
             {units.map((unit) => {
               const cover = unit.pages[0];
               const many = unit.pages.length > 1;
@@ -127,43 +255,59 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
                       before anyone reads the count. */}
                   {many && <span className="stack-leaf two" aria-hidden="true" />}
                   {many && <span className="stack-leaf one" aria-hidden="true" />}
-                  <button type="button" className="shot-pick" onClick={() => toggle(unit)}>
+                  <button type="button" className="shot-pick"
+                    aria-label={`Select ${many ? `${unit.pages.length} phone photos` : 'phone photo'} ${queueNumbers(unit).map((number) => `#${queueLabel(number)}`).join(', ')}`}
+                    onPointerEnter={(event) => showMagnifier(event, unit)}
+                    onPointerMove={(event) => showMagnifier(event, unit)}
+                    onPointerLeave={hideMagnifier}
+                    onClick={() => toggle(unit)}>
                     <img src={cover.url} alt="" loading="lazy" />
                   </button>
+                  {cover.queueNo != null && <span className="shot-queue" title={queueNumbers(unit).map((number) => `#${queueLabel(number)}`).join(', ')}>{queueSummary(unit)}</span>}
                   {many && (
                     <span className="shot-page">{unit.pages.length} pages</span>
                   )}
                   <span className="shot-when">{shortDate(cover.at)}</span>
                   {isPicked(unit) && <span className="shot-tick"><Check size={12} aria-hidden="true" /></span>}
-                  {(
-                    <button
-                      type="button"
-                      className="shot-zoom"
-                      aria-label={many ? 'See all pages' : 'See it bigger'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const shown = {
-                          party: many ? `From the phone · ${unit.pages.length} pages` : 'From the phone',
-                          date: cover.at,
-                          vchLabel: '',
-                          attachmentUrls: asAttachments(unit.pages),
-                        };
-                        // Where there is a viewer it opens there; where there
-                        // is not, the photograph opens on its own rather than
-                        // the button doing nothing.
-                        if (onViewBill) onViewBill(shown);
-                        else window.open(cover.url, '_blank', 'noopener');
-                      }}
-                    >
-                      ⤢
-                    </button>
-                  )}
+                  <button type="button" className="shot-zoom"
+                    aria-label={many ? 'See all pages' : 'See it bigger'}
+                    onClick={() => openViewer(unit)}>⤢</button>
+                  <button type="button" className="shot-delete"
+                    aria-label={`Delete phone photo ${cover.queueNo == null ? '' : `#${queueLabel(cover.queueNo)}`}`}
+                    onClick={() => { setHovered(null); setToDelete(unit); }}>
+                    <X size={16} aria-hidden="true" />
+                  </button>
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
+
+      {hovered && createPortal(
+        <PhotoHoverZoom
+          url={hovered.unit.pages[0].url}
+          label={queueSummary(hovered.unit) || 'Phone photo'}
+          pane={hovered.pane}
+          zoom={hovered.zoom}
+          onEnter={clearHoverClose}
+          onLeave={hideMagnifier}
+          onOpen={() => openViewer(hovered.unit)}
+        />,
+        document.body
+      )}
+
+      {toDelete && <Confirm
+        title={toDelete.pages.length > 1 ? `Delete ${toDelete.pages.length} photos?` : 'Delete this photo?'}
+        body={`${queueNumbers(toDelete).length ? `Queue ${queueNumbers(toDelete).map((number) => `#${queueLabel(number)}`).join(', ')}. ` : ''}This removes ${toDelete.pages.length > 1 ? 'all pages' : 'the photo'} from the waiting queue and cannot be undone.`}
+        confirmLabel="Delete photo"
+        danger
+        requireText="delete"
+        requireLabel="Type delete to confirm"
+        onConfirm={() => deleteUnit(toDelete)}
+        onClose={() => setToDelete(null)}
+      />}
+      {preview && <BillViewer voucher={preview} onClose={() => setPreview(null)} />}
 
       <button
         type="button"
@@ -196,11 +340,12 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
         <div className="shots">
           {shots.map((s, i) => (
             <div className="shot-tile" key={key(s.file)}>
-              {s.url ? (
-                <img src={s.url} alt="" />
-              ) : (
-                <span className="shot-pdf">PDF</span>
-              )}
+              <button type="button" className="shot-pick" aria-label={'Preview ' + s.file.name}
+                onClick={() => viewBill({ initialIndex: i, attachmentUrls: shots.map((shot) => ({
+                  url: shot.url, contentType: shot.file.type, name: shot.file.name, label: shot.file.name,
+                })) })}>
+                <AttachmentThumbnail file={{ url: s.url, contentType: s.file.type }} />
+              </button>
               <button
                 type="button"
                 className="shot-x"

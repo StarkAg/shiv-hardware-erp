@@ -20,6 +20,7 @@ import { PdfViewer } from './features/pdf/PdfViewer'
 import { MobileView } from './features/mobile/MobileView'
 import { DayPaper } from './features/paper/DayPaper'
 import { Receive } from './features/receive/Receive'
+import { BillFlow } from './features/flow/BillFlow'
 import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
 import { startProperInputs } from './lib/properInputs'
@@ -103,7 +104,8 @@ function PhoneGate() {
    * shop's own link opened the wrong thing. Sorting the backlog has its own
    * site now and never reaches this router at all.
    */
-  const forThePhone = new URLSearchParams(window.location.search).has('capture')
+  const forThePhone = new URLSearchParams(window.location.search).has('capture') ||
+    window.location.hash.startsWith('#/bill-flow')
 
   return phone && !optedOut && !forThePhone ? <Navigate to="/m" replace /> : <AppLayout />
 }
@@ -139,6 +141,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <Navigate to="/home" replace /> },
       { path: 'home',           element: <Home /> },
+      { path: 'bill-flow',      element: <BillFlow /> },
       { path: 'paper',          element: <DayPaper /> },
       { path: 'ledgers',        element: <LedgersPage /> },
       { path: 'ledgers/:tab',   element: <LedgersPage /> },

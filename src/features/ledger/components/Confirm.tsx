@@ -61,7 +61,7 @@ export default function Confirm({
   return (
     <div className={`ledger-root portal${dark ? ' dark' : ''}`}>
     <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal narrow">
+      <div className="modal narrow" role="dialog" aria-modal="true" aria-label={title}>
         <h2>{title}</h2>
         {body && <div className="hint">{body}</div>}
 

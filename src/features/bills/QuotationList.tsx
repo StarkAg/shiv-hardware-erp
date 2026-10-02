@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ReceiptText } from 'lucide-react'
+import { Paperclip, ReceiptText } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import type { Bill } from '../../lib/types'
 import { isQuotation } from '../../lib/types'
 import { rupees, shortDate } from '../ledger/lib/format'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import VoucherBillPreview from '../ledger/components/VoucherBillPreview'
+import BillViewer from '../ledger/components/BillViewer'
 import '../ledger/ledger.css'
 
 /** "QTN-4" for Q-4, the way the day book labels it. */
@@ -27,6 +28,7 @@ export function QuotationList() {
   const [search, setSearch] = useState('')
   const [show, setShow] = useState<'open' | 'all'>('open')
   const [previewing, setPreviewing] = useState<Bill | null>(null)
+  const [photos, setPhotos] = useState<Bill | null>(null)
 
   const all = useMemo(
     () => bills
@@ -98,6 +100,9 @@ export function QuotationList() {
                         {open ? 'Open' : <span className="ref">Sold · Bill {b.number}</span>}
                       </td>
                       <td className="w-clip" data-label="">
+                        {!!b.attachments?.length && <button type="button" className="clip" aria-label="Preview quotation photos" onClick={() => setPhotos(b)}>
+                          <Paperclip size={13} aria-hidden="true" />
+                        </button>}
                         <button className="clip" onClick={() => setPreviewing(b)} aria-label="Show the quotation" title="Show">
                           <ReceiptText size={13} aria-hidden="true" />
                         </button>
@@ -120,6 +125,7 @@ export function QuotationList() {
           </div></div>
         )}
         {previewing && <VoucherBillPreview bill={previewing} onClose={() => setPreviewing(null)} />}
+        {photos && <BillViewer voucher={{ party: photos.customerName, vchLabel: quoteLabel(photos.number), date: Date.parse(photos.date), attachmentUrls: photos.attachments }} onClose={() => setPhotos(null)} />}
       </div>
     </div>
   )

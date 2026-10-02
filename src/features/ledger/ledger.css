@@ -400,6 +400,32 @@
 .ledger-root .muted-cell{color: var(--muted);}
 .ledger-root .rowacts{text-align: right; white-space: nowrap;}
 /*
+ * Edit and delete stay in view, however wide the table gets.
+ *
+ * The table scrolls sideways inside .scroller, and every scrollbar in the
+ * ledger is hidden. So when an account's particulars ran long enough to push
+ * the table past the edge of the window, the last column — the pencil and the
+ * cross — slid off the right with nothing on screen to say there was more.
+ * The buttons were drawn on every row; they were simply out of sight, which
+ * is why it read as "no edit button" and why the code looked correct.
+ *
+ * Pinned to the right edge instead. It needs a solid background of its own,
+ * or the figures scrolling underneath show through it, and a faint shadow on
+ * its left so it reads as sitting on top rather than as part of the row.
+ */
+.ledger-root .ledger th.w-acts,
+.ledger-root .ledger td.rowacts{
+  position: sticky; right: 0; z-index: 1;
+  background: var(--card);
+  box-shadow: -10px 0 10px -10px rgb(0 0 0 / 0.22);}
+.ledger-root .ledger th.w-acts{z-index: 3; background: var(--card2);}
+/* The tinted rows. --amber-tint is see-through, so it is laid over the solid
+   card colour: the same colour as the rest of the row, and nothing behind. */
+.ledger-root .ledger tbody tr.unpriced td.rowacts,
+.ledger-root .ledger tbody tr.received.open.due td.rowacts{
+  background: linear-gradient(var(--amber-tint), var(--amber-tint)), var(--card);}
+.ledger-root .ledger tr.clickable:hover td.rowacts{background: var(--card2);}
+/*
  * A row action: 30px to look at, 44px to hit.
  *
  * These were 30px square with 8px between them, and one of every pair deletes
@@ -619,6 +645,7 @@
     font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--muted);}
 .ledger-root .table-wrap .ledger td:empty, .ledger-root .table-wrap .ledger td.hide-sm{display: none;}
+.ledger-root .table-wrap .ledger td.rowacts{position: static; box-shadow: none;}
 .ledger-root .table-wrap .particulars{text-align: right;}
 .ledger-root .sheet{width: auto; padding: 14px;}
 .ledger-root .lightbox{padding: 10px;}
@@ -752,6 +779,38 @@ to{opacity: 0}}
   font-variant-numeric: tabular-nums;}
 .ledger-root .shot-tile.stack .shot-tick{z-index: 2; top: 5px; right: 14px;}
 .ledger-root .shot-tile.stack .shot-zoom{z-index: 2; left: 4px; bottom: 13px;}
+.ledger-root .voucher-shooter-link{margin: 0 0 12px; color: var(--muted); font-size: 12px;}
+.ledger-root .voucher-shooter-link a{color: var(--brass-text); font-weight: 800;}
+.ledger-root .fromphone .shot-queue{position: absolute; top: 6px; left: 6px; z-index: 3;
+  max-width: calc(100% - 58px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 3px 6px; border-radius: 7px; background: var(--brass);
+  color: var(--brass-ink); font-size: 11px; font-weight: 900;
+  font-variant-numeric: tabular-nums; pointer-events: none;}
+.ledger-root .fromphone .shot-page{top: 36px; left: 6px;}
+.ledger-root .fromphone .shot-tick{top: 55px; right: 6px; z-index: 3;}
+.ledger-root .fromphone .shot-tile.stack .shot-tick{right: 14px;}
+.ledger-root .fromphone .shot-delete{position: absolute; top: 5px; right: 5px; z-index: 4;
+  display: grid; place-items: center; width: 44px; height: 44px;
+  border: 1px solid rgba(255,255,255,.35); border-radius: 10px;
+  background: rgba(20,18,16,.88); color: #fff; cursor: pointer;}
+.ledger-root .fromphone .shot-tile.stack .shot-delete{right: 14px;}
+.ledger-root .fromphone .shot-delete:hover,
+.ledger-root .fromphone .shot-delete:focus-visible{background: var(--red);}
+.ledger-root .fromphone .shot-delete:focus-visible,
+.ledger-root .fromphone .shot-zoom:focus-visible{outline: 3px solid var(--brass); outline-offset: 2px;}
+.ledger-root .fromphone .shot-zoom{width: 36px; height: 36px; cursor: zoom-in;}
+@media (hover: none){.ledger-root .fromphone .shot-zoom{width: 44px; height: 44px;}}
+.photo-hover-portal{position: fixed; z-index: 65; box-sizing: border-box;
+  cursor: zoom-in; border: 1px solid #b9924b; border-radius: 10px;
+  background-color: #f3f0ea; background-repeat: no-repeat;
+  box-shadow: 0 18px 48px rgba(0,0,0,.35);}
+.photo-hover-label{position: absolute; top: 8px; left: 8px;
+  padding: 4px 8px; border-radius: 6px; background: #b9924b;
+  color: #201804; font-size: 12px; font-weight: 900;
+  font-variant-numeric: tabular-nums;}
+.photo-zoom-lens{position: fixed; z-index: 66; box-sizing: border-box; pointer-events: none;
+  border: 2px solid #b9924b; background: rgba(185,146,75,.22);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);}
 .ledger-root .modal-bg.split{align-items: center;
   justify-content: center;
   gap: 16px;

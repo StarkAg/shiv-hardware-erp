@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
-import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker'
+import { pdfjs as pdfjsLib } from '../../lib/pdfjs'
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,9 +10,6 @@ import {
   ScanLine,
 } from 'lucide-react'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
-
-// One dedicated worker for the whole viewer session.
-pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker()
 
 /**
  * Feeds pdf.js only the byte ranges it asks for, read straight off the picked

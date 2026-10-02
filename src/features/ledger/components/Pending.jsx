@@ -5,6 +5,7 @@ import { api } from '../../../../convex/_generated/api';
 import { rupees, shortDate } from '../lib/format';
 import Confirm from './Confirm';
 import PriceDialog from './PriceDialog';
+import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
 import { GridSkeleton } from './Skeleton';
 
 /**
@@ -52,12 +53,8 @@ export default function Pending({ rows: live, masters, onViewBill, onOpen }) {
           return (
             <div className={`pendingcard${twins.length > 0 ? ' twinned' : ''}`} key={r._id}>
               {r.attachmentUrls.length > 0 ? (
-                <button className="shot" onClick={() => onViewBill(r)}>
-                  <img
-                    src={r.attachmentUrls[0].previewUrl ?? r.attachmentUrls[0].url}
-                    alt=""
-                    loading="lazy"
-                  />
+                <button type="button" className="shot" aria-label="Preview bill attachments" onClick={() => onViewBill(r)}>
+                  <AttachmentThumbnail file={r.attachmentUrls[0]} />
                 </button>
               ) : (
                 <div className="shot blank">no photo</div>

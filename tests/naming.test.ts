@@ -66,18 +66,28 @@ describe('naming a slip', () => {
     expect(opened).toBeTruthy()
   })
 
-  it('leaves the slip on the stack with no slot — naming moves no paper', async () => {
+  it('leaves the slip on the stack but settles its bookmark', async () => {
     const t = await shop()
     const photo = await shoot(t, 1000, 'B')
     const res = await t.mutation(api.filing.nameIt, { inboxId: photo, partyName: 'M/s Raj Kumar' })
     expect(res.party).toBe('M/s Raj Kumar')
+    // Handed straight back, so the naming screen can say where it will go.
+    expect(res.slot).toBe(1)
+    expect(res.slotLabel).toBe('S01')
 
     const [row] = await t.run((ctx) => ctx.db.query('filing').collect())
-    expect(row).toMatchObject({ stack: 'B', stage: 'named', capturedAt: 1000 })
-    // The whole point of the two walks: forty slots can sort two thousand bills
-    // only because naming a bill does not hold one.
-    expect(row.slot).toBeUndefined()
-    expect((await t.query(api.filing.slots, {})).used).toBe(0)
+    // Still `named`: the number is decided, the paper has not moved.
+    expect(row).toMatchObject({ stack: 'B', stage: 'named', capturedAt: 1000, slot: 1 })
+
+    /**
+     * This used to assert the opposite — that naming held no slot — because
+     * with forty bookmarks one given out here was held for paper still in the
+     * stack, and naming two hundred slips emptied the table. Bookmarks are
+     * unlimited now, so the number is settled before the stack is picked up.
+     */
+    const table = await t.query(api.filing.slots, {})
+    expect(table.used).toBe(1)
+    expect(table.slots[0]).toMatchObject({ slot: 1, bills: 0, named: 1 })
   })
 
   it('names a several-sheet bill once, and files every sheet on it', async () => {
@@ -213,7 +223,9 @@ describe('placing the stack', () => {
 
     // Filing a packet frees a bookmark, and the stranded slip takes it.
     const res = await t.mutation(api.filing.fileToFolder, { slot: 1, cabinet: 'A', drawer: '2', no: 142 })
-    expect(res.seated).toEqual([{ party: 'Nilesh Store', slot: 1 }])
+    // `stage` rides along too: a waiting slip's paper is already at the table,
+    // so seating it places it, where a named one only gets its number.
+    expect(res.seated).toEqual([{ party: 'Nilesh Store', slot: 1, stage: 'slotted' }])
     expect((await t.query(api.filing.slots, {})).waiting).toBe(0)
 
     // The customer's paper now has a permanent address.
@@ -232,11 +244,21 @@ describe('placing the stack', () => {
     const state = await t.query(api.filing.placeState, { stack: 'A' })
     expect(state.left).toBe(2)
     expect(state.current).toBe(null)
-    expect((await t.query(api.filing.slots, {})).used).toBe(0)
 
-    // And it comes round again as the top of the stack, not the bottom.
+    /**
+     * The bookmark stays with the customer. Both were named, so both hold one
+     * from that moment; undoing a placement puts the paper back on the stack,
+     * not the number back in the box. Releasing it here would hand the same
+     * number to somebody else while this customer's other slips are already
+     * sitting under it.
+     */
+    const table = await t.query(api.filing.slots, {})
+    expect(table.used).toBe(2)
+    expect(table.slots[0]).toMatchObject({ slot: 1, bills: 0, named: 1 })
+
+    // And it comes round again as the top of the stack, with the same number.
     const again = await t.mutation(api.filing.placeNext, { stack: 'A' })
-    expect(again.card).toMatchObject({ party: 'M/s Raj Kumar', index: 1 })
+    expect(again.card).toMatchObject({ party: 'M/s Raj Kumar', index: 1, slot: one.card!.slot })
   })
 
   it('keeps the place on reload, so a half-done stack is not lost', async () => {

@@ -417,9 +417,9 @@ export interface Bill extends BillCharges {
   /**
    * Money taken at the counter against this bill, which may be none of it, a
    * part of it or all of it. It posts as a line of the bill's own voucher —
-   * the customer is debited for what is still owed and the drawer for the
-   * rest — so a part-paid bill reads the same in the party's account, the
-   * day book and the trial balance.
+   * the customer is debited for the full sale and credited for what was paid;
+   * the drawer receives that payment. A part-paid bill reads the same in the
+   * party's account, the day book and the trial balance.
    */
   paidAmount?: number
   /**

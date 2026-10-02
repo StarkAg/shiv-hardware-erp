@@ -27,6 +27,7 @@ export function CashPending() {
   const postBacklog = useMutation(api.cash.postBacklog)
 
   const [choice, setChoice] = useState<Record<string, string>>({})
+  const [choosing, setChoosing] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [said, setSaid] = useState('')
@@ -34,6 +35,10 @@ export function CashPending() {
   const parties = useMemo(
     () => [...(masters?.ledgers ?? [])].sort((a: any, b: any) => a.name.localeCompare(b.name)),
     [masters],
+  )
+  const partyNames = useMemo(
+    () => new Map(parties.map((party: any) => [String(party._id), party.name])),
+    [parties],
   )
 
   async function run(entryId: string, work: () => Promise<unknown>) {
@@ -94,16 +99,21 @@ export function CashPending() {
                     <td className="ref" data-label="Held up by">{row.why}</td>
                     <td className="num" data-label="Amount">{rupees(row.amount)}</td>
                     <td data-label="Account">
-                      <select
-                        aria-label={`Account for ${row.name || row.entryId}`}
-                        value={choice[row.entryId] ?? ''}
-                        onChange={(e) => setChoice((c) => ({ ...c, [row.entryId]: e.target.value }))}
-                      >
-                        <option value="">—</option>
-                        {parties.map((l: any) => (
-                          <option key={l._id} value={l._id}>{l.name}</option>
-                        ))}
-                      </select>
+                      {choosing === row.entryId ? (
+                        <select autoFocus aria-label={`Account for ${row.name || row.entryId}`}
+                          value={choice[row.entryId] ?? ''}
+                          onChange={(e) => setChoice((c) => ({ ...c, [row.entryId]: e.target.value }))}>
+                          <option value="">Choose account…</option>
+                          {parties.map((l: any) => (
+                            <option key={l._id} value={l._id}>{l.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <button type="button" className="btn small ghost" aria-label={`Choose account for ${row.name || row.entryId}`}
+                          onClick={() => setChoosing(row.entryId)}>
+                          {partyNames.get(choice[row.entryId]) || 'Choose account…'}
+                        </button>
+                      )}
                     </td>
                     <td className="rowacts">
                       <button

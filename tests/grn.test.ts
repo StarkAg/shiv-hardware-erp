@@ -38,6 +38,74 @@ const sunmica = (qty: number, amount = 0) => ({ id: `l${qty}${amount}`, descript
 const entries = (t: ReturnType<typeof convexTest>) => t.run((ctx) => ctx.db.query('voucherEntries').collect())
 
 describe('goods received', () => {
+  it('files a zero-amount purchase as Goods Received immediately', async () => {
+    const t = await shop()
+    const res = await t.mutation(api.billLedger.postBill, {
+      bill: bill({ id: 'p-empty', kind: 'purchase', items: [sunmica(20)] }),
+    })
+    const voucher = await t.run((ctx) => ctx.db.get(res.voucherId))
+    const type = await t.run((ctx) => ctx.db.get(voucher!.typeId))
+    expect(type?.name).toBe('Goods Received')
+    expect(voucher).toMatchObject({ status: 'received' })
+    expect(voucher?.amount).toBeUndefined()
+    expect(res.bill).toMatchObject({ kind: 'grn', total: 0, items: [expect.objectContaining({ amount: 0 })] })
+    expect((await t.query(api.receipts.open, {})).count).toBe(1)
+    expect(await entries(t)).toHaveLength(0)
+  })
+
+  it('does not book a partial purchase as a purchase amount', async () => {
+    const t = await shop()
+    const res = await t.mutation(api.billLedger.postBill, {
+      bill: bill({ id: 'p-partial', kind: 'purchase', total: 7200,
+        items: [sunmica(15, 7200), { id: 'other', description: 'Door', qty: 1, unit: 'Pc', amount: 0 }] }),
+    })
+    expect(res.bill).toMatchObject({ kind: 'grn', total: 0 })
+    expect(res.bill.items.map((item: any) => item.amount)).toEqual([0, 0])
+    expect((await t.query(api.receipts.open, {})).count).toBe(1)
+    expect(await entries(t)).toHaveLength(0)
+  })
+
+  it('routes an unpriced ledger-only purchase to Goods Received too', async () => {
+    const t = await shop()
+    const { partyLedgerId, purchaseLedgerId } = await t.run(async (ctx) => {
+      const group = await ctx.db.query('groups').withIndex('by_name', q => q.eq('name', 'Sundry Creditors')).unique()
+      const purchase = await ctx.db.query('ledgers').filter(q => q.eq(q.field('name'), 'Purchases')).first()
+      const partyLedgerId = await ctx.db.insert('ledgers', {
+        groupId: group!._id, name: 'M/s Shree Shyam Traders', openingBalance: 0,
+        openingSide: 'Cr', openingAsOf: 1, active: true, createdAt: 1, updatedAt: 1,
+      })
+      return { partyLedgerId, purchaseLedgerId: purchase!._id }
+    })
+    const id = await t.mutation(api.vouchers.createPurchase, {
+      date: Date.parse('2026-09-10T00:00:00Z'), partyLedgerId, purchaseLedgerId,
+    })
+    const voucher = await t.run(ctx => ctx.db.get(id))
+    const type = await t.run(ctx => ctx.db.get(voucher!.typeId))
+    expect(type?.name).toBe('Goods Received')
+    expect(voucher?.status).toBe('received')
+    expect((await t.query(api.receipts.open, {})).count).toBe(1)
+    expect(await entries(t)).toHaveLength(0)
+  })
+
+  it('reclassifies an edited purchase in place when its amount is removed', async () => {
+    const t = await shop()
+    const priced = await t.mutation(api.billLedger.postBill, {
+      bill: bill({ id: 'p-edit', kind: 'purchase', total: 7200, items: [sunmica(15, 7200)] }),
+    })
+    expect(await entries(t)).toHaveLength(2)
+    const received = await t.mutation(api.billLedger.postBill, {
+      bill: bill({ id: 'p-edit', kind: 'purchase', total: 0, items: [sunmica(15)], voucherId: priced.voucherId }),
+    })
+    expect(received.voucherId).toBe(priced.voucherId)
+    expect(received.bill.kind).toBe('grn')
+    const voucher = await t.run(ctx => ctx.db.get(received.voucherId))
+    expect(voucher?.status).toBe('received')
+    expect((await t.run(ctx => ctx.db.get(voucher!.typeId)))?.name).toBe('Goods Received')
+    expect((await t.run(ctx => ctx.db.query('vouchers').collect()))).toHaveLength(1)
+    expect(await entries(t)).toHaveLength(0)
+    expect((await t.query(api.receipts.open, {})).count).toBe(1)
+  })
+
   it('files a delivery with no entries, in its own series', async () => {
     const t = await shop()
     const res = await t.mutation(api.billLedger.postBill, {
@@ -112,18 +180,36 @@ describe('goods received', () => {
 
   it('turns every unpriced supplier bill into a delivery without moving a balance', async () => {
     const t = await shop()
-    const pending = await t.mutation(api.billLedger.postBill, {
-      bill: bill({ id: 'p9', number: '144', kind: 'purchase', items: [sunmica(20)] }),
+    // Seed the old form directly: new saves now become GRNs before posting.
+    const partyLedgerId = await t.run(async (ctx) => {
+      const group = await ctx.db.query('groups').withIndex('by_name', q => q.eq('name', 'Sundry Creditors')).unique()
+      return ctx.db.insert('ledgers', {
+        groupId: group!._id, name: 'M/s Shree Shyam Traders', openingBalance: 0,
+        openingSide: 'Cr', openingAsOf: 1, active: true, createdAt: 1, updatedAt: 1,
+      })
     })
-    expect(await t.run((ctx) => ctx.db.get(pending.voucherId))).toMatchObject({ status: 'pending' })
+    const voucherId = await t.run(async (ctx) => {
+      const type = await ctx.db.query('voucherTypes').withIndex('by_name', q => q.eq('name', 'Purchase')).unique()
+      const date = Date.parse('2026-09-10T00:00:00Z')
+      const id = await ctx.db.insert('vouchers', {
+        typeId: type!._id, voucherNo: 1, fy: '2026-27', date, partyLedgerId,
+        refNo: 'BILL-144', status: 'pending', attachments: [], createdAt: 1, updatedAt: 1,
+      })
+      await ctx.db.insert('bills', {
+        billId: 'p9', number: '144', updatedAt: 1,
+        bill: bill({ id: 'p9', number: '144', kind: 'purchase', items: [sunmica(20)], voucherId: id }),
+      })
+      return id
+    })
+    expect(await t.run((ctx) => ctx.db.get(voucherId))).toMatchObject({ status: 'pending' })
 
     const dry = await t.mutation(internal.receipts.convertPending, { dryRun: true })
     expect(dry.converted).toHaveLength(1)
-    expect(await t.run((ctx) => ctx.db.get(pending.voucherId))).toMatchObject({ status: 'pending' })
+    expect(await t.run((ctx) => ctx.db.get(voucherId))).toMatchObject({ status: 'pending' })
 
     const done = await t.mutation(internal.receipts.convertPending, {})
     expect(done.converted).toEqual([expect.objectContaining({ from: 'PUR-0001', to: 'GRN-0001', lines: 1 })])
-    expect(await t.run((ctx) => ctx.db.get(pending.voucherId))).toMatchObject({ status: 'received', voucherNo: 1 })
+    expect(await t.run((ctx) => ctx.db.get(voucherId))).toMatchObject({ status: 'received', voucherNo: 1 })
     const stored = (await t.query(api.bills.get, {}))?.bills ?? []
     expect(stored.find((b: any) => b.id === 'p9')).toMatchObject({ kind: 'grn' })
     expect(await entries(t)).toHaveLength(0)

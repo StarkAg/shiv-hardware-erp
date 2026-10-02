@@ -6,6 +6,8 @@ import { useLive } from '../lib/cache';
 import { useUploadQueue } from '../lib/queue';
 import LiveCamera from './LiveCamera';
 import AutoTag from './AutoTag';
+import BillViewer from './BillViewer';
+import Confirm from './Confirm';
 
 const ago = (ms) => {
   const mins = Math.round((Date.now() - ms) / 60000);
@@ -27,6 +29,8 @@ export default function Capture() {
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
   const { items, push, retry, clearDone, pending, failed } = useUploadQueue();
   const [noCamera, setNoCamera] = useState('');
+  const [viewing, setViewing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   /**
    * Two shutters, 1 and 2. Both take a photograph; which one you press is what
    * says where the bill ends.
@@ -177,11 +181,14 @@ export default function Capture() {
       <div className="capture-grid">
         {shots.map((s) => (
           <div className="capture-tile" key={s._id}>
-            <img src={s.url} alt="" loading="lazy" />
+            <button type="button" className="shot-pick" aria-label="Preview waiting photo"
+              onClick={() => setViewing({ attachmentUrls: shots, initialIndex: shots.indexOf(s), party: 'Waiting photos' })}>
+              <img src={s.url} alt="" loading="lazy" />
+            </button>
             <span className="capture-when">{ago(s.at)}</span>
             <button
               className="shot-x"
-              onClick={() => discard({ id: s._id })}
+              onClick={() => setDeleting(s)}
               aria-label="Discard"
             >
               <X size={16} aria-hidden="true" />
@@ -189,6 +196,10 @@ export default function Capture() {
           </div>
         ))}
       </div>
+      {viewing && <BillViewer voucher={viewing} onClose={() => setViewing(null)} />}
+      {deleting && <Confirm title="Delete this photo?" body="This removes the waiting photo permanently."
+        confirmLabel="Delete photo" danger requireText="delete" requireLabel="Type delete to confirm"
+        onConfirm={() => discard({ id: deleting._id })} onClose={() => setDeleting(null)} />}
     </div>
   );
 }

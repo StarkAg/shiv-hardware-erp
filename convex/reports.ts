@@ -149,22 +149,51 @@ export const ledger = query({
       }
     }
 
-    // Tally names the *other* side of the entry in Particulars — money paid to a
-    // supplier came from Bank or Cash, and saying which is the point of the
-    // column. So every voucher's remaining lines are read and named.
-    const contra = new Map<Id<"vouchers">, string[]>();
-    for (const voucherId of vouchers.keys()) {
-      const all = await ctx.db
-        .query("voucherEntries")
-        .withIndex("by_voucher", (q) => q.eq("voucherId", voucherId))
-        .collect();
-      contra.set(
-        voucherId,
-        all
-          .filter((l) => l.ledgerId !== ledgerId)
-          .map((l) => ledgerById.get(l.ledgerId)?.name ?? "—")
-      );
-    }
+    /**
+     * Tally names the *other* side of the entry in Particulars — money paid to
+     * a supplier came from Bank or Cash, and saying which is the point of the
+     * column.
+     *
+     * "Other side" is taken per line, not per voucher. A sale paid on the spot
+     * puts the customer on both sides of one voucher — debited for the goods,
+     * credited for the money — and naming every other ledger in the voucher
+     * wrote "Cash, Sales" against both lines, so neither said which it was.
+     * Named by the opposite side instead, the goods line reads Sales and the
+     * money line reads Cash, which is what the two lines actually are.
+     *
+     * For an ordinary one-sided entry the answer is unchanged: a sale's only
+     * opposite line is Sales, a receipt's only opposite line is Cash.
+     */
+    const contra = new Map<Id<"vouchers">, { Dr: string[]; Cr: string[]; all: string[] }>();
+    await Promise.all(
+      [...vouchers.keys()].map(async (voucherId) => {
+        const all = await ctx.db
+          .query("voucherEntries")
+          .withIndex("by_voucher", (q) => q.eq("voucherId", voucherId))
+          .collect();
+        const others = all.filter((l) => l.ledgerId !== ledgerId);
+        const named = (side: "Dr" | "Cr") => [
+          ...new Set(
+            others.filter((l) => l.side === side).map((l) => ledgerById.get(l.ledgerId)?.name ?? "—"),
+          ),
+        ];
+        contra.set(voucherId, {
+          Dr: named("Dr"),
+          Cr: named("Cr"),
+          all: [...new Set(others.map((l) => ledgerById.get(l.ledgerId)?.name ?? "—"))],
+        });
+      }),
+    );
+    /** What a line of this account was posted against: the opposite side. */
+    const contraFor = (voucherId: Id<"vouchers">, side: "Dr" | "Cr") => {
+      const c = contra.get(voucherId);
+      if (!c) return [];
+      const opposite = side === "Dr" ? c.Cr : c.Dr;
+      // A voucher with nothing on the opposite side cannot balance, so this is
+      // only ever reached by something malformed — say everything rather than
+      // nothing.
+      return opposite.length ? opposite : c.all;
+    };
 
     const sorted = lines
       .filter((l) => vouchers.has(l.voucherId))
@@ -180,7 +209,12 @@ export const ledger = query({
           a.date - b.date ||
           dayRank(typeById.get(va.typeId)?.name) - dayRank(typeById.get(vb.typeId)?.name) ||
           va.createdAt - vb.createdAt ||
-          va.voucherNo - vb.voucherNo
+          va.voucherNo - vb.voucherNo ||
+          // Two lines of one voucher on this account: the goods and then the
+          // money, in the order the posting wrote them. Left to chance, a sale
+          // paid on the spot could show the credit first and the balance dip
+          // into Cr for a line before coming back to nil.
+          a._creationTime - b._creationTime
         );
       });
 
@@ -216,7 +250,7 @@ export const ledger = query({
         vchLabel: vchLabel(type?.abbr ?? "VCH", voucher.voucherNo),
         refNo: voucher.refNo ?? "",
         narration: voucher.narration ?? "",
-        contra: contra.get(voucher._id) ?? [],
+        contra: contraFor(voucher._id, line.side),
         side: line.side,
         amount: line.amount,
         balance: running,

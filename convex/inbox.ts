@@ -2,6 +2,8 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { record } from "./lib/history";
 import { autoTagFor } from "./tags";
+import { nextVoucherPhotoNo } from "./lib/numbering";
+import { deleteUnreferencedFiles } from './lib/attachmentFiles';
 
 /** Photos waiting to be filed, newest first. */
 export const list = query({
@@ -15,6 +17,7 @@ export const list = query({
         at: r.at,
         note: r.note ?? "",
         groupId: r.groupId,
+        queueNo: r.queueNo,
         stack: r.stack,
         url: await ctx.storage.getUrl(r.storageId),
       }))
@@ -42,11 +45,13 @@ export const add = mutation({
     // every photograph comes through, so the mark cannot be forgotten at the
     // counter — which is the only place it would ever be forgotten.
     const tags = await autoTagFor(ctx);
+    const queueNo = await nextVoucherPhotoNo(ctx);
     const id = await ctx.db.insert("inbox", {
       storageId,
       at: Date.now(),
       note,
       groupId,
+      queueNo,
       stack,
       tags,
     });
@@ -72,8 +77,8 @@ export const discard = mutation({
   handler: async (ctx, { id }) => {
     const row = await ctx.db.get(id);
     if (!row) return;
-    await ctx.storage.delete(row.storageId).catch(() => {});
     await ctx.db.delete(id);
+    await deleteUnreferencedFiles(ctx, [row.storageId]);
     await record(ctx, "inbox.discard", "Discarded a photo from the phone");
   },
 });

@@ -17,11 +17,13 @@ every screen and every device reads.
 
 | Directory | What it is | Runs as |
 |---|---|---|
-| [`src/`](src/) | **The panel.** Day book, bill builder, party accounts, account masters, trash, cash review, quotations, guarantee cards, inventory, rates, toto. React + TypeScript + Vite + Tailwind, HashRouter so it works from `file://` too. | Web (Vercel), desktop (Electron), Android (Capacitor) |
+| [`src/`](src/) | **The panel.** Day book, bill builder, Bill Flow intake and fulfillment, party accounts, account masters, trash, cash review, quotations, guarantee cards, inventory, rates, toto. React + TypeScript + Vite + Tailwind, HashRouter so it works from `file://` too. | Web (Vercel), desktop (Electron), Android (Capacitor) |
 | [`convex/`](convex/) | **The books and the backend.** Vouchers and their Dr/Cr lines, ledgers and groups, the bill snapshot, trash, cash sync, the photo-bill reader, attendance, WhatsApp and Twilio. | Convex |
-| [`cash-web/`](cash-web/) | **The cash book.** The counter's drawer, keyboard-first and offline-first, one line per note; it syncs through `convex/cash.ts` and posts Receipts and Payments into the books. | PWA (Vercel) |
+| [`cash-web/`](cash-web/) | **The cash book.** The counter's drawer, keyboard-first and offline-first, one line per note; it syncs through `convex/cash.ts` and posts Receipts and Payments into the books. Optional multi-page bill photos queue offline and appear in Bill Flow intake. | PWA (Vercel) |
 | [`stock-web/`](stock-web/) | **The stock panel.** Catalogue and rates on a laptop, one Convex row. | PWA (Vercel) |
 | [`attendance-web/`](attendance-web/) | **Attendance.** Who came in, and when. | PWA (Vercel) |
+| [`voucher-web/`](voucher-web/) | **Voucher Bill Shooter.** Phone camera for photos to attach to a voucher. Its waiting queue is separate from bill sorting. | Web (Vercel) |
+| [`sort-web/`](sort-web/) | **Bill sorting.** Photograph and name the old paper backlog, then place it by bookmark. | Web (Vercel) |
 | [`cloud-api/`](cloud-api/) | Small relay the phone-side flows call when the shop machine is not reachable. | Node (Railway) |
 | [`print-server/`](print-server/) | The shop machine's own service: printing, WhatsApp sending, and reading a photographed bill. | Node, on the shop PC |
 | [`electron/`](electron/) · [`android/`](android/) | Desktop and Android wrappers around the same panel build. | — |
@@ -129,6 +131,12 @@ npx convex deploy --yes --typecheck enable
 
 The other web apps each carry their own `npm run deploy`. Convex must go out with the
 panel when a function's arguments change, and open tabs need a reload.
+
+The voucher shooter is a separate project at `https://shivhardware-voucher.vercel.app`.
+Deploy the `voucherInbox` functions before its first use, then run
+`npm --prefix voucher-web run deploy`. On the bill or voucher editor, open the photo
+control and select the new image under **From the phone**. The sorting site uses
+its own backlog workflow.
 
 ---
 

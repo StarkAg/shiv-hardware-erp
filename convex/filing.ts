@@ -14,19 +14,47 @@ import { api } from "./_generated/api";
  * the bill itself is — and it is the half that turns a few thousand loose slips
  * into customer bundles without anybody holding the whole shop in their head.
  *
- * The arrangement is the shop's own: one tray of unsorted paper, and thirty or
- * forty slots on the table beside it. A slip is photographed, its customer is
- * named, and the app answers with a slot number — the same number every time
- * for that customer, so their bills gather in one place however scattered they
- * were in the tray. When a customer's packet is done it goes into their folder
- * and the slot comes free for the next customer.
+ * The arrangement is the shop's own: one tray of unsorted paper, and numbered
+ * bookmarks on the table beside it. A slip is photographed, its customer is
+ * named, and the app answers with a bookmark number — the same number every
+ * time for that customer, so their bills gather in one place however scattered
+ * they were in the tray. When a customer's packet is done it goes into their
+ * folder and the bookmark comes free for the next customer.
  *
- * So the slots are not one per customer. They are a working surface, reused all
- * day; the folders are where paper actually lives.
+ * So the bookmarks are not one per customer for ever. They are a working
+ * surface, reused all day; the folders are where paper actually lives. There
+ * is no ceiling on them — a number is handed out whenever one is needed, and a
+ * freed number is handed out again before a higher one, so a shop that files
+ * as it goes rarely sees a big number at all.
  */
 
 const PLAN_KEY = "current";
-const SLOTS_BY_DEFAULT = 40;
+
+/**
+ * How many slips ahead the photographs are pulled down.
+ *
+ * Four is about as far as a hand gets in front of the screen. More would be
+ * fetching pictures of paper that may never be reached this sitting.
+ */
+const AHEAD = 4;
+
+/**
+ * How many bookmarks the table holds. `null` is unlimited, and is the default.
+ *
+ * It used to be forty, and forty is what the two-walk design was built around:
+ * naming and placing were split into separate passes precisely so that a slot
+ * was spent only when paper reached it, because spending one at naming time
+ * emptied the table before the first hundred slips were placed.
+ *
+ * Unlimited does not make that split pointless — naming still has to happen
+ * before placing, since the app cannot call out a bookmark for a slip whose
+ * customer it does not yet know. What it removes is the jam: "every bookmark
+ * is taken, go and file a packet" in the middle of a stack of two thousand.
+ * Numbers are still handed out lowest-free-first and still come back when a
+ * packet is filed, so they stay small and readable; they simply carry on past
+ * forty when a sort genuinely needs them to.
+ */
+const SLOTS_BY_DEFAULT: number | null = null;
 
 const planRow = (ctx: QueryCtx | MutationCtx) =>
   ctx.db
@@ -34,7 +62,8 @@ const planRow = (ctx: QueryCtx | MutationCtx) =>
     .withIndex("by_key", (q) => q.eq("key", PLAN_KEY))
     .unique();
 
-async function slotCount(ctx: QueryCtx | MutationCtx) {
+/** How many bookmarks are laid out, or null when there is no limit. */
+async function slotCount(ctx: QueryCtx | MutationCtx): Promise<number | null> {
   return (await planRow(ctx))?.slotCount ?? SLOTS_BY_DEFAULT;
 }
 
@@ -42,53 +71,102 @@ async function slotCount(ctx: QueryCtx | MutationCtx) {
 export const slotLabel = (slot: number) => `S${String(slot).padStart(2, "0")}`;
 
 /**
+ * The bookmark a customer is holding, from any of their filing rows.
+ *
+ * Not `slotted` alone. A bookmark is given out when the slip is named, so
+ * between the two walks the customer holds a number while their paper is
+ * still in the stack — and looking only for placed paper showed no bookmark
+ * beside their name on the very screen somebody opens to find it.
+ *
+ * Filed rows are skipped: that packet is in its folder and the number has
+ * gone back.
+ */
+const heldSlot = (rows: Doc<"filing">[]): number | null => {
+  const holding = rows.filter((r) => r.stage !== "filed" && r.slot !== undefined);
+  if (!holding.length) return null;
+  // Paper already on the table wins over paper still coming to it, so a
+  // customer mid-move is shown where their pile actually is.
+  const placed = holding.find((r) => r.stage !== "named");
+  return (placed ?? holding[0]).slot ?? null;
+};
+
+/**
  * Which slot each customer is holding at the moment.
  *
  * Derived from the rows rather than stored: one source of truth, and no slot
  * table that can drift out of step with where the paper actually is.
  */
+/**
+ * Which bookmark each customer is holding.
+ *
+ * Counted over every stage except `filed`, because a bookmark is now given out
+ * at naming time and the slip sits at `named` until the paper reaches it. Only
+ * filing the packet gives the number back. Reading `slotted` alone — which is
+ * all this looked at while numbers were handed out during the second walk —
+ * would now let a customer named this morning and a customer named this
+ * afternoon both be told bookmark 7.
+ */
 async function slotsHeld(ctx: QueryCtx | MutationCtx) {
-  const rows = await ctx.db
-    .query("filing")
-    .withIndex("by_stage_capturedAt", (q) => q.eq("stage", "slotted"))
-    .collect();
+  const rows = await ctx.db.query("filing").collect();
   const byParty = new Map<string, number>();
   for (const r of rows) {
+    if (r.stage === "filed") continue;
     if (r.slot !== undefined) byParty.set(String(r.partyLedgerId), r.slot);
   }
   return byParty;
 }
 
 /**
- * The slot this customer's bill goes in.
+ * The bookmark this customer's bill goes in.
  *
- * A customer already on the table keeps their slot, which is the whole point —
- * it is what gathers their slips together. A customer new to the table takes
- * the lowest free slot, so the table fills from one end and the eye knows where
- * to look. Nothing free means the table is full and a packet has to go into its
- * folder before sorting can go on; that is said rather than guessed around.
+ * A customer already on the table keeps their bookmark, which is the whole
+ * point — it is what gathers their slips together. A customer new to the table
+ * takes the lowest free number, so the table fills from one end, freed numbers
+ * come back into use, and the eye knows where to look.
+ *
+ * With no limit set there is always a number: when everything below is taken
+ * the count simply goes one higher. Only a table the shop has deliberately
+ * fixed can run out, and then this returns null and the bill waits.
  */
-async function slotFor(
-  ctx: MutationCtx,
-  partyLedgerId: Id<"ledgers">
-): Promise<number | null> {
-  const held = await slotsHeld(ctx);
+function nextFree(
+  held: Map<string, number>,
+  partyLedgerId: Id<"ledgers">,
+  count: number | null,
+): number | null {
   const already = held.get(String(partyLedgerId));
   if (already !== undefined) return already;
 
   const taken = new Set(held.values());
-  const count = await slotCount(ctx);
-  for (let slot = 1; slot <= count; slot += 1) if (!taken.has(slot)) return slot;
+  // Unlimited: the lowest free number, however high that has to reach.
+  const ceiling = count ?? taken.size + 1;
+  for (let slot = 1; slot <= ceiling; slot += 1) if (!taken.has(slot)) return slot;
   return null;
 }
 
+async function slotFor(
+  ctx: MutationCtx,
+  partyLedgerId: Id<"ledgers">
+): Promise<number | null> {
+  const [held, count] = await Promise.all([slotsHeld(ctx), slotCount(ctx)]);
+  return nextFree(held, partyLedgerId, count);
+}
+
 /**
- * Records that this bill has been named. It does not move any paper.
+ * Records that this bill has been named, and gives it its bookmark.
  *
- * Naming and placing are two separate walks through the stack, and this is the
- * end of the first one: the slip goes back where it came from, in order, and
- * the books now know whose it is. No slot is given out here — see `slot` on the
- * filing table for why giving one out at this moment empties the table.
+ * Naming and placing are still two walks through the stack — the slip goes
+ * back where it came from, in order, and no paper moves here. What has changed
+ * is when the number is decided.
+ *
+ * It used to be decided on the second walk, and deliberately so: with forty
+ * bookmarks, one given out at naming time was held for paper still sitting in
+ * the stack, and naming two hundred slips before placing any emptied the table
+ * with nothing on it. Bookmarks are unlimited now, so that cost is gone — and
+ * deciding here is better, because the number is then settled before anybody
+ * picks the stack up. The second walk only reads it out.
+ *
+ * A customer keeps one bookmark across every slip of theirs, whenever it was
+ * named, which is what gathers their paper into one pile.
  *
  * `capturedAt` is when it was photographed. The inbox rows carry it and are
  * deleted straight after, so this is the last moment it can be recorded — and
@@ -102,22 +180,26 @@ export async function enrol(
     capturedAt: number;
     stack?: string;
   }
-): Promise<{ rowId: Id<"filing"> }> {
+): Promise<{ rowId: Id<"filing">; slot: number | null }> {
   const existing = await ctx.db
     .query("filing")
     .withIndex("by_voucher", (q) => q.eq("voucherId", args.voucherId))
     .first();
-  if (existing) return { rowId: existing._id };
+  if (existing) return { rowId: existing._id, slot: existing.slot ?? null };
 
+  const slot = await slotFor(ctx, args.partyLedgerId);
   const rowId = await ctx.db.insert("filing", {
     voucherId: args.voucherId,
     partyLedgerId: args.partyLedgerId,
     capturedAt: args.capturedAt,
     stack: args.stack,
+    // Still `named`: the number is decided, the paper has not moved. The
+    // second walk is what turns this into `slotted`.
     stage: "named",
+    slot: slot ?? undefined,
     at: Date.now(),
   });
-  return { rowId };
+  return { rowId, slot };
 }
 
 /* ------------------------------------------------------------------ */
@@ -155,16 +237,29 @@ export const placeState = query({
       .sort((a, b) => b.at - a.at);
     const current = placed[0] ? await card(ctx, placed[0], mine) : null;
 
-    // The next few slips' photographs, fetched before Next is pressed.
-    const ahead: string[] = [];
-    for (const row of mine.filter((r) => r.stage === "named").sort((a, b) => a.capturedAt - b.capturedAt)) {
-      if (ahead.length >= 4) break;
-      const voucher = await ctx.db.get(row.voucherId);
-      const first = voucher?.attachments?.[0];
-      const storageId = typeof first === "string" ? first : first?.storageId;
-      const url = storageId ? await ctx.storage.getUrl(storageId) : null;
-      if (url) ahead.push(url);
-    }
+    /**
+     * The next few slips' photographs, fetched before Next is pressed.
+     *
+     * All at once. This used to walk the four in a loop, awaiting a voucher
+     * and then a URL for each — eight round trips, one after another, inside a
+     * query that re-runs on every single press of Next because the mutation
+     * has just touched a filing row. That was the wait between pressing Next
+     * and the bookmark appearing, and none of the eight depended on any other.
+     */
+    const upNext = mine
+      .filter((r) => r.stage === "named")
+      .sort((a, b) => a.capturedAt - b.capturedAt)
+      .slice(0, AHEAD);
+
+    const vouchers = await Promise.all(upNext.map((r) => ctx.db.get(r.voucherId)));
+    const urls = await Promise.all(
+      vouchers.map((voucher) => {
+        const first = voucher?.attachments?.[0];
+        const storageId = typeof first === "string" ? first : first?.storageId;
+        return storageId ? ctx.storage.getUrl(storageId) : null;
+      }),
+    );
+    const ahead = urls.filter((u): u is string => Boolean(u));
 
     return {
       ahead,
@@ -180,8 +275,13 @@ export const placeState = query({
 
 /** One slip as the placing screen shows it: whose, where, and how far down. */
 async function card(ctx: QueryCtx | MutationCtx, row: Doc<"filing">, siblings: Doc<"filing">[]) {
-  const party = await ctx.db.get(row.partyLedgerId);
-  const voucher = await ctx.db.get(row.voucherId);
+  // Fetched together. Neither read depends on the other, and awaiting them one
+  // after the other put a whole extra round trip between pressing Next and the
+  // bookmark appearing on screen.
+  const [party, voucher] = await Promise.all([
+    ctx.db.get(row.partyLedgerId),
+    ctx.db.get(row.voucherId),
+  ]);
   // Older vouchers stored a bare storage id; newer ones an object with a kind.
   const first = voucher?.attachments?.[0];
   const front = typeof first === "string" ? first : first?.storageId;
@@ -217,14 +317,20 @@ export const placeNext = mutation({
       .sort((a, b) => a.capturedAt - b.capturedAt)[0];
     if (!row) return { done: true as const, card: null, left: 0 };
 
-    const slot = await slotFor(ctx, row.partyLedgerId);
-    await ctx.db.patch(row._id, {
+    // Decided at naming time. Only a slip named before that change, or one
+    // named while a fixed table was full, still needs a number here.
+    const slot = row.slot ?? (await slotFor(ctx, row.partyLedgerId));
+    const change = {
       slot: slot ?? undefined,
-      stage: slot === null ? "waiting" : "slotted",
+      stage: (slot === null ? "waiting" : "slotted") as Doc<"filing">["stage"],
       at: Date.now(),
-    });
+    };
+    await ctx.db.patch(row._id, change);
 
-    const fresh = (await ctx.db.get(row._id))!;
+    // The patched row, built here rather than read back. Nothing else can have
+    // touched it inside this transaction, and the read was a round trip
+    // standing between pressing Next and the bookmark reaching the screen.
+    const fresh: Doc<"filing"> = { ...row, ...change };
     return {
       done: false as const,
       card: await card(ctx, fresh, mine),
@@ -237,8 +343,12 @@ export const placeNext = mutation({
  * Puts the last slip back on the stack.
  *
  * For the ordinary slip of the hand — the number was read, the paper went into
- * the wrong slot, or Next was pressed twice. It goes back to named, keeping its
- * place in the stack, and comes up again on the next press.
+ * the wrong slot, or Next was pressed twice. It goes back to named, keeping
+ * its place in the stack, and comes up again on the next press.
+ *
+ * It keeps its bookmark. The number belongs to the customer from the moment
+ * they were named, so clearing it here would hand the same number to somebody
+ * else while this customer's paper is still on the table under it.
  */
 export const unplace = mutation({
   args: { id: v.id("filing") },
@@ -246,7 +356,7 @@ export const unplace = mutation({
     const row = await ctx.db.get(id);
     if (!row) throw new Error("That bill is not in the sorting queue");
     if (row.stage === "filed") throw new Error("That packet is already in its folder");
-    await ctx.db.patch(id, { slot: undefined, stage: "named", at: Date.now() });
+    await ctx.db.patch(id, { stage: "named", at: Date.now() });
     return { ok: true };
   },
 });
@@ -260,26 +370,52 @@ export const slots = query({
   args: {},
   handler: async (ctx) => {
     const count = await slotCount(ctx);
-    const rows = await ctx.db
-      .query("filing")
-      .withIndex("by_stage_capturedAt", (q) => q.eq("stage", "slotted"))
-      .collect();
+    /**
+     * Every bookmark that is spoken for, not only the ones with paper on them.
+     *
+     * A bookmark is given out at naming time, so between the two walks a
+     * customer holds a number with nothing behind it yet. Leaving those out —
+     * which is what reading only `slotted` did — showed a table with free
+     * places on it that were not free, and on a fixed table that is the
+     * difference between "four left" and running out mid-stack.
+     *
+     * `bills` is the paper actually on the table; `named` is what is still in
+     * the stack, coming to it.
+     */
+    const rows = (await ctx.db.query("filing").collect()).filter(
+      (r) => r.stage !== "filed" && r.slot !== undefined,
+    );
 
-    const bySlot = new Map<number, { partyLedgerId: Id<"ledgers">; bills: number; since: number }>();
+    const bySlot = new Map<
+      number,
+      { partyLedgerId: Id<"ledgers">; bills: number; named: number; since: number }
+    >();
     for (const r of rows) {
-      if (r.slot === undefined) continue;
-      const held = bySlot.get(r.slot) ?? {
+      const held = bySlot.get(r.slot!) ?? {
         partyLedgerId: r.partyLedgerId,
         bills: 0,
+        named: 0,
         since: r.at,
       };
-      held.bills += 1;
+      if (r.stage === "named") held.named += 1;
+      else held.bills += 1;
       held.since = Math.min(held.since, r.at);
-      bySlot.set(r.slot, held);
+      bySlot.set(r.slot!, held);
     }
 
+    /**
+     * How far the table is drawn.
+     *
+     * A fixed table is drawn in full, empty places included, because that is
+     * what is sitting in front of the person. An unlimited one has no full to
+     * draw, so it runs to the highest bookmark in use — which shows every
+     * freed number below it as a gap waiting to be reused.
+     */
+    const highest = Math.max(0, ...bySlot.keys());
+    const drawTo = count ?? highest;
+
     const out = [];
-    for (let slot = 1; slot <= count; slot += 1) {
+    for (let slot = 1; slot <= drawTo; slot += 1) {
       const held = bySlot.get(slot);
       const party = held ? await ctx.db.get(held.partyLedgerId) : null;
       out.push({
@@ -289,6 +425,8 @@ export const slots = query({
         party: party?.name ?? null,
         folder: party?.folder ?? null,
         bills: held?.bills ?? 0,
+        /** Named, bookmarked, still in the stack — coming to this place. */
+        named: held?.named ?? 0,
         since: held?.since ?? null,
       });
     }
@@ -301,35 +439,52 @@ export const slots = query({
     ).length;
 
     return {
+      /** Null when there is no limit. */
       slotCount: count,
+      unlimited: count === null,
       slots: out,
       used: bySlot.size,
-      free: count - bySlot.size,
-      // Named while the table was full. They have nowhere to go until a packet
-      // is filed, and saying so is the only honest thing to do about it.
+      highest,
+      // Nothing is "free" on a table that cannot run out — saying 0, or some
+      // large invented number, would both read as a limit that is not there.
+      free: count === null ? null : count - bySlot.size,
+      // Named while a fixed table was full. With no limit set nothing can land
+      // here, but rows left over from when there was one still can.
       waiting,
     };
   },
 });
 
-/** Lays out more slots, or fewer. */
+/**
+ * Fixes the table at a number of bookmarks, or lifts the limit again.
+ *
+ * Omitting `slotCount` means unlimited, which is the default and what a shop
+ * with a box of numbered bookmarks wants. A number is for a table that
+ * genuinely cannot grow — a fixed rack — and then running out is a real event
+ * the app has to be able to report.
+ */
 export const setSlotCount = mutation({
-  args: { slotCount: v.number() },
+  args: { slotCount: v.optional(v.number()) },
   handler: async (ctx, { slotCount: wanted }) => {
-    if (!Number.isInteger(wanted) || wanted < 2 || wanted > 200) {
-      throw new Error("Between 2 and 200 slots");
-    }
-    const held = await slotsHeld(ctx);
-    const highest = Math.max(0, ...held.values());
-    if (wanted < highest) {
-      throw new Error(
-        `${slotLabel(highest)} is holding a packet — file it before taking the table down to ${wanted}`
-      );
+    if (wanted !== undefined) {
+      if (!Number.isInteger(wanted) || wanted < 2) {
+        throw new Error("Lay out at least two bookmarks, or leave it unlimited");
+      }
+      const held = await slotsHeld(ctx);
+      const highest = Math.max(0, ...held.values());
+      if (wanted < highest) {
+        throw new Error(
+          `${slotLabel(highest)} is holding a packet — file it before taking the table down to ${wanted}`
+        );
+      }
     }
     const row = await planRow(ctx);
+    // Written as absent rather than as a number, so "unlimited" is one state
+    // and not a very large ceiling somebody has to reason about later.
+    const doc = { key: PLAN_KEY, slotCount: wanted, madeAt: Date.now() };
     if (row) await ctx.db.patch(row._id, { slotCount: wanted, madeAt: Date.now() });
-    else await ctx.db.insert("filingPlan", { key: PLAN_KEY, slotCount: wanted, madeAt: Date.now() });
-    return { slotCount: wanted };
+    else await ctx.db.insert("filingPlan", doc);
+    return { slotCount: wanted ?? null, unlimited: wanted === undefined };
   },
 });
 
@@ -395,21 +550,52 @@ export const fileToFolder = mutation({
  * since come free, oldest first — so the queue drains by itself rather than
  * needing somebody to remember it exists.
  */
+/**
+ * Gives a bookmark to anything that is holding none.
+ *
+ * Two kinds of slip end up here.
+ *
+ * A **waiting** slip was placed while a fixed table was full: the paper is at
+ * the table with nowhere to sit, so seating it moves it to `slotted`.
+ *
+ * A **named** slip has no number because it was named before bookmarks were
+ * given out at naming time. Its paper is still in the stack, so it stays at
+ * `named` — only the number is settled, which is exactly what naming would
+ * have done for it today. This used to be refused on the grounds that a named
+ * slip is not stranded and giving it a number would hold the table for paper
+ * nobody has picked up. That was true of forty bookmarks; with no limit there
+ * is nothing to hold, and leaving the backlog blank means a customer with four
+ * bills in the stack shows no bookmark on the very screen opened to find one.
+ *
+ * Walked in stack order, so the numbers run the way the paper does.
+ */
 async function seatWaiting(ctx: MutationCtx) {
-  const waiting = (
-    await ctx.db
-      .query("filing")
-      .withIndex("by_stage_capturedAt", (q) => q.eq("stage", "waiting"))
-      .collect()
-  ).sort((a, b) => a.capturedAt - b.capturedAt);
+  const rows = (await ctx.db.query("filing").collect())
+    .filter((r) => r.slot === undefined && (r.stage === "waiting" || r.stage === "named"))
+    .sort((a, b) => a.capturedAt - b.capturedAt);
 
-  const seated: { party: string; slot: number }[] = [];
-  for (const row of waiting) {
-    const slot = await slotFor(ctx, row.partyLedgerId);
-    if (slot === null) break;              // the table filled up again
-    await ctx.db.patch(row._id, { slot, stage: "slotted" });
+  /**
+   * The held map is built once and carried through the loop.
+   *
+   * Asking `slotFor` per row re-read the whole filing table each time — a
+   * hundred and forty slips against a few hundred rows is tens of thousands of
+   * document reads, and Convex stops a function at thirty-two thousand. The
+   * catch-up failed outright on the shop's real backlog. Nothing here needs a
+   * fresh read: this loop is the only thing handing numbers out, so keeping
+   * the map current as it goes is both correct and one read instead of N.
+   */
+  const [held, count] = await Promise.all([slotsHeld(ctx), slotCount(ctx)]);
+
+  const seated: { party: string; slot: number; stage: string }[] = [];
+  for (const row of rows) {
+    const slot = nextFree(held, row.partyLedgerId, count);
+    if (slot === null) break;              // a fixed table filled up again
+    held.set(String(row.partyLedgerId), slot);
+    // A waiting slip's paper is already at the table; a named one's is not.
+    const stage = row.stage === "waiting" ? ("slotted" as const) : ("named" as const);
+    await ctx.db.patch(row._id, { slot, stage });
     const party = await ctx.db.get(row.partyLedgerId);
-    seated.push({ party: party?.name ?? "—", slot });
+    seated.push({ party: party?.name ?? "—", slot, stage });
   }
   return seated;
 }
@@ -421,7 +607,11 @@ export const moveToSlot = mutation({
     const row = await ctx.db.get(id);
     if (!row) throw new Error("That bill is not in the sorting queue");
     const count = await slotCount(ctx);
-    if (slot < 1 || slot > count) throw new Error(`There is no ${slotLabel(slot)} on the table`);
+    // With no limit any number is a real bookmark, so only a fixed table can
+    // refuse one. Below 1 is never a bookmark either way.
+    if (slot < 1 || !Number.isInteger(slot) || (count !== null && slot > count)) {
+      throw new Error(`There is no ${slotLabel(slot)} on the table`);
+    }
 
     const held = await slotsHeld(ctx);
     for (const [partyId, at] of held) {
@@ -686,7 +876,7 @@ export const nameIt = mutation({
     const marks = pages.flatMap((p) => p.tags ?? []);
     if (marks.length) await ctx.db.patch(voucherId, { tags: [...new Set(marks)] });
 
-    await enrol(ctx, {
+    const filed = await enrol(ctx, {
       voucherId,
       partyLedgerId: ledgerId,
       capturedAt: Math.min(...pages.map((p) => p.at)),
@@ -707,9 +897,15 @@ export const nameIt = mutation({
       entity: "voucher",
       entityId: voucherId,
     });
-    // No slot here on purpose: the slip goes back on the stack, and the slot is
-    // given out on the second walk, when the paper actually reaches the table.
-    return { voucherId, party: party?.name ?? "" };
+    // The bookmark is decided here now, and handed straight back, so the
+    // naming screen can show whose slip it is and where it will go in one
+    // answer. The paper still does not move until the second walk.
+    return {
+      voucherId,
+      party: party?.name ?? "",
+      slot: filed.slot,
+      slotLabel: filed.slot === null ? null : slotLabel(filed.slot),
+    };
   },
 });
 
@@ -736,16 +932,34 @@ export const folders = query({
       byParty.set(r.partyLedgerId, list);
     }
 
+    /**
+     * Every voucher and every customer in two batches.
+     *
+     * This used to fetch one voucher at a time inside a loop inside a loop —
+     * one round trip per bill in the shop, in order, before the customer list
+     * could be drawn at all. At a few hundred bills that is the whole wait on
+     * opening this screen, and none of the reads depend on each other.
+     */
+    const voucherIds = [...new Set(rows.map((r) => r.voucherId))];
+    const vouchers = new Map(
+      (await Promise.all(voucherIds.map((id) => ctx.db.get(id)))).map((v, i) => [
+        voucherIds[i],
+        v,
+      ]),
+    );
+    const partyIds = [...byParty.keys()];
+    const parties = new Map(
+      (await Promise.all(partyIds.map((id) => ctx.db.get(id)))).map((p, i) => [partyIds[i], p]),
+    );
+
     const out = [];
     for (const [partyLedgerId, list] of byParty) {
-      const party = await ctx.db.get(partyLedgerId);
+      const party = parties.get(partyLedgerId);
       if (!party) continue;
-      let unpriced = 0;
-      for (const r of list) {
-        const voucher = await ctx.db.get(r.voucherId);
-        if (voucher && voucher.status === "pending") unpriced += 1;
-      }
-      const onTable = list.find((r) => r.stage === "slotted" && r.slot !== undefined);
+      const unpriced = list.filter(
+        (r) => vouchers.get(r.voucherId)?.status === "pending",
+      ).length;
+      const slot = heldSlot(list);
       out.push({
         partyLedgerId,
         name: party.name,
@@ -753,7 +967,8 @@ export const folders = query({
         bills: list.length,
         filed: list.filter((r) => r.stage === "filed").length,
         unpriced,
-        slot: onTable?.slot ?? null,
+        slot,
+        slotLabel: slot === null ? null : slotLabel(slot),
       });
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -981,13 +1196,13 @@ export const partyBills = query({
     }
     bills.sort((a, b) => a.date - b.date);
 
-    const onTable = rows.find((r) => r.stage === "slotted" && r.slot !== undefined);
+    const slot = heldSlot(rows);
     return {
       name: party.name,
       place: party.place ?? "",
       folder: party.folder ?? null,
-      slot: onTable?.slot ?? null,
-      slotLabel: onTable?.slot === undefined ? null : slotLabel(onTable.slot),
+      slot,
+      slotLabel: slot === null ? null : slotLabel(slot),
       counts: {
         all: rows.length,
         named: rows.filter((r) => r.stage === "named").length,
@@ -1044,18 +1259,18 @@ export const state = query({
 });
 
 /**
- * Seats anything that was placed while the table was full.
- *
- * Only those — a bill still sitting in the stack as "named" is not stranded, it
- * simply has not been placed yet, and giving it a slot from here would hold the
- * table for paper nobody has picked up.
+ * Gives a bookmark to every slip that is holding none — the backlog named
+ * before bookmarks were handed out at naming time, and anything left waiting
+ * by a table that was once full.
  */
 export const seatWaitingNow = mutation({
   args: {},
   handler: async (ctx) => {
     const seated = await seatWaiting(ctx);
-    if (seated.length) await record(ctx, "filing.seat", `${seated.length} bills given a slot`);
-    return { seated };
+    if (seated.length) {
+      await record(ctx, "filing.seat", `${seated.length} bills given a bookmark`);
+    }
+    return { seated: seated.length, bookmarks: seated };
   },
 });
 

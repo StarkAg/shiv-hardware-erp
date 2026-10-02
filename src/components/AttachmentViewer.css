@@ -1,0 +1,39 @@
+.attachment-dialog{position:fixed;inset:0;box-sizing:border-box;width:100%;height:100%;height:100dvh;max-width:none;max-height:none;margin:0;padding:16px;border:0;background:transparent;color:#29251e;font-family:inherit;overflow:hidden;}
+.attachment-dialog::backdrop{background:rgba(15,14,12,.8);}
+.attachment-panel{display:flex;flex-direction:column;width:min(1200px,100%);height:100%;margin:auto;overflow:hidden;border:1px solid #b9924b;border-radius:16px;background:#f3f0ea;box-shadow:0 24px 70px #0006;}
+.attachment-header{display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:1px solid #d4cbbb;}
+.attachment-heading{flex:1;min-width:0;}
+.attachment-heading h2{margin:0;font-size:16px;font-weight:800;overflow-wrap:anywhere;}
+.attachment-heading p{margin:3px 0 0;font-size:12px;color:#71675c;}
+.attachment-dialog button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:40px;min-height:40px;padding:8px 10px;border:1px solid #c8bdab;border-radius:8px;background:#faf8f3;color:inherit;font:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.attachment-dialog button:hover:not(:disabled){background:#e7dfd0;border-color:#b9924b;}
+.attachment-dialog button:disabled{opacity:.4;cursor:default;}
+.attachment-dialog button:focus-visible{outline:3px solid #a47c34;outline-offset:2px;}
+.attachment-tools{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;padding:8px 12px;border-bottom:1px solid #d4cbbb;}
+.attachment-tools output{min-width:45px;text-align:center;font-size:12px;font-variant-numeric:tabular-nums;}
+.attachment-canvas{position:relative;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;background:#ddd7cb;scrollbar-width:auto;}
+.attachment-canvas.is-zoomed{cursor:grab;}
+.attachment-canvas.is-dragging{cursor:grabbing;user-select:none;}
+.attachment-sheet{position:relative;margin:auto;flex:none;}
+.attachment-sheet img{position:absolute;display:block;max-width:none;max-height:none;transform-origin:center;user-select:none;-webkit-user-drag:none;box-shadow:0 2px 12px #0003;}
+.attachment-center{display:flex;align-items:center;justify-content:center;min-width:100%;min-height:100%;width:max-content;padding:16px;box-sizing:border-box;}
+.attachment-status{margin:auto;padding:24px;text-align:center;font-size:14px;}
+.attachment-error{padding:8px 16px;color:#9f1d20;font-size:13px;text-align:center;}
+.attachment-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;padding:8px 12px;border-top:1px solid #d4cbbb;font-size:13px;}
+.attachment-footer span{font-variant-numeric:tabular-nums;}
+.attachment-thumb{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-height:50px;gap:6px;color:inherit;font-size:12px;}
+.attachment-thumb img{display:block;width:100%;height:100%;object-fit:cover;}
+.dark .attachment-panel{background:#25231e;color:#f3f0ea;}
+.dark .attachment-heading p{color:#b6ad9e;}
+.dark .attachment-dialog button{background:#343027;border-color:#645844;}
+.dark .attachment-dialog button:hover:not(:disabled){background:#494032;}
+.dark .attachment-canvas{background:#151411;}
+.dark .attachment-header,.dark .attachment-tools,.dark .attachment-footer{border-color:#514938;}
+@media(max-width:600px){
+  .attachment-dialog{padding:6px;}
+  .attachment-panel{border-radius:12px;}
+  .attachment-header{padding:8px 10px;gap:8px;}
+  .attachment-dialog button{min-width:44px;min-height:44px;}
+  .attachment-tools{gap:4px;padding:6px;}
+  .attachment-tools .attachment-action-label{display:none;}
+}

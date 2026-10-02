@@ -251,6 +251,40 @@ export const read = action({
   },
 });
 
+/** Read a cashier photo into Bill Flow's review draft. Nothing is posted here. */
+export const readFlow = action({
+  args: { id: v.id('billFlows') },
+  handler: async (ctx, { id }): Promise<{ ok: boolean; error?: string }> => {
+    await ctx.runMutation(internal.billFlow.beginReading, { id });
+    try {
+      const urls = await ctx.runQuery(internal.billFlow.photoUrls, { id });
+      const pages = [];
+      for (const url of urls) pages.push(await fetchImage(url));
+      const apiKey = process.env.MESH_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error('Photo reader is not configured.');
+      const client = new Anthropic({ apiKey, baseURL: BASE_URL });
+      const response = await client.messages.create({
+        model: MODEL, max_tokens: 8000, system: SYSTEM,
+        tools: [BILL_TOOL], tool_choice: { type: 'tool', name: 'file_bill' },
+        messages: [{ role: 'user', content: [
+          ...pages.map(page => ({ type: 'image' as const, source: {
+            type: 'base64' as const, media_type: page.media_type, data: page.data,
+          } })),
+          { type: 'text' as const, text: `Read these ${pages.length} page(s) as one bill or receipt. Return a draft for human review. It may be a customer sale, supplier purchase, receipt, payment, or goods received without an amount. Do not invent a price or infer that photographed money was paid twice.` },
+        ] }],
+      });
+      const call = response.content.find(block => block.type === 'tool_use');
+      if (!call) throw new Error('The reader did not fill the form in.');
+      await ctx.runMutation(internal.billFlow.saveReading, { id, draft: (call as Anthropic.ToolUseBlock).input });
+      return { ok: true };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      await ctx.runMutation(internal.billFlow.saveReading, { id, error });
+      return { ok: false, error };
+    }
+  },
+});
+
 /**
  * Reads a chunk of the pile, four bills at a time.
  *

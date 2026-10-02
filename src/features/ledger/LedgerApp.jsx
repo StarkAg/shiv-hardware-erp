@@ -14,6 +14,7 @@ import BillViewer from './components/BillViewer';
 import PrintPacket from './components/PrintPacket';
 import SalaryRent from './components/SalaryRent';
 import BillsToCome from './components/BillsToCome';
+import Bills from './components/Bills';
 import { History as HistoryIcon } from 'lucide-react'
 
 /**
@@ -40,12 +41,12 @@ const TABS = [
 /**
  * Every view this screen can show, tabs or not.
  *
- * The sidebar links straight to /ledger/tocome, /ledger/bills and
- * /ledger/trial, and those still have to land where they say. Validating an
+ * Older links can still open /ledger/bills, while the sidebar links straight
+ * to /ledger/tocome and /ledger/trial. Validating an
  * address against the tab strip instead would have quietly dropped all three
  * back to All Parties the moment they stopped being tabs.
  */
-const VIEWS = [...TABS.map(([id]) => id), 'monthly', 'tocome', 'trial'];
+const VIEWS = [...TABS.map(([id]) => id), 'monthly', 'tocome', 'trial', 'bills'];
 
 const KINDS = ['purchase', 'payment', 'sale', 'receipt'];
 
@@ -225,7 +226,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
   return (
     <div className="app">
       <header className="topbar">
-        <h1 className="pagetitle">Party Accounts</h1>
+        <h1 className="pagetitle">{tab === 'bills' ? 'Bills' : tab === 'tocome' ? 'Bills to Come' : tab === 'monthly' ? 'Salary & Rent' : tab === 'trial' ? 'Trial Balance' : 'Party Accounts'}</h1>
         <div className="actions">
           {/* The four voucher buttons that were here are gone. They were the
               third way to write the same voucher and the worst of the three:
@@ -240,7 +241,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
         </div>
       </header>
 
-      <nav className="tabs">
+      {TABS.some(([id]) => id === tab) && <nav className="tabs">
         {TABS.map(([id, label]) => (
           <button
             key={id}
@@ -253,7 +254,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
             {label}
           </button>
         ))}
-      </nav>
+      </nav>}
 
       {tab === 'all' &&
         (partyId ? (
@@ -322,6 +323,8 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
           onViewBill={setViewing}
         />
       )}
+
+      {tab === 'bills' && <Bills masters={masters} pending={pending} onViewBill={setViewing} onOpen={openParty} />}
 
       {tab === 'trial' && <TrialBalance />}
 

@@ -5,7 +5,9 @@ import { api } from '../../../../convex/_generated/api';
 import { useUploader } from '../lib/upload';
 import Combo from './Combo';
 import BillDrop from './BillDrop';
-import BillPane from './BillPane';
+import BillViewer from './BillViewer';
+import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
+import Confirm from './Confirm';
 import { inputDate, today, fromInputDate, longDate } from '../lib/format';
 import { groupLabel } from '../lib/groups';
 import { nextStep } from '../lib/walk';
@@ -120,6 +122,7 @@ export default function VoucherForm({
 
   // The bill being read off while this voucher is filled in.
   const [preview, setPreview] = useState(null);
+  const [removing, setRemoving] = useState(null);
 
   // The ledger behind must not scroll while this is open — on a trackpad it
   // slides away under the form and leaves you somewhere else on closing.
@@ -165,6 +168,7 @@ export default function VoucherForm({
   const addAttachments = useMutation(api.vouchers.addAttachments);
   const removeAttachment = useMutation(api.vouchers.removeAttachment);
   const claimFromPhone = useMutation(api.inbox.claim);
+  const claimVoucherPhoto = useMutation(api.voucherInbox.claim);
   const upload = useUploader();
 
   // The account is safe to default, and does so once the masters arrive on a
@@ -194,7 +198,8 @@ export default function VoucherForm({
     e.preventDefault();
     setError('');
     const value = amount.trim() === '' ? undefined : Number(amount);
-    if (value !== undefined && !(value > 0)) return setError('Enter an amount above zero');
+    if (value !== undefined && !(value > 0) && !(kind === 'purchase' && value === 0))
+      return setError('Enter an amount above zero');
     if (!spec.unpriced && value === undefined) return setError('Enter an amount');
     if (!partyId || !accountId) return setError('Pick both ledgers');
 
@@ -222,7 +227,10 @@ export default function VoucherForm({
         if (attachments.length) {
           await addAttachments({ id: edit._id, documents: attachments });
         }
-        for (const p of picked) await claimFromPhone({ id: p._id });
+        for (const p of picked) {
+          if (p.source === 'voucher') await claimVoucherPhoto({ id: p._id });
+          else await claimFromPhone({ id: p._id });
+        }
         onClose();
         return undefined;
       }
@@ -243,7 +251,10 @@ export default function VoucherForm({
       } else {
         await createReceipt({ ...common, receivedIntoLedgerId: accountId, amount: value });
       }
-      for (const p of picked) await claimFromPhone({ id: p._id });
+      for (const p of picked) {
+        if (p.source === 'voucher') await claimVoucherPhoto({ id: p._id });
+        else await claimFromPhone({ id: p._id });
+      }
       onClose();
     } catch (err) {
       setError(err.message ?? String(err));
@@ -297,7 +308,7 @@ export default function VoucherForm({
 
   return (
     <div
-      className={`modal-bg${preview ? ' split' : ''}`}
+      className="modal-bg"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <form className="modal" ref={formRef} onSubmit={submit} onKeyDown={walk}>
@@ -369,7 +380,7 @@ export default function VoucherForm({
             inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder={spec.unpriced ? 'blank — file it unpriced' : ''}
+            placeholder={kind === 'purchase' ? 'blank — Goods Received' : spec.unpriced ? 'blank — file it unpriced' : ''}
             autoFocus={editing || Boolean(defaultPartyId)}
           />
         </label>
@@ -386,14 +397,15 @@ export default function VoucherForm({
             <div className="shots">
               {edit.attachments.map((shot) => (
                 <div className="shot-tile" key={shot.storageId}>
-                  <img src={shot.url} alt="" />
+                  <button type="button" className="shot-pick" aria-label="Preview attached file"
+                    onClick={() => setPreview({ ...edit, attachmentUrls: edit.attachments, initialIndex: edit.attachments.indexOf(shot) })}>
+                    <AttachmentThumbnail file={shot} />
+                  </button>
                   <button
                     type="button"
                     className="shot-x"
                     aria-label="Remove"
-                    onClick={() =>
-                      removeAttachment({ id: edit._id, storageId: shot.storageId })
-                    }
+                    onClick={() => setRemoving(shot)}
                   >
                     <X size={16} aria-hidden="true" />
                   </button>
@@ -416,7 +428,7 @@ export default function VoucherForm({
         <div className="modal-actions">
           <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn" disabled={busy}>
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? 'Saving…' : kind === 'purchase' && !(Number(amount) > 0) ? 'Save Goods Received' : 'Save'}
           </button>
         </div>
       </form>
@@ -440,7 +452,12 @@ export default function VoucherForm({
         />
       )}
 
-      <BillPane bill={preview} onClose={() => setPreview(null)} />
+      {preview && <BillViewer voucher={preview} onClose={() => setPreview(null)} />}
+      {removing && <Confirm title="Delete this attachment?"
+        body="This removes the file from the voucher permanently."
+        confirmLabel="Delete attachment" danger requireText="delete" requireLabel="Type delete to confirm"
+        onConfirm={() => removeAttachment({ id: edit._id, storageId: removing.storageId })}
+        onClose={() => setRemoving(null)} />}
     </div>
   );
 }
