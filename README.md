@@ -85,7 +85,14 @@ must use the hosted app rather than the plain HTTP address.
 
 ```bash
 npx convex dev                 # schema + functions against the dev deployment
-npx convex deploy --yes        # push to production
+npm run deploy:convex          # push to production (refuses if either computer has unsaved work)
+```
+
+**Two computers**
+
+```bash
+npm run sync                   # start of work: pull main, list the other computer's uncommitted files
+npm run autosave:install       # once per computer: copy uncommitted work to wip/<computer> every 15 min
 ```
 
 > `npx convex dev` rewrites `VITE_CONVEX_URL` in `.env.local` to the dev deployment.
@@ -126,7 +133,7 @@ the bundle that was tested:
 ```bash
 npm run build
 npx vercel deploy dist --project shiv-panel --prod --yes
-npx convex deploy --yes --typecheck enable
+npm run deploy:convex
 ```
 
 The other web apps each carry their own `npm run deploy`. Convex must go out with the
