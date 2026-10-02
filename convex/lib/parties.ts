@@ -59,9 +59,19 @@ export async function findParty(
   ctx: QueryCtx,
   name: string,
 ): Promise<Doc<'ledgers'> | null> {
+  if (!fold(name)) return null
+  return findPartyIn(await ctx.db.query('ledgers').collect(), name)
+}
+
+/**
+ * findParty against accounts already in hand.
+ *
+ * For a caller asking about many names at once: reading every account once
+ * per name is what ran the cash queue past the read limit.
+ */
+export function findPartyIn(all: Doc<'ledgers'>[], name: string): Doc<'ledgers'> | null {
   const wanted = fold(name)
   if (!wanted) return null
-  const all = await ctx.db.query('ledgers').collect()
 
   const exact = all.filter((l) => spellingsOf(l).includes(wanted))
   if (exact.length === 1) return exact[0]

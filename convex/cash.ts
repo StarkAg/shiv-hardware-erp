@@ -4,7 +4,7 @@ import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { api } from './_generated/api'
 import { round2, fyOf } from './lib/money'
-import { findParty } from './lib/parties'
+import { findParty, findPartyIn } from './lib/parties'
 import { nextVoucherNo } from './lib/numbering'
 import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
@@ -38,18 +38,34 @@ const dayOf = (date: string) => Date.parse(`${date}T00:00:00Z`)
 
 type CashRow = Doc<'cashEntries'>
 
+/**
+ * What blockedBecause checks against, read once per query.
+ *
+ * Asking the books afresh for every note read the whole account list twice a
+ * note, and a queue of a few hundred notes took the query past Convex's read
+ * limit — the cash page and Home then failed outright instead of listing them.
+ */
+type Books = { ledgers: Map<Id<'ledgers'>, Doc<'ledgers'>>; all: Doc<'ledgers'>[]; types: Set<string> }
+
+async function readBooks(ctx: QueryCtx): Promise<Books> {
+  const all = await ctx.db.query('ledgers').collect()
+  const types = new Set<string>()
+  for (const { type } of Object.values(CASH_KINDS)) {
+    const found = await ctx.db.query('voucherTypes').withIndex('by_name', q => q.eq('name', type)).first()
+    if (found) types.add(type)
+  }
+  return { ledgers: new Map(all.map((l) => [l._id, l])), all, types }
+}
+
 /** Why an entry has not reached the books, or null when it has nothing to say. */
-async function blockedBecause(ctx: QueryCtx, row: CashRow): Promise<string | null> {
+function blockedBecause(books: Books, row: CashRow): string | null {
   if (row.deleted) return null
   if (!(row.amount > 0)) return 'No amount'
-  const party = row.ledgerId ? await ctx.db.get(row.ledgerId) : await findParty(ctx, row.name)
+  const party = row.ledgerId ? books.ledgers.get(row.ledgerId) : findPartyIn(books.all, row.name)
   if (!party) return row.name.trim() ? 'No account by that name' : 'No name'
   const drawer = row.mode === 'online' ? 'Bank' : 'Cash'
-  const account = await ctx.db.query('ledgers').filter(q => q.eq(q.field('name'), drawer)).first()
-  if (!account) return `No "${drawer}" account`
-  const type = await ctx.db.query('voucherTypes')
-    .withIndex('by_name', q => q.eq('name', CASH_KINDS[row.kind].type)).unique()
-  if (!type) return `No ${CASH_KINDS[row.kind].type} voucher type`
+  if (!books.all.some((l) => l.name === drawer)) return `No "${drawer}" account`
+  if (!books.types.has(CASH_KINDS[row.kind].type)) return `No ${CASH_KINDS[row.kind].type} voucher type`
   return null
 }
 
@@ -324,12 +340,13 @@ export const all = query({
       .filter((row) => !row.deleted && row.date >= from)
       .sort((a, b) => (a.date === b.date ? b.at - a.at : b.date.localeCompare(a.date)))
 
+    const books = await readBooks(ctx)
     const out = []
     for (const row of rows) {
-      // Only asked of a note that has not posted — it walks the books, and
-      // there is nothing it could tell us about one that already has.
-      const why = row.voucherId ? null : await blockedBecause(ctx, row)
-      const party = row.ledgerId ? await ctx.db.get(row.ledgerId) : null
+      // Only asked of a note that has not posted — there is nothing it could
+      // tell us about one that already has.
+      const why = row.voucherId ? null : blockedBecause(books, row)
+      const party = row.ledgerId ? books.ledgers.get(row.ledgerId) : null
       out.push({
         _id: row._id,
         entryId: row.entryId,
@@ -514,9 +531,10 @@ export const unposted = query({
       .filter((row) => !row.deleted && !row.voucherId)
       .sort((a, b) => b.at - a.at)
 
+    const books = await readBooks(ctx)
     const out = []
     for (const row of rows) {
-      const why = await blockedBecause(ctx, row)
+      const why = blockedBecause(books, row)
       if (!why) continue
       out.push({
         _id: row._id,
@@ -557,7 +575,7 @@ export const assign = mutation({
       .withIndex('by_entry_id', (q) => q.eq('entryId', entryId))
       .unique()
     if (!posted?.voucherId) {
-      throw new Error(await blockedBecause(ctx, posted ?? row) ?? 'The books did not take this note.')
+      throw new Error(blockedBecause(await readBooks(ctx), posted ?? row) ?? 'The books did not take this note.')
     }
     return { voucherId: posted.voucherId }
   },
