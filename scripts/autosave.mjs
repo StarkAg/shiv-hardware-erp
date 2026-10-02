@@ -46,13 +46,20 @@ const IDENTITY = { GIT_AUTHOR_NAME: 'wip-backups', GIT_AUTHOR_EMAIL: 'wip-backup
 
 const stamp = () => new Date().toLocaleString('en-IN', { hour12: false })
 const lines = (text) => (text ? text.split('\n').filter(Boolean) : [])
+// A time limit on every call: macOS can hold a background process indefinitely on a folder
+// it guards (Documents, iCloud) while it waits for a permission answer.
 const git = (cwd, args, opts = {}) =>
-  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 512 << 20, ...opts })
+  execFileSync('git', args, {
+    cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 512 << 20, killSignal: 'SIGKILL',
+    timeout: args[0] === 'push' || args[0] === 'fetch' ? 300_000 : 60_000, ...opts,
+  })
 const out = (cwd, args, opts) => git(cwd, args, opts).trim()
 const maybe = (cwd, args, opts) => {
   try { return out(cwd, args, opts) } catch { return null }
 }
-const errText = (e) => String(e?.stderr || e?.message || e).trim().split('\n').slice(-2).join(' ')
+const errText = (e) => e?.signal === 'SIGKILL'
+  ? 'timed out (on macOS this folder may need permission: System Settings > Privacy & Security > Files and Folders)'
+  : String(e?.stderr || e?.message || e).trim().split('\n').slice(-2).join(' ')
 
 function withLock(path, fn, busy) {
   try {
