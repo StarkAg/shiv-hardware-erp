@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { useAction } from 'convex/react'
-import { ExternalLink, Eye, MessageCircle, Printer, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useAction, useConvex } from 'convex/react'
+import { CloudDownload, ExternalLink, Eye, MessageCircle, Printer, Trash2, X } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { Button, Card, Input, Page, PageHeader } from '../../components/ui'
@@ -156,6 +156,98 @@ function SendWhatsAppButton({ doc }: { doc: GuaranteeDocument }) {
   )
 }
 
+// The shop code, kept on this device after it is entered once, so History can
+// fetch the cloud's copy of the cards on every open. The cloud only hands the
+// full list (names, Aadhaar, QR secrets) to someone holding this code.
+const CLOUD_PIN_KEY = 'shiv-panel:guarantee-cloud-pin'
+
+function readCloudPin() {
+  try { return localStorage.getItem(CLOUD_PIN_KEY) || '' } catch { return '' }
+}
+
+function writeCloudPin(pin: string) {
+  try {
+    if (pin) localStorage.setItem(CLOUD_PIN_KEY, pin)
+    else localStorage.removeItem(CLOUD_PIN_KEY)
+  } catch { /* ignore */ }
+}
+
+type CloudGuaranteeRow = { localId: string; number: string; token?: string; document: GuaranteeDocument }
+
+/**
+ * Pulls the cards made at other counters (or before a reinstall) into this
+ * device's History. Cards are uploaded as they are made; this is the way back
+ * down. Split out so the Convex hook only mounts when a deployment is set.
+ */
+function CloudGuaranteeSync() {
+  const convex = useConvex()
+  const merge = useStore((s) => s.mergeGuaranteesFromCloud)
+  const [pin, setPin] = useState(readCloudPin)
+  const [asking, setAsking] = useState(false)
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const pull = useCallback(async (code: string, quiet = false) => {
+    setBusy(true)
+    try {
+      const rows = (await convex.query(api.documents.recentGuarantees, { pin: code, limit: 100 })) as CloudGuaranteeRow[]
+      const docs = rows
+        .filter((r) => r?.document && r.number)
+        .map((r) => ({ ...r.document, id: r.localId, number: r.number, token: r.token ?? r.document.token }))
+      const added = merge(docs)
+      setStatus(added ? `${added} card${added === 1 ? '' : 's'} synced from the cloud` : 'Up to date with the cloud')
+      return true
+    } catch (err) {
+      // A ConvexError carries the server's own words ("Wrong code.", "No code is set…").
+      const said = typeof (err as { data?: unknown })?.data === 'string' ? String((err as { data: string }).data) : ''
+      const wrong = /wrong code/i.test(said || String(err instanceof Error ? err.message : err))
+      if (wrong) {
+        writeCloudPin('')
+        setPin('')
+      }
+      if (!quiet || wrong) setStatus(wrong ? 'Wrong code. Enter it again to sync.' : said || 'Could not reach the cloud.')
+      if (!quiet && (wrong || said)) throw new Error(said || 'Wrong code.')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }, [convex, merge])
+
+  useEffect(() => {
+    if (pin) void pull(pin, true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        variant="outline"
+        className="flex items-center gap-1.5"
+        disabled={busy}
+        onClick={() => (pin ? void pull(pin) : setAsking(true))}
+      >
+        <CloudDownload size={15} /> {busy ? 'Syncing…' : 'Sync from cloud'}
+      </Button>
+      {status && <span className="text-xs text-muted">{status}</span>}
+      {asking && (
+        <Confirm
+          title="Sync guarantee cards"
+          body="Enter the shop code once on this device. History then fetches the cards made at every counter each time it opens."
+          confirmLabel="Sync"
+          ask={{ label: 'Code', secret: true }}
+          onConfirm={async (code) => {
+            const ok = await pull(code.trim())
+            if (!ok) throw new Error('Could not reach the cloud. Try again.')
+            writeCloudPin(code.trim())
+            setPin(code.trim())
+          }}
+          onClose={() => setAsking(false)}
+        />
+      )}
+    </div>
+  )
+}
+
 export function GuaranteeHistory() {
   const { guarantees, deleteGuarantee } = useStore()
   const [deleting, setDeleting] = useState<{ id: string; number: string } | null>(null)
@@ -192,8 +284,11 @@ export function GuaranteeHistory() {
       )}
       <PageHeader title="Guarantee History" subtitle={`${guarantees.length} cards`} />
       <Page>
-        <div className="max-w-sm">
-          <Input placeholder="Search number, name, mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="w-full max-w-sm">
+            <Input placeholder="Search number, name, mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          {convexReady && <CloudGuaranteeSync />}
         </div>
         <Card className="overflow-x-auto">
           <table className="min-w-[760px] w-full text-sm">

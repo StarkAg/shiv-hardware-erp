@@ -117,6 +117,12 @@ interface AppState {
    * Saves to localStorage only — does NOT push back to the remote to avoid sync loops.
    */
   syncGuaranteesFromRemote: (guarantees: GuaranteeDocument[], remoteSeq: number) => void
+  /**
+   * Add the cards the cloud has that this device doesn't (made at another
+   * counter, or before a reinstall). Never drops or overwrites a local card,
+   * and skips cards deleted here. Saves locally only, no push back.
+   */
+  mergeGuaranteesFromCloud: (cloud: GuaranteeDocument[]) => number
 
   // hardware catalog
   setHardwareCatalog: (c: HardwareCatalog) => void
@@ -136,6 +142,30 @@ interface AppState {
   addCustomEntry: (name: string) => string   // returns new entry id
   updateCustomEntry: (id: string, patch: Partial<Omit<CustomCatalogEntry, 'id'>>) => void
   removeCustomEntry: (id: string) => void
+}
+
+// Cards deleted on this device, so a cloud sync doesn't bring them back. The
+// cloud keeps its copy: the card in the customer's hand still has to open.
+const DELETED_GUARANTEES_KEY = 'shiv-panel:guarantees-deleted:v1'
+const guaranteeKey = (g: GuaranteeDocument) => g.token || g.id
+
+function deletedGuaranteeKeys(): Set<string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DELETED_GUARANTEES_KEY) || '[]')
+    return new Set(Array.isArray(parsed) ? parsed : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function rememberDeletedGuarantee(g: GuaranteeDocument) {
+  const keys = deletedGuaranteeKeys()
+  keys.add(guaranteeKey(g))
+  try {
+    localStorage.setItem(DELETED_GUARANTEES_KEY, JSON.stringify([...keys]))
+  } catch {
+    /* ignore quota errors */
+  }
 }
 
 function persist(get: () => AppState) {
@@ -457,8 +487,50 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteGuarantee: (id) => {
+    const gone = get().guarantees.find((g) => g.id === id)
+    if (gone) rememberDeletedGuarantee(gone)
     set((st) => ({ guarantees: st.guarantees.filter((g) => g.id !== id) }))
     persist(get)
+  },
+
+  mergeGuaranteesFromCloud: (cloud) => {
+    const deleted = deletedGuaranteeKeys()
+    const local = get().guarantees
+    const byToken = new Map(local.filter((g) => g.token).map((g) => [g.token as string, g]))
+    const byId = new Map(local.map((g) => [g.id, g]))
+    const merged = [...local]
+    let added = 0
+    let changed = false
+    let seq = get().guaranteeSeq
+
+    for (const remote of cloud) {
+      if (deleted.has(guaranteeKey(remote))) continue
+      // The token says which physical card it is: ids are counted per device,
+      // so the same id at two counters can be two different cards.
+      const sameId = byId.get(remote.id)
+      const mine = remote.token
+        ? byToken.get(remote.token) ?? (sameId && !sameId.token ? sameId : undefined)
+        : sameId
+      if (mine) {
+        // The cloud mints a card's QR secret when the device sent none.
+        if (!mine.token && remote.token) {
+          merged[merged.indexOf(mine)] = { ...mine, token: remote.token }
+          changed = true
+        }
+        continue
+      }
+      // Keep ids unique on this device (History opens and prints cards by id).
+      merged.push(sameId ? { ...remote, id: `${remote.id}#${String(remote.token).slice(0, 8)}` } : remote)
+      added += 1
+      const match = /^GC-\d{4}-(\d{4,})$/.exec(remote.number)
+      if (match) seq = Math.max(seq, Number(match[1]))
+    }
+
+    if (!added && !changed) return 0
+    merged.sort((a, b) => b.number.localeCompare(a.number) || String(b.date).localeCompare(String(a.date)))
+    set({ guarantees: merged, guaranteeSeq: seq })
+    persist(get)
+    return added
   },
 
   syncGuaranteesFromRemote: (remoteGuarantees, remoteSeq) => {
