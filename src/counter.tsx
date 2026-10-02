@@ -18,6 +18,8 @@ import { Transport } from './features/transport/Transport'
 import { Customers } from './features/customers/Customers'
 import { AppError, NotFound } from './components/RouteFallbacks'
 import { startProperInputs } from './lib/properInputs'
+import { startEnterFlow } from './lib/enterFlow'
+import { startOfflineSync } from './lib/offlineSync'
 import { useStore } from './lib/store'
 
 /**
@@ -32,6 +34,11 @@ import { useStore } from './lib/store'
  */
 
 startProperInputs()
+// Enter walks every form box to box and lands on Print — see lib/enterFlow.
+startEnterFlow()
+// Retry cards/quotations whose cloud save failed (as the panel's main.tsx does).
+// Without it a failed save sat in the queue until the next card was made.
+startOfflineSync()
 useStore.getState().normalizeCustomerNames()
 
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()

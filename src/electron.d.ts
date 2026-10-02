@@ -29,6 +29,12 @@ declare global {
       isElectron: true
       getPrinters: () => Promise<DesktopPrinter[]>
       printCurrentPage: (options?: DesktopPrintOptions) => Promise<{ ok: true }>
+      /** PVC guarantee cards straight to the Epson on this PC (no print server). */
+      printGuaranteeCardsDirect?: (payload: {
+        documents: import('./lib/types').GuaranteeDocument[]
+        slot?: 1 | 2
+        copies?: number
+      }) => Promise<{ ok: true; printer: string }>
       getUpdateState?: () => Promise<DesktopUpdateState>
       checkForUpdates?: () => Promise<DesktopUpdateState>
       installUpdate?: () => Promise<void>

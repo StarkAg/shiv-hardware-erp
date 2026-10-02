@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { mutation, query, type QueryCtx } from './_generated/server'
 import { requirePin } from './lib/pin'
 
 export const recentQuotations = query({
@@ -93,29 +93,68 @@ export const getGuaranteeByNumber = query({
     number: v.string(),
     token: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const clean = String(args.number ?? '').trim()
-    if (!clean) return null
+  handler: async (ctx, args) => (await cardsForQr(ctx, args.number, args.token))[0] ?? null,
+})
 
-    // The QR and the print server both encode the `number` (e.g. GC-2026-0042).
-    // Look it up by index; fall back to a full scan if the index hasn't been
-    // back-filled yet.
-    const indexed = await ctx.db
-      .query('guaranteeDocuments')
-      .withIndex('by_number', q => q.eq('number', clean))
-      .first()
+/**
+ * Every card a QR opens -- usually one. Before 2026-10-02 a slot-2 card was
+ * printed with slot 1's number AND secret, so both cards of that tray pass
+ * carry the very same QR; this returns both so each customer finds theirs.
+ * Same gate as getGuaranteeByNumber: no matching token, nothing.
+ */
+export const getGuaranteesForQr = query({
+  args: {
+    number: v.string(),
+    token: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => await cardsForQr(ctx, args.number, args.token),
+})
 
-    const row = indexed ?? await ctx.db
+async function cardsForQr(ctx: QueryCtx, number: string, token: string | undefined) {
+  const clean = String(number ?? '').trim()
+  const given = String(token ?? '').trim()
+  // A card with no token was written before this existed and stays shut
+  // until one is minted for it -- see backfillGuaranteeTokens.
+  if (!clean || !given) return []
+
+  // The QR encodes the `number` (e.g. GC-2026-0042) and its token. Numbers
+  // are minted per device, so two cards can share one (a fresh install
+  // restarted at 0001); the token tells them apart, so match on both rather
+  // than taking the first row with the number -- which opened the wrong card,
+  // or none. Falls back to a scan if the index hasn't been back-filled yet.
+  let rows = await ctx.db
+    .query('guaranteeDocuments')
+    .withIndex('by_number', q => q.eq('number', clean))
+    .collect()
+  if (!rows.length) {
+    rows = await ctx.db
       .query('guaranteeDocuments')
       .filter(q => q.eq(q.field('number'), clean))
-      .first()
+      .collect()
+  }
+  return rows
+    .filter(row => row.token && row.token === given)
+    .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+}
 
-    if (!row) return null
-    const given = String(args.token ?? '').trim()
-    // A card with no token was written before this existed and stays shut
-    // until one is minted for it -- see backfillGuaranteeTokens.
-    if (!row.token || given !== row.token) return null
-    return row
+/**
+ * The highest GC-<year>-NNNN sequence already issued this year, so a device
+ * with an empty or stale local counter (a fresh install, a second counter)
+ * continues the shop's numbering instead of reissuing 0001. Returns only a
+ * number -- nothing about any card.
+ */
+export const latestGuaranteeSeq = query({
+  args: { year: v.number() },
+  handler: async (ctx, args) => {
+    const re = new RegExp(`^GC-${Math.trunc(args.year)}-(\\d{4})$`)
+    let max = 0
+    // Newest first; a year's cards are all recent, so the last 500 cover it.
+    const rows = await ctx.db.query('guaranteeDocuments').withIndex('by_created_at').order('desc').take(500)
+    for (const row of rows) {
+      const m = re.exec(String(row.number ?? ''))
+      if (m) max = Math.max(max, Number(m[1]))
+    }
+    return max
   },
 })
 
@@ -128,12 +167,27 @@ export const saveGuarantee = mutation({
     customer: v.any(),
     document: v.any(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, incoming) => {
     const now = Date.now()
-    const existing = await ctx.db
+    const byLocalId = (localId: string) => ctx.db
       .query('guaranteeDocuments')
-      .withIndex('by_local_id', q => q.eq('localId', args.localId))
+      .withIndex('by_local_id', q => q.eq('localId', localId))
       .unique()
+
+    let args = incoming
+    let existing = await byLocalId(args.localId)
+
+    // A different physical card that happens to reuse this id. Card numbers
+    // are counted per device, so a fresh install reissued GC-2026-0002 and its
+    // save overwrote July's GC-2026-0002 (keeping July's token, so neither
+    // card's QR opened the right one). The token says which card this is:
+    // when it differs, the card gets a row of its own instead.
+    const sent = String(args.token ?? (args.document as { token?: string } | null)?.token ?? '').trim()
+    if (existing?.token && sent && existing.token !== sent) {
+      const ownId = `${args.localId}#${sent.slice(0, 8)}`
+      args = { ...args, localId: ownId }
+      existing = await byLocalId(ownId)
+    }
 
     if (existing) {
       await ctx.db.patch(existing._id, {

@@ -13,7 +13,11 @@ module.exports = async function afterPack(context) {
   const { rcedit } = require('rcedit')
   const productName = context.packager.appInfo.productFilename // "Shiv Hardware Panel"
   const exePath = path.join(context.appOutDir, `${productName}.exe`)
-  const iconPath = path.resolve(context.packager.info.projectDir, 'build', 'icon.ico')
+  // The build config's win.icon, so Shiv Quotation gets its own icon.
+  const iconPath = path.resolve(
+    context.packager.info.projectDir,
+    context.packager.platformSpecificBuildOptions.icon || path.join('build', 'icon.ico'),
+  )
 
   await rcedit(exePath, { icon: iconPath })
   console.log(`  • afterPack: embedded icon into ${productName}.exe`)

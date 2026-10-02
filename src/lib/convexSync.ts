@@ -20,6 +20,21 @@ function client(): ConvexHttpClient | null {
 
 export const convexEnabled = () => Boolean(CONVEX_URL)
 
+/**
+ * The shop's highest GC-<year>-NNNN already saved, so this device's counter
+ * can't reissue a number another device (or a fresh install) already used.
+ * Null when offline / no Convex — the local counter stands as before.
+ */
+export async function fetchLatestGuaranteeSeq(year: number): Promise<number | null> {
+  const c = client()
+  if (!c) return null
+  try {
+    return await c.query(api.documents.latestGuaranteeSeq, { year })
+  } catch {
+    return null
+  }
+}
+
 /** Push all bills to Convex. Fire-and-forget. */
 export async function pushBillsToConvex(bills: Bill[], billSeq: number): Promise<void> {
   const c = client()

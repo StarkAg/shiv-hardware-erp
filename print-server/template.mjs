@@ -166,6 +166,33 @@ function page(body) {
 </head><body><div class="page">${body}</div></body></html>`
 }
 
+/**
+ * One line, never dots: a box marked data-fit holds its text in an inline-block
+ * (fitInner). If the text is wider than the box, the font shrinks to fit (down
+ * to 70%), then the rest is squeezed horizontally with scaleX — so any length
+ * prints whole on one line. Runs in Puppeteer before the screenshot. Mirrors
+ * fitLine() in src/lib/fitLine.ts (the on-screen preview); keep them in sync.
+ */
+const fitInner = (html) => `<span data-fit-inner style="display:inline-block;white-space:nowrap">${html}</span>`
+const FIT_SCRIPT = `<script>
+document.querySelectorAll('[data-fit]').forEach(function (box) {
+  var inner = box.firstElementChild
+  if (!inner) return
+  // Fractional widths: offsetWidth/clientWidth round to whole px and let a
+  // sub-pixel overflow through, which then gets clipped.
+  var room = box.getBoundingClientRect().width
+  var need = inner.getBoundingClientRect().width
+  if (!room || need <= room) return
+  var base = parseFloat(getComputedStyle(inner).fontSize)
+  inner.style.fontSize = Math.max(base * 0.7, base * room / need) + 'px'
+  need = inner.getBoundingClientRect().width
+  if (need > room) {
+    inner.style.transformOrigin = 'left center'
+    inner.style.transform = 'scaleX(' + room / need + ')'
+  }
+})
+</script>`
+
 function cardPage(body) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -176,7 +203,7 @@ function cardPage(body) {
   :root { --card-safe: ${CARD_SAFE_MM}mm; }
   body { font-family: Arial, Helvetica, sans-serif; color: #000; overflow: hidden; }
 </style>
-</head><body>${body}</body></html>`
+</head><body>${body}${FIT_SCRIPT}</body></html>`
 }
 
 export async function buildQuotationHtml(quote) {
@@ -340,8 +367,9 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
     const customer = document.customer ?? {}
     // Item line at 4pt (Excel-style small print), everything else at 7pt.
     // A CSS grid keeps every row's columns aligned with a fixed, EQUAL gap
-    // between them; the Type (brand) column takes the remaining space (1fr)
-    // and truncates with an ellipsis instead of overlapping Size/Pcs/Rate.
+    // between them; the Type (brand) column takes the remaining space (1fr).
+    // Every cell is data-fit: long text shrinks/squeezes to stay on one line,
+    // never truncated and never overlapping Size/Pcs/Rate.
     // Each row can carry its own thickness/size/qty (spreadsheet-style entry);
     // falls back to the document-level values when a row omits them.
     const itemRows = rows.map((item, i) => {
@@ -350,11 +378,11 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
       const rowQty = item.qty ?? document.qty
       return `
         <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;top:${(20.5 + i * 3.2).toFixed(1)}mm;display:grid;grid-template-columns:5.5mm 1fr 11mm 5mm 4.5mm;column-gap:1.3mm;align-items:baseline;font-size:4pt;line-height:1">
-          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rowThickness)}</span>
-          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.brandName)}</span>
-          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rowSize)}</span>
-          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(rowQty)} Pcs</span>
-          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right">${Number(item.amount) ? esc(Math.round(Number(item.amount))) : ''}</span>
+          <span data-fit style="white-space:nowrap;overflow:hidden">${fitInner(esc(rowThickness))}</span>
+          <span data-fit style="white-space:nowrap;overflow:hidden">${fitInner(esc(item.brandName))}</span>
+          <span data-fit style="white-space:nowrap;overflow:hidden">${fitInner(esc(rowSize))}</span>
+          <span data-fit style="white-space:nowrap;overflow:hidden">${fitInner(`${esc(rowQty)} Pcs`)}</span>
+          <span data-fit style="white-space:nowrap;overflow:hidden;text-align:right">${fitInner(Number(item.amount) ? esc(Math.round(Number(item.amount))) : '')}</span>
         </div>`
     }).join('')
 
@@ -362,9 +390,9 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
     return cardPage(`
         <div style="position:relative;width:${CARD_W_MM}mm;height:${CARD_H_MM}mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
           <div style="position:absolute;left:${CARD_SAFE_MM}mm;top:4mm;right:${CARD_SAFE_MM}mm;font-size:7pt;font-weight:600;line-height:1.18">
-            <div style="white-space:nowrap;overflow:hidden">M/s ${esc(customer.name || '')}${customer.address ? `,${esc(customer.address)}` : ''}</div>
-            <div>Mob - ${esc(customer.mobile || '')}</div>
-            <div>UID - ${esc(customer.uid || 'N/A')}</div>
+            <div data-fit style="white-space:nowrap;overflow:hidden">${fitInner(`M/s ${esc(customer.name || '')}${customer.address ? `,${esc(customer.address)}` : ''}`)}</div>
+            <div data-fit style="white-space:nowrap;overflow:hidden">${fitInner(`Mob - ${esc(customer.mobile || '')}`)}</div>
+            <div data-fit style="white-space:nowrap;overflow:hidden">${fitInner(`UID - ${esc(customer.uid || 'N/A')}`)}</div>
           </div>
           <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:13.9mm;font-size:7pt;font-weight:500">${cardDate}</div>
           ${itemRows}

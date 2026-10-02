@@ -1,15 +1,104 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAction } from 'convex/react'
-import { MessageCircle, Printer, Trash2 } from 'lucide-react'
+import { ExternalLink, Eye, MessageCircle, Printer, Trash2, X } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { Button, Card, Input, Page, PageHeader } from '../../components/ui'
 import { PrintPreview } from '../print/PrintPreview'
-import { GuaranteeCard } from '../print/GuaranteeCard'
+import { GuaranteeCard, GuaranteeCardFace } from '../print/GuaranteeCard'
 import { api } from '../../../convex/_generated/api'
 import type { GuaranteeDocument } from '../../lib/types'
+import { formatSize } from '../../lib/pricing'
+import { guaranteeOnlineUrl } from '../../lib/printServer'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
+
+/**
+ * Show = look at a saved card, nothing to change. The card face as it prints
+ * on the PVC card, every detail on it, and the online page its QR opens.
+ */
+function ShowGuaranteeModal({ doc, onClose }: { doc: GuaranteeDocument; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const c = doc.customer ?? { name: '', mobile: '', uid: '', address: '' }
+  const items = doc.items ?? []
+  const total = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0)
+  const onlineUrl = guaranteeOnlineUrl(doc.number, doc.token)
+  const detail = (label: string, value?: string | null) => (
+    <div className="flex gap-3 border-t border-line py-1.5 first:border-t-0 dark:border-white/10">
+      <span className="w-20 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted">{label}</span>
+      <span className="min-w-0 break-words font-medium">{value || '—'}</span>
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="max-h-full w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl dark:bg-stone-900" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-base font-bold text-stone-800 dark:text-stone-100">
+            Guarantee Card <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm dark:bg-white/10">{doc.number}</span>
+          </h2>
+          <button onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-muted transition hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-white/10 dark:hover:text-stone-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-5 md:flex-row">
+          {/* The card as it prints (the shop design is pre-printed on the PVC). */}
+          <div className="shrink-0 self-center md:self-start">
+            <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-md border border-stone-300 bg-white font-print text-black shadow-sm">
+              <GuaranteeCardFace document={doc} />
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1 text-sm">
+            {detail('Name', c.name)}
+            {detail('Mobile', c.mobile)}
+            {detail('Aadhaar', c.uid)}
+            {detail('Address', c.address)}
+            {detail('Date', new Date(doc.date).toLocaleDateString('en-GB'))}
+
+            <h3 className="mb-1 mt-4 text-xs font-bold uppercase tracking-wide text-muted">Items</h3>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted">
+                <tr><th className="py-1">Brand</th><th className="py-1">Size</th><th className="py-1 text-right">Qty</th><th className="py-1 text-right">Gty</th><th className="py-1 text-right">Amount</th></tr>
+              </thead>
+              <tbody>
+                {items.map((it, i) => (
+                  <tr key={i} className="border-t border-line dark:border-white/10">
+                    <td className="py-1.5 pr-2 font-medium">
+                      {it.brandName || '—'}
+                      {it.thickness ? <div className="text-xs text-muted">{it.thickness}</div> : null}
+                    </td>
+                    <td className="py-1.5 pr-2">{formatSize(it.height ?? doc.height, it.width ?? doc.width) || it.sizeLabel || '—'}</td>
+                    <td className="py-1.5 text-right">{it.qty ?? doc.qty ?? ''}</td>
+                    <td className="py-1.5 text-right">{it.guaranteeYears ? `${it.guaranteeYears} yr` : '—'}</td>
+                    <td className="py-1.5 text-right">{Number(it.amount) ? `₹${Math.round(Number(it.amount))}` : ''}</td>
+                  </tr>
+                ))}
+                {!items.length && <tr><td colSpan={5} className="py-3 text-center text-muted">No items on this card.</td></tr>}
+              </tbody>
+              {total > 0 && (
+                <tfoot><tr className="border-t-2 border-stone-800 font-bold dark:border-stone-300"><td colSpan={4} className="py-1.5">Total</td><td className="py-1.5 text-right">₹{Math.round(total)}</td></tr></tfoot>
+              )}
+            </table>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button variant="outline" className="flex items-center gap-1.5" onClick={() => window.open(onlineUrl, '_blank', 'noopener')}>
+                <ExternalLink size={15} /> Open online
+              </Button>
+              {!doc.token && <span className="text-xs text-danger">No QR secret saved — this card won't open online.</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** Brands on a card, condensed for the table. */
 function itemSummary(doc: GuaranteeDocument): string {
@@ -70,6 +159,7 @@ function SendWhatsAppButton({ doc }: { doc: GuaranteeDocument }) {
 export function GuaranteeHistory() {
   const { guarantees, deleteGuarantee } = useStore()
   const [deleting, setDeleting] = useState<{ id: string; number: string } | null>(null)
+  const [showing, setShowing] = useState<GuaranteeDocument | null>(null)
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const [params, setParams] = useSearchParams()
@@ -128,6 +218,14 @@ export function GuaranteeHistory() {
                   <td className="px-4 py-2">{itemSummary(x)}</td>
                   <td className="px-4 py-2">
                     <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        className="px-2 py-1"
+                        title="Show card"
+                        onClick={() => setShowing(x)}
+                      >
+                        <Eye size={16} />
+                      </Button>
                       {convexReady && <SendWhatsAppButton doc={x} />}
                       <Button
                         variant="ghost"
@@ -160,6 +258,8 @@ export function GuaranteeHistory() {
           </table>
         </Card>
       </Page>
+
+      {showing && <ShowGuaranteeModal doc={showing} onClose={() => setShowing(null)} />}
 
       {preview && (
         <PrintPreview

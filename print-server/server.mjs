@@ -604,7 +604,11 @@ function guaranteeCardUrl(number, req) {
 function withGuaranteeQr(doc, req) {
   if (!doc) return doc
   const url = guaranteeCardUrl(doc.number, req)
-  return url ? { ...doc, qrUrl: url } : doc
+  if (!url) return doc
+  // The hosted page opens a card only when number AND its secret token match
+  // (Convex getGuaranteeByNumber) — a QR without ?k= shows "Card not found".
+  // Same URL as the app's guaranteeOnlineUrl and the desktop direct print.
+  return { ...doc, qrUrl: doc.token ? `${url}?k=${encodeURIComponent(doc.token)}` : url }
 }
 
 function localNetworkUrls(port) {

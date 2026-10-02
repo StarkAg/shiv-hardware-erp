@@ -106,7 +106,10 @@ interface AppState {
   syncCatalogFromRemote: (snap: { hardwareCatalog: HardwareCatalog; customCatalog: CustomCatalogEntry[]; sets: BrandSet[] }) => void
 
   // guarantee cards (history)
-  nextGuaranteeNumber: () => string
+  /** The next card number; `offset` 1 = the one after it (a slot-2 card in the same print). */
+  nextGuaranteeNumber: (offset?: number) => string
+  /** Never let the local counter sit below a number already issued elsewhere. */
+  raiseGuaranteeSeq: (atLeast: number) => void
   saveGuarantee: (g: GuaranteeDocument) => void
   deleteGuarantee: (id: string) => void
   /**
@@ -420,10 +423,16 @@ export const useStore = create<AppState>((set, get) => ({
     db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
   },
 
-  nextGuaranteeNumber: () => {
-    const seq = get().guaranteeSeq + 1
+  nextGuaranteeNumber: (offset = 0) => {
+    const seq = get().guaranteeSeq + 1 + Math.max(0, Math.trunc(offset))
     const year = new Date().getFullYear()
     return `GC-${year}-${String(seq).padStart(4, '0')}`
+  },
+
+  raiseGuaranteeSeq: (atLeast) => {
+    if (!Number.isFinite(atLeast) || atLeast <= get().guaranteeSeq) return
+    set({ guaranteeSeq: Math.trunc(atLeast) })
+    persist(get)
   },
 
   saveGuarantee: (g) => {

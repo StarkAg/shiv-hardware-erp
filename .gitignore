@@ -1,6 +1,7 @@
 node_modules
 dist
 release
+release-quotation
 print-server/.env
 print-server/data/wwebjs-auth/
 print-server/data/baileys-auth/

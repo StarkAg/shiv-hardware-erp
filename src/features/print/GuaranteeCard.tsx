@@ -5,6 +5,27 @@ import { Letterhead } from './Letterhead'
 import { A4Page } from './A4Page'
 import { GuaranteeQr } from './GuaranteeQr'
 import { guaranteeOnlineUrl } from '../../lib/printServer'
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { fitLine } from '../../lib/fitLine'
+
+/** A one-line card field that shrinks/squeezes to fit its width — never "…". */
+function FitText({ children, className = '' }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const box = ref.current
+    if (!box) return
+    fitLine(box)
+    // The print font can arrive after first paint; measure again once it has.
+    let live = true
+    document.fonts?.ready.then(() => { if (live) fitLine(box) })
+    return () => { live = false }
+  })
+  return (
+    <span ref={ref} className={`block overflow-hidden whitespace-nowrap ${className}`}>
+      <span className="inline-block whitespace-nowrap">{children}</span>
+    </span>
+  )
+}
 
 // Standalone guarantee document. It is not tied to a quotation.
 
@@ -156,11 +177,9 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
   return (
     <>
       <div className="absolute left-[3mm] right-[3mm] top-[4mm] text-[6pt] font-semibold leading-[1.18]">
-        <div className="overflow-hidden whitespace-nowrap">
-          M/s {customer.name || ''}{customer.address ? `,${customer.address}` : ''}
-        </div>
-        <div>Mob - {customer.mobile || ''}</div>
-        <div>UID - {customer.uid || 'N/A'}</div>
+        <FitText>M/s {customer.name || ''}{customer.address ? `,${customer.address}` : ''}</FitText>
+        <FitText>Mob - {customer.mobile || ''}</FitText>
+        <FitText>UID - {customer.uid || 'N/A'}</FitText>
       </div>
 
       <div className="absolute right-[3mm] top-[13.9mm] text-[6pt] font-medium">{dateStr}</div>
@@ -177,11 +196,11 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
           className="absolute left-[3mm] right-[3mm] items-baseline text-[5pt] leading-none"
           style={{ top: `${20.5 + i * 3.2}mm`, display: 'grid', gridTemplateColumns: '5.5mm 1fr 11mm 5mm 4.5mm', columnGap: '1.3mm' }}
         >
-          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{rowThickness}</span>
-          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{item.brandName}</span>
-          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{rowSizeStr}</span>
-          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{rowQty} Pcs</span>
-          <span className="overflow-hidden text-ellipsis whitespace-nowrap text-right">{Number(item.amount) ? Math.round(Number(item.amount)) : ''}</span>
+          <FitText>{rowThickness}</FitText>
+          <FitText>{item.brandName}</FitText>
+          <FitText>{rowSizeStr}</FitText>
+          <FitText>{rowQty} Pcs</FitText>
+          <FitText className="text-right">{Number(item.amount) ? Math.round(Number(item.amount)) : ''}</FitText>
         </div>
         )
       })}

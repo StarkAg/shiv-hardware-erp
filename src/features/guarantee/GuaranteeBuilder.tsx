@@ -16,8 +16,8 @@ import {
 } from '../../lib/types'
 import { GuaranteeCardFace } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
+import { fetchLatestGuaranteeSeq } from '../../lib/convexSync'
 import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, printOnServer, type ServerPrintPayload } from '../../lib/printServer'
-import { createCloudPrintJob, CLOUD_API_URL } from '../../lib/cloudApi'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
 
@@ -115,14 +115,26 @@ function rowsToItems(rows: SizeRow[], brandOptions: Brand[], fallbackBrand: stri
   })
 }
 
+/** One card's identity: its GC number and the QR secret that opens it online. */
+type CardRef = { number: string; id: string; token: string }
+/** A Print/Generate click: slot 1's ref, plus slot 2's own ref when it's on. */
+type MintedRefs = CardRef & { second: CardRef | null }
+
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
-  const { sets, bills, saveGuarantee, nextGuaranteeNumber } = useStore()
+  const { sets, bills, saveGuarantee, nextGuaranteeNumber, raiseGuaranteeSeq } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
   // Each Save or Print mints a fresh GC-YYYY-NNNN ref number from the store sequence,
   // so every card becomes a permanent entry in the History tab and gets a stable QR.
-  const [ref, setRef] = useState<{ number: string; id: string; token: string }>(() => {
+  const [ref, setRef] = useState<CardRef>(() => {
     const number = `GC-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`
+    return { number, id: number, token: mintCardToken() }
+  })
+  // The slot-2 card is its own card: its own number and its own QR secret.
+  // (It used to share slot 1's, so both cards' QRs were identical and the
+  // online view could only ever open one of them.)
+  const [ref2, setRef2] = useState<CardRef>(() => {
+    const number = `GC-${new Date().getFullYear()}-${(Date.now() + 1).toString().slice(-5)}`
     return { number, id: number, token: mintCardToken() }
   })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
@@ -144,14 +156,40 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // Mint a new card number from the store sequence. Refreshing on every
   // save/print means each click becomes a permanent record (matching what
   // the shop would do physically with a fresh-stamped card).
-  function mintFreshRef() {
+  /**
+   * Numbers are counted on each device, so before minting one, catch up with
+   * the highest the shop has already saved — a fresh install or a second
+   * counter would otherwise reissue GC-YYYY-0001 (it did, 2026-10-02). Capped
+   * at 2.5s so being offline never holds up a print; the local counter stands.
+   */
+  async function catchUpGuaranteeSeq() {
+    const latest = await Promise.race([
+      fetchLatestGuaranteeSeq(new Date().getFullYear()),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+    ])
+    if (latest != null) raiseGuaranteeSeq(latest)
+  }
+  useEffect(() => { void catchUpGuaranteeSeq() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function mintFreshRef(): MintedRefs {
     const number = nextGuaranteeNumber()
     // A fresh card is a fresh secret. The QR is printed from this, so it has to
     // exist before the card is drawn, not after it is saved.
     const next = { number, id: number, token: mintCardToken() }
     setRef(next)
-    return next
+    // Slot 2 takes the number after slot 1's, with a secret of its own.
+    let second: CardRef | null = null
+    if (secondCardOn) {
+      const number2 = nextGuaranteeNumber(1)
+      second = { number: number2, id: number2, token: mintCardToken() }
+      setRef2(second)
+    }
+    return { ...next, second }
   }
+
+  /** "GC-2026-0012" or "GC-2026-0012 + 0013" for toasts. */
+  const mintedLabel = (m: MintedRefs) =>
+    m.second ? `${m.number} + ${m.second.number.split('-').pop()}` : m.number
 
   // On entry: reopen a saved guarantee (from History) or import a selected bill.
   useEffect(() => {
@@ -231,7 +269,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     if (imported.length) setRows((prev) => [...prev.filter(isRowFilled), ...imported, blankRow()])
   }
 
-  function buildGuaranteeDoc(uuid: { number: string; id: string; token: string } = ref): GuaranteeDocument {
+  function buildGuaranteeDoc(uuid: CardRef = ref): GuaranteeDocument {
     const filled = rows.filter(isRowFilled)
     const primary = filled[0]
     return {
@@ -248,11 +286,11 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     }
   }
 
-  function buildSecondDoc(uuid: { number: string; id: string; token: string } = ref): GuaranteeDocument {
+  function buildSecondDoc(uuid: CardRef = ref2): GuaranteeDocument {
     const filled = rows2.filter(isRowFilled)
     const primary = filled[0]
     return {
-      id: `${uuid.id}-2`,
+      id: uuid.id,
       number: uuid.number,
       token: uuid.token,
       date: new Date().toISOString(),
@@ -268,15 +306,15 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const doc = buildGuaranteeDoc()
   const doc2 = buildSecondDoc()
 
-  // Save (and enqueue for sync) both cards under a freshly minted ref. The QR
-  // points to /guarantee/<number> on the print server, which only resolves once
-  // the card has been stored locally and pushed to the server.
-  function persistCards(minted: { number: string; id: string; token: string }) {
+  // Save (and enqueue for sync) each card under its freshly minted ref. The QR
+  // opens <site>/<number>?k=<token>, which only resolves once the card has
+  // been pushed to Convex.
+  function persistCards(minted: MintedRefs) {
     const freshDoc = buildGuaranteeDoc(minted)
     saveGuarantee(freshDoc)
     enqueueGuaranteeSync(freshDoc)
-    if (secondCardOn) {
-      const freshDoc2 = buildSecondDoc(minted)
+    if (minted.second) {
+      const freshDoc2 = buildSecondDoc(minted.second)
       saveGuarantee(freshDoc2)
       enqueueGuaranteeSync(freshDoc2)
     }
@@ -285,7 +323,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // WhatsApp the customer(s) that their card is being processed. Best-effort:
   // the outcome is shown in the toast and a failure never blocks anything. The
   // per-mobile cooldown on the server means Print-after-Generate won't double-send.
-  async function notifyCustomers(minted: { number: string; id: string }) {
+  async function notifyCustomers(minted: MintedRefs) {
+    const label = mintedLabel(minted)
     const recipients = [
       { mobile: customer.mobile.trim(), name: customer.name.trim() },
       ...(secondCardOn ? [{ mobile: customer2.mobile.trim(), name: customer2.name.trim() }] : []),
@@ -294,12 +333,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     const uniqueRecipients = recipients.filter((r) => (seen.has(r.mobile) ? false : seen.add(r.mobile)))
 
     if (uniqueRecipients.length === 0) {
-      toast(`Saved ${minted.number} · no mobile, WhatsApp skipped`)
+      toast(`Saved ${label} · no mobile, WhatsApp skipped`)
       return
     }
 
     setGenerating(true)
-    toast(`Saved ${minted.number} · sending WhatsApp…`, 'info')
+    toast(`Saved ${label} · sending WhatsApp…`, 'info')
     let sent = 0
     let firstError = ''
     let notConnected = false
@@ -314,30 +353,48 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     }
     setGenerating(false)
     if (notConnected) {
-      toast(`Saved ${minted.number} · WhatsApp needs login`, 'error')
+      toast(`Saved ${label} · WhatsApp needs login`, 'error')
       setShowWhatsAppLogin(true)
     } else if (firstError) {
-      toast(`Saved ${minted.number} · WhatsApp failed: ${firstError}`, 'error')
+      toast(`Saved ${label} · WhatsApp failed: ${firstError}`, 'error')
     } else if (sent > 0) {
-      toast(`Saved ${minted.number} · WhatsApp sent`)
+      toast(`Saved ${label} · WhatsApp sent`)
     } else {
-      toast(`Saved ${minted.number} · customer already notified`)
+      toast(`Saved ${label} · customer already notified`)
     }
   }
 
-  // Print = save the card(s) + print + WhatsApp the customer. Tries the print
-  // server directly (shop network / same PC); if it can't be reached — e.g. the
-  // panel is opened from the public Vercel URL — it queues the job through the
-  // cloud API, which the shop print server polls, prints, AND WhatsApps from.
-  // (WhatsApp is sent server-side in BOTH paths, so no client-side send here.)
+  // Print = save the card(s) + print + WhatsApp the customer.
+  //
+  // Desktop app, PVC card: straight to the Epson on this PC (no print server),
+  // then WhatsApp via the server best-effort — the card still prints if it's
+  // down. Anywhere else: the shop print server, which also sends the WhatsApp.
   async function printCard() {
     if (generating) return
-    const minted = mintFreshRef()
-    persistCards(minted)
     setGenerating(true)
+    await catchUpGuaranteeSeq()
+    const minted = mintFreshRef()
+    const label = mintedLabel(minted)
+    persistCards(minted)
 
     const printDoc = buildGuaranteeDoc(minted)
-    const printDoc2 = secondCardOn ? buildSecondDoc(minted) : null
+    const printDoc2 = minted.second ? buildSecondDoc(minted.second) : null
+
+    const printDirect = layout === 'card' ? window.shivDesktop?.printGuaranteeCardsDirect : undefined
+    if (printDirect) {
+      toast(`Printing ${label}…`, 'info')
+      try {
+        const result = await printDirect({ documents: printDoc2 ? [printDoc, printDoc2] : [printDoc], slot: 1 })
+        toast(`Sent ${label} to ${result.printer}`)
+      } catch (err) {
+        toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
+        setGenerating(false)
+        return
+      }
+      setGenerating(false)
+      await notifyCustomers(minted)
+      return
+    }
     const payload: ServerPrintPayload = layout === 'card'
       ? {
           kind: 'guarantee',
@@ -348,24 +405,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         }
       : { kind: 'guarantee', document: printDoc, layout }
 
-    toast(`Printing ${minted.number}…`, 'info')
+    toast(`Printing ${label}…`, 'info')
     try {
       const result = await printOnServer(payload)
-      toast(`Sent ${minted.number} to ${result.printer}`)
-    } catch (directErr) {
-      // Direct print server unreachable — fall back to the cloud relay.
-      if (!CLOUD_API_URL) {
-        toast(`Print failed: ${directErr instanceof Error ? directErr.message : String(directErr)}`, 'error')
-        setGenerating(false)
-        return
-      }
-      try {
-        await createCloudPrintJob({ kind: 'guarantee', document: printDoc, layout, source: 'web' })
-        if (printDoc2) await createCloudPrintJob({ kind: 'guarantee', document: printDoc2, layout, source: 'web' })
-        toast(`Queued ${minted.number} to the shop printer (via cloud)`)
-      } catch (cloudErr) {
-        toast(`Print failed: ${cloudErr instanceof Error ? cloudErr.message : String(cloudErr)}`, 'error')
-      }
+      toast(`Sent ${label} to ${result.printer}`)
+    } catch (err) {
+      toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
       setGenerating(false)
     }
@@ -374,6 +419,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // Generate = save the card(s) + WhatsApp the customer (no print).
   async function generateCard() {
     if (generating) return
+    setGenerating(true)
+    await catchUpGuaranteeSeq()
+    setGenerating(false)
     const minted = mintFreshRef()
     persistCards(minted)
     await notifyCustomers(minted)
@@ -386,7 +434,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
           </Button>
-          <Button onClick={printCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+          <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
             <Printer size={20} /> Print
           </Button>
           <button
@@ -398,6 +446,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         </div>
         <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">
           Next Ref No: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref.number}</span>
+          {secondCardOn && (
+            <span className="ml-2">Slot 2: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref2.number}</span></span>
+          )}
         </div>
 
         <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">

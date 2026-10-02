@@ -18,6 +18,9 @@
     "release:win": "npm run build && electron-builder --win nsis --x64 --publish always",
     "dist:win:dir": "npm run build && electron-builder --win dir --x64",
     "dist:win:portable": "npm run build && electron-builder --win portable --x64",
+    "quotation:dev": "npm run build && node electron/run-dev.cjs counter",
+    "dist:quotation": "npm run build && electron-builder --config electron-builder.quotation.cjs --win nsis --x64",
+    "dist:quotation:dir": "npm run build && electron-builder --config electron-builder.quotation.cjs --win dir --x64",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "android:add": "cap add android",
@@ -72,12 +75,19 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "print-server/template.mjs",
+      "print-server/tools/print-card-gdi.ps1",
+      "print-server/data/epson-card.devmode"
     ],
     "extraMetadata": {
       "main": "electron/main.cjs"
     },
     "asar": true,
+    "asarUnpack": [
+      "print-server/tools/print-card-gdi.ps1",
+      "print-server/data/epson-card.devmode"
+    ],
     "afterPack": "./electron/after-pack.cjs",
     "publish": [
       {

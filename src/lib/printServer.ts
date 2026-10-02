@@ -429,27 +429,25 @@ export async function pullGuaranteesFromServer(): Promise<GuaranteeDocument[] | 
   }
 }
 
-/** Public URL of a single guarantee card on the print server — encoded into the QR. */
-export function guaranteeOnlineUrl(number: string, token?: string, baseUrl?: string): string {
-  // Prefer the explicitly-configured public viewer (e.g. a Vercel deployment)
-  // over the local print-server URL. The print server is reachable only on
-  // the shop Wi-Fi; a global URL lets the printed card's QR resolve from
-  // any device.
-  const envBase = (import.meta.env.VITE_GUARANTEE_PUBLIC_URL ?? '').trim().replace(/\/+$/, '')
-  const base = (baseUrl ?? (envBase || PRINT_SERVER_URL)).replace(/\/+$/, '')
-  /**
-   * A hash URL, not a clean path.
-   *
-   * The card page is a single-page app on static hosting, so `/g/<number>`
-   * only resolves if the host is configured to rewrite it to index.html —
-   * which silently 404s the moment that config is wrong, and a dead QR is
-   * printed onto a card nobody can reprint. Everything after the `#` is the
-   * page's own business and never reaches the host, so this form works on any
-   * static host with no configuration at all.
-   */
-  const path = `${base}/#/g/${encodeURIComponent(number)}`
-  // Without the secret the page will not open the card, so a QR printed
-  // without one is a dead QR.
+/** The hosted Shiv Hardware site's guarantee page — what every printed QR opens. */
+const GUARANTEE_SITE_URL = 'https://www.shivhardware.store/Gaurantee'
+
+/**
+ * Public URL of a single guarantee card — encoded into the QR.
+ *
+ * Exactly what gets printed: the print server and the desktop app's direct
+ * Epson path both print `GUARANTEE_PUBLIC_URL/<number>?k=<token>`
+ * (print-server/.env), so the on-screen preview builds the same URL and the QR
+ * you see is the QR on the card. VITE_GUARANTEE_PUBLIC_URL overrides the hosted
+ * site, like the server's.
+ *
+ * The token is not optional: Convex's getGuaranteeByNumber opens a card only
+ * when number AND token match (numbers are sequential and the card carries
+ * Aadhaar/mobile), so a QR without it shows "Card not found".
+ */
+export function guaranteeOnlineUrl(number: string, token?: string): string {
+  const base = ((import.meta.env.VITE_GUARANTEE_PUBLIC_URL ?? '').trim() || GUARANTEE_SITE_URL).replace(/\/+$/, '')
+  const path = `${base}/${encodeURIComponent(number)}`
   return token ? `${path}?k=${encodeURIComponent(token)}` : path
 }
 

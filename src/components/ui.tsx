@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
+import { enterFlowAdvance } from '../lib/enterFlow'
 
 /**
  * The body of a page.
@@ -233,6 +234,8 @@ export function DropDown({
         type="button"
         disabled={disabled}
         {...(navigable ? { 'data-bill-nav': '1' } : {})}
+        data-dropdown-trigger=""
+        aria-expanded={open}
         onFocus={() => {
           // Tally opens the list as soon as the field is reached.
           if (!navigable || disabled) return
@@ -253,8 +256,12 @@ export function DropDown({
               const pick = normalised[hl]
               if (pick) onChange(pick.value)
               setOpen(false)
-              // Tally accepts the line and moves on in one keystroke.
-              if (e.key === 'Enter') onCommit?.()
+              // Tally accepts the line and moves on in one keystroke. Without a
+              // page-specific next step, the app's Enter flow (if on) takes it.
+              if (e.key === 'Enter') {
+                if (onCommit) onCommit()
+                else enterFlowAdvance(e.currentTarget)
+              }
               return
             }
             if (e.key === 'Home' || e.key === 'End') {

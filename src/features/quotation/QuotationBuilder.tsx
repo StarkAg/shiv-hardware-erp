@@ -226,12 +226,14 @@ export function QuotationBuilder() {
   const focusNextSizeEntry = (e: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
     if (e.key !== 'Enter') return
 
-    e.preventDefault()
     const entries = Array.from(
       sizeCardRef.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-size-entry]') ?? [],
     )
     const next = entries[entries.indexOf(e.currentTarget) + 1]
-    next?.focus()
+    // Last size box: leave Enter to the app's flow (on to the next box / Print).
+    if (!next) return
+    e.preventDefault()
+    next.focus()
     if (next instanceof HTMLInputElement) next.select()
   }
 
@@ -254,7 +256,7 @@ export function QuotationBuilder() {
             >
               <Share2 size={16} /> {sharing ? 'Sharing' : 'WhatsApp'}
             </Button>
-            <Button onClick={handleDirectPrint} disabled={(!hasSize && !fixed) || printState === 'printing'} className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
+            <Button onClick={handleDirectPrint} disabled={(!hasSize && !fixed) || printState === 'printing'} data-enter-submit className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
               {printState === 'printing' ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
               {printState === 'printing' ? 'Printing…' : 'Print'}
             </Button>
