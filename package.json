@@ -27,10 +27,9 @@
     "android:sync": "npm run build && cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "test": "vitest run",
-    "sync": "node scripts/sync.mjs start",
-    "save": "node scripts/sync.mjs save",
-    "deploy:convex": "node scripts/sync.mjs check && npx convex deploy --yes --typecheck enable",
-    "autosave:install": "node scripts/sync.mjs install",
+    "sync": "node scripts/autosave.mjs start",
+    "save": "node scripts/autosave.mjs save",
+    "deploy:convex": "node scripts/autosave.mjs check && npx convex deploy --yes --typecheck enable",
     "deploy:counter": "bash scripts/deploy-counter.sh"
   },
   "dependencies": {

@@ -92,8 +92,10 @@ npm run deploy:convex          # push to production (refuses if either computer 
 
 ```bash
 npm run sync                   # start of work: pull main, list the other computer's uncommitted files
-npm run autosave:install       # once per computer: copy uncommitted work to wip/<computer> every 15 min
 ```
+
+Each computer runs StarkAg/wip-backups (set up once per computer, see its README), which
+copies every repo's uncommitted work to that private repo every 5 minutes.
 
 > `npx convex dev` rewrites `VITE_CONVEX_URL` in `.env.local` to the dev deployment.
 > Put it back before building, or the build ships an app that writes to the wrong
