@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation, query, type QueryCtx } from './_generated/server'
+import { internalMutation, mutation, query, type QueryCtx } from './_generated/server'
 import { requirePin } from './lib/pin'
 
 export const recentQuotations = query({
@@ -245,6 +245,34 @@ export function mintToken(): string {
  * carry no token and the file was public until now. Cards already in a
  * customer's hand need reprinting to scan again.
  */
+/**
+ * Move one saved card to a new number and secret, in place (admin only —
+ * `npx convex run --prod documents:renumberGuarantee`). For the slot-2 cards
+ * printed before 2026-10-02, which shared slot 1's number and QR: each gets a
+ * number of its own and is reprinted. saveGuarantee deliberately never
+ * re-issues a token, so this is the one place that does.
+ */
+export const renumberGuarantee = internalMutation({
+  args: { localId: v.string(), number: v.string(), token: v.string() },
+  handler: async (ctx, { localId, number, token }) => {
+    const row = await ctx.db
+      .query('guaranteeDocuments')
+      .withIndex('by_local_id', q => q.eq('localId', localId))
+      .unique()
+    if (!row) throw new Error(`No guarantee card with localId ${localId}`)
+    const taken = await ctx.db
+      .query('guaranteeDocuments')
+      .withIndex('by_number', q => q.eq('number', number))
+      .first()
+    if (taken) throw new Error(`${number} is already used`)
+    const document = row.document && typeof row.document === 'object'
+      ? { ...(row.document as object), id: number, number, token }
+      : row.document
+    await ctx.db.patch(row._id, { localId: number, number, token, document, updatedAt: Date.now() })
+    return { from: row.number, to: number }
+  },
+})
+
 export const backfillGuaranteeTokens = mutation({
   args: { dryRun: v.optional(v.boolean()) },
   handler: async (ctx, { dryRun }) => {
