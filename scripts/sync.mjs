@@ -10,7 +10,7 @@
 // `save` never touches the working tree, the real index or the current branch: it
 // builds the snapshot in a throwaway index, so it is safe while other sessions edit.
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, hostname, platform } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,7 +35,7 @@ const OWN = `wip/${computer}`
 /** The whole working tree as a tree object, built in a throwaway index. */
 function snapshotTree() {
   const gitDir = git(['rev-parse', '--absolute-git-dir'])
-  const index = join(gitDir, 'sync-index')
+  const index = join(gitDir, `sync-index-${process.pid}`)
   if (existsSync(join(gitDir, 'index'))) copyFileSync(join(gitDir, 'index'), index)
   const env = { ...process.env, GIT_INDEX_FILE: index }
   try {
@@ -51,7 +51,26 @@ function snapshotTree() {
   }
 }
 
+/** One save at a time: the 15-minute job and `npm run sync` can fire together. */
 function save() {
+  const lock = join(git(['rev-parse', '--absolute-git-dir']), 'sync.lock')
+  try {
+    closeSync(openSync(lock, 'wx'))
+  } catch {
+    if (Date.now() - statSync(lock).mtimeMs < 5 * 60 * 1000) {
+      console.log(`${stamp()}  ${computer}: another save is running`)
+      return
+    }
+    writeFileSync(lock, '') // left behind by a crashed run
+  }
+  try {
+    saveLocked()
+  } finally {
+    rmSync(lock, { force: true })
+  }
+}
+
+function saveLocked() {
   const head = git(['rev-parse', 'HEAD'])
   const { tree, big } = snapshotTree()
   const remote = lines(git(['ls-remote', '--heads', 'origin', OWN]))[0]?.split(/\s+/)[0] ?? ''
@@ -178,8 +197,9 @@ function install() {
 `)
     const uid = String(process.getuid())
     try { execFileSync('launchctl', ['bootout', `gui/${uid}`, plist], { stdio: 'ignore' }) } catch {}
-    execFileSync('launchctl', ['bootstrap', `gui/${uid}`, plist])
+    execFileSync('launchctl', ['bootstrap', `gui/${uid}`, plist]) // RunAtLoad saves once now
     console.log(`every 15 minutes this Mac copies uncommitted work to ${OWN}\nlog: ${log}`)
+    return
   } else if (platform() === 'win32') {
     // Through wscript so no console window flashes up every 15 minutes.
     const vbs = join(git(['rev-parse', '--absolute-git-dir']), 'sync-autosave.vbs')
