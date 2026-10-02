@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Check, Copy, FileText, Printer, Send, Trash2, X } from 'lucide-react'
+import { Check, Copy, FileText, Plus, Printer, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
@@ -157,6 +157,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // Slot 2: an independent second card printed in the same tray pass.
   // Ticking it on reveals its own small set of fields plus its own table.
   const [secondCardOn, setSecondCardOn] = useState(false)
+  // Which card the form is showing (card layout): one form, two tabs.
+  const [tab, setTab] = useState<1 | 2>(1)
+  const onCard2 = layout === 'card' && secondCardOn && tab === 2
   const [customer2, setCustomer2] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows2, setRows2] = useState<SizeRow[]>(() => [blankRow()])
 
@@ -443,161 +446,223 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
   return (
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:p-4">
-        <div className="no-print flex flex-wrap items-center justify-center gap-3">
-          <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
-            <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
-          </Button>
-          <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
-            <Printer size={20} /> Print
-          </Button>
-          <button
-            onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: `/guarantee/${layout}` } })}
-            className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
-          >
-            <FileText size={20} /> Select Bill
-          </button>
-        </div>
-        <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">
-          Next Ref No: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref.number}</span>
-          {secondCardOn && (
-            <span className="ml-2">Slot 2: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref2.number}</span></span>
-          )}
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4">
+        {/* Card layout from 1024px: the form scrolls on the left, the print preview
+            (slot 1 above slot 2) stays put on the right. Narrower, it sits below. */}
+        <div className={layout === 'card' ? 'flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-4' : 'flex flex-col gap-3'}>
+          <div className="flex min-w-0 flex-col gap-3">
+            <div className="no-print flex flex-wrap items-center justify-center gap-3">
+              <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
+              </Button>
+              <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                <Printer size={20} /> Print
+              </Button>
+              <button
+                onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: `/guarantee/${layout}` } })}
+                className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
+              >
+                <FileText size={20} /> Select Bill
+              </button>
+            </div>
+            <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">
+              Next Ref No: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref.number}</span>
+              {secondCardOn && (
+                <span className="ml-2">Slot 2: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref2.number}</span></span>
+              )}
+            </div>
 
-        <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Customer</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Input label="M/s (Name)" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>
-              <input
-                type="tel"
-                inputMode="numeric"
-                maxLength={10}
-                value={customer.mobile}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '').slice(0, 10)
-                  setCustomer({ ...customer, mobile: value })
-                }}
-                className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 transition ${
-                  customer.mobile.length === 10
-                    ? 'border-green-500 bg-green-50 focus:border-green-600 focus:ring-green-600/20 dark:border-green-600 dark:bg-green-950/30'
-                    : 'border-stone-300 bg-stone-50 focus:border-shiv-green focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950'
-                } dark:text-stone-100`}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-muted">UID</span>
-              <input
-                type="text"
-                inputMode="text"
-                maxLength={12}
-                value={customer.uid}
-                onChange={(e) => {
-                  const value = e.target.value.toUpperCase().slice(0, 12)
-                  setCustomer({ ...customer, uid: value })
-                }}
-                className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 transition ${
-                  customer.uid.length === 12
-                    ? 'border-green-500 bg-green-50 focus:border-green-600 focus:ring-green-600/20 dark:border-green-600 dark:bg-green-950/30'
-                    : 'border-stone-300 bg-stone-50 focus:border-shiv-green focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950'
-                } dark:text-stone-100`}
-              />
-            </label>
-          </div>
-        </Card>
-
-        <Card className="min-h-0 shrink-0 overflow-hidden text-stone-800 dark:text-stone-100">
-          <div className="border-b border-stone-100 px-4 py-2 text-sm font-bold uppercase tracking-wide text-muted dark:border-white/10">
-            Items
-          </div>
-          <SizeTable rows={rows} setRows={setRows} brandOptions={brandOptions} datalistId="type-options-1" />
-        </Card>
-
-        {layout === 'card' && (
-          <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Print Preview</h2>
-            <div className="flex flex-wrap items-start justify-center gap-6">
-              <div className="flex flex-col items-center gap-2">
-                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted dark:bg-white/10 dark:text-stone-300">
-                  Slot 1
-                </span>
-                <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-md border border-stone-300 bg-white shadow-sm dark:border-white/20">
-                  <GuaranteeCardFace document={doc} />
-                </div>
-              </div>
-
-              <div className="flex flex-col items-center gap-2">
-                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted dark:bg-white/10 dark:text-stone-300">
-                  Slot 2
-                </span>
+            {layout === 'card' && (
+              <div className="no-print flex flex-wrap items-center gap-2" role="tablist" aria-label="Cards in this tray pass">
+                <CardTab title="Card 1" name={customer.name} active={!onCard2} onSelect={() => setTab(1)} />
                 {secondCardOn ? (
-                  <div className="relative">
-                    <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-md border border-stone-300 bg-white shadow-sm dark:border-white/20">
-                      <GuaranteeCardFace document={doc2} />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSecondCardOn(false)}
-                      aria-label="Remove slot 2 card"
-                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-stone-300 bg-white text-muted shadow-sm transition hover:border-red-400 hover:text-danger dark:border-white/20 dark:bg-stone-800 dark:text-stone-300"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
+                  <CardTab
+                    title="Card 2"
+                    name={customer2.name}
+                    active={onCard2}
+                    onSelect={() => setTab(2)}
+                    onRemove={() => { setSecondCardOn(false); setTab(1) }}
+                  />
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setSecondCardOn(true)}
-                    className="flex h-[86mm] w-[54mm] flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 bg-stone-50 text-muted transition hover:border-shiv-green hover:text-shiv-green dark:border-white/15 dark:bg-white/5"
+                    onClick={() => { setSecondCardOn(true); setTab(2) }}
+                    className="flex items-center gap-1.5 rounded-xl border-2 border-dashed border-stone-300 px-4 py-2 text-sm font-semibold text-muted transition hover:border-shiv-green hover:text-shiv-green dark:border-white/15"
                   >
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-current">
-                      <Check size={16} />
-                    </span>
-                    <span className="text-xs font-semibold">Add 2nd card</span>
+                    <Plus size={15} /> Card 2
                   </button>
                 )}
               </div>
-            </div>
-
-            {secondCardOn && (
-              <div className="mt-4 border-t border-stone-100 pt-4 dark:border-white/10">
-                <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Slot 2 Details</h3>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <Input label="M/s (Name)" value={customer2.name} onChange={(e) => setCustomer2({ ...customer2, name: e.target.value })} />
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      maxLength={10}
-                      value={customer2.mobile}
-                      onChange={(e) => setCustomer2({ ...customer2, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                      className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-muted">UID</span>
-                    <input
-                      type="text"
-                      maxLength={12}
-                      value={customer2.uid}
-                      onChange={(e) => setCustomer2({ ...customer2, uid: e.target.value.toUpperCase().slice(0, 12) })}
-                      className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-                    />
-                  </label>
-                </div>
-                <div className="mt-3">
-                  <SizeTable rows={rows2} setRows={setRows2} brandOptions={brandOptions} datalistId="type-options-2" />
-                </div>
-              </div>
             )}
-          </Card>
-        )}
+
+            <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
+              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Customer</h2>
+              {onCard2
+                ? <CustomerFields key="c2" value={customer2} onChange={setCustomer2} />
+                : <CustomerFields key="c1" value={customer} onChange={setCustomer} />}
+            </Card>
+
+            <Card className="min-h-0 shrink-0 overflow-hidden text-stone-800 dark:text-stone-100">
+              <div className="border-b border-stone-100 px-4 py-2 text-sm font-bold uppercase tracking-wide text-muted dark:border-white/10">
+                Items
+              </div>
+              {onCard2
+                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brandOptions={brandOptions} datalistId="type-options-2" />
+                : <SizeTable key="t1" rows={rows} setRows={setRows} brandOptions={brandOptions} datalistId="type-options-1" />}
+            </Card>
+          </div>
+
+          {layout === 'card' && (
+            <aside className="lg:sticky lg:top-0 lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto">
+                <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
+                  {/* Slot 1 above slot 2. Stacked, the two 86 mm cards can be taller than
+                      the window, so the panel (the <aside>) scrolls on its own rather
+                      than cutting slot 2 off. */}
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted dark:bg-white/10 dark:text-stone-300">
+                        Slot 1
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setTab(1)}
+                        aria-label="Edit card 1"
+                        className={`relative h-[86mm] w-[54mm] overflow-hidden rounded-md border bg-white text-left shadow-sm transition ${
+                          !onCard2 ? 'border-shiv-green ring-2 ring-shiv-green/40' : 'border-stone-300 dark:border-white/20'
+                        }`}
+                      >
+                        <GuaranteeCardFace document={doc} />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted dark:bg-white/10 dark:text-stone-300">
+                        Slot 2
+                      </span>
+                      {secondCardOn ? (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setTab(2)}
+                            aria-label="Edit card 2"
+                            className={`relative h-[86mm] w-[54mm] overflow-hidden rounded-md border bg-white text-left shadow-sm transition ${
+                              onCard2 ? 'border-shiv-green ring-2 ring-shiv-green/40' : 'border-stone-300 dark:border-white/20'
+                            }`}
+                          >
+                            <GuaranteeCardFace document={doc2} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setSecondCardOn(false); setTab(1) }}
+                            aria-label="Remove slot 2 card"
+                            className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-stone-300 bg-white text-muted shadow-sm transition hover:border-red-400 hover:text-danger dark:border-white/20 dark:bg-stone-800 dark:text-stone-300"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setSecondCardOn(true); setTab(2) }}
+                          className="flex h-[86mm] w-[54mm] flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 bg-stone-50 text-muted transition hover:border-shiv-green hover:text-shiv-green dark:border-white/15 dark:bg-white/5"
+                        >
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-current">
+                            <Check size={16} />
+                          </span>
+                          <span className="text-xs font-semibold">Add 2nd card</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                </Card>
+            </aside>
+          )}
+        </div>
       </div>
 
       <WhatsAppLoginModal open={showWhatsAppLogin} onClose={() => setShowWhatsAppLogin(false)} />
+    </div>
+  )
+}
+
+type CustomerInfo = { id: string; name: string; mobile: string; uid: string; address: string }
+
+/** Name, mobile and UID for one card; the same fields for card 1 and card 2. */
+function CustomerFields({ value, onChange }: { value: CustomerInfo; onChange: (next: CustomerInfo) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <Input label="M/s (Name)" value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>
+        <input
+          type="tel"
+          inputMode="numeric"
+          maxLength={10}
+          value={value.mobile}
+          onChange={(e) => {
+            const typed = e.target.value.replace(/\D/g, '').slice(0, 10)
+            onChange({ ...value, mobile: typed })
+          }}
+          className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 transition ${
+            value.mobile.length === 10
+              ? 'border-green-500 bg-green-50 focus:border-green-600 focus:ring-green-600/20 dark:border-green-600 dark:bg-green-950/30'
+              : 'border-stone-300 bg-stone-50 focus:border-shiv-green focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950'
+          } dark:text-stone-100`}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold text-muted">UID</span>
+        <input
+          type="text"
+          inputMode="text"
+          maxLength={12}
+          value={value.uid}
+          onChange={(e) => {
+            const typed = e.target.value.toUpperCase().slice(0, 12)
+            onChange({ ...value, uid: typed })
+          }}
+          className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 transition ${
+            value.uid.length === 12
+              ? 'border-green-500 bg-green-50 focus:border-green-600 focus:ring-green-600/20 dark:border-green-600 dark:bg-green-950/30'
+              : 'border-stone-300 bg-stone-50 focus:border-shiv-green focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950'
+          } dark:text-stone-100`}
+        />
+      </label>
+    </div>
+  )
+}
+
+/** One tab of the Card 1 / Card 2 switch, labelled with its customer once typed. */
+function CardTab({ title, name, active, onSelect, onRemove }: {
+  title: string
+  name: string
+  active: boolean
+  onSelect: () => void
+  onRemove?: () => void
+}) {
+  return (
+    <div
+      className={`flex items-center rounded-xl border transition ${
+        active
+          ? 'border-shiv-green bg-white shadow-sm dark:bg-stone-900'
+          : 'border-stone-300 bg-stone-50 dark:border-white/15 dark:bg-white/5'
+      }`}
+    >
+      <button type="button" role="tab" aria-selected={active} onClick={onSelect} className="flex items-baseline gap-2 py-2 pl-4 pr-3 text-left">
+        <span className={`text-sm font-bold ${active ? 'text-stone-900 dark:text-stone-50' : 'text-muted'}`}>{title}</span>
+        <span className="max-w-40 truncate text-xs text-muted">{name.trim() || '—'}</span>
+      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${title}`}
+          className="mr-1.5 flex h-6 w-6 items-center justify-center rounded-full text-muted transition hover:bg-red-50 hover:text-danger dark:hover:bg-red-950/30"
+        >
+          <X size={13} />
+        </button>
+      )}
     </div>
   )
 }
@@ -640,9 +705,9 @@ function SizeTable({
   datalistId: string
 }) {
   const cellClass =
-    'w-full rounded border border-transparent bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white dark:text-stone-100 dark:focus:bg-stone-950'
+    'w-full min-w-0 rounded border border-stone-200 bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:text-stone-100 dark:focus:bg-stone-950 md:dark:border-transparent'
   const sootClass =
-    'w-10 shrink-0 rounded border border-transparent bg-transparent px-1 py-1.5 text-sm text-muted outline-none transition focus:border-shiv-green focus:bg-white  dark:focus:bg-stone-950'
+    'w-9 shrink-0 rounded border border-stone-200 bg-transparent px-1 py-1.5 text-sm text-muted outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:focus:bg-stone-950 md:dark:border-transparent'
 
   // Copy the last filled row into a new row (same size/brand for the next door),
   // keeping a trailing blank so the table still grows as you type. When nothing
@@ -659,141 +724,160 @@ function SizeTable({
   const rowActionClass =
     'mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-stone-300 bg-stone-50/60 px-3 py-2 text-xs font-semibold text-stone-600 transition hover:border-shiv-green hover:bg-stone-100 hover:text-stone-800 dark:border-white/15 dark:bg-white/5 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-stone-100'
 
+  // A grid rather than a table so nothing forces a minimum width: on a wide screen
+  // it lines up as columns under one header; on a phone each row stacks into a
+  // small labelled block instead of scrolling sideways.
+  const gridCols =
+    'md:grid-cols-[3.75rem_minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.25fr)_3.25rem_minmax(0,0.9fr)_minmax(0,1fr)_2rem]'
+  const labelClass = 'mb-0.5 block px-0.5 text-[10px] font-bold uppercase tracking-wide text-muted md:hidden'
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[820px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-stone-200 bg-stone-100 text-xs font-bold uppercase tracking-wide text-muted dark:border-white/10 dark:bg-white/5">
-            <th className="px-2 py-2 text-left">Thickness</th>
-            <th className="px-2 py-2 text-left">Type</th>
-            <th className="px-2 py-2 text-right">Length</th>
-            <th className="px-2 py-2 text-right">Height</th>
-            <th className="px-2 py-2 text-right">Pcs</th>
-            <th className="px-2 py-2 text-right">Rate</th>
-            <th className="px-2 py-2 text-left">Guarantee</th>
-            <th className="w-9 px-1 py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} className="border-b border-stone-100 last:border-b-0 dark:border-white/5">
-              <td className="p-0.5">
-                <input
-                  value={row.thickness}
-                  placeholder="—"
-                  onChange={(e) => updateSizeRow(setRows, row.id, { thickness: e.target.value })}
-                  className={cellClass}
-                />
-              </td>
-              <td className="p-0.5">
-                <input
-                  list={datalistId}
-                  value={row.type}
-                  placeholder="Brand"
-                  onChange={(e) => updateSizeRow(setRows, row.id, { type: e.target.value })}
-                  className={cellClass}
-                />
-              </td>
-              <td className="p-0.5">
-                <div className="flex items-center gap-0.5">
-                  <input
-                    type="number"
-                    value={row.length}
-                    placeholder="0"
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => updateSizeRow(setRows, row.id, { length: e.target.value === '' ? '' : Number(e.target.value) })}
-                    className={`${cellClass} text-right`}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    max={7}
-                    value={row.lengthSoot}
-                    placeholder="0"
-                    title="Soot (1/8 inch)"
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) =>
-                      updateSizeRow(setRows, row.id, {
-                        lengthSoot: e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))),
-                      })
-                    }
-                    className={`${sootClass} text-right`}
-                  />
-                  <span className="shrink-0 text-xs text-muted">/8</span>
-                </div>
-              </td>
-              <td className="p-0.5">
-                <div className="flex items-center gap-0.5">
-                  <input
-                    type="number"
-                    value={row.height}
-                    placeholder="0"
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => updateSizeRow(setRows, row.id, { height: e.target.value === '' ? '' : Number(e.target.value) })}
-                    className={`${cellClass} text-right`}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    max={7}
-                    value={row.heightSoot}
-                    placeholder="0"
-                    title="Soot (1/8 inch)"
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) =>
-                      updateSizeRow(setRows, row.id, {
-                        heightSoot: e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))),
-                      })
-                    }
-                    className={`${sootClass} text-right`}
-                  />
-                  <span className="shrink-0 text-xs text-muted">/8</span>
-                </div>
-              </td>
-              <td className="p-0.5">
+    <div>
+      <div
+        className={`hidden gap-1 border-b border-stone-200 bg-stone-100 px-1 py-2 text-xs font-bold uppercase tracking-wide text-muted md:grid dark:border-white/10 dark:bg-white/5 ${gridCols}`}
+      >
+        <span className="px-2">Thickness</span>
+        <span className="px-2">Type</span>
+        <span className="px-2 text-right">Length</span>
+        <span className="px-2 text-right">Height</span>
+        <span className="px-2 text-right">Pcs</span>
+        <span className="px-2 text-right">Rate</span>
+        <span className="px-2">Guarantee</span>
+        <span />
+      </div>
+      <div className="flex flex-col gap-2 md:gap-0">
+        {rows.map((row) => (
+          <div
+            key={row.id}
+            className={`relative grid grid-cols-6 gap-x-2 gap-y-1.5 rounded-lg border border-stone-200 p-2 pr-9 md:items-center md:gap-1 md:rounded-none md:border-0 md:border-b md:border-stone-100 md:p-0.5 md:pr-0.5 md:last:border-b-0 dark:border-white/10 md:dark:border-white/5 ${gridCols}`}
+          >
+            <label className="col-span-2 min-w-0 md:col-span-1">
+              <span className={labelClass}>Thickness</span>
+              <input
+                value={row.thickness}
+                placeholder="—"
+                onChange={(e) => updateSizeRow(setRows, row.id, { thickness: e.target.value })}
+                className={cellClass}
+              />
+            </label>
+            <label className="col-span-4 min-w-0 md:col-span-1">
+              <span className={labelClass}>Type</span>
+              <input
+                list={datalistId}
+                value={row.type}
+                placeholder="Brand"
+                onChange={(e) => updateSizeRow(setRows, row.id, { type: e.target.value })}
+                className={cellClass}
+              />
+            </label>
+            <div className="col-span-3 min-w-0 md:col-span-1">
+              <span className={labelClass}>Length</span>
+              <div className="flex items-center gap-0.5">
                 <input
                   type="number"
-                  min={1}
-                  value={row.qty}
-                  placeholder="1"
-                  onFocus={(e) => e.currentTarget.select()}
-                  onChange={(e) => updateSizeRow(setRows, row.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
-                  className={`${cellClass} text-right`}
-                />
-              </td>
-              <td className="p-0.5">
-                <input
-                  type="number"
-                  value={row.rate}
+                  value={row.length}
                   placeholder="0"
+                  aria-label="Length"
                   onFocus={(e) => e.currentTarget.select()}
-                  onChange={(e) => updateSizeRow(setRows, row.id, { rate: e.target.value === '' ? '' : Number(e.target.value) })}
+                  onChange={(e) => updateSizeRow(setRows, row.id, { length: e.target.value === '' ? '' : Number(e.target.value) })}
                   className={`${cellClass} text-right`}
                 />
-              </td>
-              <td className="p-0.5">
-                <GuaranteeSelect
-                  value={rowYears(row, brandOptions, DEFAULT_YEARS)}
-                  onChange={(years) => updateSizeRow(setRows, row.id, { years })}
-                  className={cellClass}
+                <input
+                  type="number"
+                  min={0}
+                  max={7}
+                  value={row.lengthSoot}
+                  placeholder="0"
+                  title="Soot (1/8 inch)"
+                  aria-label="Length soot"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) =>
+                    updateSizeRow(setRows, row.id, {
+                      lengthSoot: e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))),
+                    })
+                  }
+                  className={`${sootClass} text-right`}
                 />
-              </td>
-              <td className="p-0.5 text-center">
-                {rows.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeSizeRow(setRows, row.id)}
-                    aria-label="Remove row"
-                    className="rounded p-1 text-muted transition hover:bg-red-50 hover:text-danger dark:hover:bg-red-950/30"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                <span className="shrink-0 text-xs text-muted">/8</span>
+              </div>
+            </div>
+            <div className="col-span-3 min-w-0 md:col-span-1">
+              <span className={labelClass}>Height</span>
+              <div className="flex items-center gap-0.5">
+                <input
+                  type="number"
+                  value={row.height}
+                  placeholder="0"
+                  aria-label="Height"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => updateSizeRow(setRows, row.id, { height: e.target.value === '' ? '' : Number(e.target.value) })}
+                  className={`${cellClass} text-right`}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={7}
+                  value={row.heightSoot}
+                  placeholder="0"
+                  title="Soot (1/8 inch)"
+                  aria-label="Height soot"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) =>
+                    updateSizeRow(setRows, row.id, {
+                      heightSoot: e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))),
+                    })
+                  }
+                  className={`${sootClass} text-right`}
+                />
+                <span className="shrink-0 text-xs text-muted">/8</span>
+              </div>
+            </div>
+            <label className="col-span-2 min-w-0 md:col-span-1">
+              <span className={labelClass}>Pcs</span>
+              <input
+                type="number"
+                min={1}
+                value={row.qty}
+                placeholder="1"
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => updateSizeRow(setRows, row.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
+                className={`${cellClass} text-right`}
+              />
+            </label>
+            <label className="col-span-2 min-w-0 md:col-span-1">
+              <span className={labelClass}>Rate</span>
+              <input
+                type="number"
+                value={row.rate}
+                placeholder="0"
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => updateSizeRow(setRows, row.id, { rate: e.target.value === '' ? '' : Number(e.target.value) })}
+                className={`${cellClass} text-right`}
+              />
+            </label>
+            <div className="col-span-2 min-w-0 md:col-span-1">
+              <span className={labelClass}>Guarantee</span>
+              <GuaranteeSelect
+                value={rowYears(row, brandOptions, DEFAULT_YEARS)}
+                onChange={(years) => updateSizeRow(setRows, row.id, { years })}
+                className={cellClass}
+              />
+            </div>
+            <div className="absolute right-1 top-1 md:static md:text-center">
+              {rows.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeSizeRow(setRows, row.id)}
+                  aria-label="Remove row"
+                  className="rounded p-1.5 text-muted transition hover:bg-red-50 hover:text-danger md:p-1 dark:hover:bg-red-950/30"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
       <datalist id={datalistId}>
         {brandOptions.map((b) => (
           <option key={b.id} value={b.name} />
