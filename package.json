@@ -20,6 +20,7 @@
     "dist:win:portable": "npm run build && electron-builder --win portable --x64",
     "quotation:dev": "npm run build && node electron/run-dev.cjs counter",
     "dist:quotation": "npm run build && electron-builder --config electron-builder.quotation.cjs --win nsis --x64",
+    "card": "node scripts/card-job.mjs",
     "dist:quotation:dir": "npm run build && electron-builder --config electron-builder.quotation.cjs --win dir --x64",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
