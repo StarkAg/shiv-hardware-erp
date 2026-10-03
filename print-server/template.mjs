@@ -378,7 +378,9 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
     // falls back to the document-level values when a row omits them.
     const itemRows = rows.map((item, i) => {
       const rowThickness = item.thickness || docThickness
-      const rowSize = (item.height || item.width) ? cardSize(item.height, item.width) : docSizeStr
+      // The size as the bill wrote it (e.g. "7 X 4" feet) wins over inches.
+      const rowSize = String(item.sizeLabel ?? '').trim()
+        || ((item.height || item.width) ? cardSize(item.height, item.width) : docSizeStr)
       const rowQty = item.qty ?? document.qty
       return `
         <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;top:${(20.5 + i * 3.2).toFixed(1)}mm;display:grid;grid-template-columns:5.5mm 1fr 11mm 5mm 4.5mm;column-gap:1.3mm;align-items:baseline;font-size:4pt;line-height:1">

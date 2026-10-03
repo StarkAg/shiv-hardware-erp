@@ -74,7 +74,7 @@ function ShowGuaranteeModal({ doc, onClose }: { doc: GuaranteeDocument; onClose:
                       {it.brandName || '—'}
                       {it.thickness ? <div className="text-xs text-muted">{it.thickness}</div> : null}
                     </td>
-                    <td className="py-1.5 pr-2">{formatSize(it.height ?? doc.height, it.width ?? doc.width) || it.sizeLabel || '—'}</td>
+                    <td className="py-1.5 pr-2">{it.sizeLabel?.trim() || formatSize(it.height ?? doc.height, it.width ?? doc.width) || '—'}</td>
                     <td className="py-1.5 text-right">{it.qty ?? doc.qty ?? ''}</td>
                     <td className="py-1.5 text-right">{it.guaranteeYears ? `${it.guaranteeYears} yr` : '—'}</td>
                     <td className="py-1.5 text-right">{Number(it.amount) ? `₹${Math.round(Number(it.amount))}` : ''}</td>

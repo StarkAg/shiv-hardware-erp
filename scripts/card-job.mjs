@@ -18,7 +18,10 @@
 //     { "years": 5,                              // one guarantee period per card (its seal is pre-printed);
 //                                                // omitted → the first item's brand years from Rates
 //       "items": [ { "thickness": "19MM", "brand": "Milton Super Solid",
-//                    "length": "84", "height": "48 4/8", "qty": 25, "amount": 68600 } ] }
+//                    "size": "7 X 4", "qty": 25, "amount": 68600 } ] }
+//
+// Size: write it the way the bill does. Feet on the bill ("7x4") → "size": "7 X 4",
+// printed as-is. Inches on the bill → "length": "82 4/8", "height": "35 4/8".
 //   ]
 // }
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
@@ -111,12 +114,15 @@ const cards = job.cards.map((card, i) => {
     if (!it.brand) fail(`card ${i + 1}: every item needs a brand`)
     const own = brandYears.get(String(it.brand).trim().toLowerCase())
     if (card.years == null && own && own !== years) fail(`card ${i + 1} mixes ${years} and ${own} years — one period per card (its seal is pre-printed)`)
+    const sizeLabel = it.size ? String(it.size).trim().replace(/\s*[xX×]\s*/g, ' X ') : null
     return {
       brandName: String(it.brand).trim(),
       guaranteeYears: years,
       thickness: it.thickness ? String(it.thickness).trim() : null,
-      height: dim(it.length),
-      width: dim(it.height),
+      // As the bill wrote it (feet stay feet); inches only when given as length/height.
+      sizeLabel,
+      height: sizeLabel ? null : dim(it.length),
+      width: sizeLabel ? null : dim(it.height),
       qty: it.qty != null && it.qty !== '' ? Number(it.qty) : null,
       amount: it.amount != null && it.amount !== '' ? Number(it.amount) : null,
     }

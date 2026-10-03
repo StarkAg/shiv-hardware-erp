@@ -186,9 +186,12 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
 
       {rows.map((item, i) => {
         const rowThickness = item.thickness || docThickness
-        const rowSizeStr = (item.height || item.width)
-          ? [cardDimension(item.height), cardDimension(item.width)].filter(Boolean).join(' X ')
-          : docSizeStr
+        // The size as the bill wrote it (e.g. "7 X 4" feet) wins over inches.
+        const rowSizeStr = item.sizeLabel?.trim()
+          ? item.sizeLabel.trim()
+          : (item.height || item.width)
+            ? [cardDimension(item.height), cardDimension(item.width)].filter(Boolean).join(' X ')
+            : docSizeStr
         const rowQty = item.qty ?? document.qty
         return (
         <div
