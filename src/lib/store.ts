@@ -119,8 +119,10 @@ interface AppState {
   syncGuaranteesFromRemote: (guarantees: GuaranteeDocument[], remoteSeq: number) => void
   /**
    * Add the cards the cloud has that this device doesn't (made at another
-   * counter, or before a reinstall). Never drops or overwrites a local card,
-   * and skips cards deleted here. Saves locally only, no push back.
+   * counter, or before a reinstall), and take the cloud's copy of a card when
+   * it is newer (edited elsewhere). Never drops a local card, never reverts a
+   * newer local edit, and skips cards deleted here. Saves locally only, no
+   * push back. Returns cards added + updated.
    */
   mergeGuaranteesFromCloud: (cloud: GuaranteeDocument[]) => number
 
@@ -500,6 +502,7 @@ export const useStore = create<AppState>((set, get) => ({
     const byId = new Map(local.map((g) => [g.id, g]))
     const merged = [...local]
     let added = 0
+    let updated = 0
     let changed = false
     let seq = get().guaranteeSeq
 
@@ -512,6 +515,14 @@ export const useStore = create<AppState>((set, get) => ({
         ? byToken.get(remote.token) ?? (sameId && !sameId.token ? sameId : undefined)
         : sameId
       if (mine) {
+        // Edited elsewhere (another counter, or here and since uploaded): take
+        // the newer copy, under this device's id. A local edit still waiting
+        // to upload is newer than the cloud's copy, so it is never reverted.
+        if ((remote.updatedAt ?? 0) > (mine.updatedAt ?? 0)) {
+          merged[merged.indexOf(mine)] = { ...remote, id: mine.id, token: remote.token ?? mine.token }
+          updated += 1
+          continue
+        }
         // The cloud mints a card's QR secret when the device sent none.
         if (!mine.token && remote.token) {
           merged[merged.indexOf(mine)] = { ...mine, token: remote.token }
@@ -526,11 +537,11 @@ export const useStore = create<AppState>((set, get) => ({
       if (match) seq = Math.max(seq, Number(match[1]))
     }
 
-    if (!added && !changed) return 0
+    if (!added && !updated && !changed) return 0
     merged.sort((a, b) => b.number.localeCompare(a.number) || String(b.date).localeCompare(String(a.date)))
     set({ guarantees: merged, guaranteeSeq: seq })
     persist(get)
-    return added
+    return added + updated
   },
 
   syncGuaranteesFromRemote: (remoteGuarantees, remoteSeq) => {

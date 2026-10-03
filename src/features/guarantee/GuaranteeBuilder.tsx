@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Check, Copy, FileText, Plus, Printer, Send, Trash2, X } from 'lucide-react'
+import { Check, Copy, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
@@ -163,6 +163,11 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const [customer2, setCustomer2] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows2, setRows2] = useState<SizeRow[]>(() => [blankRow()])
 
+  // Editing a saved card (History → Edit): it keeps its number, QR secret and
+  // date — the card in the customer's hand must keep opening — so Save never
+  // mints a new number, and a reprint carries the very same QR.
+  const [editing, setEditing] = useState<GuaranteeDocument | null>(null)
+
   // Unfiltered brand list — the Items table's Type column can match any known
   // brand regardless of category, since there's no Product picker anymore.
   const brandOptions = sets[0]?.brands ?? []
@@ -208,7 +213,15 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
   // On entry: reopen a saved guarantee (from History) or import a selected bill.
   useEffect(() => {
-    const state = location.state as { selectedBillId?: string; reopenGuarantee?: GuaranteeDocument } | null
+    const state = location.state as { selectedBillId?: string; reopenGuarantee?: GuaranteeDocument; editGuarantee?: GuaranteeDocument } | null
+    if (state?.editGuarantee) {
+      importGuarantee(state.editGuarantee)
+      setEditing(state.editGuarantee)
+      setSecondCardOn(false)
+      setTab(1)
+      window.history.replaceState({}, '')
+      return
+    }
     if (state?.reopenGuarantee) {
       importGuarantee(state.reopenGuarantee)
       window.history.replaceState({}, '')
@@ -294,6 +307,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       number: uuid.number,
       token: uuid.token,
       date: new Date().toISOString(),
+      updatedAt: Date.now(),
       customer: { ...customer, name: toProperCase(customer.name) },
       category: DEFAULT_CATEGORY,
       height: (primary && rowDim(primary.length, primary.lengthSoot)) ?? blankDim(),
@@ -311,6 +325,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       number: uuid.number,
       token: uuid.token,
       date: new Date().toISOString(),
+      updatedAt: Date.now(),
       customer: { ...customer2, name: toProperCase(customer2.name) },
       category: DEFAULT_CATEGORY,
       height: (primary && rowDim(primary.length, primary.lengthSoot)) ?? blankDim(),
@@ -320,7 +335,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     }
   }
 
-  const doc = buildGuaranteeDoc()
+  // While editing, the preview keeps the card's own date (what a reprint shows).
+  const doc = editing ? { ...buildGuaranteeDoc(), date: editing.date } : buildGuaranteeDoc()
   const doc2 = buildSecondDoc()
 
   // Save (and enqueue for sync) each card under its freshly minted ref. The QR
@@ -386,6 +402,30 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // Desktop app, PVC card: straight to the Epson on this PC (no print server),
   // then WhatsApp via the server best-effort — the card still prints if it's
   // down. Anywhere else: the shop print server, which also sends the WhatsApp.
+  const printDirect = layout === 'card' ? window.shivDesktop?.printGuaranteeCardsDirect : undefined
+
+  /** Print one or two cards (slot 1, slot 2); true when the job was sent. */
+  async function sendToPrinter(printDocs: GuaranteeDocument[], label: string): Promise<boolean> {
+    toast(`Printing ${label}…`, 'info')
+    try {
+      if (printDirect) {
+        const result = await printDirect({ documents: printDocs, slot: 1 })
+        toast(`Sent ${label} to ${result.printer}`)
+        return true
+      }
+      const [printDoc, printDoc2] = printDocs
+      const payload: ServerPrintPayload = layout === 'card'
+        ? { kind: 'guarantee', document: printDoc, layout, slot: 1, ...(printDoc2 ? { documents: printDocs } : {}) }
+        : { kind: 'guarantee', document: printDoc, layout }
+      const result = await printOnServer(payload)
+      toast(`Sent ${label} to ${result.printer}`)
+      return true
+    } catch (err) {
+      toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      return false
+    }
+  }
+
   async function printCard() {
     if (generating) return
     setGenerating(true)
@@ -394,43 +434,36 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     const label = mintedLabel(minted)
     persistCards(minted)
 
-    const printDoc = buildGuaranteeDoc(minted)
-    const printDoc2 = minted.second ? buildSecondDoc(minted.second) : null
+    const printDocs = [buildGuaranteeDoc(minted), ...(minted.second ? [buildSecondDoc(minted.second)] : [])]
+    const sent = await sendToPrinter(printDocs, label)
+    setGenerating(false)
+    // The print server WhatsApps the customer itself; direct printing doesn't.
+    if (sent && printDirect) await notifyCustomers(minted)
+  }
 
-    const printDirect = layout === 'card' ? window.shivDesktop?.printGuaranteeCardsDirect : undefined
-    if (printDirect) {
-      toast(`Printing ${label}…`, 'info')
-      try {
-        const result = await printDirect({ documents: printDoc2 ? [printDoc, printDoc2] : [printDoc], slot: 1 })
-        toast(`Sent ${label} to ${result.printer}`)
-      } catch (err) {
-        toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
-        setGenerating(false)
-        return
-      }
-      setGenerating(false)
-      await notifyCustomers(minted)
-      return
-    }
-    const payload: ServerPrintPayload = layout === 'card'
-      ? {
-          kind: 'guarantee',
-          document: printDoc,
-          layout,
-          slot: 1,
-          ...(printDoc2 ? { documents: [printDoc, printDoc2] } : {}),
-        }
-      : { kind: 'guarantee', document: printDoc, layout }
+  // ── Edit mode ──────────────────────────────────────────────────────────────
+  /** The edited card: same number, secret and date; synced to Convex in place. */
+  function saveEdit(): GuaranteeDocument {
+    const edited = { ...buildGuaranteeDoc(ref), date: editing!.date }
+    saveGuarantee(edited)
+    enqueueGuaranteeSync(edited)
+    return edited
+  }
 
-    toast(`Printing ${label}…`, 'info')
-    try {
-      const result = await printOnServer(payload)
-      toast(`Sent ${label} to ${result.printer}`)
-    } catch (err) {
-      toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
-    } finally {
-      setGenerating(false)
-    }
+  function saveChanges() {
+    if (!editing || generating) return
+    const edited = saveEdit()
+    toast(`Saved changes to ${edited.number}`)
+    navigate('/guarantee/history')
+  }
+
+  async function saveAndPrint() {
+    if (!editing || generating) return
+    setGenerating(true)
+    const edited = saveEdit()
+    const sent = await sendToPrinter([edited], edited.number)
+    setGenerating(false)
+    if (sent) navigate('/guarantee/history')
   }
 
   // Generate = save the card(s) + WhatsApp the customer (no print).
@@ -451,22 +484,37 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             (slot 1 above slot 2) stays put on the right. Narrower, it sits below. */}
         <div className={layout === 'card' ? 'flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-4' : 'flex flex-col gap-3'}>
           <div className="flex min-w-0 flex-col gap-3">
-            <div className="no-print flex flex-wrap items-center justify-center gap-3">
-              <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
-                <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
-              </Button>
-              <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
-                <Printer size={20} /> Print
-              </Button>
-              <button
-                onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: `/guarantee/${layout}` } })}
-                className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
-              >
-                <FileText size={20} /> Select Bill
-              </button>
-            </div>
+            {editing ? (
+              <div className="no-print flex flex-wrap items-center justify-center gap-3">
+                <Button onClick={saveChanges} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                  <Save size={20} /> Save changes
+                </Button>
+                <Button variant="outline" onClick={saveAndPrint} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                  <Printer size={20} /> {generating ? 'Printing…' : 'Save & Print'}
+                </Button>
+                <Button variant="ghost" onClick={() => navigate('/guarantee/history')} disabled={generating} className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                  <X size={20} /> Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="no-print flex flex-wrap items-center justify-center gap-3">
+                <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                  <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
+                </Button>
+                <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                  <Printer size={20} /> Print
+                </Button>
+                <button
+                  onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: `/guarantee/${layout}` } })}
+                  className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
+                >
+                  <FileText size={20} /> Select Bill
+                </button>
+              </div>
+            )}
             <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">
-              Next Ref No: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref.number}</span>
+              {editing ? 'Editing' : 'Next Ref No:'} <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref.number}</span>
+              {editing && <span className="ml-2 normal-case">· same number & QR, date {new Date(editing.date).toLocaleDateString('en-GB')}</span>}
               {secondCardOn && (
                 <span className="ml-2">Slot 2: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref2.number}</span></span>
               )}
@@ -475,7 +523,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             {layout === 'card' && (
               <div className="no-print flex flex-wrap items-center gap-2" role="tablist" aria-label="Cards in this tray pass">
                 <CardTab title="Card 1" name={customer.name} active={!onCard2} onSelect={() => setTab(1)} />
-                {secondCardOn ? (
+                {editing ? null : secondCardOn ? (
                   <CardTab
                     title="Card 2"
                     name={customer2.name}
@@ -535,7 +583,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                       </button>
                     </div>
 
-                    <div className="flex flex-col items-center gap-2">
+                    {!editing && <div className="flex flex-col items-center gap-2">
                       <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted dark:bg-white/10 dark:text-stone-300">
                         Slot 2
                       </span>
@@ -572,7 +620,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                           <span className="text-xs font-semibold">Add 2nd card</span>
                         </button>
                       )}
-                    </div>
+                    </div>}
                   </div>
 
                 </Card>

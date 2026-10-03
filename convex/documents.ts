@@ -175,6 +175,26 @@ export const saveGuarantee = mutation({
       .unique()
 
     let args = incoming
+    const sent = String(args.token ?? (args.document as { token?: string } | null)?.token ?? '').trim()
+
+    // An edit of a card already saved: the same physical card is the same
+    // number + token, whatever id this device knows it by (a card pulled from
+    // the cloud can carry a device-local id). Update that row, never add one.
+    if (sent) {
+      const sameCard = (await ctx.db
+        .query('guaranteeDocuments')
+        .withIndex('by_number', q => q.eq('number', args.number))
+        .collect()).find(row => row.token === sent)
+      if (sameCard) {
+        await ctx.db.patch(sameCard._id, {
+          customer: args.customer,
+          document: args.document,
+          updatedAt: now,
+        })
+        return sameCard._id
+      }
+    }
+
     let existing = await byLocalId(args.localId)
 
     // A different physical card that happens to reuse this id. Card numbers
@@ -182,7 +202,6 @@ export const saveGuarantee = mutation({
     // save overwrote July's GC-2026-0002 (keeping July's token, so neither
     // card's QR opened the right one). The token says which card this is:
     // when it differs, the card gets a row of its own instead.
-    const sent = String(args.token ?? (args.document as { token?: string } | null)?.token ?? '').trim()
     if (existing?.token && sent && existing.token !== sent) {
       const ownId = `${args.localId}#${sent.slice(0, 8)}`
       args = { ...args, localId: ownId }

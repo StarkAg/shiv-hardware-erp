@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAction, useConvex } from 'convex/react'
-import { CloudDownload, ExternalLink, Eye, MessageCircle, Printer, Trash2, X } from 'lucide-react'
+import { CloudDownload, ExternalLink, Eye, MessageCircle, Pencil, Printer, Trash2, X } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import { Button, Card, Input, Page, PageHeader } from '../../components/ui'
@@ -172,7 +172,7 @@ function writeCloudPin(pin: string) {
   } catch { /* ignore */ }
 }
 
-type CloudGuaranteeRow = { localId: string; number: string; token?: string; document: GuaranteeDocument }
+type CloudGuaranteeRow = { localId: string; number: string; token?: string; updatedAt?: number; document: GuaranteeDocument }
 
 /**
  * Pulls the cards made at other counters (or before a reinstall) into this
@@ -193,7 +193,7 @@ function CloudGuaranteeSync() {
       const rows = (await convex.query(api.documents.recentGuarantees, { pin: code, limit: 100 })) as CloudGuaranteeRow[]
       const docs = rows
         .filter((r) => r?.document && r.number)
-        .map((r) => ({ ...r.document, id: r.localId, number: r.number, token: r.token ?? r.document.token }))
+        .map((r) => ({ ...r.document, id: r.localId, number: r.number, token: r.token ?? r.document.token, updatedAt: r.updatedAt ?? r.document.updatedAt }))
       const added = merge(docs)
       setStatus(added ? `${added} card${added === 1 ? '' : 's'} synced from the cloud` : 'Up to date with the cloud')
       return true
@@ -320,6 +320,14 @@ export function GuaranteeHistory() {
                         onClick={() => setShowing(x)}
                       >
                         <Eye size={16} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="px-2 py-1"
+                        title="Edit card (keeps its number and QR)"
+                        onClick={() => navigate('/guarantee/card', { state: { editGuarantee: x } })}
+                      >
+                        <Pencil size={16} />
                       </Button>
                       {convexReady && <SendWhatsAppButton doc={x} />}
                       <Button

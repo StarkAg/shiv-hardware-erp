@@ -124,6 +124,12 @@ export interface GuaranteeDocument {
    */
   token?: string
   date: string
+  /**
+   * When this copy was last saved (ms). History sync keeps whichever copy of a
+   * card is newer, so an edit at one counter reaches the others — and a local
+   * edit not yet uploaded is never overwritten by the cloud's older copy.
+   */
+  updatedAt?: number
   customer: Customer
   category: ProductCategory
   height: Dimension
