@@ -43,10 +43,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
 .item-name { display: inline-flex; align-items: baseline; min-width: 0; gap: 9px; white-space: nowrap; font-size: 20px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .item-separator { color: var(--brass); }
 .item-code { min-width: 1.5ch; }
-.stock-quantity { display: inline-block; min-width: 0; text-align: left; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.stock-quantity b { font-size: 22px; }
-.stock-quantity.low b { color: var(--low); }
-.stock-line { display: flex; flex: 1; align-items: baseline; justify-content: center; min-width: 0; gap: 12px; }
+.stock-line { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); flex: 1; align-items: baseline; min-width: 0; font-size: 20px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stock-line > * { min-width: 0; text-align: center; }
+.stock-line strong { font-size: 22px; }
+.stock-line.low strong { color: var(--low); }
+.stock-line i { font-style: normal; }
 .stepper { margin-left: auto; display: flex; align-items: center; flex-shrink: 0; gap: 4px; }
 .stepper button { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); color: var(--brass); }
 .quantity { min-width: 60px; text-align: center; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -64,5 +65,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
   .page { padding-left: 12px; padding-right: 12px; }
   .stock-list li { padding: 10px 12px; gap: 8px; }
   .item-name { gap: 9px; font-size: 18px; }
+  .stock-line { font-size: 18px; }
   .tabs button { padding: 8px 14px; }
 }

@@ -24,6 +24,17 @@ function ItemLabel({ item }) {
   </span>
 }
 
+function StockLine({ item }) {
+  const low = item.stock <= (item.min ?? 2)
+  return <div className={`stock-line ${low ? 'low' : ''}`}>
+    <span>{item.mm}mm <i className="item-separator">·</i></span>
+    <span>{item.size.replace('x', ' × ')}</span>
+    <span>{brandCode[item.brand]}</span>
+    <span>α</span>
+    <strong>{quantity(item.stock)}</strong>
+  </div>
+}
+
 function StepIcon({ plus }) {
   return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
     <path d="M5 12h14" />
@@ -205,7 +216,7 @@ export default function App() {
                   <button aria-label={`Decrease ${item.name}`} disabled={item.stock <= 0} onClick={() => change(item, -1)}><StepIcon /></button>
                   <span className="quantity alpha-quantity" aria-live="polite"><span>α</span><span>{quantity(item.stock)}</span></span>
                   <button aria-label={`Increase ${item.name}`} onClick={() => change(item, 1)}><StepIcon plus /></button>
-                </div></> : <div className="stock-line"><ItemLabel item={item} /><span className={`stock-quantity ${item.stock <= (item.min ?? 2) ? 'low' : ''}`}><b className="alpha-quantity"><span>α</span><span>{quantity(item.stock)}</span></b></span></div>}
+                </div></> : <StockLine item={item} />}
               </li>)}
             </ul>
           </section>)}
