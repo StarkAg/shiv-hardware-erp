@@ -11,7 +11,7 @@
         1
       ],
       "sizes": [],
-      "unit": "174"
+      "unit": "Pc"
     },
     {
       "brands": [],
@@ -23,18 +23,31 @@
       "brands": [],
       "id": "zkyt4en3",
       "name": "Fevicol Marine 20 Kg",
-      "rate": 55,
+      "rate": 6000,
       "rates": [
+        6000,
         55,
         33
       ],
-      "sizes": []
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 6000
+      }
     },
     {
       "brands": [],
       "id": "z3102akx",
       "name": "Fevicol Marine",
-      "sizes": []
+      "rate": 340,
+      "rates": [
+        340
+      ],
+      "sizes": [],
+      "unit": "Kg",
+      "unitRates": {
+        "Kg": 340
+      }
     },
     {
       "brands": [],
@@ -52,23 +65,31 @@
       "brands": [],
       "id": "o37sv32n",
       "name": "Sunmica Linear Off White",
-      "rate": 555,
+      "rate": 980,
       "rates": [
+        980,
         555
       ],
-      "sizes": []
+      "sizes": [],
+      "unit": "Pc"
     },
     {
       "brands": [],
       "id": "00igua0n",
       "name": "Abro Tape",
-      "rate": 18.33,
+      "rate": 20,
       "rates": [
+        20,
+        120,
         18.33,
         110
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "B/L": 120,
+        "Pc": 20
+      }
     },
     {
       "brands": [],
@@ -87,13 +108,22 @@
       "brands": [],
       "id": "lrj5yzqm",
       "name": "35 X 10 Lipping Teak",
-      "sizes": []
+      "rate": 12,
+      "rates": [
+        12
+      ],
+      "sizes": [],
+      "unit": "Feet",
+      "unitRates": {
+        "Feet": 12
+      }
     },
     {
       "brands": [],
       "id": "6jgqbati",
       "name": "4\" Cutter Blade Bosch",
-      "sizes": []
+      "sizes": [],
+      "unit": "Pc"
     },
     {
       "brands": [],
@@ -311,7 +341,10 @@
         980
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Sheet",
+      "unitRates": {
+        "Sheet": 980
+      }
     },
     {
       "brands": [],
@@ -379,11 +412,16 @@
       "brands": [],
       "id": "ek0abc5t",
       "name": "19mm S 7 X 4",
+      "rate": 3304,
       "rates": [
+        3304,
         2352
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 3304
+      }
     },
     {
       "brands": [],
@@ -440,8 +478,10 @@
       "brands": [],
       "id": "pb4srhfj",
       "name": "Bill",
-      "rate": 95895,
+      "rate": 9300,
       "rates": [
+        21216,
+        9300,
         95895
       ],
       "sizes": [],
@@ -562,7 +602,10 @@
         0.15
       ],
       "sizes": [],
-      "unit": "Pkt"
+      "unit": "Pkt",
+      "unitRates": {
+        "Pkt": 58
+      }
     },
     {
       "brands": [],
@@ -592,10 +635,11 @@
       "name": "19 X 6 Screw SS (+)",
       "rate": 0.88,
       "rates": [
+        76.5,
         0.88
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pkt"
     },
     {
       "brands": [],
@@ -628,7 +672,10 @@
         2
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 2
+      }
     },
     {
       "brands": [],
@@ -660,7 +707,7 @@
         1704
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Sheet"
     },
     {
       "brands": [],
@@ -829,8 +876,10 @@
       "brands": [],
       "id": "cat_e34398170d61",
       "name": "1\" Pipe SS 12'",
-      "rate": 580,
+      "rate": 480,
       "rates": [
+        480,
+        320,
         580
       ],
       "sizes": [],
@@ -918,12 +967,16 @@
       "brands": [],
       "id": "cat_2683587c27d4",
       "name": "6\" TB Acer Jazz",
-      "rate": 144,
+      "rate": 108,
       "rates": [
+        108,
         144
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 108
+      }
     },
     {
       "brands": [],
@@ -969,7 +1022,10 @@
         120
       ],
       "sizes": [],
-      "unit": "Kg"
+      "unit": "Kg",
+      "unitRates": {
+        "Kg": 120
+      }
     },
     {
       "brands": [],
@@ -1322,7 +1378,10 @@
         32
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 24
+      }
     },
     {
       "brands": [],
@@ -1339,14 +1398,17 @@
       "brands": [],
       "id": "cat_0d1b639f5053",
       "name": "3\" Screw SS (+)",
-      "rate": 5.5,
+      "rate": 6.86,
       "rates": [
-        5.5,
         6.86,
+        5.5,
         1.43
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 6.86
+      }
     },
     {
       "brands": [],
@@ -1374,13 +1436,16 @@
       "brands": [],
       "id": "cat_fe31ed3e83e9",
       "name": "20 No 3/4\" HL Nail",
-      "rate": 65,
+      "rate": 0.15,
       "rates": [
-        65,
-        0.15
+        0.15,
+        65
       ],
       "sizes": [],
-      "unit": "Pkt"
+      "unit": "Gm",
+      "unitRates": {
+        "Gm": 0.15
+      }
     },
     {
       "brands": [],
@@ -1408,13 +1473,16 @@
       "brands": [],
       "id": "cat_4b40a5a1d8cf",
       "name": "Nut Bolt",
-      "rate": 12,
+      "rate": 6,
       "rates": [
-        12,
-        6
+        6,
+        12
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 6
+      }
     },
     {
       "brands": [],
@@ -1448,7 +1516,10 @@
         0.12
       ],
       "sizes": [],
-      "unit": "Gm"
+      "unit": "Kg",
+      "unitRates": {
+        "Kg": 120
+      }
     },
     {
       "brands": [],
@@ -1566,23 +1637,31 @@
       "brands": [],
       "id": "cat_cf5b519d4a9a",
       "name": "30mm S 81 X 42",
-      "rate": 3780,
+      "rate": 4064,
       "rates": [
+        4064,
         3780
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 4064
+      }
     },
     {
       "brands": [],
       "id": "cat_2e222050b52e",
       "name": "30mm S 81 X 36",
-      "rate": 3240,
+      "rate": 3483,
       "rates": [
+        3483,
         3240
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 3483
+      }
     },
     {
       "brands": [],
@@ -1720,13 +1799,14 @@
       "brands": [],
       "id": "cat_5df5d4ebee52",
       "name": "1 1/2\" Gujja",
-      "rate": 35,
+      "rate": 0.42,
       "rates": [
+        0.42,
         35,
         0.4
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pkt"
     },
     {
       "brands": [],
@@ -1822,12 +1902,13 @@
       "brands": [],
       "id": "cat_7d5a78c7a9fd",
       "name": "Fevicol Heatx",
-      "rate": 0.9,
+      "rate": 520,
       "rates": [
+        520,
         0.9
       ],
       "sizes": [],
-      "unit": "Gm"
+      "unit": "Ltr"
     },
     {
       "brands": [],
@@ -1894,19 +1975,25 @@
         1.43
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 1.5
+      }
     },
     {
       "brands": [],
       "id": "cat_aba0f03a998d",
       "name": "3/4\" Screw SS (+)",
-      "rate": 0.88,
+      "rate": 0.83,
       "rates": [
-        0.88,
-        0.83
+        0.83,
+        0.88
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 0.83
+      }
     },
     {
       "brands": [],
@@ -1987,8 +2074,9 @@
       "brands": [],
       "id": "cat_fde545e8f400",
       "name": "8\" TB Acer Slide",
-      "rate": 96,
+      "rate": 144,
       "rates": [
+        144,
         96
       ],
       "sizes": [],
@@ -2003,7 +2091,10 @@
         72
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 72
+      }
     },
     {
       "brands": [],
@@ -2031,8 +2122,9 @@
       "brands": [],
       "id": "cat_ffc18af7990b",
       "name": "Door Magnet",
-      "rate": 85,
+      "rate": 95,
       "rates": [
+        95,
         85,
         68
       ],
@@ -2297,12 +2389,16 @@
       "brands": [],
       "id": "cat_3ff50a7eb544",
       "name": "5\" Hinges Acer Jazz",
-      "rate": 98,
+      "rate": 118,
       "rates": [
+        118,
         98
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 118
+      }
     },
     {
       "brands": [],
@@ -2443,19 +2539,25 @@
       "brands": [],
       "id": "qcabb9qu",
       "name": "2 1/2\" Screw (+)",
-      "rate": 4,
+      "rate": 1.43,
       "rates": [
+        1.43,
+        5.2,
         4
       ],
       "sizes": [],
-      "unit": "Pc"
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 1.43
+      }
     },
     {
       "brands": [],
       "id": "m6cjj22v",
       "name": "2\" Screw SS (+)",
-      "rate": 3,
+      "rate": 4.5,
       "rates": [
+        4.5,
         3
       ],
       "sizes": [],
@@ -2512,6 +2614,906 @@
       "rates": [
         180
       ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "g1owkcmu",
+      "name": "8236 SF HR Lam",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "epd7ekjb",
+      "name": "16\" Telescopic Indian",
+      "rate": 288,
+      "rates": [
+        288
+      ],
+      "sizes": [],
+      "unit": "Set"
+    },
+    {
+      "brands": [],
+      "id": "wl5ks67p",
+      "name": "30mm S 78 X 34",
+      "rate": 3167,
+      "rates": [
+        2210,
+        3167
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "mt4pfeuw",
+      "name": "30mm S 78 X 36",
+      "rate": 5,
+      "rates": [
+        2340,
+        5
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "st00t8qw",
+      "name": "30mm S 78 X 30",
+      "rate": 2795,
+      "rates": [
+        1950,
+        2795
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "ds8yd6mo",
+      "name": "30mm S 78 X 28",
+      "rate": 2608,
+      "rates": [
+        1820,
+        2608
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "f0qgj8g9",
+      "name": "30mm S 78 X 24",
+      "rate": 2236,
+      "rates": [
+        1560,
+        2236
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "k3wlqwu1",
+      "name": "10\" Aldrop Acer Slide",
+      "rate": 180,
+      "rates": [
+        180
+      ],
+      "sizes": [],
+      "unit": "Set",
+      "unitRates": {
+        "Set": 180
+      }
+    },
+    {
+      "brands": [],
+      "id": "irt9973o",
+      "name": "7\" Handle Acer Slide",
+      "rate": 98,
+      "rates": [
+        98
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "a0hy29xj",
+      "name": "5\" Hinges Acer Slide",
+      "rate": 98,
+      "rates": [
+        98,
+        118
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 98
+      }
+    },
+    {
+      "brands": [],
+      "id": "rht4k15x",
+      "name": "12mm PF 8 X 4",
+      "rate": 2496,
+      "rates": [
+        2496
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "oxo1qa4r",
+      "name": "1\" Screw SS (+)",
+      "rate": 0.98,
+      "rates": [
+        0.98
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "3n7qks77",
+      "name": "32 X 6 Screw SS",
+      "rate": 1.25,
+      "rates": [
+        1.25
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "fdhtnomz",
+      "name": "4mm 8 X 4",
+      "rate": 896,
+      "rates": [
+        896
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "n4i58fof",
+      "name": "Fevicol Marine 1 Kg",
+      "rate": 340,
+      "rates": [
+        340
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "9t4krxls",
+      "name": "Pin Board 4 X 3",
+      "rate": 456,
+      "rates": [
+        456
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "h2km90ym",
+      "name": "17 No 3/4\" HL Nail",
+      "rate": 58,
+      "rates": [
+        58,
+        0.15
+      ],
+      "sizes": [],
+      "unit": "Pkt"
+    },
+    {
+      "brands": [],
+      "id": "6ml8yhay",
+      "name": "4\" Pelmet Patti",
+      "rate": 8,
+      "rates": [
+        8
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "4eizxyav",
+      "name": "Prakash Chakka",
+      "rate": 24,
+      "rates": [
+        24
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "4wodyci4",
+      "name": "19mm S 4 X 2",
+      "rate": 944,
+      "rates": [
+        944
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "2kha80m7",
+      "name": "4\" Handle R/G",
+      "rate": 48,
+      "rates": [
+        48
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "eygu61tc",
+      "name": "19mm Amron 8 X 4",
+      "rate": 2336,
+      "rates": [
+        2336
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "egf63bsl",
+      "name": "6mm Amron 8 X 4",
+      "rate": 1344,
+      "rates": [
+        1344
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "ll288lf8",
+      "name": "6mm Amron 8 X 3",
+      "rate": 1008,
+      "rates": [
+        1008
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "3g99dnxg",
+      "name": "Bracket Full Wooden",
+      "rate": 160,
+      "rates": [
+        160
+      ],
+      "sizes": [],
+      "unit": "Set"
+    },
+    {
+      "brands": [],
+      "id": "xmz2hfs7",
+      "name": "4\" Handle J 585",
+      "rate": 216,
+      "rates": [
+        216
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "atkv9ejg",
+      "name": "8\" Handle J 585",
+      "rate": 378,
+      "rates": [
+        378
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "arem6w9l",
+      "name": "12\" Telescopic SS",
+      "sizes": [],
+      "unit": "Set"
+    },
+    {
+      "brands": [],
+      "id": "0di09nlj",
+      "name": "Doorset Kaira",
+      "rate": 1560,
+      "rates": [
+        1560
+      ],
+      "sizes": [],
+      "unit": "Set"
+    },
+    {
+      "brands": [],
+      "id": "538rvl5s",
+      "name": "8207 SMT",
+      "rate": 1786,
+      "rates": [
+        1786
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "oi86u8t1",
+      "name": "Corner Bracket SS",
+      "rate": 180,
+      "rates": [
+        180
+      ],
+      "sizes": [],
+      "unit": "Set"
+    },
+    {
+      "brands": [],
+      "id": "l53opjbs",
+      "name": "1\" Center Support SS",
+      "rate": 30,
+      "rates": [
+        30
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "xjxu4dki",
+      "name": "6mm PF 36 X 26",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "zisdv5ui",
+      "name": "30mm PF 78 X 38",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "bmxo8woc",
+      "name": "19mm Solid Mr 7 X 4",
+      "rate": 1736,
+      "rates": [
+        1736,
+        1388.8
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "nbcbcy81",
+      "name": "19mm Mr 7 X 4",
+      "rate": 1960,
+      "rates": [
+        1960
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "htf3ptvv",
+      "name": "12mm Mr 7 X 4",
+      "rate": 1512,
+      "rates": [
+        1512
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "vhc7222y",
+      "name": "Fevicol Marine 5kg",
+      "rate": 1600,
+      "rates": [
+        1600
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "tjrntmbf",
+      "name": "Mica Nayana Teak SF",
+      "rate": 550,
+      "rates": [
+        550
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "1u9bwj1k",
+      "name": "Mica OffWhite SF",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "w00zq2kk",
+      "name": "4 X 2 1/2 WPC Chowkhat SG 84 X 47",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "zw4bhg6k",
+      "name": "4 X 2 1/2 WPC Chowkhat SG 84 X 41",
+      "rate": 4420,
+      "rates": [
+        4420
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "aegtdhq9",
+      "name": "4 X 2 1/2 WPC Chowkhat SG 84 X 35",
+      "rate": 4420,
+      "rates": [
+        4420
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "j4kduda1",
+      "name": "12mm T Bit Gold Dorio",
+      "rate": 480,
+      "rates": [
+        480
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "2pokt5k5",
+      "name": "30mm S 81 X 40",
+      "rate": 3870,
+      "rates": [
+        3870
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 3870
+      }
+    },
+    {
+      "brands": [],
+      "id": "azgnneww",
+      "name": "30mm S 81 X 48",
+      "rate": 4644,
+      "rates": [
+        4644
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 4644
+      }
+    },
+    {
+      "brands": [],
+      "id": "ly16crsj",
+      "name": "30mm S 81 X 46",
+      "rate": 4450,
+      "rates": [
+        4450
+      ],
+      "sizes": [],
+      "unitRates": {
+        "Pc": 4450
+      }
+    },
+    {
+      "brands": [],
+      "id": "x1in3wyh",
+      "name": "6mm S 7 X 4",
+      "rate": 1904,
+      "rates": [
+        1904
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 1904
+      }
+    },
+    {
+      "brands": [],
+      "id": "gke3vehl",
+      "name": "17 No 1 1/4\" Nail",
+      "rate": 58,
+      "rates": [
+        58
+      ],
+      "sizes": [],
+      "unit": "Pkt",
+      "unitRates": {
+        "Pkt": 58
+      }
+    },
+    {
+      "brands": [],
+      "id": "ve30ekpd",
+      "name": "19mm Mr Solid 8 X 4",
+      "rate": 1984,
+      "rates": [
+        1984,
+        2080
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 1984
+      }
+    },
+    {
+      "brands": [],
+      "id": "3zgj1411",
+      "name": "30mm JSF 78 X 38",
+      "rates": [
+        1935
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "yi1pwqzn",
+      "name": "30mm Safari 78 X 38",
+      "rates": [
+        1852.2
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "h5lftha3",
+      "name": "30mm Safari 78 X 36",
+      "rates": [
+        1755
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "nfrb31p4",
+      "name": "30mm Safari 81 X 30",
+      "rates": [
+        1518.3
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "e33xe6rz",
+      "name": "30mm Safari 81 X 36",
+      "rates": [
+        1822.5
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "dh3roq4n",
+      "name": "30mm Safari 81 X 38",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "hkdyumro",
+      "name": "30mm Safari 78 X 32",
+      "rates": [
+        1560
+      ],
+      "sizes": []
+    },
+    {
+      "brands": [],
+      "id": "0mlqjtz3",
+      "name": "30mm Safari 78 X 42",
+      "rates": [
+        2047.5
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "92z456mc",
+      "name": "30mm Safari 78 X 26",
+      "rates": [
+        1267.5
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "0d92u1rz",
+      "name": "30mm Safari 81 X 42",
+      "rates": [
+        2126
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "6051nbgy",
+      "name": "9169 HC Armica",
+      "rates": [
+        737.29
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "qmeyy3ka",
+      "name": "SL 0019 SF 0.72MM",
+      "rates": [
+        440
+      ],
+      "sizes": [],
+      "unit": "Sheet"
+    },
+    {
+      "brands": [],
+      "id": "eyxoni2p",
+      "name": "30mm PF 81 X 38",
+      "rate": 2779,
+      "rates": [
+        2779
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 2779
+      }
+    },
+    {
+      "brands": [],
+      "id": "sgcuiufx",
+      "name": "Sunmica Teak Linear",
+      "rate": 580,
+      "rates": [
+        580
+      ],
+      "sizes": [],
+      "unit": "Sheet",
+      "unitRates": {
+        "Sheet": 580
+      }
+    },
+    {
+      "brands": [],
+      "id": "k29a058c",
+      "name": "6\" Handle Acer Slide",
+      "rate": 98,
+      "rates": [
+        98
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 98
+      }
+    },
+    {
+      "brands": [],
+      "id": "241kill9",
+      "name": "Stopper Acer Slide",
+      "rate": 75,
+      "rates": [
+        75
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 75
+      }
+    },
+    {
+      "brands": [],
+      "id": "rcktroyb",
+      "name": "U Channel Aluminium Section",
+      "rate": 1300,
+      "rates": [
+        1300
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 1300
+      }
+    },
+    {
+      "brands": [],
+      "id": "35uoespe",
+      "name": "38 X 8 Screw SS (+)",
+      "sizes": [],
+      "unit": "Pkt"
+    },
+    {
+      "brands": [],
+      "id": "nqahhjcn",
+      "name": "2\" CP Bolt",
+      "sizes": [],
+      "unit": "Pkt"
+    },
+    {
+      "brands": [],
+      "id": "msz71bd4",
+      "name": "8\" Oval TB",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "ujifgwrs",
+      "name": "6\" Oval TB",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "82n409f6",
+      "name": "3/4\" Piano Hinges",
+      "rates": [
+        150
+      ],
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "twz52tgo",
+      "name": "19mm Mr Solid 7 X 4",
+      "rate": 1736,
+      "rates": [
+        1736,
+        1800
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 1736
+      }
+    },
+    {
+      "brands": [],
+      "id": "0162dvcs",
+      "name": "19mm Mr Solid 6 X 4",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "szo8uick",
+      "name": "6mm Mr 8 X 4",
+      "rate": 1216,
+      "rates": [
+        1216
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 1216
+      }
+    },
+    {
+      "brands": [],
+      "id": "vwrre7px",
+      "name": "8\" F Bracket SS",
+      "rate": 60,
+      "rates": [
+        60
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 60
+      }
+    },
+    {
+      "brands": [],
+      "id": "aq277re3",
+      "name": "Aluminium Sheet 4' X 2 1/2'",
+      "rate": 380,
+      "rates": [
+        380
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 380
+      }
+    },
+    {
+      "brands": [],
+      "id": "jknorruk",
+      "name": "4\" TB Acer Jazz",
+      "rate": 72,
+      "rates": [
+        72
+      ],
+      "sizes": [],
+      "unitRates": {
+        "Pc": 72
+      }
+    },
+    {
+      "brands": [],
+      "id": "wueamohn",
+      "name": "4\" Handle 2021",
+      "rate": 112,
+      "rates": [
+        112
+      ],
+      "sizes": [],
+      "unit": "Pc",
+      "unitRates": {
+        "Pc": 112
+      }
+    },
+    {
+      "brands": [],
+      "id": "2hixrwgj",
+      "name": "20\" Telescopic Channel SS",
+      "sizes": [],
+      "unit": "Set"
+    },
+    {
+      "brands": [],
+      "id": "bwljhkip",
+      "name": "17 X 20 X 8 Thali Truluv",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "xbjr1oxg",
+      "name": "17 X 20 X 6 Plain Truluv",
+      "sizes": [],
+      "unit": "Pc"
+    },
+    {
+      "brands": [],
+      "id": "umn5tumt",
+      "name": "17 X 20 X 4 Cutlery Truluv",
       "sizes": [],
       "unit": "Pc"
     }
@@ -3135,5 +4137,5 @@
       "name": "C1"
     }
   ],
-  "_savedAt": "2026-09-24T10:31:56.740Z"
+  "_savedAt": "2026-09-28T08:07:50.534Z"
 }
