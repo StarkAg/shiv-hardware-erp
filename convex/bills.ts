@@ -75,6 +75,52 @@ export const get = query({
   },
 })
 
+/** Add phone photos to an existing bill and its voucher in one transaction. */
+export const addImages = mutation({
+  args: { billId: v.string(), storageIds: v.array(v.id('_storage')) },
+  handler: async (ctx, { billId, storageIds }) => {
+    if (!storageIds.length || storageIds.length > 12) throw new Error('Choose 1 to 12 bill photos.')
+    const bill = await readBill(ctx, billId)
+    if (!bill?.voucherId) throw new Error('Choose a posted bill with an accounting voucher.')
+    const voucherId = ctx.db.normalizeId('vouchers', String(bill.voucherId))
+    const voucher = voucherId ? await ctx.db.get(voucherId) : null
+    if (!voucher || (bill.ledgerId && voucher.partyLedgerId !== bill.ledgerId)) {
+      throw new Error('The voucher linked to this bill is missing or belongs to another party.')
+    }
+    const unique = [...new Set(storageIds)]
+    for (const id of unique) {
+      const file = await ctx.db.system.get(id)
+      if (!file || (file.contentType && !file.contentType.startsWith('image/'))) throw new Error('Choose an image file for this bill.')
+    }
+    const idOf = (doc: any) => typeof doc === 'string' ? doc : doc.storageId
+    const onBill = new Set((bill.attachments ?? []).map(idOf))
+    const onVoucher = new Set((voucher.attachments ?? []).map(idOf))
+    const added = unique.filter(id => !onBill.has(id) || !onVoucher.has(id))
+    if (!added.length) return { added: 0, total: onBill.size }
+    const now = Date.now()
+    const documents = unique.map(storageId => ({ storageId, kind: 'bill' as const }))
+    await ctx.db.patch(voucher._id, {
+      attachments: [...(voucher.attachments ?? []), ...documents.filter(doc => !onVoucher.has(doc.storageId))],
+      updatedAt: now,
+    })
+    const updated = {
+      ...bill,
+      attachments: [...(bill.attachments ?? []), ...documents.filter(doc => !onBill.has(doc.storageId))],
+      updatedAt: now,
+    }
+    await writeBills(ctx, [updated])
+    const flow = await ctx.db.query('billFlows').withIndex('by_bill', q => q.eq('billId', billId)).unique()
+    if (flow) {
+      const photos = [...new Set([...flow.photos, ...unique])]
+      await ctx.db.patch(flow._id, { photos, updatedAt: now,
+        history: [...flow.history, { at: now, action: 'Bill photo added from phone' }] })
+    }
+    await record(ctx, 'bill.photo.add', `Added ${added.length} photo${added.length === 1 ? '' : 's'} to bill ${bill.number}`,
+      { entity: 'bill', entityId: billId })
+    return { added: added.length, total: updated.attachments.length }
+  },
+})
+
 /**
  * Moves bills out of the old single row into a row each. Safe to run again:
  * a bill already moved is left as it is.

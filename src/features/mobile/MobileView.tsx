@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'convex/react'
-import { ChevronLeft, PackageCheck, Paperclip, Phone, ReceiptText, Search, X } from 'lucide-react'
+import { ChevronLeft, PackageCheck, Paperclip, Phone, ReceiptText, Search, SquarePen, X } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { useStore } from '../../lib/store'
@@ -177,6 +177,10 @@ export function MobileView() {
                 </Link>
               </div>
             </div>
+
+            <Link to="/quick" className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-shiv-green bg-shiv-green/15 text-sm font-bold text-stone-900 dark:text-shiv-green">
+              <SquarePen size={17} aria-hidden="true" /> Quick entry: ledger, photo, money
+            </Link>
 
             <label className="flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2.5 dark:border-white/15 dark:bg-white/5">
               <Search size={16} className="shrink-0 text-stone-400" aria-hidden="true" />

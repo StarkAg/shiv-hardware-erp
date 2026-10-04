@@ -7,6 +7,32 @@ import { attachmentName, isPdfAttachment } from '../src/lib/attachments'
 const modules = import.meta.glob('../convex/**/*.ts')
 
 describe('attachment persistence and previews', () => {
+  it('adds a phone image to the bill, voucher and flow once', async () => {
+    const t = convexTest(schema, modules)
+    await t.run(async ctx => {
+      await ctx.db.insert('groups', { name: 'Sundry Debtors', nature: 'asset', normalSide: 'Dr', sort: 0 })
+      const sales = await ctx.db.insert('groups', { name: 'Sales Accounts', nature: 'income', normalSide: 'Cr', sort: 1 })
+      await ctx.db.insert('ledgers', { name: 'Sales', groupId: sales, openingBalance: 0, openingSide: 'Cr', openingAsOf: 1, active: true, createdAt: 1, updatedAt: 1 })
+      await ctx.db.insert('voucherTypes', { name: 'Sale', abbr: 'SAL', sort: 0 })
+    })
+    const original = await t.run(ctx => ctx.storage.store(new Blob(['original'], { type: 'image/jpeg' })))
+    const posted = await t.mutation(api.billLedger.postBill, {
+      bill: { id: 'phone-photo-sale', number: '', kind: 'sale', date: '2026-10-05', customerName: 'Example Customer',
+        items: [{ id: 'line-1', description: 'Goods', qty: 1, unit: 'Pc', amount: 100 }], total: 100,
+        paid: false, paymentMode: 'cash' }, attachments: [{ storageId: original, kind: 'bill' }], keepAsBill: true,
+    })
+    const photo = await t.run(ctx => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
+    expect(await t.mutation(api.bills.addImages, { billId: 'phone-photo-sale', storageIds: [photo] })).toEqual({ added: 1, total: 2 })
+    expect(await t.mutation(api.bills.addImages, { billId: 'phone-photo-sale', storageIds: [photo] })).toEqual({ added: 0, total: 2 })
+    const bill = (await t.query(api.bills.get, {}))?.bills.find((row: any) => row.id === 'phone-photo-sale')
+    expect(bill?.attachments).toEqual([{ storageId: original, kind: 'bill' }, { storageId: photo, kind: 'bill' }])
+    const voucher = await t.query(api.vouchers.detail, { id: posted.voucherId! })
+    expect(voucher?.attachments).toEqual([expect.objectContaining({ storageId: original }), expect.objectContaining({ storageId: photo })])
+    const [flow] = await t.run(ctx => ctx.db.query('billFlows').collect())
+    expect(flow.photos).toEqual([original, photo])
+    await expect(t.mutation(api.bills.addImages, { billId: 'missing-bill', storageIds: [photo] })).rejects.toThrow('posted bill')
+  })
+
   it('keeps quotation photos through reopen and conversion to sale', async () => {
     const t = convexTest(schema, modules)
     const photo = await t.run(ctx => ctx.storage.store(new Blob(['bill'], { type: 'image/jpeg' })))

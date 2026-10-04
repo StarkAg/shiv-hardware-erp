@@ -19,6 +19,7 @@ import { CashPending } from './features/cash/CashPending'
 import { Home } from './features/home/Home'
 import { PdfViewer } from './features/pdf/PdfViewer'
 import { MobileView } from './features/mobile/MobileView'
+import { QuickEntry } from './features/mobile/QuickEntry'
 import { DayPaper } from './features/paper/DayPaper'
 import { Receive } from './features/receive/Receive'
 import { BillFlow } from './features/flow/BillFlow'
@@ -106,7 +107,7 @@ function PhoneGate() {
    * site now and never reaches this router at all.
    */
   const forThePhone = new URLSearchParams(window.location.search).has('capture') ||
-    window.location.hash.startsWith('#/bill-flow')
+    window.location.hash.startsWith('#/bill-flow') || window.location.hash.startsWith('#/quick')
 
   return phone && !optedOut && !forThePhone ? <Navigate to="/m" replace /> : <AppLayout />
 }
@@ -133,6 +134,7 @@ document.addEventListener(
 
 const router = createHashRouter([
   { path: '/m', element: <MobileView />, errorElement: <AppError /> },
+  { path: '/quick', element: <QuickEntry />, errorElement: <AppError /> },
   // Staff at the door, on a phone: a delivery in, with the challan photo.
   { path: '/receive', element: <Receive />, errorElement: <AppError /> },
   {
