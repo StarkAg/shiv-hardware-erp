@@ -192,9 +192,9 @@ export default function Ledger() {
   const shown = useMemo(() => {
     const all = listed
     if (!typed) return all
-    const listed = new Set(all.map((r) => r.partyLedgerId))
+    const onList = new Set(all.map((r) => r.partyLedgerId))
     const others = (parties ?? [])
-      .filter((p) => !listed.has(p._id))
+      .filter((p) => !onList.has(p._id))
       .map((p) => ({ partyLedgerId: p._id, name: p.name, folder: null, bills: 0, unpriced: 0, slotLabel: null, noPaper: true }))
     const sq = squash(typed)
     const rank = (r) => (squash(r.name) === sq ? 0 : squash(r.name).startsWith(sq) ? 1 : 2)
