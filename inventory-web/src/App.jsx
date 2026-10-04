@@ -198,7 +198,6 @@ export default function App() {
   const status = syncLabel({ queue, online, syncing, pin, blocked })
   return <div className="app">
     <header className="top">
-      <div className="brand"><b>Inventory</b><span>Shiv Hardware</span></div>
       <nav className="tabs" aria-label="Sections">
         <button className={tab === 'stock' ? 'on' : ''} onClick={() => { setTab('stock'); setError('') }}>Stock</button>
         <button className={tab === 'edit' ? 'on' : ''} onClick={() => { setTab('edit'); setError('') }}>Edit</button>
