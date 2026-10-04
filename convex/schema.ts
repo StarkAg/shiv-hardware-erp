@@ -927,6 +927,12 @@ export default defineSchema({
   })
     .index("by_party", ["partyLedgerId"])
     .index("by_slot", ["slot"]),
+  // Customers ticked off on the Sort app's Ledger (tapped while sorting a
+  // stack), shared by every phone until somebody presses Reset.
+  sortMarks: defineTable({
+    partyLedgerId: v.id("ledgers"),
+    at: v.number(),
+  }).index("by_party", ["partyLedgerId"]),
 
   filingPlan: defineTable({
     key: v.string(),

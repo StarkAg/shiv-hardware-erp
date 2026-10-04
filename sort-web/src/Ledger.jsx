@@ -59,6 +59,8 @@ export default function Ledger() {
   // "Add" never opens a second account for a name the books already have.
   const parties = useCached(anyApi.filing.parties, {}, 'parties')
   const { pending } = useOutbox()
+  // Ticked off on any phone, kept in Convex until Reset.
+  const marks = useCached(anyApi.filing.marks, {}, 'marks')
   const freeHold = useMutation(anyApi.filing.freeHold)
   // Same rename the panel uses: the new name goes everywhere the old one was
   // written, and a name another account already has is refused.
@@ -143,6 +145,38 @@ export default function Ledger() {
       }))
     return [...all, ...fresh].sort((a, b) => a.name.localeCompare(b.name))
   }, [rows, pending])
+
+  /**
+   * Who is ticked: the server's list, with this phone's own taps and resets
+   * still on their way laid over it in the order they were made. A customer
+   * added here is ticked at once (the server ticks them when it opens the
+   * account).
+   */
+  const ticks = useMemo(() => {
+    let map = new Map((marks ?? []).map((m) => [String(m.partyLedgerId), m.at]))
+    for (const it of pending) {
+      if (it.fn === 'filing:resetMarks') map = new Map()
+      else if (it.fn === 'filing:mark') map.set(String(it.args.partyLedgerId), it.at)
+    }
+    for (const r of listed) if (r.pending) map.set(String(r.partyLedgerId), Date.now())
+    return map
+  }, [marks, pending, listed])
+  const lastTick = useMemo(() => {
+    let best = null
+    for (const [id, at] of ticks) if (!best || at > best.at) best = { id, at }
+    return best?.id ?? null
+  }, [ticks])
+  const tap = (r) => {
+    if (r.pending) return
+    send(anyApi.filing.mark, { partyLedgerId: r.partyLedgerId })
+    setOpen(r.partyLedgerId)
+  }
+  const resetTicks = () => {
+    if (!ticks.size) return
+    if (!window.confirm(`Clear all ${ticks.size} ticks? Every phone starts fresh.`)) return
+    send(anyApi.filing.resetMarks, {})
+    setSaid('Ticks cleared')
+  }
 
   // The server's number for a customer added here, said only when it differs.
   useAnswers(useCallback((item, result, failed) => {
@@ -377,6 +411,13 @@ export default function Ledger() {
         />
       </div>
 
+      {ticks.size > 0 && !typed && (
+        <div className="lg-ticks">
+          <span>{ticks.size} ticked</span>
+          <button className="linkbtn" onClick={resetTicks}>Reset ticks</button>
+        </div>
+      )}
+
       {canAdd && (
         <button className="lg-addrow" disabled={adding} onClick={add}>
           <b>+</b>
@@ -395,7 +436,11 @@ export default function Ledger() {
       ) : (
         <div className="lg-list">
           {shown.map((r) => (
-            <button key={r.partyLedgerId} className={`lg-row${r.pending ? ' pending' : ''}`} onClick={() => !r.pending && setOpen(r.partyLedgerId)}>
+            <button
+              key={r.partyLedgerId}
+              className={`lg-row${r.pending ? ' pending' : ''}${ticks.has(String(r.partyLedgerId)) ? ' ticked' : ''}${lastTick === String(r.partyLedgerId) ? ' last' : ''}`}
+              onClick={() => tap(r)}
+            >
               <span className="lg-row-name">
                 <b>{r.name}</b>
                 <span className="hint">
@@ -408,6 +453,7 @@ export default function Ledger() {
                   named, not from when the paper reaches the table. Written by
                   the server so this and the customer's own page cannot
                   disagree about how a number is spelt. */}
+              {ticks.has(String(r.partyLedgerId)) && <span className="lg-tick" aria-label="Ticked">✓</span>}
               {r.slotLabel && <span className="lg-slot">{r.slotLabel}</span>}
             </button>
           ))}

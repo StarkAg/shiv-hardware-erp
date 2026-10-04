@@ -1203,6 +1203,9 @@ export const addCustomer = mutation({
     const party = await ctx.db.get(ledgerId);
     if (!party) throw new Error("That account is gone");
 
+    // Added from the Ledger: ticked off there too, so the new row shows green.
+    await tick(ctx, ledgerId);
+
     const already = (await slotsHeld(ctx)).get(String(ledgerId));
     if (already !== undefined) {
       return { partyLedgerId: ledgerId, name: party.name, slot: already, slotLabel: slotLabel(already), already: true };
@@ -1216,6 +1219,48 @@ export const addCustomer = mutation({
       entityId: ledgerId,
     });
     return { partyLedgerId: ledgerId, name: party.name, slot, slotLabel: slotLabel(slot), already: false };
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* ticked off on the Ledger                                            */
+/* ------------------------------------------------------------------ */
+// Tapping a customer on the Ledger ticks them off for this round of sorting,
+// so the row changes colour on every phone. Kept until Reset, not by day: a
+// stack can take more than one sitting.
+
+export const marks = query({
+  args: {},
+  handler: async (ctx) =>
+    (await ctx.db.query("sortMarks").collect()).map((m) => ({ partyLedgerId: m.partyLedgerId, at: m.at })),
+});
+
+/** Ticks a customer off (again: only the time moves, so the newest is "last"). */
+async function tick(ctx: MutationCtx, partyLedgerId: Id<"ledgers">) {
+  const row = await ctx.db
+    .query("sortMarks")
+    .withIndex("by_party", (q) => q.eq("partyLedgerId", partyLedgerId))
+    .first();
+  if (row) await ctx.db.patch(row._id, { at: Date.now() });
+  else await ctx.db.insert("sortMarks", { partyLedgerId, at: Date.now() });
+}
+
+export const mark = mutation({
+  args: { partyLedgerId: v.id("ledgers") },
+  handler: async (ctx, { partyLedgerId }) => {
+    await tick(ctx, partyLedgerId);
+    return { ok: true };
+  },
+});
+
+/** Clears every tick, for the next stack. */
+export const resetMarks = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("sortMarks").collect();
+    for (const m of all) await ctx.db.delete(m._id);
+    await record(ctx, "filing.marks", `Ledger ticks reset (${all.length})`, {});
+    return { cleared: all.length };
   },
 });
 

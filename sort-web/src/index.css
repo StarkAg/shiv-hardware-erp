@@ -708,3 +708,10 @@ button:disabled { cursor: default; }
 .lg-edit input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; }
 .lg-edit-acts { display: flex; gap: 8px; justify-content: flex-end; }
 .lg-row.pending { opacity: .7; }
+
+/* Ticked off on the Ledger (kept in Convex until Reset). */
+.lg-row.ticked { background: color-mix(in srgb, var(--go) 14%, transparent); }
+.lg-row.ticked .lg-row-name b { color: var(--go); }
+.lg-row.last { background: color-mix(in srgb, var(--go) 30%, transparent); box-shadow: inset 4px 0 0 var(--go); }
+.lg-tick { flex: none; margin-left: auto; color: var(--go); font-weight: 800; font-size: 18px; }
+.lg-ticks { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px; font-size: 13px; color: var(--muted); }
