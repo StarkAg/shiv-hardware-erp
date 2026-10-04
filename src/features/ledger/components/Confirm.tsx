@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLedgerTheme } from '../useLedgerTheme';
+// The counter app uses these dialogs without ever mounting the ledger page.
+import '../ledger.css';
 
 /**
  * Asks before doing something that cannot be shrugged off. With `requireText`
@@ -41,27 +44,55 @@ export default function Confirm({
   const [typed, setTyped] = useState('');
   const [secret, setSecret] = useState('');
   const [error, setError] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const submitting = useRef(false);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    dialog?.querySelector<HTMLElement>('input, button')?.focus();
+    return () => { if (previous?.isConnected) previous.focus(); };
+  }, []);
+
+  const close = () => { if (!submitting.current) onClose(); };
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
+    if (event.key !== 'Tab') return;
+    const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('input:not(:disabled), button:not(:disabled)') ?? []);
+    const first = controls[0], last = controls[controls.length - 1];
+    if (!first) { event.preventDefault(); return; }
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  };
 
   const matches =
     (!requireText || typed.trim().toLowerCase() === requireText.trim().toLowerCase()) &&
     (!ask || secret.trim() !== '');
 
   const go = async () => {
-    if (!matches || busy) return;
+    if (!matches || submitting.current) return;
+    submitting.current = true;
     setBusy(true);
+    setError('');
     try {
       await onConfirm(secret);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      submitting.current = false;
       setBusy(false);
     }
   };
 
-  return (
-    <div className={`ledger-root portal${dark ? ' dark' : ''}`}>
-    <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal narrow" role="dialog" aria-modal="true" aria-label={title}>
+  return createPortal(
+    <div className={`ledger-root portal${dark ? ' dark' : ''}`} data-enter="off">
+    <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div ref={dialogRef} className="modal narrow" role="dialog" aria-modal="true" aria-label={title} aria-busy={busy} onKeyDown={onKeyDown}>
         <h2>{title}</h2>
         {body && <div className="hint">{body}</div>}
 
@@ -70,6 +101,7 @@ export default function Confirm({
             {requireLabel ?? 'Type the name to confirm'}
             <input
               value={typed}
+              disabled={busy}
               onChange={(e) => setTyped(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && go()}
               placeholder={requireText}
@@ -86,6 +118,7 @@ export default function Confirm({
             <input
               type={ask.secret ? 'password' : 'text'}
               value={secret}
+              disabled={busy}
               onChange={(e) => setSecret(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && go()}
               autoFocus={!requireText}
@@ -95,11 +128,12 @@ export default function Confirm({
           </label>
         )}
 
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error" role="alert">{error}</p>}
 
         <div className="modal-actions">
-          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn ghost" onClick={close} disabled={busy}>Cancel</button>
           <button
+            type="button"
             className={`btn${danger ? ' danger' : ''}`}
             onClick={go}
             disabled={busy || !matches}
@@ -109,6 +143,7 @@ export default function Confirm({
         </div>
       </div>
     </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

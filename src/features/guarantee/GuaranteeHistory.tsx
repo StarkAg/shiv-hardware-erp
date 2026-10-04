@@ -276,6 +276,7 @@ export function GuaranteeHistory() {
       {deleting && (
         <Confirm
           title={`Delete ${deleting.number}?`}
+          body="Remove this card from this device's Guarantee History? The cloud copy and printed card will remain available."
           confirmLabel="Delete"
           danger
           onConfirm={() => deleteGuarantee(deleting.id)}
