@@ -17,6 +17,7 @@ import Shoot from './Shoot.jsx'
 import Name from './Name.jsx'
 import Place from './Place.jsx'
 import Ledger from './Ledger.jsx'
+import { useOutbox } from './local.js'
 
 const TABS = [
   { id: 'shoot', label: 'Shoot', icon: 'camera' },
@@ -36,6 +37,10 @@ export default function App() {
   })
 
   const [working, setWorking] = useState(false)
+  // Starts the background sender on every tab, and says when work is still
+  // on its way — closing the app then only delays it, never loses it.
+  const { pending } = useOutbox()
+  const stuck = pending.find((p) => p.tries)
   const [keyboard, setKeyboard] = useState(false)
   useEffect(() => {
     const viewport = window.visualViewport
@@ -66,7 +71,14 @@ export default function App() {
     <div className={`app app-${tab}`}>
       <header className="bar">
         <div><h1>Shiv Hardware</h1><span className="bar-caption">Bill sorting</span></div>
-        <span className="step-label">{TABS.find(t => t.id === tab)?.label}</span>
+        <span className="step-label">
+          {pending.length > 0 && (
+            <em className={`sync${stuck ? ' late' : ''}`} title={stuck?.error}>
+              {stuck ? `${pending.length} waiting for signal` : `${pending.length} saving…`}
+            </em>
+          )}
+          {TABS.find(t => t.id === tab)?.label}
+        </span>
       </header>
 
       {tab === 'shoot' ? <Shoot onWorking={setWorking} /> : tab === 'name' ? <Name onNavigate={go} /> : tab === 'place' ? <Place onNavigate={go} /> : <Ledger />}

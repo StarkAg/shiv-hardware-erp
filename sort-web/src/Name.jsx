@@ -13,9 +13,10 @@
  * still stands, for a plainer reason. The app cannot call out a bookmark for a
  * slip whose customer it does not yet know, and naming is where it finds out.
  */
-import { useEffect, useRef, useState } from 'react'
-import { useAction, useMutation, useQuery } from 'convex/react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useAction } from 'convex/react'
 import { anyApi } from 'convex/server'
+import { send, useAnswers, useCached, useOutbox } from './local.js'
 import { bestMatch, clean, isOwnShop } from './match.js'
 import Picker from './Picker.jsx'
 import PhotoViewer from './PhotoViewer.jsx'
@@ -51,17 +52,53 @@ export default function Name({ onNavigate }) {
   const fieldRef = useRef(null)
   const saveRef = useRef(null)
 
-  const stacks = useQuery(anyApi.filing.waiting, {})
-  const parties = useQuery(anyApi.filing.parties, {})
-  const next = useQuery(anyApi.filing.toName, {
-    ...(stack === null ? {} : { stack }),
-  })
-  const nameIt = useMutation(anyApi.filing.nameIt)
-  const discardShot = useMutation(anyApi.filing.discardShot)
+  // From this phone's copy first, the live answer as soon as it lands.
+  const stacks = useCached(anyApi.filing.waiting, {}, 'waiting')
+  const parties = useCached(anyApi.filing.parties, {}, 'parties')
+  const queue = useCached(anyApi.filing.nameQueue, stack === null ? {} : { stack }, `nameQueue:${stack ?? '*'}`)
   const readAhead = useAction(anyApi.ai.readNamesAhead)
+  const { pending, hidden } = useOutbox()
 
-  const photo = next?.photo ?? null
+  // Named on this phone but not yet on the server: already off the tray here.
+  const bills = useMemo(() => (queue?.bills ?? []).filter((b) => !hidden.has(b.id)), [queue, hidden])
+  const photo = bills[0] ?? null
+  const ahead = useMemo(() => bills.slice(1, 6).map((b) => b.pages[0]?.url).filter(Boolean), [bills])
+  const next = queue && { photo, index: photo?.index ?? 0, total: queue.total, ahead }
   const guess = clean(photo?.guess)
+
+  /**
+   * The bookmark, worked out here the way the server does it: a customer
+   * already holding one keeps it, anybody new takes the lowest free number.
+   * Names still on their way count as held, so two in a row are not both
+   * told the same number. The server's own answer is checked when it comes.
+   */
+  const bookmarkFor = useCallback((pickNow) => {
+    const held = new Map((queue?.held ?? []).map((h) => [String(h.partyLedgerId), h.slot]))
+    const key = pickNow.id ? `id:${pickNow.id}` : `name:${pickNow.name.trim().toLowerCase()}`
+    const byName = new Map((parties ?? []).map((p) => [p.name.toLowerCase(), String(p._id)]))
+    const own = pickNow.id || byName.get(pickNow.name.trim().toLowerCase())
+    if (own && held.has(String(own))) return held.get(String(own))
+    const taken = new Set(held.values())
+    for (const it of pending) {
+      if (it.fn !== 'filing:nameIt' || it.meta?.slot == null) continue
+      if (it.meta.key === key) return it.meta.slot
+      taken.add(it.meta.slot)
+    }
+    const ceiling = queue?.count ?? taken.size + 1
+    for (let slot = 1; slot <= ceiling; slot += 1) if (!taken.has(slot)) return slot
+    return null
+  }, [queue, parties, pending])
+
+  // The server's answer to each name sent: said only when it differs.
+  useAnswers(useCallback((item, result, failed) => {
+    if (item.fn !== 'filing:nameIt') return
+    if (failed) return setError(`Not saved: ${item.meta?.party ?? 'a slip'} — ${failed}`)
+    if (result && item.meta && result.slot !== item.meta.slot) {
+      setSaid(result.slot == null
+        ? `${result.party} — no bookmark free yet`
+        : `${result.party} is bookmark ${result.slot}, not ${item.meta.slot}`)
+    }
+  }, []))
 
   // Fetch the next few slips while this one is being answered, so the card is
   // never blank when it arrives.
@@ -125,29 +162,24 @@ export default function Name({ onNavigate }) {
     })),
   ]
 
-  const save = async () => {
+  // Instant: the next slip is on screen before the server has heard of this
+  // one. The name goes in the outbox and is sent behind it, in order.
+  const save = () => {
     if (!photo || (!pick.id && !pick.name.trim())) return setError('Say whose bill this is')
-    setBusy(true)
     setError('')
-    try {
-      const res = await nameIt({
-        inboxId: photo.id,
-        ...(pick.id ? { partyLedgerId: pick.id } : { partyName: pick.name.trim() }),
-      })
-      // The bookmark is decided here now, so it is said here. The slip still
-      // goes back on the stack — the number is where it will go, not where it
-      // has gone — but seeing it while naming is what lets somebody write it
-      // on the slip in pencil and skip the second walk for that one.
-      setSaid(
-        res.slotLabel
-          ? `${res.party} — bookmark ${res.slot}, back on the stack`
-          : `${res.party} — back on the stack`,
-      )
-      setFocusWant('field')
-    } catch (err) {
-      setError(err?.message ?? String(err))
-    }
-    setBusy(false)
+    const party = pick.name.trim()
+    const slot = bookmarkFor(pick)
+    send(
+      anyApi.filing.nameIt,
+      { inboxId: photo.id, ...(pick.id ? { partyLedgerId: pick.id } : { partyName: party }) },
+      photo.id,
+      { party, slot, key: pick.id ? `id:${pick.id}` : `name:${party.toLowerCase()}` },
+    )
+    // Seeing the number while naming is what lets somebody write it on the
+    // slip in pencil and skip the second walk for that one.
+    setSaid(slot == null ? `${party} — back on the stack` : `${party} — bookmark ${slot}, back on the stack`)
+    setTouched(false)
+    setFocusWant('field')
     return undefined
   }
 
@@ -292,18 +324,10 @@ export default function Name({ onNavigate }) {
               <button
                 className="btn bin"
                 disabled={busy}
-                onClick={async () => {
-                  setBusy(true)
-                  setError('')
-                  try {
-                    await discardShot({ inboxId: photo.id })
-                    setBinning(false)
-                    setSaid('Thrown away.')
-                  } catch (e) {
-                    setError(String(e?.message || e))
-                  } finally {
-                    setBusy(false)
-                  }
+                onClick={() => {
+                  send(anyApi.filing.discardShot, { inboxId: photo.id }, photo.id)
+                  setBinning(false)
+                  setSaid('Thrown away.')
                 }}
               >
                 {busy ? 'Throwing…' : 'Throw it away'}

@@ -10,9 +10,9 @@
  * is sitting in, so the slip being named on the screen is always the one on
  * top. Nothing has to be searched for.
  */
-import { useEffect, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { anyApi } from 'convex/server'
+import { send, unhide, unsend, useAnswers, useCached, useOutbox } from './local.js'
 import PhotoViewer from './PhotoViewer.jsx'
 import { preload } from './preload.js'
 
@@ -25,9 +25,11 @@ export default function Place({ onNavigate }) {
   const [error, setError] = useState('')
   const [shown, setShown] = useState(null)   // what this phone last called out
 
-  const state = useQuery(anyApi.filing.placeState, stack === null ? {} : { stack })
-  const placeNext = useMutation(anyApi.filing.placeNext)
-  const unplace = useMutation(anyApi.filing.unplace)
+  // The next few dozen slips, from this phone's copy first. Next walks this
+  // list on the spot; the server is told behind it.
+  const state = useCached(anyApi.filing.placeQueue, stack === null ? {} : { stack }, `placeQueue:${stack ?? '*'}`)
+  const { hidden } = useOutbox()
+  const queue = useMemo(() => (state?.queue ?? []).filter((c) => !hidden.has(c.id)), [state, hidden])
 
   // Opening the app again mid-stack picks up where it was left, rather than
   // showing a blank screen to somebody holding a slip.
@@ -38,33 +40,36 @@ export default function Place({ onNavigate }) {
 
   // Next is pressed as fast as paper can be moved; the photograph has to be
   // there already or it is only ever seen after the fact.
+  const ahead = useMemo(() => queue.slice(0, 6).map((c) => c.url).filter(Boolean), [queue])
   useEffect(() => {
-    preload(state?.ahead)
-  }, [state?.ahead])
+    preload(ahead)
+  }, [ahead])
 
-  const next = async () => {
-    setBusy(true)
+  // A slip named before bookmarks were decided at naming has no number yet;
+  // the server gives it one and its answer fills it in.
+  useAnswers(useCallback((item, result, failed) => {
+    if (item.fn !== 'filing:placeRow') return
+    if (failed) return setError(`Not saved — ${failed}`)
+    setShown((s) => (s && s.id === item.hide && s.slot == null && result?.slot != null
+      ? { ...s, slot: result.slot, slotLabel: `S${String(result.slot).padStart(2, '0')}` }
+      : s))
+  }, []))
+
+  const next = () => {
+    const top = queue[0]
+    if (!top) return
     setError('')
-    try {
-      const res = await placeNext(stack === null ? {} : { stack })
-      setShown(res.done ? null : res.card)
-      if (res.done) setError('')
-    } catch (err) {
-      setError(err?.message ?? String(err))
-    }
-    setBusy(false)
+    setShown(top)
+    send(anyApi.filing.placeRow, { id: top.id }, top.id)
   }
 
-  const back = async () => {
+  const back = () => {
     if (!card) return
-    setBusy(true)
-    try {
-      await unplace({ id: card.id })
-      setShown(null)
-    } catch (err) {
-      setError(err?.message ?? String(err))
-    }
-    setBusy(false)
+    setError('')
+    // Not sent yet: simply taken back. Already sent: put back on the stack.
+    if (!unsend(card.id, 'filing:placeRow')) send(anyApi.filing.unplace, { id: card.id })
+    unhide(card.id)
+    setShown(null)
   }
 
   const chips = [
@@ -77,7 +82,8 @@ export default function Place({ onNavigate }) {
     })),
   ]
 
-  const left = state?.left ?? 0
+  // Placed here but not yet on the server: no longer left.
+  const left = Math.max(0, (state?.left ?? 0) - (state?.queue ?? []).filter((c) => hidden.has(c.id)).length)
 
   return (
     <>
@@ -130,7 +136,9 @@ export default function Place({ onNavigate }) {
               {card.index} of {card.total}
             </p>
             <p className="callwho">{card.party}</p>
-            {card.slotLabel ? (
+            {card.slot == null && hidden.has(card.id) ? (
+              <p className="callslot"><span>BOOKMARK</span><b>…</b></p>
+            ) : card.slotLabel ? (
               <p className="callslot">
                 <span>BOOKMARK</span>
                 <b>{card.slot}</b>

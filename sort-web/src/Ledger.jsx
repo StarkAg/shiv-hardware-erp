@@ -12,6 +12,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
+import { useCached } from './local.js'
 import { anyApi } from 'convex/server'
 import PhotoViewer from './PhotoViewer.jsx'
 import { clean } from './match.js'
@@ -51,12 +52,12 @@ export default function Ledger() {
   const [find, setFind] = useState('')
   const [open, setOpen] = useState(null)
 
-  const rows = useQuery(anyApi.filing.folders, {})
+  const rows = useCached(anyApi.filing.folders, {}, 'folders')
   const one = useQuery(anyApi.filing.partyBills, open ? { partyLedgerId: open } : 'skip')
   const revertBill = useMutation(anyApi.filing.revertBill)
   // Every customer account, so a search finds people with no paper yet too, and
   // "Add" never opens a second account for a name the books already have.
-  const parties = useQuery(anyApi.filing.parties, {})
+  const parties = useCached(anyApi.filing.parties, {}, 'parties')
   const addCustomer = useMutation(anyApi.filing.addCustomer)
   const freeHold = useMutation(anyApi.filing.freeHold)
   const searchBox = useRef(null)

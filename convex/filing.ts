@@ -848,6 +848,125 @@ export const toName = query({
   },
 });
 
+/* ------------------------------------------------------------------ */
+/* the phone works ahead: queues it walks on its own                   */
+/* ------------------------------------------------------------------ */
+// Saving a name or pressing Next used to wait on the server twice — the
+// mutation, then the query re-running to say what comes next. The phone now
+// holds the next few dozen slips and the bookmarks already given out, moves on
+// the moment it is pressed, and sends the change behind it. The server stays
+// the judge: what it answers replaces what the phone guessed.
+
+const QUEUE = 30;
+
+/** Rank of `at` among sorted times: how many come before it, plus one. */
+function rankIn(sorted: number[], at: number): number {
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < at) lo = mid + 1; else hi = mid; }
+  return lo + 1;
+}
+
+/** The next bills to name, each with its sheets, plus what the phone needs to number them. */
+export const nameQueue = query({
+  args: { stack: v.optional(v.string()) },
+  handler: async (ctx, { stack }) => {
+    const photos = await ctx.db.query("inbox").withIndex("by_at").order("asc").take(400);
+    const wanted = stack ? photos.filter((p) => p.stack === stack) : photos;
+    const filing = await ctx.db.query("filing").collect();
+
+    // One entry per bill (a two-sheet bill is one), in stack order.
+    const bills = new Map<string, Doc<"inbox">[]>();
+    for (const p of wanted) {
+      const key = p.groupId ? `g:${p.groupId}` : `p:${p._id}`;
+      bills.set(key, [...(bills.get(key) ?? []), p]);
+    }
+    const firsts = [...bills.values()].map((pages) => Math.min(...pages.map((p) => p.at)));
+    const named = filing.filter((r) => (stack ? r.stack === stack : true)).map((r) => r.capturedAt);
+    const times = [...firsts, ...named].sort((a, b) => a - b);
+
+    const out = [];
+    for (const pages of [...bills.values()].slice(0, QUEUE)) {
+      pages.sort((a, b) => a.at - b.at);
+      const photo = pages[0];
+      const reading = await ctx.db
+        .query("readings")
+        .withIndex("by_inbox", (q) => q.eq("inboxId", photo._id))
+        .first();
+      out.push({
+        id: photo._id,
+        at: photo.at,
+        stack: photo.stack ?? null,
+        guess: reading?.status === "ready" && typeof reading.draft?.party === "string" ? String(reading.draft.party).trim() : "",
+        reading: reading?.status ?? null,
+        index: rankIn(times, photo.at),
+        pages: await Promise.all(pages.map(async (p) => ({ id: p._id, url: await ctx.storage.getUrl(p.storageId) }))),
+      });
+    }
+    const held = await slotsHeld(ctx);
+    return {
+      bills: out,
+      left: bills.size,
+      total: times.length,
+      held: [...held].map(([partyLedgerId, slot]) => ({ partyLedgerId, slot })),
+      count: await slotCount(ctx),
+    };
+  },
+});
+
+/** The next slips to place, in stack order, each already showing its bookmark. */
+export const placeQueue = query({
+  args: { stack: v.optional(v.string()) },
+  handler: async (ctx, { stack }) => {
+    const rows = await ctx.db.query("filing").collect();
+    const byStack = new Map<string, { left: number; placed: number; total: number }>();
+    for (const r of rows) {
+      const key = r.stack ?? "";
+      const tally = byStack.get(key) ?? { left: 0, placed: 0, total: 0 };
+      tally.total += 1;
+      if (r.stage === "named") tally.left += 1;
+      else tally.placed += 1;
+      byStack.set(key, tally);
+    }
+    const mine = stack === undefined ? rows : rows.filter((r) => (r.stack ?? "") === stack);
+    const upNext = mine
+      .filter((r) => r.stage === "named")
+      .sort((a, b) => a.capturedAt - b.capturedAt)
+      .slice(0, QUEUE);
+    const last = mine
+      .filter((r) => r.stage === "slotted" || r.stage === "waiting")
+      .sort((a, b) => b.at - a.at)[0];
+    return {
+      queue: await Promise.all(upNext.map((r) => card(ctx, r, mine))),
+      current: last ? await card(ctx, last, mine) : null,
+      stacks: [...byStack]
+        .map(([s, tally]) => ({ stack: s, ...tally }))
+        .sort((a, b) => a.stack.localeCompare(b.stack)),
+      left: mine.filter((r) => r.stage === "named").length,
+      total: mine.length,
+    };
+  },
+});
+
+/**
+ * This slip is in its bookmark. By id, not "the next one": the phone has
+ * already shown which slip it was, and sending it again (a retry after a
+ * dropped signal) changes nothing.
+ */
+export const placeRow = mutation({
+  args: { id: v.id("filing") },
+  handler: async (ctx, { id }) => {
+    const row = await ctx.db.get(id);
+    if (!row || row.stage !== "named") return { done: true, slot: row?.slot ?? null };
+    const slot = row.slot ?? (await slotFor(ctx, row.partyLedgerId));
+    await ctx.db.patch(id, {
+      slot: slot ?? undefined,
+      stage: slot === null ? "waiting" : "slotted",
+      at: Date.now(),
+    });
+    return { done: true, slot };
+  },
+});
+
 /**
  * "This one is Raj Kumar's." Files it unpriced and answers with its slot.
  *
