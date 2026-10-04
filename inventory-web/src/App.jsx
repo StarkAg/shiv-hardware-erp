@@ -16,7 +16,12 @@ const isOnline = () => typeof navigator === 'undefined' || navigator.onLine
 const brandCode = { Signature: 'S', 'Signature Gold': 'SG', Milton: 'MS' }
 
 function ItemLabel({ item }) {
-  return <span className="item-name"><span>{item.mm}mm</span><span className="item-separator">·</span><span>{item.size.replace('x', ' × ')} {brandCode[item.brand]}</span></span>
+  return <span className="item-name">
+    <span>{item.mm}mm</span>
+    <span className="item-separator">·</span>
+    <span>{item.size.replace('x', ' × ')}</span>
+    <span className="item-code">{brandCode[item.brand]}</span>
+  </span>
 }
 
 function StepIcon({ plus }) {
@@ -196,12 +201,11 @@ export default function App() {
             <h2>{group.brand}</h2>
             <ul className="stock-list">
               {group.items.map(item => <li key={item.ref}>
-                <ItemLabel item={item} />
-                {editing ? <div className="stepper" aria-label={`Quantity for ${item.name}`}>
+                {editing ? <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
                   <button aria-label={`Decrease ${item.name}`} disabled={item.stock <= 0} onClick={() => change(item, -1)}><StepIcon /></button>
                   <span className="quantity alpha-quantity" aria-live="polite"><span>α</span><span>{quantity(item.stock)}</span></span>
                   <button aria-label={`Increase ${item.name}`} onClick={() => change(item, 1)}><StepIcon plus /></button>
-                </div> : <span className={`stock-quantity ${item.stock <= (item.min ?? 2) ? 'low' : ''}`}><b className="alpha-quantity"><span>α</span><span>{quantity(item.stock)}</span></b></span>}
+                </div></> : <div className="stock-line"><ItemLabel item={item} /><span className={`stock-quantity ${item.stock <= (item.min ?? 2) ? 'low' : ''}`}><b className="alpha-quantity"><span>α</span><span>{quantity(item.stock)}</span></b></span></div>}
               </li>)}
             </ul>
           </section>)}
