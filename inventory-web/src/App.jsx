@@ -97,7 +97,6 @@ export default function App() {
   const adjust = useMutation(api.adjustSeed)
   const [device, setDevice] = useState(null)
   const [tab, setTab] = useState('stock')
-  const [sort, setSort] = useState('brand')
   const [brand, setBrand] = useState('')
   const [thickness, setThickness] = useState('')
   const [search, setSearch] = useState('')
@@ -173,12 +172,8 @@ export default function App() {
     ? [...new Set(items.filter(item => item.brand === brand).map(item => item.mm))].sort((a, b) => a - b)
     : [], [items, brand])
   const shown = useMemo(() => items
-    .filter(item => (!brand || item.brand === brand) && (!thickness || item.mm === thickness) && matchesStockSearch(item, search))
-    .sort((a, b) => {
-      if (sort === 'stock') return a.stock - b.stock || a.brand.localeCompare(b.brand) || a.mm - b.mm
-      if (sort === 'thickness') return a.mm - b.mm || a.brand.localeCompare(b.brand) || a.size.localeCompare(b.size)
-      return BRAND_ORDER.indexOf(a.brand) - BRAND_ORDER.indexOf(b.brand) || a.mm - b.mm || a.size.localeCompare(b.size)
-    }), [items, brand, thickness, search, sort])
+    .filter(item => (!brand || item.brand === brand) && (!thickness || item.mm === thickness) && matchesStockSearch(item, search)),
+  [items, brand, thickness, search])
   const editing = tab === 'edit' && Boolean(pin)
   const locked = tab === 'edit' && !pin
 
@@ -206,20 +201,7 @@ export default function App() {
     </header>
     <main className="page">
       {locked ? <PinForm onUnlock={nextPin => { setPin(nextPin); setBlocked(false); setError('') }} /> : <>
-        <div className="toolbar">
-          <label className="sort-control">
-            <span>Sort</span>
-            <span className="sort-select"><select value={sort} onChange={event => setSort(event.target.value)} aria-label="Sort stock">
-                <option value="brand">Brand</option>
-                <option value="thickness">Thickness</option>
-                <option value="stock">Low stock first</option>
-              </select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
-          </label>
-          <div className="toolbar-actions">
-            <span className={`cloud-status ${queue.length ? 'waiting' : ''}`} role="status" aria-live="polite" aria-label={status} title={status}><CloudIcon /></span>
-            {editing && <button className="lock" onClick={() => { setPin(''); setError('') }}>Lock</button>}
-          </div>
-        </div>
+        {editing && <div className="edit-toolbar"><button className="lock" onClick={() => { setPin(''); setError('') }}>Lock</button></div>}
         <div className="filter-stages" aria-label="Product filters">
           <div className="filter-stage" aria-label="Brand"><div className="filter-chips">
             {BRAND_ORDER.map(name => <button key={name} className={brand === name ? 'active' : ''} aria-pressed={brand === name} onClick={() => {
@@ -231,8 +213,8 @@ export default function App() {
             {thicknesses.map(mm => <button key={mm} className={thickness === mm ? 'active' : ''} aria-pressed={thickness === mm} onClick={() => setThickness(current => current === mm ? '' : mm)}>{mm}mm</button>)}
           </div></div>}
         </div>
-        <input className="search" type="search" aria-label="Search stock" placeholder="Search: S, SG, MS, size"
-          value={search} onChange={e => setSearch(e.target.value)} />
+        <div className="search-row"><input className="search" type="search" aria-label="Search stock" placeholder="Search: S, SG, MS, size"
+          value={search} onChange={e => setSearch(e.target.value)} /><span className={`cloud-status ${queue.length ? 'waiting' : ''}`} role="status" aria-live="polite" aria-label={status} title={status}><CloudIcon /></span></div>
         {error && <p className="error" role="alert">{error}</p>}
         {!shown.length ? <p className="hint">No matching stock.</p>
           : <ul className={`stock-list ${editing ? '' : 'stock-cards'}`}>
