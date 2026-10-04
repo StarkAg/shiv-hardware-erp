@@ -44,8 +44,10 @@ const PRINT_SERVER_PUBLIC_URL = (process.env.PRINT_SERVER_PUBLIC_URL || '').repl
 // Prefer a public viewer (e.g. Vercel) so a customer's scan works off the shop
 // Wi-Fi; falls back to the request host so the QR at least works on the LAN.
 const GUARANTEE_PUBLIC_URL = (process.env.GUARANTEE_PUBLIC_URL || '').replace(/\/+$/, '')
-// The short link (qr-redirect/) printed instead when set: <short>/<number>/<token>.
-const GUARANTEE_SHORT_URL = (process.env.GUARANTEE_SHORT_URL || '').replace(/\/+$/, '')
+// The short link (qr-redirect/) printed on every card: <short>/<number>/<token>.
+// Same as GUARANTEE_SHORT_URL in src/lib/printServer.ts; an empty value in .env
+// turns it off and prints the long link.
+const GUARANTEE_SHORT_URL = (process.env.GUARANTEE_SHORT_URL ?? 'https://gcvf.vercel.app').replace(/\/+$/, '')
 const CLOUD_API_URL = (process.env.CLOUD_API_URL || '').replace(/\/+$/, '')
 const CLOUD_API_KEY = process.env.CLOUD_API_KEY || ''
 const PRINTER_AGENT_ID = process.env.PRINTER_AGENT_ID || 'shiv-shop-printer'

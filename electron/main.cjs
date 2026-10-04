@@ -221,8 +221,9 @@ const CARD_PRINT_DEFAULTS = {
   // The QR on the card must open the hosted Shiv Hardware site — same URL the
   // print server prints (GUARANTEE_PUBLIC_URL + '/' + number).
   guaranteePublicUrl: 'https://www.shivhardware.store/Gaurantee',
-  // The short link (qr-redirect/) printed instead when set: <short>/<number>/<token>.
-  guaranteeShortUrl: '',
+  // The short link (qr-redirect/) printed on every card: <short>/<number>/<token>.
+  // Same as GUARANTEE_SHORT_URL in src/lib/printServer.ts.
+  guaranteeShortUrl: 'https://gcvf.vercel.app',
 }
 
 function cardPrintConfig() {

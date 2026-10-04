@@ -59,8 +59,8 @@ const CFG = {
   cloudApi: (appEnv.VITE_CLOUD_API_URL || '').replace(/\/+$/, ''),
   cloudKey: appEnv.VITE_CLOUD_API_KEY || '',
   site: (psEnv.GUARANTEE_PUBLIC_URL || appEnv.VITE_GUARANTEE_PUBLIC_URL || 'https://www.shivhardware.store/Gaurantee').replace(/\/+$/, ''),
-  // The short link (qr-redirect/) printed instead when set: <short>/<number>/<token>.
-  short: (psEnv.GUARANTEE_SHORT_URL || appEnv.VITE_GUARANTEE_SHORT_URL || '').replace(/\/+$/, ''),
+  // The short link (qr-redirect/) printed on every card: <short>/<number>/<token>.
+  short: (psEnv.GUARANTEE_SHORT_URL ?? appEnv.VITE_GUARANTEE_SHORT_URL ?? 'https://gcvf.vercel.app').replace(/\/+$/, ''),
   printer: printerArg || psEnv.COLOR_PRINTER || 'EPSON L8050 Series',
   slot1: [num(psEnv.EPSON_CARD_SLOT_LEFT_MM, 8), num(psEnv.EPSON_CARD_SLOT_TOP_MM, 35)],
   slot2: [num(psEnv.EPSON_CARD_SLOT2_LEFT_MM, 82), num(psEnv.EPSON_CARD_SLOT2_TOP_MM, 35)],
