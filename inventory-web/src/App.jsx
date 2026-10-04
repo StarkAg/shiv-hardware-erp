@@ -98,6 +98,8 @@ export default function App() {
   const [device, setDevice] = useState(null)
   const [tab, setTab] = useState('stock')
   const [filter, setFilter] = useState('all')
+  const [brand, setBrand] = useState('')
+  const [thickness, setThickness] = useState('')
   const [search, setSearch] = useState('')
   const [pin, setPin] = useState('') // Never written to device storage.
   const [online, setOnline] = useState(isOnline)
@@ -167,11 +169,15 @@ export default function App() {
   const base = device?.items ?? (remoteItems ? hydrateStockItems(remoteItems) : FALLBACK_ITEMS)
   const queue = device?.queue ?? []
   const items = useMemo(() => queuedStock(base, queue), [base, queue])
+  const thicknesses = useMemo(() => brand
+    ? [...new Set(items.filter(item => item.brand === brand).map(item => item.mm))].sort((a, b) => a - b)
+    : [], [items, brand])
   const shown = useMemo(() => items.filter(item =>
-    (filter === 'all' || item.stock <= (item.min ?? 2)) && matchesStockSearch(item, search),
-  ), [items, filter, search])
-  const groups = useMemo(() => BRAND_ORDER.map(brand => ({ brand, items: shown.filter(item => item.brand === brand) }))
-    .filter(group => group.items.length), [shown])
+    (filter === 'all' || item.stock <= (item.min ?? 2)) &&
+    (!brand || item.brand === brand) &&
+    (!thickness || item.mm === thickness) &&
+    matchesStockSearch(item, search),
+  ), [items, filter, brand, thickness, search])
   const editing = tab === 'edit' && Boolean(pin)
   const locked = tab === 'edit' && !pin
 
@@ -208,22 +214,30 @@ export default function App() {
           </div>
           {editing && <button className="lock" onClick={() => { setPin(''); setError('') }}>Lock</button>}
         </div>
+        <div className="filter-stages" aria-label="Product filters">
+          <div className="filter-stage"><span>Brand</span><div className="filter-chips">
+            {BRAND_ORDER.map(name => <button key={name} className={brand === name ? 'active' : ''} aria-pressed={brand === name} onClick={() => {
+              setBrand(current => current === name ? '' : name)
+              setThickness('')
+            }}>{name}</button>)}
+          </div></div>
+          {brand && <div className="filter-stage"><span>Thickness</span><div className="filter-chips">
+            {thicknesses.map(mm => <button key={mm} className={thickness === mm ? 'active' : ''} aria-pressed={thickness === mm} onClick={() => setThickness(current => current === mm ? '' : mm)}>{mm}mm</button>)}
+          </div></div>}
+        </div>
         <input className="search" type="search" aria-label="Search stock" placeholder="Search: S, SG, MS, size"
           value={search} onChange={e => setSearch(e.target.value)} />
         {error && <p className="error" role="alert">{error}</p>}
-        {!groups.length ? <p className="hint">{search ? 'No matching stock.' : 'No low stock.'}</p>
-          : groups.map(group => <section className="brand-group" key={group.brand}>
-            <h2>{group.brand}</h2>
-            <ul className={`stock-list ${editing ? '' : 'stock-cards'}`}>
-              {group.items.map(item => <li key={item.ref}>
+        {!shown.length ? <p className="hint">{search || brand || thickness ? 'No matching stock.' : 'No low stock.'}</p>
+          : <ul className={`stock-list ${editing ? '' : 'stock-cards'}`}>
+              {shown.map(item => <li key={item.ref}>
                 {editing ? <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
                   <button aria-label={`Decrease ${item.name}`} disabled={item.stock <= 0} onClick={() => change(item, -1)}><StepIcon /></button>
                   <span className="quantity alpha-quantity" aria-live="polite"><span>α</span><span>{quantity(item.stock)}</span></span>
                   <button aria-label={`Increase ${item.name}`} onClick={() => change(item, 1)}><StepIcon plus /></button>
                 </div></> : <StockCard item={item} />}
               </li>)}
-            </ul>
-          </section>)}
+            </ul>}
       </>}
     </main>
   </div>
