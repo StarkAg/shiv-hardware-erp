@@ -292,6 +292,29 @@ export const renumberGuarantee = internalMutation({
   },
 })
 
+/**
+ * Removes cards that were never real: duplicate saves of one card, test cards.
+ * Matched on number AND token, so only the exact rows named can go. Run from
+ * the CLI (`npx convex run --prod documents:removeGuaranteeCards …`).
+ */
+export const removeGuaranteeCards = internalMutation({
+  args: { cards: v.array(v.object({ number: v.string(), token: v.string() })) },
+  handler: async (ctx, { cards }) => {
+    const removed: string[] = []
+    for (const { number, token } of cards) {
+      const rows = await ctx.db
+        .query('guaranteeDocuments')
+        .withIndex('by_number', q => q.eq('number', number))
+        .collect()
+      for (const row of rows.filter(r => r.token === token)) {
+        await ctx.db.delete(row._id)
+        removed.push(number)
+      }
+    }
+    return removed
+  },
+})
+
 export const backfillGuaranteeTokens = mutation({
   args: { dryRun: v.optional(v.boolean()) },
   handler: async (ctx, { dryRun }) => {

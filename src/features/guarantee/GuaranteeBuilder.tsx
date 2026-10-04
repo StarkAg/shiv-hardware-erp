@@ -133,8 +133,22 @@ type CardRef = { number: string; id: string; token: string }
 /** A Print/Generate click: slot 1's ref, plus slot 2's own ref when it's on. */
 type MintedRefs = CardRef & { second: CardRef | null }
 
+
+/**
+ * What makes two saved cards the same card: customer (name + mobile), day and
+ * every item line. The number, secret and save time are left out.
+ */
+function cardKey(d: GuaranteeDocument): string {
+  const t = (v: unknown) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const dim = (x?: { inches?: number; soot?: number } | null) => (x ? `${x.inches ?? 0}.${x.soot ?? 0}` : '')
+  return JSON.stringify([
+    t(d.customer?.name), String(d.customer?.mobile ?? '').replace(/\D/g, ''), String(d.date ?? '').slice(0, 10),
+    (d.items ?? []).map((it) => [t(it.brandName), t(it.thickness), t(it.sizeLabel), dim(it.height), dim(it.width), it.qty ?? '', it.amount ?? '', it.guaranteeYears ?? '']),
+  ])
+}
+
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
-  const { sets, bills, saveGuarantee, nextGuaranteeNumber, raiseGuaranteeSeq } = useStore()
+  const { sets, bills, guarantees, saveGuarantee, nextGuaranteeNumber, raiseGuaranteeSeq } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
   // Each Save or Print mints a fresh GC-YYYY-NNNN ref number from the store sequence,
@@ -202,21 +216,39 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   }
   useEffect(() => { void catchUpGuaranteeSeq() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * A card already saved for the same customer, day and items. Print pressed
+   * again (a failed print, a second copy) reprints that card under its own
+   * number instead of saving it again — GC-2026-95244/45/46 were one card.
+   */
+  function savedTwin(d: GuaranteeDocument): CardRef | null {
+    const key = cardKey(d)
+    const twin = guarantees.find((g) => g.token && cardKey(g) === key)
+    return twin ? { number: twin.number, id: twin.id, token: twin.token as string } : null
+  }
+
   function mintFreshRef(): MintedRefs {
-    const number = nextGuaranteeNumber()
+    const blank: CardRef = { number: '', id: '', token: '' }
+    const twin1 = savedTwin(buildGuaranteeDoc(blank))
     // A fresh card is a fresh secret. The QR is printed from this, so it has to
     // exist before the card is drawn, not after it is saved.
-    const next = { number, id: number, token: mintCardToken() }
+    const fresh = (offset: number): CardRef => {
+      const number = nextGuaranteeNumber(offset)
+      return { number, id: number, token: mintCardToken() }
+    }
+    const next = twin1 ?? fresh(0)
     setRef(next)
-    // Slot 2 takes the number after slot 1's, with a secret of its own.
+    // Slot 2 takes the next free number, with a secret of its own.
     let second: CardRef | null = null
     if (secondCardOn) {
-      const number2 = nextGuaranteeNumber(1)
-      second = { number: number2, id: number2, token: mintCardToken() }
+      second = savedTwin(buildSecondDoc(blank)) ?? fresh(twin1 ? 0 : 1)
       setRef2(second)
     }
     return { ...next, second }
   }
+
+  /** True when this card is already in the store (being reprinted, not new). */
+  const isSaved = (r: CardRef) => guarantees.some((g) => g.id === r.id && g.token === r.token)
 
   /** "GC-2026-0012" or "GC-2026-0012 + 0013" for toasts. */
   const mintedLabel = (m: MintedRefs) =>
@@ -445,7 +477,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     await catchUpGuaranteeSeq()
     const minted = mintFreshRef()
     const label = mintedLabel(minted)
-    persistCards(minted)
+    const again = isSaved(minted) && (!minted.second || isSaved(minted.second))
+    if (again) toast(`Already saved as ${label} — reprinting the same card`, 'info')
+    else persistCards(minted)
 
     const printDocs = [buildGuaranteeDoc(minted), ...(minted.second ? [buildSecondDoc(minted.second)] : [])]
     const sent = await sendToPrinter(printDocs, label)
@@ -486,6 +520,10 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     await catchUpGuaranteeSeq()
     setGenerating(false)
     const minted = mintFreshRef()
+    if (isSaved(minted) && (!minted.second || isSaved(minted.second))) {
+      toast(`Already saved as ${mintedLabel(minted)}`, 'info')
+      return
+    }
     persistCards(minted)
     await notifyCustomers(minted)
   }

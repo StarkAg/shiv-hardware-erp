@@ -4,6 +4,8 @@
 //   node scripts/card-job.mjs <job.json> --preview     render the fronts to PNG (nothing saved/printed)
 //   node scripts/card-job.mjs <job.json> --print       number, save to cloud, print slot 1 (+ slot 2)
 //        [--printer "<name>"]                          override the Epson queue (default COLOR_PRINTER)
+//        [--out <dir>]                                 where the PNGs go (default %TEMP%\shiv-card-job)
+//        [--json]                                      end with one "@@RESULT {…}" line for callers
 //
 // Prints the TEXT side only — the back is the shop's pre-printed card for that
 // brand + period (Desktop\Epson designs). Same template, fit rules, QR and tray
@@ -35,10 +37,13 @@ import { createRequire } from 'node:module'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(join(ROOT, 'package.json'))
 const args = process.argv.slice(2)
-const jobPath = args.find((a) => !a.startsWith('--'))
 const PRINT = args.includes('--print')
 const PREVIEW = args.includes('--preview') || !PRINT
-const printerArg = args.includes('--printer') ? args[args.indexOf('--printer') + 1] : ''
+const opt = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : '')
+const printerArg = opt('--printer')
+const outArg = opt('--out')
+const JSON_OUT = args.includes('--json')
+const jobPath = args.find((a, i) => !a.startsWith('--') && !['--printer', '--out'].includes(args[i - 1]))
 if (!jobPath) {
   console.error('usage: node scripts/card-job.mjs <job.json> --preview | --print [--printer "<name>"]')
   process.exit(2)
@@ -72,7 +77,11 @@ const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Pro
 
 // ── job → documents ────────────────────────────────────────────────────────
 const job = JSON.parse(readFileSync(jobPath, 'utf8').replace(/^﻿/, '')) // tolerate a Windows BOM
-const fail = (msg) => { console.error(`✖ ${msg}`); process.exit(1) }
+const fail = (msg) => {
+  console.error(`✖ ${msg}`)
+  if (JSON_OUT) console.log(`@@RESULT ${JSON.stringify({ ok: false, error: msg })}`)
+  process.exit(1)
+}
 if (!job.customer?.name) fail('customer.name is required')
 if (!Array.isArray(job.cards) || !job.cards.length) fail('cards: give 1 or 2 cards')
 if (job.cards.length > 2) fail('the tray holds 2 cards — split the job into passes of 2')
@@ -171,7 +180,7 @@ const docs = cards.map((c, i) => ({
 // ── render the fronts (same template + fit script as the print) ────────────
 const { buildGuaranteeHtml, CARD_W_MM, CARD_H_MM } = await import(pathToFileURL(join(ROOT, 'print-server', 'template.mjs')).href)
 const puppeteer = require('puppeteer-core')
-const outDir = join(tmpdir(), 'shiv-card-job')
+const outDir = outArg || join(tmpdir(), 'shiv-card-job')
 mkdirSync(outDir, { recursive: true })
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true })
 const page = await browser.newPage()
@@ -196,8 +205,10 @@ const summary = docs.map((d, i) =>
 console.log(`${customer.name} · ${customer.mobile || 'no mobile'} · UID ${customer.uid || 'N/A'} · ${day.split('-').reverse().join('-')}`)
 console.log(summary.join('\n'))
 
+const result = () => ({ ok: true, numbers: docs.map((d) => d.number), years: cards.map((c) => c.years), pngs })
 if (!PRINT) {
   console.log(`preview: ${pngs.join('  ')}`)
+  if (JSON_OUT) console.log(`@@RESULT ${JSON.stringify(result())}`)
   process.exit(0)
 }
 
@@ -230,7 +241,7 @@ const psArgs = [
 if (pngs[1]) psArgs.push('-ImagePath2', pngs[1])
 execFileSync('powershell.exe', psArgs, { stdio: 'inherit', windowsHide: true, timeout: 120000 })
 console.log(`printed ✓ → ${CFG.printer}`)
-for (const f of pngs) rmSync(f, { force: true })
+if (!outArg) for (const f of pngs) rmSync(f, { force: true })
 
 // ── WhatsApp (only when the job asks) ──────────────────────────────────────
 if (job.whatsapp && customer.mobile) {
@@ -241,3 +252,4 @@ if (job.whatsapp && customer.mobile) {
 } else {
   console.log('WhatsApp: not sent')
 }
+if (JSON_OUT) console.log(`@@RESULT ${JSON.stringify(result())}`)

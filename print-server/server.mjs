@@ -25,6 +25,7 @@ import {
   buildGuaranteeHtml, buildQuotationHtml, buildBillHtml,
   CARD_W_MM, CARD_H_MM, CARD_SAFE_MM, CARD_PRINT_W_MM, CARD_PRINT_H_MM,
 } from './template.mjs'
+import { registerCardScan } from './card-scan.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
@@ -3919,6 +3920,9 @@ app.get('/track/:id', (req, res) => {
   </script>
 </body></html>`)
 })
+
+// Bill photo → guarantee cards, from a phone on the shop Wi-Fi (/cards).
+registerCardScan(app)
 
 app.listen(PORT, '0.0.0.0', () => {
   const networkUrls = localNetworkUrls(PORT)

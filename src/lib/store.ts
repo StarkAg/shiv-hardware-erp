@@ -151,6 +151,34 @@ interface AppState {
 const DELETED_GUARANTEES_KEY = 'shiv-panel:guarantees-deleted:v1'
 const guaranteeKey = (g: GuaranteeDocument) => g.token || g.id
 
+/**
+ * The counter a card number stands for: GC-<this year>-NNNN, four digits only.
+ * July's test cards in the cloud carry random numbers (GC-2026-95243, 59230…);
+ * counting them sent the counter to GC-2026-95244 on 2026-10-04.
+ */
+export function guaranteeSeqOf(number: string): number | null {
+  const m = /^GC-(\d{4})-(\d{4})$/.exec(number)
+  return m && Number(m[1]) === new Date().getFullYear() ? Number(m[2]) : null
+}
+/**
+ * Cards removed from the cloud on 2026-10-04 — two duplicate saves of
+ * Sanjay Kumar's GC-2026-95246 and July's test cards. Each device drops its
+ * own copy too (by secret, so no real card can match).
+ */
+const RETIRED_GUARANTEE_TOKENS = new Set([
+  'EWMC5UXDEHLZVERKZQNY', 'JGDDWJ7MTE7C464M5XUE', 'MZG3HC3H274QF4DKDR7F', 'KT6Z8B7XLGQ9QBUK8UPF',
+  'YUK9Q7RDSY2X2AKW7H4U', '6R3A9FBG3C9HFK4QYDE7', 'JMJMEHLCJBSNKY9FZD5Q',
+])
+const notRetired = (g: GuaranteeDocument) => !(g.token && RETIRED_GUARANTEE_TOKENS.has(g.token))
+
+/** A counter past four digits came from such a number, never a real card. */
+const sane = (seq: number) => (Number.isFinite(seq) && seq >= 0 && seq <= 9999 ? Math.trunc(seq) : null)
+function startingSeq(saved: number | undefined, guarantees: GuaranteeDocument[]): number {
+  const ok = sane(saved ?? 0)
+  if (ok != null) return ok
+  return Math.max(0, ...guarantees.map((g) => guaranteeSeqOf(g.number) ?? 0))
+}
+
 function deletedGuaranteeKeys(): Set<string> {
   try {
     const parsed = JSON.parse(localStorage.getItem(DELETED_GUARANTEES_KEY) || '[]')
@@ -200,8 +228,8 @@ export const useStore = create<AppState>((set, get) => ({
   quoteSeq: (saved?.quoteSeq as number) ?? 0,
   bills: (saved?.bills as Bill[]) ?? [],
   billSeq: (saved?.billSeq as number) ?? 0,
-  guarantees: (saved?.guarantees as GuaranteeDocument[]) ?? [],
-  guaranteeSeq: (saved?.guaranteeSeq as number) ?? 0,
+  guarantees: ((saved?.guarantees as GuaranteeDocument[]) ?? []).filter(notRetired),
+  guaranteeSeq: startingSeq(saved?.guaranteeSeq as number | undefined, (saved?.guarantees as GuaranteeDocument[]) ?? []),
   hardwareCatalog: (saved?.hardwareCatalog as HardwareCatalog) ?? DEFAULT_HARDWARE_CATALOG,
   customCatalog: (saved?.customCatalog as CustomCatalogEntry[]) ?? [],
   // Seeded from whatever past bills actually used, so nothing already written
@@ -456,13 +484,15 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   nextGuaranteeNumber: (offset = 0) => {
-    const seq = get().guaranteeSeq + 1 + Math.max(0, Math.trunc(offset))
+    const seq = startingSeq(get().guaranteeSeq, get().guarantees) + 1 + Math.max(0, Math.trunc(offset))
     const year = new Date().getFullYear()
     return `GC-${year}-${String(seq).padStart(4, '0')}`
   },
 
   raiseGuaranteeSeq: (atLeast) => {
-    if (!Number.isFinite(atLeast) || atLeast <= get().guaranteeSeq) return
+    if (sane(atLeast) == null) return
+    // Only ever raised — except off a bogus counter, which the shop's real highest replaces.
+    if (atLeast <= get().guaranteeSeq && sane(get().guaranteeSeq) != null) return
     set({ guaranteeSeq: Math.trunc(atLeast) })
     persist(get)
   },
@@ -477,11 +507,8 @@ export const useStore = create<AppState>((set, get) => ({
       } else {
         guarantees.unshift(g)
         // Bump the sequence when number implies a higher one (always true on first save).
-        const match = /^GC-\d{4}-(\d{4,})$/.exec(g.number)
-        if (match) {
-          const n = Number(match[1])
-          if (Number.isFinite(n)) guaranteeSeq = Math.max(guaranteeSeq, n)
-        }
+        const n = guaranteeSeqOf(g.number)
+        if (n != null) guaranteeSeq = Math.max(sane(guaranteeSeq) ?? 0, n)
       }
       return { guarantees, guaranteeSeq }
     })
@@ -507,7 +534,7 @@ export const useStore = create<AppState>((set, get) => ({
     let seq = get().guaranteeSeq
 
     for (const remote of cloud) {
-      if (deleted.has(guaranteeKey(remote))) continue
+      if (deleted.has(guaranteeKey(remote)) || !notRetired(remote)) continue
       // The token says which physical card it is: ids are counted per device,
       // so the same id at two counters can be two different cards.
       const sameId = byId.get(remote.id)
@@ -533,8 +560,8 @@ export const useStore = create<AppState>((set, get) => ({
       // Keep ids unique on this device (History opens and prints cards by id).
       merged.push(sameId ? { ...remote, id: `${remote.id}#${String(remote.token).slice(0, 8)}` } : remote)
       added += 1
-      const match = /^GC-\d{4}-(\d{4,})$/.exec(remote.number)
-      if (match) seq = Math.max(seq, Number(match[1]))
+      const n = guaranteeSeqOf(remote.number)
+      if (n != null) seq = Math.max(sane(seq) ?? 0, n)
     }
 
     if (!added && !updated && !changed) return 0
@@ -545,7 +572,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   syncGuaranteesFromRemote: (remoteGuarantees, remoteSeq) => {
-    set((st) => ({ guarantees: remoteGuarantees, guaranteeSeq: Math.max(st.guaranteeSeq, remoteSeq) }))
+    set((st) => ({ guarantees: remoteGuarantees, guaranteeSeq: Math.max(sane(st.guaranteeSeq) ?? 0, sane(remoteSeq) ?? 0) }))
     const s = get()
     db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: remoteGuarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
   },
