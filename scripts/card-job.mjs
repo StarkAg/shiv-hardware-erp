@@ -59,6 +59,8 @@ const CFG = {
   cloudApi: (appEnv.VITE_CLOUD_API_URL || '').replace(/\/+$/, ''),
   cloudKey: appEnv.VITE_CLOUD_API_KEY || '',
   site: (psEnv.GUARANTEE_PUBLIC_URL || appEnv.VITE_GUARANTEE_PUBLIC_URL || 'https://www.shivhardware.store/Gaurantee').replace(/\/+$/, ''),
+  // The short link (qr-redirect/) printed instead when set: <short>/<number>/<token>.
+  short: (psEnv.GUARANTEE_SHORT_URL || appEnv.VITE_GUARANTEE_SHORT_URL || '').replace(/\/+$/, ''),
   printer: printerArg || psEnv.COLOR_PRINTER || 'EPSON L8050 Series',
   slot1: [num(psEnv.EPSON_CARD_SLOT_LEFT_MM, 8), num(psEnv.EPSON_CARD_SLOT_TOP_MM, 35)],
   slot2: [num(psEnv.EPSON_CARD_SLOT2_LEFT_MM, 82), num(psEnv.EPSON_CARD_SLOT2_TOP_MM, 35)],
@@ -179,7 +181,9 @@ const h = Math.ceil((CARD_H_MM / 25.4) * 96)
 await page.setViewport({ width: w, height: h, deviceScaleFactor: 4 })
 const pngs = []
 for (const [i, doc] of docs.entries()) {
-  const qrUrl = `${CFG.site}/${encodeURIComponent(doc.number)}?k=${encodeURIComponent(doc.token)}`
+  const qrUrl = CFG.short
+    ? `${CFG.short}/${encodeURIComponent(doc.number)}/${encodeURIComponent(doc.token)}`
+    : `${CFG.site}/${encodeURIComponent(doc.number)}?k=${encodeURIComponent(doc.token)}`
   await page.setContent(await buildGuaranteeHtml({ ...doc, qrUrl }, 'card'), { waitUntil: 'load' })
   const file = join(outDir, `${PRINT ? doc.number : `preview-slot${i + 1}`}.png`)
   writeFileSync(file, await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: w, height: h } }))

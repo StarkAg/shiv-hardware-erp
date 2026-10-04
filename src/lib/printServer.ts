@@ -446,6 +446,10 @@ const GUARANTEE_SITE_URL = 'https://www.shivhardware.store/Gaurantee'
  * Aadhaar/mobile), so a QR without it shows "Card not found".
  */
 export function guaranteeOnlineUrl(number: string, token?: string): string {
+  // The short link (qr-redirect/), when one is set: <short>/<number>/<token>, which
+  // redirects to the long one. Shorter, so the QR on the small card is less dense.
+  const short = (import.meta.env.VITE_GUARANTEE_SHORT_URL ?? '').trim().replace(/\/+$/, '')
+  if (short && token) return `${short}/${encodeURIComponent(number)}/${encodeURIComponent(token)}`
   const base = ((import.meta.env.VITE_GUARANTEE_PUBLIC_URL ?? '').trim() || GUARANTEE_SITE_URL).replace(/\/+$/, '')
   const path = `${base}/${encodeURIComponent(number)}`
   return token ? `${path}?k=${encodeURIComponent(token)}` : path

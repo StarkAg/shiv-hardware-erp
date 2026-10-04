@@ -32,6 +32,7 @@ function cardPrintFromEnv() {
     offsetYmm: num('EPSON_CARD_OFFSET_Y_MM'),
     scalePercent: num('EPSON_CARD_SCALE_PERCENT'),
     guaranteePublicUrl: get('GUARANTEE_PUBLIC_URL'),
+    guaranteeShortUrl: get('GUARANTEE_SHORT_URL'),
   }
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined && !Number.isNaN(v)))
 }

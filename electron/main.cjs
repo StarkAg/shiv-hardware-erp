@@ -221,6 +221,8 @@ const CARD_PRINT_DEFAULTS = {
   // The QR on the card must open the hosted Shiv Hardware site — same URL the
   // print server prints (GUARANTEE_PUBLIC_URL + '/' + number).
   guaranteePublicUrl: 'https://www.shivhardware.store/Gaurantee',
+  // The short link (qr-redirect/) printed instead when set: <short>/<number>/<token>.
+  guaranteeShortUrl: '',
 }
 
 function cardPrintConfig() {
@@ -300,6 +302,8 @@ ipcMain.handle('card:print-direct', async (event, payload = {}) => {
   // (Convex getGuaranteeByNumber). Same URL as src/lib/printServer.ts guaranteeOnlineUrl.
   const cardUrl = (doc) => {
     if (!base || !doc.number) return ''
+    const short = String(config.guaranteeShortUrl || '').replace(/\/+$/, '')
+    if (short && doc.token) return `${short}/${encodeURIComponent(doc.number)}/${encodeURIComponent(doc.token)}`
     const url = `${base}/${encodeURIComponent(doc.number)}`
     return doc.token ? `${url}?k=${encodeURIComponent(doc.token)}` : url
   }
