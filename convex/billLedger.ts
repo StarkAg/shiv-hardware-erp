@@ -1,3 +1,4 @@
+import { isWithoutBillParty } from './lib/text'
 import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
@@ -231,6 +232,12 @@ export const postBill = mutation({
      */
     // A cashier entry has already posted the money. The goods voucher must not
     // post that same cash again, even if the read draft carries "paid".
+    if (kind === 'sale' && isWithoutBillParty(customerName)) {
+      bill.customerPhone = ''
+      bill.customerUid = ''
+      bill.paidAmount = hasAmount ? total : 0
+      bill.paid = hasAmount
+    }
     const asked = args.cashEntryId ? 0 : Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0
     // No money changes hands on a goods return; a refund is its own receipt or payment.
     const received = spec.settles || kind === 'return' ? 0 : round2(Math.min(Math.max(asked, 0), Number(bill.total) || 0))

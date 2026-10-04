@@ -352,7 +352,7 @@ export interface BillItem {
 // "Less", "CGST 9%", "S GST 9%", "IGST 18%". None of them is a quantity of
 // anything; picked from My Items they used to arrive with a qty, a unit and
 // a rate. A name that only contains GST ("Sanmica GST 589") is still goods.
-const AMOUNT_ONLY_NAMES = /^(?:fare|cartage|freight|labour|labor|transport|discount|less|(?:[csi]\s*\.?\s*)?gst\b.*)$/i
+const AMOUNT_ONLY_NAMES = /^(?:bill|fare|cartage|freight|labour|labor|transport|discount|less|(?:[csi]\s*\.?\s*)?gst\b.*)$/i
 
 /** A name the counter writes for a charge on the bill rather than goods. */
 export const isChargeName = (name: string | undefined) => AMOUNT_ONLY_NAMES.test((name ?? '').trim())

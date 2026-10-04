@@ -176,3 +176,6 @@ export const foldName = (name: string | undefined | null) =>
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+
+/** The cash-sale account, including the spelling used by older bills. */
+export const isWithoutBillParty = (name: string | undefined | null) => foldName(name) === 'wb'

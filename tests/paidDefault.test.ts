@@ -11,6 +11,13 @@ describe('sale payment default', () => {
     expect(withPaidDefault(sale, 500)).toEqual({ paidAmount: 500, paid: true })
   })
 
+  it('settles W/B goods sales even when an old draft says credit', () => {
+    for (const customerName of ['W/B', 'w/b', 'M/s WB']) {
+      const sale = { customerName, kind: 'sale' as const, items: [goods], paidAmount: 0, paid: false }
+      expect(withPaidDefault(sale, 500)).toEqual({ paidAmount: 500, paid: true })
+    }
+  })
+
   it('respects explicit credit and leaves goods sales on credit', () => {
     expect(paidByDefault({ kind: 'sale', items: [amountOnly], paidAmount: 0 }, 500)).toBe(false)
     expect(paidByDefault({ kind: 'sale', items: [goods], paidAmount: undefined }, 500)).toBe(false)

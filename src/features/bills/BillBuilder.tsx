@@ -62,7 +62,7 @@ import { readBoardSize, sizeLabel, sqftFields, withSqft } from '../../lib/boardS
 import { keepTyped, rateForUnit, withUnitRate } from '../../lib/linePick'
 import { itemHistory, recallList, type ItemHistory, type RecalledItem } from '../../lib/itemHistory'
 import { lastSoldRates, openingRate, type SoldRate } from '../../lib/rateFill'
-import { canonicalUnit, foldName } from '../../../convex/lib/text'
+import { canonicalUnit, foldName, isWithoutBillParty } from '../../../convex/lib/text'
 import { catalogChangesFor } from '../../lib/learnCatalog'
 import { paidByDefault, withPaidDefault } from '../../lib/paidDefault'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
@@ -538,6 +538,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     // the shorter name — Enter always took the match.
     ...(search.trim() && !duplicateEntry ? [{ kind: 'add' as const }] : []),
     // Always offered, so an adjustment or a charge is one pick away.
+    { kind: 'bill' as const },
     { kind: 'roundup' as const },
     { kind: 'fare' as const },
   ], [filtered, customFiltered, search, duplicateEntry])
@@ -634,6 +635,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   useEffect(() => {
     pickFromPanel.current = (v) => {
       if (v === 'roundup') { pickRoundup(); return }
+      if (v === 'bill') { pickCharge('Bill'); return }
       if (v === 'fare') { pickFare(); return }
       if (v === 'add') { addItemFromSearch(); return }
       if (v.startsWith('c:')) {
@@ -657,6 +659,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
         o.kind === 'category' ? { value: `c:${o.opt.category}`, label: o.opt.label }
         : o.kind === 'custom' ? { value: `e:${o.entry.id}`, label: formatItemDescription(o.entry.name), hint: rateHint(o.entry, 'Rs ') }
         : o.kind === 'roundup' ? { value: 'roundup', label: 'Roundup (minus)' }
+        : o.kind === 'bill' ? { value: 'bill', label: 'Bill — total amount only' }
         : o.kind === 'fare' ? { value: 'fare', label: 'Fare / cartage' }
         : { value: 'add', label: `Create "${search.trim()}"` },
       ),
@@ -900,6 +903,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   function addItemFromSearch() {
     const name = formatItemDescription(search.trim())
     if (!name) return
+    if (name.toLowerCase() === 'bill') { pickCharge('Bill'); return }
     // Already in My Items — pick it rather than creating a duplicate.
     if (duplicateEntry) { selectCustomEntry(duplicateEntry); return }
     const newId = addCustomEntry(name)
@@ -1115,12 +1119,14 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                     onBlankRowDone(item.id)
                     return
                   }
+                  if (search.trim().toLowerCase() === 'bill') { pickCharge('Bill'); return }
                   const pick = showDrop ? navOptions[highlight] : undefined
                   if (pick) {
                     // Take the highlighted row — first result unless arrowed away.
                     if (pick.kind === 'category') selectCategory(pick.opt)
                     else if (pick.kind === 'custom') selectCustomEntry(pick.entry)
                     else if (pick.kind === 'roundup') { pickRoundup(); return }
+                    else if (pick.kind === 'bill') { pickCharge('Bill'); return }
                     else if (pick.kind === 'fare') { pickFare(); return }
                     else addItemFromSearch()
                     // Let the dropdown close, then carry on to quantity.
@@ -1179,6 +1185,14 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                       ))}
                     </div>
                   )}
+
+                  <button
+                    onMouseDown={(e) => { e.preventDefault(); pickCharge('Bill') }}
+                    onMouseEnter={() => setHighlight(navOptions.length - 3)}
+                    className={`flex w-full items-center gap-2 border-t border-stone-100 px-3 py-2 text-sm dark:border-white/5 ${highlight === navOptions.length - 3 ? 'bg-stone-100 dark:bg-white/10' : ''}`}
+                  >
+                    <ReceiptText size={13} /> Bill — total amount only
+                  </button>
 
                   <button
                     onMouseDown={(e) => { e.preventDefault(); pickRoundup() }}
@@ -2692,6 +2706,7 @@ export function BillBuilder() {
   /** A delivery with its rates already in: it files as a purchase too. */
   const pricedGrn = draft.kind === 'grn' && draft.items.some((i) => Number(i.amount) > 0 && !i.auto)
   /** Written against a supplier: a purchase or a payment. */
+  const isWithoutBillSale = (draft.kind ?? 'sale') === 'sale' && isWithoutBillParty(draft.customerName)
   const isSupplierVoucher = PARTY_SIDE[draft.kind ?? 'sale'] === 'supplier'
 
   /**
@@ -3686,7 +3701,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               the purchase book — not a customer on credit whose phone and
               Aadhaar are taken so they can be chased. Asking for them on a
               purchase is two boxes to tab past on every voucher. */}
-          {!isSupplierVoucher && (
+          {!isSupplierVoucher && !isWithoutBillSale && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">Phone (optional)</label>
             <input
@@ -3717,7 +3732,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             />
           </div>
           )}
-          {!isSupplierVoucher && (
+          {!isSupplierVoucher && !isWithoutBillSale && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">UID (optional)</label>
             <input
@@ -3939,7 +3954,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                   min={0}
                   max={total || undefined}
                   data-bill-nav="1"
-                  value={draft.paidAmount ?? (paidByDefault(draft, total) ? total : '')}
+                  readOnly={isWithoutBillSale}
+                  value={isWithoutBillSale ? total : draft.paidAmount ?? (paidByDefault(draft, total) ? total : '')}
                   onChange={(e) => setDraft((d) => ({
                     ...d,
                     paidAmount: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
@@ -3958,8 +3974,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                     square with nobody having touched this box would otherwise
                     look like a mistake. */}
                 {paidByDefault(draft, total) && (
-                  <span className="text-xs text-muted" title="A sale with no goods lines is paid on the spot. Type 0 if it is on credit.">
-                    no goods lines — paid · 0 for credit
+                  <span className="text-xs text-muted" title={isWithoutBillSale ? 'W/B is a cash sale, settled in full.' : 'A sale with no goods lines is paid on the spot. Type 0 if it is on credit.'}>
+                    {isWithoutBillSale ? 'Cash sale — paid in full' : 'no goods lines — paid · 0 for credit'}
                   </span>
                 )}
                 {/* When the money came in. Blank is the usual counter sale —

@@ -6,7 +6,7 @@ const line = (description: string, amount = 100): BillItem =>
 
 describe('charges on a bill are not goods', () => {
   test('fare, discount and tax are charges', () => {
-    for (const name of ['Fare', 'Cartage', 'Freight', 'Labour', 'Transport', 'Discount', 'Less',
+    for (const name of ['Bill', ' bill ', 'BILL', 'Fare', 'Cartage', 'Freight', 'Labour', 'Transport', 'Discount', 'Less',
       'CGST 9%', 'SGST 9%', 'C GST 9%', 'S GST 9%', 'IGST 18%', 'GST', 'c.gst 9%', ' discount ']) {
       expect(isChargeName(name), name).toBe(true)
     }

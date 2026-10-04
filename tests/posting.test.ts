@@ -583,3 +583,19 @@ describe('one party, one account', () => {
     expect(await partiesOf(t)).toHaveLength(2)
   })
 })
+
+
+it('posts a W/B item sale as cash with a zero net party entry', async () => {
+  const t = await shop()
+  const result = await t.mutation(api.billLedger.postBill, { bill: aBill({
+    customerName: 'W/B', customerPhone: '9876543210', customerUid: '123456789012', paidAmount: 0,
+    items: [{ id: 'goods', description: 'Plywood', qty: 2, unit: 'Pc', amount: 1000 }],
+  }) })
+  const entries = await lines(t)
+  const partyEntries = entries.filter(e => String(e.ledgerId) === String(result.ledgerId))
+  expect(partyEntries.reduce((sum, e) => sum + (e.side === 'Dr' ? e.amount : -e.amount), 0)).toBe(0)
+  expect(partyEntries).toHaveLength(2)
+  expect(result.bill.paidAmount).toBe(1000)
+  expect(result.bill.customerPhone).toBe('')
+  expect(result.bill.customerUid).toBe('')
+})
