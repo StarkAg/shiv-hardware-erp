@@ -24,12 +24,17 @@ function ItemLabel({ item }) {
   </span>
 }
 
-function StockLine({ item }) {
+function ProductIcon({ category }) {
+  return category === 'door'
+    ? <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="12" y="5" width="24" height="38" rx="2" fill="currentColor" opacity=".14" /><path d="M14 43V7h20v36M18 11h12M29 25h1" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    : <svg viewBox="0 0 48 48" aria-hidden="true"><path d="m8 15 25-7 8 6-25 8-8-7Z" fill="currentColor" opacity=".16" /><path d="m8 15 25-7 8 6-25 8-8-7Zm8 7v16l25-8V14M16 38l-8-7V15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+}
+
+function StockCard({ item }) {
   const low = item.stock <= (item.min ?? 2)
-  return <div className={`stock-line ${low ? 'low' : ''}`}>
-    <span>{item.mm}mm <i className="item-separator">·</i></span>
-    <span>{item.size.replace('x', ' × ')}</span>
-    <span>{brandCode[item.brand]}</span>
+  return <div className={`stock-card ${low ? 'low' : ''}`}>
+    <span className="stock-thumbnail"><ProductIcon category={item.category} /></span>
+    <span className="stock-details"><strong>{item.size.replace('x', ' × ')}</strong><small>{item.brand} · {item.mm}mm</small></span>
     <span className="stock-count"><span>α</span><strong>{quantity(item.stock)}</strong></span>
   </div>
 }
@@ -207,18 +212,18 @@ export default function App() {
           value={search} onChange={e => setSearch(e.target.value)} />
         {error && <p className="error" role="alert">{error}</p>}
         {!groups.length ? <p className="hint">{search ? 'No matching stock.' : 'No low stock.'}</p>
-          : groups.map(group => <section className="brand-group" key={group.brand}>
+          : editing ? groups.map(group => <section className="brand-group" key={group.brand}>
             <h2>{group.brand}</h2>
             <ul className="stock-list">
               {group.items.map(item => <li key={item.ref}>
-                {editing ? <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
+                <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
                   <button aria-label={`Decrease ${item.name}`} disabled={item.stock <= 0} onClick={() => change(item, -1)}><StepIcon /></button>
                   <span className="quantity alpha-quantity" aria-live="polite"><span>α</span><span>{quantity(item.stock)}</span></span>
                   <button aria-label={`Increase ${item.name}`} onClick={() => change(item, 1)}><StepIcon plus /></button>
-                </div></> : <StockLine item={item} />}
+                </div></>
               </li>)}
             </ul>
-          </section>)}
+          </section>) : <ul className="stock-list stock-cards">{shown.map(item => <li key={item.ref}><StockCard item={item} /></li>)}</ul>}
       </>}
     </main>
   </div>
