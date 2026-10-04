@@ -20,11 +20,15 @@ import {
   NotebookPen,
   Scale,
   TrendingUp, HandCoins, CalendarClock, PackageCheck, PackageOpen,
-  ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack } from 'lucide-react'
+  ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, Inbox } from 'lucide-react'
+import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { UpdateBanner } from './UpdateBanner'
 import { RentReminder } from './RentReminder'
 import { Toaster } from './Toast'
 import { BUILD_ID, CURRENT_VERSION } from '../lib/appUpdate'
+
+// Guarantee claims (and their menu badge) read the cloud, so they only mount when it is configured.
+const CONVEX_READY = Boolean(import.meta.env.VITE_CONVEX_URL)
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${
@@ -56,6 +60,8 @@ type NavItem = {
   match?: string[]
   /** …except these, which belong to an entry of their own. */
   except?: string[]
+  /** Shows the count of guarantee claims waiting on the shop. */
+  badge?: boolean
 }
 
 const AREAS: { label: string; items: NavItem[] }[] = [
@@ -65,7 +71,10 @@ const AREAS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: 'Operations',
-    items: [{ to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck }],
+    items: [
+      { to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck },
+      { to: '/guarantee/claims', label: 'Guarantee Claims', icon: Inbox, badge: true },
+    ],
   },
   {
     label: 'Transactions',
@@ -290,6 +299,7 @@ export function AppLayout() {
               >
                 <item.icon size={18} />
                 <span className="flex-1">{item.label}</span>
+                {item.badge && CONVEX_READY && <ClaimsBadge />}
                 {item.key && (
                   <span className="text-[11px] font-semibold text-muted">{item.key}</span>
                 )}

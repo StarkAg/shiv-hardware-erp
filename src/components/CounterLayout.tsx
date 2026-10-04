@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  CarTaxiFront, FileText, History, IndianRupee, Moon, Package, ShieldCheck, Sun, Users,
+  CarTaxiFront, FileText, History, IndianRupee, Inbox, Moon, Package, ShieldCheck, Sun, Users,
 } from 'lucide-react'
+import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { isDarkMode, toggleTheme } from '../lib/theme'
 import { Toaster } from './Toast'
 
@@ -36,6 +37,7 @@ const NAV = [
       { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck },
       { to: '/guarantee/a4', label: 'Guarantee A4', icon: FileText },
       { to: '/guarantee/history', label: 'Guarantee History', icon: History },
+      { to: '/guarantee/claims', label: 'Claims', icon: Inbox, badge: true },
     ],
   },
   {
@@ -54,6 +56,9 @@ const owns = (to: string, pathname: string) => {
   if (to === '/history') return pathname.startsWith('/history')
   return pathname.startsWith(to)
 }
+
+// Claims (and their badge) read the cloud, so they only mount when it is configured.
+const convexReady = Boolean(import.meta.env.VITE_CONVEX_URL)
 
 export function CounterLayout() {
   const { pathname } = useLocation()
@@ -89,6 +94,7 @@ export function CounterLayout() {
                 >
                   <item.icon size={18} />
                   <span className="flex-1">{item.label}</span>
+                  {'badge' in item && item.badge && convexReady && <ClaimsBadge />}
                 </NavLink>
               ))}
             </div>

@@ -6,6 +6,7 @@ import './index.css'
 import { AppLayout } from './components/AppLayout'
 import { ConvexSync } from './components/ConvexSync'
 import { PrintDemo } from './features/print/PrintDemo'
+import { GuaranteeClaims } from './features/guarantee/GuaranteeClaims'
 import { Ledger } from './features/ledger/Ledger'
 import { Profit } from './features/profit/Profit'
 import { LedgersPage } from './features/ledger/LedgersPage'
@@ -142,6 +143,8 @@ const router = createHashRouter([
       { index: true, element: <Navigate to="/home" replace /> },
       { path: 'home',           element: <Home /> },
       { path: 'bill-flow',      element: <BillFlow /> },
+      // Claims customers file from a guarantee card's QR page.
+      { path: 'guarantee/claims', element: <GuaranteeClaims /> },
       { path: 'paper',          element: <DayPaper /> },
       { path: 'ledgers',        element: <LedgersPage /> },
       { path: 'ledgers/:tab',   element: <LedgersPage /> },

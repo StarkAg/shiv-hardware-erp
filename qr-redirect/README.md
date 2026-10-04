@@ -1,11 +1,14 @@
 # QR short link
 
-The short address printed in guarantee-card QR codes. It only redirects:
+The short address printed in guarantee-card QR codes: `<host>/<card number>/<card secret>`.
 
-    <short-domain>/GC-2026-0016/FMGP4ZXWAM9GC574G8U3
-      -> https://www.shivhardware.store/Gaurantee/GC-2026-0016?k=FMGP4ZXWAM9GC574G8U3
+- **A card's first 20 days** (from its own date): a temporary (307) redirect to
+  `https://www.shivhardware.store/Gaurantee/<number>?k=<secret>`, the branded page.
+- **After that:** the card is served from this host, so the shop's site never shows in
+  the address bar. `middleware.js` proxies the same page (neutral by then) and
+  `vercel.json` proxies its scripts and images. One page to maintain.
+- Anything else shows a plain page (`index.html`).
 
-A temporary (307) redirect on purpose, so the destination can move and every printed
-card follows. Anything else shows a plain page. No code, no database: one rule in
-vercel.json. Deploy: `npx vercel deploy --prod --yes` from this folder (Vercel project
-`gcvf`). Printed cards depend on this staying up and on the domain being renewed.
+`BRANDED_DAYS` here must match `BRANDED_DAYS` on the guarantee page (shivhardware.store).
+Deploy: `npx vercel deploy --prod --yes` from this folder (Vercel project `gcvf`).
+Printed cards depend on this staying up and on the domain being renewed.

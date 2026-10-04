@@ -10,6 +10,7 @@ import { QuotationOptions } from './features/quotation/QuotationOptions'
 import { QuoteHistory } from './features/quotation/QuoteHistory'
 import { GuaranteeBuilder } from './features/guarantee/GuaranteeBuilder'
 import { GuaranteeHistory } from './features/guarantee/GuaranteeHistory'
+import { GuaranteeClaims } from './features/guarantee/GuaranteeClaims'
 import { BillSelectPage } from './features/guarantee/BillSelectPage'
 import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
 import { Inventory } from './features/inventory/Inventory'
@@ -73,6 +74,7 @@ const router = createHashRouter([
       { path: 'guarantee/a4', element: <GuaranteeBuilder layout="a4" /> },
       { path: 'guarantee/history', element: <GuaranteeHistory /> },
       { path: 'guarantee/history/:id', element: <GuaranteeHistory /> },
+      { path: 'guarantee/claims', element: <GuaranteeClaims cardLinks /> },
       { path: 'guarantee/select-bill', element: <BillSelectPage /> },
       { path: 'guarantee/bill/:billId', element: <BillBrandCardsPage /> },
       // The catalogue and its rates are what a quotation is built out of, so

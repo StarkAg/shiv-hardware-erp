@@ -1,0 +1,8 @@
+{
+  "name": "qr-redirect",
+  "private": true,
+  "description": "Guarantee-card QR short link: redirect for a card's first 20 days, then serve the neutral page here",
+  "dependencies": {
+    "@vercel/functions": "^3.9.11"
+  }
+}

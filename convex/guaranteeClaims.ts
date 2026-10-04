@@ -176,12 +176,21 @@ export const list = query({
   },
 })
 
+/** Claims waiting on the shop (received or under review): the panel's badge. */
+export const openCount = query({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query('guaranteeClaims').collect()).filter((c) => OPEN.includes(c.status)).length,
+})
+
 export const setStatus = mutation({
   args: { id: v.id('guaranteeClaims'), status: statusArg, note: v.optional(v.string()) },
   handler: async (ctx, { id, status, note }) => {
     const claim = await ctx.db.get(id)
     if (!claim) throw new ConvexError('That claim is gone.')
     const clean = note === undefined ? claim.note : note.trim().slice(0, 500) || undefined
+    // A refusal is the decision most likely to be questioned later, so it is never
+    // recorded without its reason (which the customer also sees on the card page).
+    if (status === 'rejected' && !clean) throw new ConvexError('Give the reason it is not approved. The customer sees it.')
     await ctx.db.patch(id, { status, note: clean, updatedAt: Date.now() })
   },
 })
