@@ -209,11 +209,11 @@ export default function App() {
         <div className="toolbar">
           <label className="sort-control">
             <span>Sort</span>
-            <select value={sort} onChange={event => setSort(event.target.value)} aria-label="Sort stock">
-              <option value="brand">Brand</option>
-              <option value="thickness">Thickness</option>
-              <option value="stock">Low stock first</option>
-            </select>
+            <span className="sort-select"><select value={sort} onChange={event => setSort(event.target.value)} aria-label="Sort stock">
+                <option value="brand">Brand</option>
+                <option value="thickness">Thickness</option>
+                <option value="stock">Low stock first</option>
+              </select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
           </label>
           <div className="toolbar-actions">
             <span className={`cloud-status ${queue.length ? 'waiting' : ''}`} role="status" aria-live="polite" aria-label={status} title={status}><CloudIcon /></span>
