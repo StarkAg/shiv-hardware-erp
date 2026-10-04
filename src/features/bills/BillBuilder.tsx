@@ -4257,7 +4257,9 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   const finished = bills
 
   const rows = useMemo<DayRow[]>(() => {
-    const list: DayRow[] = (vouchers ?? []).map((v: any) => ({
+    // Notes written in the cash drawer are posted to the books (ref CASH-c-…)
+    // so the ledgers balance, but they belong to the Cash page, not here.
+    const list: DayRow[] = (vouchers ?? []).filter((v: any) => !String(v.refNo ?? '').startsWith('CASH-c-')).map((v: any) => ({
       key: v._id,
       date: v.date,
       label: v.vchLabel,
