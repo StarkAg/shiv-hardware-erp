@@ -10,9 +10,9 @@
  * — because this screen, with the photographs side by side under one name, is
  * where a bill filed to the wrong man is actually spotted.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
-import { useCached } from './local.js'
+import { send, useAnswers, useCached, useOutbox } from './local.js'
 import { anyApi } from 'convex/server'
 import PhotoViewer from './PhotoViewer.jsx'
 import { clean } from './match.js'
@@ -58,7 +58,7 @@ export default function Ledger() {
   // Every customer account, so a search finds people with no paper yet too, and
   // "Add" never opens a second account for a name the books already have.
   const parties = useCached(anyApi.filing.parties, {}, 'parties')
-  const addCustomer = useMutation(anyApi.filing.addCustomer)
+  const { pending } = useOutbox()
   const freeHold = useMutation(anyApi.filing.freeHold)
   // Same rename the panel uses: the new name goes everywhere the old one was
   // written, and a name another account already has is refused.
@@ -67,7 +67,7 @@ export default function Ledger() {
   const [savingName, setSavingName] = useState(false)
   const searchBox = useRef(null)
   const doneBtn = useRef(null)
-  const [adding, setAdding] = useState(false)
+  const adding = false
   // The bookmark just given, shown large until Done.
   const [added, setAdded] = useState(null)
 
@@ -127,9 +127,36 @@ export default function Ledger() {
 
   const typed = find.trim()
 
+  /**
+   * Customers added on this phone whose account the server has not opened
+   * yet: on the list straight away, with the number they were given here.
+   */
+  const label = (slot) => (slot == null ? null : `S${String(slot).padStart(2, '0')}`)
+  const listed = useMemo(() => {
+    const all = rows ?? []
+    const have = new Set(all.map((r) => squash(r.name)))
+    const fresh = pending
+      .filter((it) => it.fn === 'filing:addCustomer' && it.meta && !have.has(squash(it.meta.name)))
+      .map((it) => ({
+        partyLedgerId: `pending:${it.id}`, name: it.meta.name, folder: null, bills: 0, unpriced: 0,
+        slot: it.meta.slot, slotLabel: label(it.meta.slot), noPaper: true, pending: true,
+      }))
+    return [...all, ...fresh].sort((a, b) => a.name.localeCompare(b.name))
+  }, [rows, pending])
+
+  // The server's number for a customer added here, said only when it differs.
+  useAnswers(useCallback((item, result, failed) => {
+    if (item.fn !== 'filing:addCustomer') return
+    if (failed) return setError(`Not added: ${item.meta?.name ?? ''} — ${failed}`)
+    if (result && item.meta && result.slot !== item.meta.slot) {
+      setSaid(`${result.name} is ${result.slotLabel}, not ${label(item.meta.slot)}`)
+      setAdded((a) => (a && a.name === item.meta.name ? { ...a, slot: result.slot, slotLabel: result.slotLabel } : a))
+    }
+  }, []))
+
   // Customers with paper or a bookmark, plus (while searching) every other account.
   const shown = useMemo(() => {
-    const all = rows ?? []
+    const all = listed
     if (!typed) return all
     const listed = new Set(all.map((r) => r.partyLedgerId))
     const others = (parties ?? [])
@@ -140,25 +167,30 @@ export default function Ledger() {
     return [...all, ...others]
       .filter((r) => matches(r.name, typed))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
-  }, [rows, parties, typed])
+  }, [listed, parties, typed])
 
   // The account this exact name already is (spacing and case aside), if any.
   const exact = typed ? shown.find((r) => squash(r.name) === squash(typed)) : null
   // Add is offered unless this exact name is already on the list with paper or a bookmark.
   const canAdd = Boolean(typed) && (!exact || (exact.noPaper && !exact.slotLabel))
 
-  const add = async () => {
-    if (!canAdd || adding) return
-    setAdding(true)
+  /**
+   * Instant: the number is worked out here (the lowest one nobody holds, the
+   * way the server does it) and shown at once; the account is opened on the
+   * server behind it, and its answer corrects the number if two phones raced.
+   */
+  const add = () => {
+    if (!canAdd) return
     setError('')
-    try {
-      setAdded(await addCustomer(exact ? { partyLedgerId: exact.partyLedgerId } : { name: typed }))
-    } catch (e) {
-      setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
-    } finally {
-      setAdding(false)
-    }
+    if (exact && !exact.pending && exact.slotLabel) return setAdded({ ...exact, already: true })
+    const taken = new Set(listed.map((r) => r.slot).filter((n) => n != null))
+    let slot = 1
+    while (taken.has(slot)) slot += 1
+    const name = exact ? exact.name : typed.replace(/\s+/g, ' ')
+    send(anyApi.filing.addCustomer, exact && !exact.pending ? { partyLedgerId: exact.partyLedgerId } : { name }, undefined, { name, slot })
+    setAdded({ name, slot, slotLabel: label(slot), already: false })
   }
+
 
   // Done: clear the search and put the cursor back for the next name. Focusing inside
   // the tap keeps the phone's keyboard coming up.
@@ -254,9 +286,7 @@ export default function Ledger() {
                 {!one.slotLabel && !one.folder && (
                   <span className="hint">No bookmark and no folder yet</span>
                 )}
-                {one.heldOnly && (
-                  <button className="linkbtn" onClick={giveBack}>Free bookmark</button>
-                )}
+                {/* No "Free bookmark": every customer holds one now (2026-10-04). */}
               </div>
               <p className="hint">
                 {one.counts.all} {one.counts.all === 1 ? 'bill' : 'bills'}
@@ -365,7 +395,7 @@ export default function Ledger() {
       ) : (
         <div className="lg-list">
           {shown.map((r) => (
-            <button key={r.partyLedgerId} className="lg-row" onClick={() => setOpen(r.partyLedgerId)}>
+            <button key={r.partyLedgerId} className={`lg-row${r.pending ? ' pending' : ''}`} onClick={() => !r.pending && setOpen(r.partyLedgerId)}>
               <span className="lg-row-name">
                 <b>{r.name}</b>
                 <span className="hint">

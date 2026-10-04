@@ -13,4 +13,13 @@ crons.interval(
   {},
 )
 
+// Every customer holds a bookmark: any account opened some other way (the cash
+// book, an import) is given its number within ten minutes.
+crons.interval(
+  'give every customer a bookmark',
+  { minutes: 10 },
+  internal.filing.holdAllCustomers,
+  {},
+)
+
 export default crons

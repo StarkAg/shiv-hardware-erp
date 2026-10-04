@@ -707,3 +707,4 @@ button:disabled { cursor: default; }
 .lg-edit { display: grid; gap: 8px; }
 .lg-edit input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; }
 .lg-edit-acts { display: flex; gap: 8px; justify-content: flex-end; }
+.lg-row.pending { opacity: .7; }

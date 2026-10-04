@@ -19,20 +19,23 @@ import Place from './Place.jsx'
 import Ledger from './Ledger.jsx'
 import { useOutbox } from './local.js'
 
+// Ledger first: the shop's flow since 2026-10-04 is a bill in the hand, its
+// name searched here, and the bookmark read off (or a new customer added) —
+// no photograph and no reading. The photo walks stay for the old backlog.
 const TABS = [
+  { id: 'ledger', label: 'Ledger', icon: 'book' },
   { id: 'shoot', label: 'Shoot', icon: 'camera' },
   { id: 'name', label: 'Name', icon: 'edit' },
   { id: 'place', label: 'Place', icon: 'place' },
-  { id: 'ledger', label: 'Ledger', icon: 'book' },
 ]
 
 export default function App() {
   const [tab, setTab] = useState(() => {
     try {
-      const saved = localStorage.getItem('shiv-sort:tab')
-      return TABS.some(t => t.id === saved) ? saved : 'name'
+      const saved = localStorage.getItem('shiv-sort:tab:v2')
+      return TABS.some(t => t.id === saved) ? saved : 'ledger'
     } catch {
-      return 'name'
+      return 'ledger'
     }
   })
 
@@ -61,7 +64,7 @@ export default function App() {
   const go = (id) => {
     setTab(id)
     try {
-      localStorage.setItem('shiv-sort:tab', id)
+      localStorage.setItem('shiv-sort:tab:v2', id)
     } catch {
       /* remembering the tab is a convenience, not a requirement */
     }

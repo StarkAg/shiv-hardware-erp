@@ -141,7 +141,7 @@ async function partyByName(ctx: MutationCtx, name: string, asOf: number): Promis
     .unique();
   if (!group) throw new Error("The Sundry Debtors group is missing");
   const now = Date.now();
-  return await ctx.db.insert("ledgers", {
+  const id = await ctx.db.insert("ledgers", {
     name: properText(wanted),
     groupId: group._id,
     openingBalance: 0,
@@ -151,6 +151,9 @@ async function partyByName(ctx: MutationCtx, name: string, asOf: number): Promis
     createdAt: now,
     updatedAt: now,
   });
+  // Every customer holds a bookmark from the moment the account opens.
+  await holdFor(ctx, id);
+  return id;
 }
 
 /**
@@ -187,6 +190,57 @@ async function slotFor(
   const [held, count] = await Promise.all([slotsHeld(ctx), slotCount(ctx)]);
   return nextFree(held, partyLedgerId, count);
 }
+
+/**
+ * Every customer holds a bookmark, paper or not (the shop's rule from
+ * 2026-10-04): the Ledger lists each account with its number beside it, so a
+ * slip that turns up for anybody already has a place on the table.
+ *
+ * Gives the lowest free number to each active customer holding none, in name
+ * order, and returns how many were given. Safe to run at any time — a
+ * customer with a number keeps it. The held map is built once and kept current
+ * through the loop (the same reason as seatWaiting: one read, not one per row).
+ */
+export async function holdEveryone(ctx: MutationCtx): Promise<number> {
+  const debtors = await ctx.db
+    .query("groups")
+    .withIndex("by_name", (q) => q.eq("name", "Sundry Debtors"))
+    .unique();
+  if (!debtors) return 0;
+  const customers = (
+    await ctx.db.query("ledgers").withIndex("by_group", (q) => q.eq("groupId", debtors._id)).collect()
+  )
+    .filter((l) => l.active)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const [held, count] = await Promise.all([slotsHeld(ctx), slotCount(ctx)]);
+  let given = 0;
+  const now = Date.now();
+  for (const c of customers) {
+    if (held.has(String(c._id))) continue;
+    const slot = nextFree(held, c._id, count);
+    if (slot === null) break; // a fixed table is full
+    held.set(String(c._id), slot);
+    await ctx.db.insert("filingHolds", { partyLedgerId: c._id, slot, at: now });
+    given += 1;
+  }
+  return given;
+}
+
+/** One customer: their bookmark, given now if they have none. */
+export async function holdFor(ctx: MutationCtx, partyLedgerId: Id<"ledgers">): Promise<number | null> {
+  const held = await slotsHeld(ctx);
+  const already = held.get(String(partyLedgerId));
+  if (already !== undefined) return already;
+  const slot = nextFree(held, partyLedgerId, await slotCount(ctx));
+  if (slot !== null) await ctx.db.insert("filingHolds", { partyLedgerId, slot, at: Date.now() });
+  return slot;
+}
+
+/** Runs holdEveryone: once by hand, and every few minutes so no account is missed. */
+export const holdAllCustomers = internalMutation({
+  args: {},
+  handler: async (ctx) => ({ given: await holdEveryone(ctx) }),
+});
 
 /**
  * Records that this bill has been named, and gives it its bookmark.
@@ -572,8 +626,11 @@ export const fileToFolder = mutation({
     if (!folder) throw new Error("Say which folder this packet goes into");
 
     for (const r of rows) await ctx.db.patch(r._id, { stage: "filed" });
+    // The packet goes to its folder; the customer keeps the number (every
+    // customer holds one), so their next slip lands on the same bookmark.
     const hold = await holdOf(ctx, partyLedgerId);
-    if (hold) await ctx.db.delete(hold._id);
+    if (hold) await ctx.db.patch(hold._id, { slot, at: Date.now() });
+    else await ctx.db.insert("filingHolds", { partyLedgerId, slot, at: Date.now() });
     await ctx.db.patch(partyLedgerId, { folder, updatedAt: Date.now() });
 
     // A bill of somebody else's that had nowhere to go now has somewhere.

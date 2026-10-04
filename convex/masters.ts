@@ -7,6 +7,7 @@ import { round2 } from "./lib/money";
 import { requirePin } from "./lib/pin";
 import { fold } from "./lib/parties";
 import { carryRename } from "./lib/rename";
+import { holdFor } from "./filing";
 
 /** The groups whose ledgers are people the shop deals with. */
 const PARTY_GROUPS = ["Sundry Creditors", "Sundry Debtors"];
@@ -101,6 +102,8 @@ export const createLedger = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    // A new customer holds a bookmark from the start (see filing.holdEveryone).
+    if (group?.name === "Sundry Debtors") await holdFor(ctx, id);
     await record(
       ctx,
       "ledger.create",
