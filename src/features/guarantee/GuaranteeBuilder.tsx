@@ -853,7 +853,7 @@ function SizeTable({
   // it lines up as columns under one header; on a phone each row stacks into a
   // small labelled block instead of scrolling sideways.
   const gridCols =
-    'md:grid-cols-[3.75rem_minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.25fr)_3.25rem_minmax(0,0.9fr)_2rem]'
+    'md:grid-cols-[5.75rem_minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.25fr)_3.25rem_minmax(0,0.9fr)_2rem]'
   const labelClass = 'mb-0.5 block px-0.5 text-[10px] font-bold uppercase tracking-wide text-muted md:hidden'
 
   // Arrow keys move between cells like Excel. The cell under the caret is found from
@@ -903,7 +903,7 @@ function SizeTable({
       <div
         className={`hidden gap-1 border-b border-stone-200 bg-stone-100 px-1 py-2 text-xs font-bold uppercase tracking-wide text-muted md:grid dark:border-white/10 dark:bg-white/5 ${gridCols}`}
       >
-        <span className="px-2">Thickness</span>
+        <span className="truncate px-2">Thickness</span>
         <span className="px-2">Type</span>
         <span className="px-2 text-right">Length</span>
         <span className="px-2 text-right">Height</span>

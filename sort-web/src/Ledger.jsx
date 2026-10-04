@@ -60,6 +60,11 @@ export default function Ledger() {
   const parties = useCached(anyApi.filing.parties, {}, 'parties')
   const addCustomer = useMutation(anyApi.filing.addCustomer)
   const freeHold = useMutation(anyApi.filing.freeHold)
+  // Same rename the panel uses: the new name goes everywhere the old one was
+  // written, and a name another account already has is refused.
+  const updateLedger = useMutation(anyApi.masters.updateLedger)
+  const [editing, setEditing] = useState(null) // { name, place } while the form is open
+  const [savingName, setSavingName] = useState(false)
   const searchBox = useRef(null)
   const doneBtn = useRef(null)
   const [adding, setAdding] = useState(false)
@@ -76,6 +81,24 @@ export default function Ledger() {
       setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
     }
   }
+  const saveName = async () => {
+    if (!open || !editing || savingName) return
+    const name = editing.name.trim()
+    if (!name) return setError('A name is needed')
+    setSavingName(true)
+    setError('')
+    try {
+      await updateLedger({ id: open, name, place: editing.place.trim() })
+      setEditing(null)
+      setSaid('Name saved')
+    } catch (e) {
+      setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
+    } finally {
+      setSavingName(false)
+    }
+  }
+  useEffect(() => setEditing(null), [open])
+
   const [sending, setSending] = useState(null)
   const [said, setSaid] = useState('')
   const [error, setError] = useState('')
@@ -193,8 +216,34 @@ export default function Ledger() {
         ) : (
           <>
             <div className="lg-who">
-              <h2>{one.name}</h2>
-              {one.place && <p className="hint">{one.place}</p>}
+              {editing ? (
+                <form className="lg-edit" onSubmit={(e) => { e.preventDefault(); void saveName() }}>
+                  <input
+                    autoFocus
+                    value={editing.name}
+                    aria-label="Customer name"
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
+                  <input
+                    value={editing.place}
+                    placeholder="Place"
+                    aria-label="Place"
+                    onChange={(e) => setEditing({ ...editing, place: e.target.value })}
+                  />
+                  <div className="lg-edit-acts">
+                    <button type="button" className="btn ghost" disabled={savingName} onClick={() => setEditing(null)}>Cancel</button>
+                    <button type="submit" className="btn go" disabled={savingName || !editing.name.trim()}>{savingName ? 'Saving…' : 'Save'}</button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="lg-name">
+                    <h2>{one.name}</h2>
+                    <button className="linkbtn" onClick={() => setEditing({ name: one.name, place: one.place ?? '' })}>Edit</button>
+                  </div>
+                  {one.place && <p className="hint">{one.place}</p>}
+                </>
+              )}
               <div className="lg-marks">
                 {one.slotLabel && <span className="lg-slot">{one.slotLabel}</span>}
                 {one.folder && (

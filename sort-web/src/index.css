@@ -701,3 +701,9 @@ button:disabled { cursor: default; }
 /* Work still on its way to the server, beside the tab name. */
 .sync { font-style: normal; font-size: 12px; font-weight: 600; margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.14); }
 .sync.late { background: #b45309; color: #fff; }
+
+/* Ledger: rename a customer in place. */
+.lg-name { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.lg-edit { display: grid; gap: 8px; }
+.lg-edit input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; }
+.lg-edit-acts { display: flex; gap: 8px; justify-content: flex-end; }
