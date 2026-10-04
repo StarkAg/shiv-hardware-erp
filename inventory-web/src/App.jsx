@@ -26,8 +26,8 @@ function ItemLabel({ item }) {
 
 function ProductIcon({ category }) {
   return category === 'door'
-    ? <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="12" y="5" width="24" height="38" rx="2" fill="currentColor" opacity=".14" /><path d="M14 43V7h20v36M18 11h12M29 25h1" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-    : <svg viewBox="0 0 48 48" aria-hidden="true"><path d="m8 15 25-7 8 6-25 8-8-7Z" fill="currentColor" opacity=".16" /><path d="m8 15 25-7 8 6-25 8-8-7Zm8 7v16l25-8V14M16 38l-8-7V15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    ? <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="12" y="4" width="24" height="40" rx="2" fill="currentColor" opacity=".13" /><path d="M13 44V5h22v39M17 10h14M17 38h14M17 15v5m0 5v5m0 5v3m13-16h1.5" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    : <svg viewBox="0 0 48 48" aria-hidden="true"><path d="m6 14 25-8 11 7-25 8-11-7Z" fill="currentColor" opacity=".16" /><path d="m6 14 25-8 11 7-25 8-11-7Zm0 5 11 7 25-8M6 24l11 7 25-8M6 29l11 7 25-8M17 21v15M42 13v15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
 }
 
 function StockCard({ item }) {
@@ -212,18 +212,18 @@ export default function App() {
           value={search} onChange={e => setSearch(e.target.value)} />
         {error && <p className="error" role="alert">{error}</p>}
         {!groups.length ? <p className="hint">{search ? 'No matching stock.' : 'No low stock.'}</p>
-          : editing ? groups.map(group => <section className="brand-group" key={group.brand}>
+          : groups.map(group => <section className="brand-group" key={group.brand}>
             <h2>{group.brand}</h2>
-            <ul className="stock-list">
+            <ul className={`stock-list ${editing ? '' : 'stock-cards'}`}>
               {group.items.map(item => <li key={item.ref}>
-                <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
+                {editing ? <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
                   <button aria-label={`Decrease ${item.name}`} disabled={item.stock <= 0} onClick={() => change(item, -1)}><StepIcon /></button>
                   <span className="quantity alpha-quantity" aria-live="polite"><span>α</span><span>{quantity(item.stock)}</span></span>
                   <button aria-label={`Increase ${item.name}`} onClick={() => change(item, 1)}><StepIcon plus /></button>
-                </div></>
+                </div></> : <StockCard item={item} />}
               </li>)}
             </ul>
-          </section>) : <ul className="stock-list stock-cards">{shown.map(item => <li key={item.ref}><StockCard item={item} /></li>)}</ul>}
+          </section>)}
       </>}
     </main>
   </div>
