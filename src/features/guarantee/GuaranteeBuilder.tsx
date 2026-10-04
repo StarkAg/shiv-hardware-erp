@@ -31,9 +31,8 @@ const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 // Proper Case for the printed/previewed card — e.g. "AJAY KUMAR JEE" -> "Ajay Kumar Jee".
 const toProperCase = (s: string) => s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())
 
-// No Product/Brand/Years pickers anymore — the Items table's Type column is
-// typed freely and matched against every known brand; these are just the
-// fallback values used when a row's Type doesn't match one.
+// The Items table's Type column is typed freely and matched against known
+// brands. A card has one guarantee period for all of its items.
 const DEFAULT_CATEGORY: ProductCategory = 'readymade-door'
 const DEFAULT_YEARS: GuaranteeYears = 10
 const DEFAULT_BRAND_LABEL = CATEGORY_LABELS[DEFAULT_CATEGORY]
@@ -54,11 +53,9 @@ type SizeRow = {
   heightSoot: number | ''
   qty: number | ''
   rate: number | ''
-  /** Chosen guarantee; '' follows the brand's years from Rates. */
-  years: GuaranteeYears | ''
 }
 
-// The periods offered in the Guarantee column: every period the shop's PVC
+// The periods offered for a card: every period the shop's PVC
 // cards carry (Milton Super 5, Signature 7, Signature Gold 10, Gold Club 20…).
 // Wax-seal images (assets/seals, used on the A4 sheet) exist for 1/3/7/10/25.
 const SEAL_YEARS: GuaranteeYears[] = [1, 3, 5, 7, 10, 20, 25]
@@ -73,7 +70,6 @@ const blankRow = (): SizeRow => ({
   heightSoot: '',
   qty: '',
   rate: '',
-  years: '',
 })
 const isRowFilled = (r: SizeRow) =>
   r.type.trim() !== '' ||
@@ -106,23 +102,15 @@ function removeSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => voi
   })
 }
 
-/** A row's guarantee: the one chosen in the row, else its brand's, else the default. */
-function rowYears(row: SizeRow, brandOptions: Brand[], fallbackYears: GuaranteeYears): GuaranteeYears {
-  if (row.years !== '') return row.years
-  const matched = brandOptions.find((b) => b.name.toLowerCase() === row.type.trim().toLowerCase())
-  return matched?.guaranteeYears ?? fallbackYears
+/** Default from the first matched brand until staff selects a card period. */
+function cardYears(rows: SizeRow[], brandOptions: Brand[], selected: GuaranteeYears | ''): GuaranteeYears {
+  if (selected !== '') return selected
+  const first = rows.find(isRowFilled)
+  const matched = brandOptions.find((b) => b.name.toLowerCase() === first?.type.trim().toLowerCase())
+  return matched?.guaranteeYears ?? DEFAULT_YEARS
 }
 
-/**
- * The distinct guarantee periods on a card's filled rows, in row order. A PVC
- * card is pre-printed with ONE guarantee seal (e.g. SRT Signature "7 YEAR"),
- * so a card may only carry items of one period; another period is another card.
- */
-function cardYears(rows: SizeRow[], brandOptions: Brand[]): GuaranteeYears[] {
-  return [...new Set(rows.filter(isRowFilled).map((r) => rowYears(r, brandOptions, DEFAULT_YEARS)))]
-}
-
-function rowsToItems(rows: SizeRow[], brandOptions: Brand[], fallbackBrand: string, fallbackYears: GuaranteeYears): GuaranteeCardItem[] {
+function rowsToItems(rows: SizeRow[], fallbackBrand: string, years: GuaranteeYears): GuaranteeCardItem[] {
   const filled = rows.filter(isRowFilled)
   // No fake placeholder row when the table is empty — an empty table prints
   // (and previews) with no item line at all.
@@ -130,7 +118,7 @@ function rowsToItems(rows: SizeRow[], brandOptions: Brand[], fallbackBrand: stri
   return filled.map((row) => {
     return {
       brandName: row.type.trim() || fallbackBrand,
-      guaranteeYears: rowYears(row, brandOptions, fallbackYears),
+      guaranteeYears: years,
       thickness: row.thickness.trim() || null,
       height: rowDim(row.length, row.lengthSoot),
       width: rowDim(row.height, row.heightSoot),
@@ -164,6 +152,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
+  const [period1, setPeriod1] = useState<GuaranteeYears | ''>('')
   const [generating, setGenerating] = useState(false)
   const [showWhatsAppLogin, setShowWhatsAppLogin] = useState(false)
 
@@ -175,6 +164,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const onCard2 = layout === 'card' && secondCardOn && tab === 2
   const [customer2, setCustomer2] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows2, setRows2] = useState<SizeRow[]>(() => [blankRow()])
+  const [period2, setPeriod2] = useState<GuaranteeYears | ''>('')
 
   // Editing a saved card (History → Edit): it keeps its number, QR secret and
   // date — the card in the customer's hand must keep opening — so Save never
@@ -191,28 +181,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const brandOptions = sets[0]?.brands ?? []
   const hasRows = rows.some(isRowFilled)
 
-  // One guarantee period per PVC card (its seal is pre-printed). A card whose
-  // items carry two periods can't be printed as-is: split it, or fix the rows.
-  const years1 = cardYears(rows, brandOptions)
-  const years2 = secondCardOn ? cardYears(rows2, brandOptions) : []
-  const mixedCard: 0 | 1 | 2 = layout !== 'card' ? 0 : years1.length > 1 ? 1 : years2.length > 1 ? 2 : 0
-  // Auto-split only the simple case: card 1 holds two periods and slot 2 is free.
-  const canSplit = mixedCard === 1 && years1.length === 2 && !editing && !(secondCardOn && rows2.some(isRowFilled))
-
-  /** Move card 1's items of its second period onto Card 2, same customer. */
-  function splitByYears() {
-    const keep = years1[0]
-    const moving = rows.filter((r) => isRowFilled(r) && rowYears(r, brandOptions, DEFAULT_YEARS) !== keep)
-    setRows((prev) => {
-      const stay = prev.filter((r) => !moving.includes(r))
-      return stay.length && !isRowFilled(stay[stay.length - 1]) ? stay : [...stay, blankRow()]
-    })
-    setRows2([...moving.map((r) => ({ ...r, id: uid() })), blankRow()])
-    setCustomer2({ ...customer, id: uid() })
-    setSecondCardOn(true)
-    setTab(2)
-    toast(`Moved the ${years1[1]}-year items to Card 2`)
-  }
+  const years1 = cardYears(rows, brandOptions, period1)
+  const years2 = cardYears(rows2, brandOptions, period2)
 
   // Mint a new card number from the store sequence. Refreshing on every
   // save/print means each click becomes a permanent record (matching what
@@ -299,9 +269,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       heightSoot: it.width?.soot ?? '',
       qty: it.qty ?? '',
       rate: it.amount ?? '',
-      years: it.guaranteeYears ?? '',
     }))
     setRows(imported.length ? [...imported, blankRow()] : [blankRow()])
+    setPeriod1(g.items[0]?.guaranteeYears ?? '')
   }
 
   function importBill(bill: Bill) {
@@ -334,11 +304,13 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           heightSoot: height.soot,
           qty: it.qty,
           rate: it.amount || '',
-          years: '' as const,
         }
       })
 
-    if (imported.length) setRows((prev) => [...prev.filter(isRowFilled), ...imported, blankRow()])
+    if (imported.length) {
+      setRows((prev) => [...prev.filter(isRowFilled), ...imported, blankRow()])
+      setPeriod1('')
+    }
   }
 
   function buildGuaranteeDoc(uuid: CardRef = ref): GuaranteeDocument {
@@ -355,7 +327,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       height: (primary && rowDim(primary.length, primary.lengthSoot)) ?? blankDim(),
       width: (primary && rowDim(primary.height, primary.heightSoot)) ?? blankDim(),
       qty: primary && primary.qty !== '' ? Number(primary.qty) : 1,
-      items: rowsToItems(rows, brandOptions, DEFAULT_BRAND_LABEL, DEFAULT_YEARS),
+      items: rowsToItems(rows, DEFAULT_BRAND_LABEL, years1),
     }
   }
 
@@ -373,7 +345,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       height: (primary && rowDim(primary.length, primary.lengthSoot)) ?? blankDim(),
       width: (primary && rowDim(primary.height, primary.heightSoot)) ?? blankDim(),
       qty: primary && primary.qty !== '' ? Number(primary.qty) : 1,
-      items: rowsToItems(rows2, brandOptions, DEFAULT_BRAND_LABEL, DEFAULT_YEARS),
+      items: rowsToItems(rows2, DEFAULT_BRAND_LABEL, years2),
     }
   }
 
@@ -527,10 +499,10 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           <div className="flex min-w-0 flex-col gap-3">
             {editing ? (
               <div className="no-print flex flex-wrap items-center justify-center gap-3">
-                <Button onClick={saveChanges} disabled={!hasRows || generating || mixedCard > 0} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                <Button onClick={saveChanges} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
                   <Save size={20} /> Save changes
                 </Button>
-                <Button variant="outline" onClick={saveAndPrint} disabled={!hasRows || generating || mixedCard > 0} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                <Button variant="outline" onClick={saveAndPrint} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
                   <Printer size={20} /> {generating ? 'Printing…' : 'Save & Print'}
                 </Button>
                 <Button variant="ghost" onClick={() => navigate('/guarantee/history')} disabled={generating} className="flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
@@ -539,10 +511,10 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
               </div>
             ) : (
               <div className="no-print flex flex-wrap items-center justify-center gap-3">
-                <Button onClick={generateCard} disabled={!hasRows || generating || mixedCard > 0} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
                   <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
                 </Button>
-                <Button onClick={printCard} disabled={!hasRows || generating || mixedCard > 0} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
                   <Printer size={20} /> Print
                 </Button>
                 <button
@@ -570,21 +542,6 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 <span className="ml-2">Slot 2: <span className="ml-1 rounded bg-stone-100 px-2 py-0.5 font-mono text-sm text-stone-700 dark:bg-white/10 dark:text-stone-200">{ref2.number}</span></span>
               )}
             </div>
-
-            {mixedCard > 0 && (
-              <div className="no-print flex flex-wrap items-center gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-                <span className="min-w-0 flex-1">
-                  <b>Card {mixedCard} has items with {(mixedCard === 1 ? years1 : years2).join(' and ')} years guarantee.</b>{' '}
-                  One PVC card carries one guarantee seal, so each period needs its own card.
-                  {!canSplit && ' Change or remove the rows of the other period (print them as a separate card).'}
-                </span>
-                {canSplit && (
-                  <Button onClick={splitByYears} className="flex items-center gap-1.5">
-                    <Copy size={15} /> Move {years1[1]}-year items to Card 2
-                  </Button>
-                )}
-              </div>
-            )}
 
             {layout === 'card' && (
               <div className="no-print flex flex-wrap items-center gap-2" role="tablist" aria-label="Cards in this tray pass">
@@ -618,8 +575,19 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             </Card>
 
             <Card className="min-h-0 shrink-0 overflow-hidden text-stone-800 dark:text-stone-100">
-              <div className="border-b border-stone-100 px-4 py-2 text-sm font-bold uppercase tracking-wide text-muted dark:border-white/10">
-                Items
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-3 dark:border-white/10">
+                <div>
+                  <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Items</h2>
+                  <p className="text-xs text-muted">One guarantee period applies to every item on this card.</p>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+                  Guarantee period
+                  <GuaranteeSelect
+                    value={onCard2 ? years2 : years1}
+                    onChange={onCard2 ? setPeriod2 : setPeriod1}
+                    className="min-w-32 rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-shiv-green dark:border-white/15 dark:bg-stone-950"
+                  />
+                </label>
               </div>
               {onCard2
                 ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brandOptions={brandOptions} datalistId="type-options-2" />
@@ -749,11 +717,10 @@ function CustomerFields({ value, onChange }: { value: CustomerInfo; onChange: (n
 }
 
 /** One tab of the Card 1 / Card 2 switch, labelled with its customer once typed. */
-function CardTab({ title, name, years = [], active, onSelect, onRemove }: {
+function CardTab({ title, name, years, active, onSelect, onRemove }: {
   title: string
   name: string
-  /** The card's guarantee period(s): one is right, two means it must be split. */
-  years?: GuaranteeYears[]
+  years: GuaranteeYears
   active: boolean
   onSelect: () => void
   onRemove?: () => void
@@ -769,11 +736,9 @@ function CardTab({ title, name, years = [], active, onSelect, onRemove }: {
       <button type="button" role="tab" aria-selected={active} onClick={onSelect} className="flex items-baseline gap-2 py-2 pl-4 pr-3 text-left">
         <span className={`text-sm font-bold ${active ? 'text-stone-900 dark:text-stone-50' : 'text-muted'}`}>{title}</span>
         <span className="max-w-40 truncate text-xs text-muted">{name.trim() || '—'}</span>
-        {years.length > 0 && (
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${years.length > 1 ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' : 'bg-stone-100 text-stone-700 dark:bg-white/10 dark:text-stone-200'}`}>
-            {years.map((y) => (y ? `${y} yr` : 'no gty')).join(' + ')}
-          </span>
-        )}
+        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-bold text-stone-700 dark:bg-white/10 dark:text-stone-200">
+          {years ? `${years} yr` : 'no gty'}
+        </span>
       </button>
       {onRemove && (
         <button
@@ -805,7 +770,7 @@ function GuaranteeSelect({
       value={value}
       onChange={(e) => onChange(Number(e.target.value) as GuaranteeYears)}
       className={`${className} cursor-pointer ${value ? 'font-semibold text-shiv-red' : 'text-muted'}`}
-      aria-label="Guarantee"
+      aria-label="Guarantee period"
     >
       <option value={0}>None</option>
       {options.map((y) => (
@@ -850,7 +815,7 @@ function SizeTable({
   // it lines up as columns under one header; on a phone each row stacks into a
   // small labelled block instead of scrolling sideways.
   const gridCols =
-    'md:grid-cols-[3.75rem_minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.25fr)_3.25rem_minmax(0,0.9fr)_minmax(0,1fr)_2rem]'
+    'md:grid-cols-[3.75rem_minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.25fr)_3.25rem_minmax(0,0.9fr)_2rem]'
   const labelClass = 'mb-0.5 block px-0.5 text-[10px] font-bold uppercase tracking-wide text-muted md:hidden'
 
   // Arrow keys move between cells like Excel. The cell under the caret is found from
@@ -906,7 +871,6 @@ function SizeTable({
         <span className="px-2 text-right">Height</span>
         <span className="px-2 text-right">Pcs</span>
         <span className="px-2 text-right">Rate</span>
-        <span className="px-2">Guarantee</span>
         <span />
       </div>
       <div ref={grid} onKeyDown={moveWithArrows} className="flex flex-col gap-2 md:gap-0">
@@ -1019,14 +983,6 @@ function SizeTable({
                 className={`${cellClass} text-right`}
               />
             </label>
-            <div className="col-span-2 min-w-0 md:col-span-1">
-              <span className={labelClass}>Guarantee</span>
-              <GuaranteeSelect
-                value={rowYears(row, brandOptions, DEFAULT_YEARS)}
-                onChange={(years) => updateSizeRow(setRows, row.id, { years })}
-                className={cellClass}
-              />
-            </div>
             <div className="absolute right-1 top-1 md:static md:text-center">
               {rows.length > 1 && (
                 <button
