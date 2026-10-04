@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, Copy, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
@@ -853,6 +853,48 @@ function SizeTable({
     'md:grid-cols-[3.75rem_minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.25fr)_3.25rem_minmax(0,0.9fr)_minmax(0,1fr)_2rem]'
   const labelClass = 'mb-0.5 block px-0.5 text-[10px] font-bold uppercase tracking-wide text-muted md:hidden'
 
+  // Arrow keys move between cells like Excel. The cell under the caret is found from
+  // the DOM (row = child of the grid, column = its nth input or select), so this keeps
+  // working when columns change. Up/Down in a number box move rows instead of nudging
+  // the number; Left/Right in a text box only leave it from its start or end (or when
+  // all of it is selected, as it is on arrival); and while a brand is half typed,
+  // Up/Down are left to the Type column's suggestion list.
+  const grid = useRef<HTMLDivElement>(null)
+  function moveWithArrows(e: KeyboardEvent<HTMLDivElement>) {
+    const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown'
+    if (!vertical && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+    const el = e.target
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement)) return
+    const rowEls = Array.from(grid.current?.children ?? []) as HTMLElement[]
+    const cellsOf = (row?: HTMLElement) => (row ? Array.from(row.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')) : [])
+    const r = rowEls.findIndex((row) => row.contains(el))
+    if (r < 0) return
+    const c = cellsOf(rowEls[r]).indexOf(el)
+
+    let target: HTMLInputElement | HTMLSelectElement | undefined
+    if (vertical) {
+      if (el instanceof HTMLInputElement && el.list) {
+        const typed = el.value.trim().toLowerCase()
+        if (typed && !brandOptions.some((b) => b.name.toLowerCase() === typed)) return
+      }
+      target = cellsOf(rowEls[r + (e.key === 'ArrowDown' ? 1 : -1)])[c]
+    } else {
+      const left = e.key === 'ArrowLeft'
+      if (el instanceof HTMLInputElement && el.type !== 'number') {
+        const { selectionStart: from, selectionEnd: to, value } = el
+        const all = from === 0 && to === value.length
+        const edge = left ? from === 0 && to === 0 : from === value.length && to === value.length
+        if (from !== null && !all && !edge) return
+      }
+      target = cellsOf(rowEls[r])[c + (left ? -1 : 1)]
+    }
+    if (!target) return
+    e.preventDefault()
+    target.focus()
+    if (target instanceof HTMLInputElement) target.select()
+  }
+
   return (
     <div>
       <div
@@ -867,7 +909,7 @@ function SizeTable({
         <span className="px-2">Guarantee</span>
         <span />
       </div>
-      <div className="flex flex-col gap-2 md:gap-0">
+      <div ref={grid} onKeyDown={moveWithArrows} className="flex flex-col gap-2 md:gap-0">
         {rows.map((row) => (
           <div
             key={row.id}
