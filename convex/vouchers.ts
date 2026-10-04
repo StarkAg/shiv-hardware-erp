@@ -725,32 +725,42 @@ export const remove = mutation({
       if (!cash?.deleted) throw new Error('Reverse this payment in Cashier → Staff Payments.');
     }
 
-    const lines = await ctx.db
-      .query("voucherEntries")
-      .withIndex("by_voucher", (q) => q.eq("voucherId", id))
-      .collect();
-
-    const { _id, _creationTime, ...fields } = voucher;
-    const trashId = await ctx.db.insert("trash", {
-      ...fields,
-      entries: lines.map((l) => ({
-        ledgerId: l.ledgerId,
-        side: l.side,
-        amount: l.amount,
-      })),
-      deletedAt: Date.now(),
-    });
-
-    const named = await describeVoucher(ctx, id);
-    for (const line of lines) await ctx.db.delete(line._id);
-    await ctx.db.delete(id);
-    await record(ctx, "voucher.delete", `Deleted ${named} → Trash`, {
-      entity: "voucher",
-      entityId: id,
-    });
-    return trashId;
+    return await trashVoucher(ctx, id);
   },
 });
+
+/**
+ * Moves a voucher and its lines to the Trash, where it can be put back.
+ * Shared by `remove` and by the cash book unposting its own vouchers.
+ */
+export async function trashVoucher(ctx: MutationCtx, id: Id<"vouchers">) {
+  const voucher = await ctx.db.get(id);
+  if (!voucher) return null;
+  const lines = await ctx.db
+    .query("voucherEntries")
+    .withIndex("by_voucher", (q) => q.eq("voucherId", id))
+    .collect();
+
+  const { _id, _creationTime, ...fields } = voucher;
+  const trashId = await ctx.db.insert("trash", {
+    ...fields,
+    entries: lines.map((l) => ({
+      ledgerId: l.ledgerId,
+      side: l.side,
+      amount: l.amount,
+    })),
+    deletedAt: Date.now(),
+  });
+
+  const named = await describeVoucher(ctx, id);
+  for (const line of lines) await ctx.db.delete(line._id);
+  await ctx.db.delete(id);
+  await record(ctx, "voucher.delete", `Deleted ${named} → Trash`, {
+    entity: "voucher",
+    entityId: id,
+  });
+  return trashId;
+}
 
 /**
  * Changes what kind of voucher this is, and rewrites its sides to match.

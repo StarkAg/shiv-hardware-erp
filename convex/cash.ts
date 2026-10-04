@@ -1,5 +1,5 @@
 import { ConvexError, v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { internalMutation, mutation, query } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { api } from './_generated/api'
@@ -9,6 +9,19 @@ import { nextVoucherNo } from './lib/numbering'
 import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
 import { ensureCashFlow, flowForCash } from './lib/billFlow'
+import { trashVoucher } from './vouchers'
+
+/**
+ * The cash book stays out of the panel's books (the shop's call, 2026-10-04:
+ * "don't connect the cashier app to the panel, don't mix any data").
+ *
+ * Cash notes, closes and staff payments live only in the Cashier app and the
+ * panel's own Cash view. Nothing here posts a receipt or payment voucher any
+ * more, and a note that was posted before is taken back out (to the Trash) the
+ * next time it is touched — `unpostAll` did that for every one at once.
+ * Set to true only if the shop asks for the books to follow the drawer again.
+ */
+const POST_TO_BOOKS = false
 
 /**
  * The drawer, in the books.
@@ -85,6 +98,14 @@ export async function postCashEntry(ctx: MutationCtx, entryId: string): Promise<
     .withIndex('by_entry_id', (q) => q.eq('entryId', entryId))
     .unique()
   if (!row) return
+
+  if (!POST_TO_BOOKS) {
+    if (row.voucherId) {
+      await trashVoucher(ctx, row.voucherId)
+      await ctx.db.patch(row._id, { voucherId: undefined })
+    }
+    return
+  }
 
   // Deleted at the counter, or edited down to nothing: the books follow. The
   // voucher goes to the trash rather than being destroyed, so a note deleted
@@ -613,5 +634,31 @@ export const postBacklog = mutation({
       if (after?.voucherId) posted++
     }
     return { looked: rows.length, posted, waiting: rows.length - posted }
+  },
+})
+
+/**
+ * Takes every voucher the cash book ever posted back out of the books (to the
+ * Trash), and unlinks the notes. Run once when the cash book was separated:
+ *   npx convex run --prod cash:unpostAll
+ */
+export const unpostAll = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const removed: string[] = []
+    for (const row of await ctx.db.query('cashEntries').collect()) {
+      if (!row.voucherId) continue
+      const v = await ctx.db.get(row.voucherId)
+      if (v) { await trashVoucher(ctx, row.voucherId); removed.push(String(v.refNo ?? row.entryId)) }
+      await ctx.db.patch(row._id, { voucherId: undefined })
+    }
+    // Any left behind with no note pointing at them (a note since wiped).
+    for (const v of await ctx.db.query('vouchers').collect()) {
+      if (!String(v.refNo ?? '').startsWith('CASH-')) continue
+      await trashVoucher(ctx, v._id)
+      removed.push(String(v.refNo))
+    }
+    await record(ctx, 'cash.unpost', `Cash book separated from the books: ${removed.length} vouchers moved to Trash`, {})
+    return { removed: removed.length, refs: removed }
   },
 })
