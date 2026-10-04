@@ -10,11 +10,10 @@
  * — because this screen, with the photographs side by side under one name, is
  * where a bill filed to the wrong man is actually spotted.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import PhotoViewer from './PhotoViewer.jsx'
-import Picker from './Picker.jsx'
 import { clean } from './match.js'
 import { RevertIcon } from './icons.jsx'
 
@@ -25,6 +24,19 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const day = (ms) => {
   const d = new Date(ms)
   return `${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
+}
+
+/**
+ * Search that forgives how a name was typed: case, spaces, dots and dashes do not
+ * matter ("rajkumar" finds "Raj Kumar", "rk traders" finds "R. K. Traders"), and
+ * the words can come in any order ("kumar raj").
+ */
+const squash = (s) => clean(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '')
+const words = (s) => clean(s).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+const matches = (name, q) => {
+  const n = squash(name)
+  const sq = squash(q)
+  return !sq || n.includes(sq) || words(q).every((w) => n.includes(w))
 }
 
 const WHERE = {
@@ -42,22 +54,16 @@ export default function Ledger() {
   const rows = useQuery(anyApi.filing.folders, {})
   const one = useQuery(anyApi.filing.partyBills, open ? { partyLedgerId: open } : 'skip')
   const revertBill = useMutation(anyApi.filing.revertBill)
-  // Adding a customer by name, before any of their paper: they get a bookmark now.
-  const [adding, setAdding] = useState(false)
-  const parties = useQuery(anyApi.filing.parties, adding ? {} : 'skip')
+  // Every customer account, so a search finds people with no paper yet too, and
+  // "Add" never opens a second account for a name the books already have.
+  const parties = useQuery(anyApi.filing.parties, {})
   const addCustomer = useMutation(anyApi.filing.addCustomer)
   const freeHold = useMutation(anyApi.filing.freeHold)
-
-  const add = async (p) => {
-    setAdding(false)
-    setError('')
-    try {
-      const res = await addCustomer(p.id ? { partyLedgerId: p.id } : { name: p.name })
-      setSaid(res.already ? `${res.name} already holds bookmark ${res.slotLabel}` : `${res.name} — bookmark ${res.slotLabel}`)
-    } catch (e) {
-      setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
-    }
-  }
+  const searchBox = useRef(null)
+  const doneBtn = useRef(null)
+  const [adding, setAdding] = useState(false)
+  // The bookmark just given, shown large until Done.
+  const [added, setAdded] = useState(null)
 
   const giveBack = async () => {
     if (!open) return
@@ -95,12 +101,52 @@ export default function Ledger() {
     return () => clearTimeout(t)
   }, [said])
 
+  const typed = find.trim()
+
+  // Customers with paper or a bookmark, plus (while searching) every other account.
   const shown = useMemo(() => {
-    const q = clean(find)
     const all = rows ?? []
-    if (!q) return all
-    return all.filter((r) => clean(r.name).includes(q))
-  }, [rows, find])
+    if (!typed) return all
+    const listed = new Set(all.map((r) => r.partyLedgerId))
+    const others = (parties ?? [])
+      .filter((p) => !listed.has(p._id))
+      .map((p) => ({ partyLedgerId: p._id, name: p.name, folder: null, bills: 0, unpriced: 0, slotLabel: null, noPaper: true }))
+    const sq = squash(typed)
+    const rank = (r) => (squash(r.name) === sq ? 0 : squash(r.name).startsWith(sq) ? 1 : 2)
+    return [...all, ...others]
+      .filter((r) => matches(r.name, typed))
+      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  }, [rows, parties, typed])
+
+  // The account this exact name already is (spacing and case aside), if any.
+  const exact = typed ? shown.find((r) => squash(r.name) === squash(typed)) : null
+  // Add is offered unless this exact name is already on the list with paper or a bookmark.
+  const canAdd = Boolean(typed) && (!exact || (exact.noPaper && !exact.slotLabel))
+
+  const add = async () => {
+    if (!canAdd || adding) return
+    setAdding(true)
+    setError('')
+    try {
+      setAdded(await addCustomer(exact ? { partyLedgerId: exact.partyLedgerId } : { name: typed }))
+    } catch (e) {
+      setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  // Done: clear the search and put the cursor back for the next name. Focusing inside
+  // the tap keeps the phone's keyboard coming up.
+  const nextName = () => {
+    setAdded(null)
+    setFind('')
+    searchBox.current?.focus()
+  }
+
+  useEffect(() => {
+    if (added) doneBtn.current?.focus()
+  }, [added])
 
   /**
    * Every sheet this customer has, in one flat run, oldest first — and where
@@ -231,29 +277,40 @@ export default function Ledger() {
   /* ---------------- everybody ---------------- */
   return (
     <div className="body">
-      <div className="lg-head lg-head-row">
+      <div className="lg-head">
         <input
+          ref={searchBox}
           className="field search"
-          placeholder="Find a customer…"
-          aria-label="Find a customer"
+          placeholder="Find or add a customer…"
+          aria-label="Find or add a customer"
           type="search"
+          enterKeyHint="go"
+          autoCapitalize="words"
+          autoCorrect="off"
+          spellCheck="false"
           value={find}
           onChange={(e) => setFind(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter adds only when nothing matches, so it never adds over a name on the list.
+            if (e.key === 'Enter' && canAdd && !shown.length) { e.preventDefault(); add() }
+          }}
         />
-        <button className="btn go lg-add" onClick={() => setAdding(true)} aria-label="Add a customer and give them a bookmark">
-          + Add
-        </button>
       </div>
 
-      {adding ? (
-        <div className="lg-adding">
-          <Picker parties={parties} value="" guess={null} onPick={add} onClose={() => setAdding(false)} />
-        </div>
-      ) : rows === undefined ? (
+      {canAdd && (
+        <button className="lg-addrow" disabled={adding} onClick={add}>
+          <b>+</b>
+          <span>
+            {exact ? <>Give <b>{exact.name}</b> a bookmark</> : <>Add <b>“{typed}”</b> and give a bookmark</>}
+          </span>
+        </button>
+      )}
+
+      {rows === undefined ? (
         <p className="pad hint">Loading…</p>
       ) : !shown.length ? (
         <p className="pad hint">
-          {find.trim() ? `Nobody matches “${find.trim()}”.` : 'No customers yet. Name a bill, or add one with + Add.'}
+          {typed ? `Nobody matches “${typed}”.` : 'No customers yet. Type a name to add one.'}
         </p>
       ) : (
         <div className="lg-list">
@@ -262,7 +319,7 @@ export default function Ledger() {
               <span className="lg-row-name">
                 <b>{r.name}</b>
                 <span className="hint">
-                  {r.bills} {r.bills === 1 ? 'bill' : 'bills'}
+                  {r.noPaper ? 'no bills yet' : `${r.bills} ${r.bills === 1 ? 'bill' : 'bills'}`}
                   {r.unpriced ? ` · ${r.unpriced} unpriced` : ''}
                   {r.folder ? ` · ${r.folder.cabinet}/${r.folder.drawer}/${r.folder.no}` : ''}
                 </span>
@@ -274,6 +331,26 @@ export default function Ledger() {
               {r.slotLabel && <span className="lg-slot">{r.slotLabel}</span>}
             </button>
           ))}
+        </div>
+      )}
+
+      {added && (
+        <div className="full sheet" onClick={nextName}>
+          <div className="ask lg-added" role="dialog" aria-label="Bookmark given" onClick={(e) => e.stopPropagation()}>
+            <p className="hint">{added.already ? 'Already holds bookmark' : 'Bookmark'}</p>
+            <div className="lg-added-slot">{added.slotLabel}</div>
+            <h3>{added.name}</h3>
+            <div className="ask-acts">
+              <button
+                ref={doneBtn}
+                className="btn go"
+                onClick={nextName}
+                onKeyDown={(e) => { if (e.key === 'Escape') nextName() }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

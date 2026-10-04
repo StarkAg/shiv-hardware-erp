@@ -506,10 +506,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* ── The ledger: who has what, and on which bookmark ───────────────────── */
 .lg-head{padding: 12px 14px; border-bottom: 1px solid var(--line);}
 .lg-head .linkbtn{min-height: 44px; padding: 6px 2px; font-size: 15px;}
-.lg-head-row{display: flex; align-items: center; gap: 8px;}
-.lg-head-row .search{flex: 1; min-width: 0;}
-.btn.lg-add{flex: none; min-height: 44px; padding: 0 16px; font-size: 15px;}
-.lg-adding{display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 12px 14px;}
+.lg-addrow{display: flex; align-items: center; gap: 10px; width: calc(100% - 28px); margin: 10px 14px 4px; min-height: 52px;
+  padding: 10px 14px; border: 1.5px dashed var(--go); border-radius: 12px; background: none; color: var(--ink); text-align: left; font-size: 15px;}
+.lg-addrow > b{flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--go); color: var(--go-ink); font-size: 18px;}
+.lg-addrow:disabled{opacity: .6;}
+.lg-added{text-align: center;}
+.lg-added-slot{margin: 6px 0 4px; font-size: 64px; font-weight: 800; letter-spacing: .02em; line-height: 1.05; color: var(--go);
+  font-variant-numeric: tabular-nums;}
 .lg-list{flex: 1; overflow-y: auto;}
 .lg-row{display: flex; align-items: center; justify-content: space-between; gap: 12px;
   width: 100%; min-height: 62px; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--line);
