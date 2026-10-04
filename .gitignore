@@ -33,3 +33,4 @@ certs/dev-key.pem
 # One-off scripts written to read production while chasing a bug.
 .probe/
 .counter-dist/
+.intake/

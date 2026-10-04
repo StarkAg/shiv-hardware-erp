@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#152424" />
+  <title>Shiv Hardware | Task intake</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">SH</span><span>Shiv Hardware</span></div>
+      <span class="top-note">Task intake</span>
+    </header>
+    <section class="hero">
+      <div class="eyebrow">From request to result</div>
+      <h1>Send a task.<br><em>Follow the result.</em></h1>
+      <p>Ask about bills, stock, cash, orders, records, or changes to the panel. Add images when they help. This Codex chat handles the work and sends the result back here.</p>
+    </section>
+    <form id="intake" class="card">
+      <div class="step"><span>01</span><div><h2>Add images if useful</h2><p>Choose up to 12 images for this task. A text-only request works too.</p></div></div>
+      <label id="drop" class="drop" for="photos">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 16V3m-5 5 5-5 5 5"/></svg>
+        <strong>Choose photos or drop them here</strong>
+        <small>JPEG, PNG, or WebP. Up to 12 MB each, 36 MB total.</small>
+        <input id="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple />
+      </label>
+      <div id="previews" class="previews" aria-live="polite"></div>
+      <div class="step second"><span>02</span><div><h2>Say what you need</h2><p>Give the action you want, the relevant name or record, and any constraints.</p></div></div>
+      <label class="field"><span>Your request</span><textarea id="note" rows="4" placeholder="Example: Check these supplier invoices against Murli Plywood and record any missing purchases. Do not enter a payment unless there is payment proof."></textarea></label>
+      <button id="send" class="send" type="submit">Send to this chat <span aria-hidden="true">&rarr;</span></button>
+      <p class="footnote">Uses the Codex CLI on this computer. No separate AI key or AI service is configured.</p>
+    </form>
+    <section id="result" class="result" hidden aria-live="polite">
+      <div class="result-head"><span id="status-label">Waiting</span><span id="request-id"></span></div>
+      <h2 id="result-title">Sent to the chat</h2>
+      <p id="result-text">Work is in progress. Keep this page open, or return later on this computer.</p>
+      <button id="retry" class="retry" type="button" hidden>Retry this request</button>
+    </section>
+    <footer>Shiv Hardware Store · Ramgarh Cantt</footer>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
