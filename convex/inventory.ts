@@ -18,12 +18,13 @@
  * through the item's pack size ("1 Box = 10 Pc") when one is set, and shown
  * apart when not, rather than added in the wrong unit.
  *
- * Everything here asks for the ledger PIN: it carries purchase prices.
+ * Open like the rest of the shop's functions: the Inventory site has no sign-in
+ * (decided 2026-10-04). It does carry purchase prices. `pin` is still accepted,
+ * and ignored, so a client that sends one keeps working.
  */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
-import { requirePin } from "./lib/pin";
 import { readBills } from "./lib/billRows";
 import { canonicalUnit } from "./lib/text";
 
@@ -245,9 +246,8 @@ function summarise(ref: string, list: Move[], setting: any, count: any, entry: a
  * has moved, marked as not in My Items.
  */
 export const list = query({
-  args: { pin: v.string() },
-  handler: async (ctx, { pin }) => {
-    requirePin(pin);
+  args: { pin: v.optional(v.string()) },
+  handler: async (ctx) => {
     const [all, entries, s] = await Promise.all([moves(ctx), catalog(ctx), settings(ctx)]);
     const byRef = new Map<string, Move[]>();
     for (const m of all) byRef.set(m.ref, [...(byRef.get(m.ref) ?? []), m]);
@@ -262,9 +262,8 @@ export const list = query({
 
 /** One item: its stock and every movement and count, newest first. */
 export const item = query({
-  args: { pin: v.string(), ref: v.string() },
-  handler: async (ctx, { pin, ref }) => {
-    requirePin(pin);
+  args: { pin: v.optional(v.string()), ref: v.string() },
+  handler: async (ctx, { ref }) => {
     const [all, entries, s, counts] = await Promise.all([
       moves(ctx),
       catalog(ctx),
@@ -285,9 +284,8 @@ export const item = query({
 
 /** The latest movements across every item, for the Moves tab. */
 export const recent = query({
-  args: { pin: v.string(), limit: v.optional(v.number()) },
-  handler: async (ctx, { pin, limit }) => {
-    requirePin(pin);
+  args: { pin: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }) => {
     const all = await moves(ctx);
     return all.slice(-(limit ?? 150)).reverse();
   },
@@ -295,9 +293,8 @@ export const recent = query({
 
 /** "There are 14 on the shelf" — resets the item to what was counted. */
 export const count = mutation({
-  args: { pin: v.string(), ref: v.string(), qty: v.number(), note: v.optional(v.string()), day: v.optional(v.string()) },
-  handler: async (ctx, { pin, ref, qty, note, day }) => {
-    requirePin(pin);
+  args: { pin: v.optional(v.string()), ref: v.string(), qty: v.number(), note: v.optional(v.string()), day: v.optional(v.string()) },
+  handler: async (ctx, { ref, qty, note, day }) => {
     if (!Number.isFinite(qty) || qty < 0) throw new Error("Count must be zero or more");
     const at = Date.now();
     await ctx.db.insert("stockCounts", {
@@ -314,7 +311,7 @@ export const count = mutation({
 /** Reorder level, rack/shelf, main unit and pack sizes for one item. */
 export const setItem = mutation({
   args: {
-    pin: v.string(),
+    pin: v.optional(v.string()),
     ref: v.string(),
     min: v.optional(v.union(v.number(), v.null())),
     place: v.optional(v.string()),
@@ -322,8 +319,7 @@ export const setItem = mutation({
     packs: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
     note: v.optional(v.string()),
   },
-  handler: async (ctx, { pin, ref, ...patch }) => {
-    requirePin(pin);
+  handler: async (ctx, { pin: _pin, ref, ...patch }) => {
     const row = await ctx.db.query("stockItems").withIndex("by_ref", (q) => q.eq("ref", ref)).first();
     const next = {
       min: patch.min === undefined ? row?.min : patch.min ?? undefined,
@@ -339,11 +335,8 @@ export const setItem = mutation({
   },
 });
 
-/** Checks a PIN without loading anything, for the sign-in screen. */
+/** Kept for a client written for the old sign-in screen: there is no PIN now. */
 export const checkPin = query({
-  args: { pin: v.string() },
-  handler: async (_ctx, { pin }) => {
-    requirePin(pin);
-    return true;
-  },
+  args: { pin: v.optional(v.string()) },
+  handler: async () => true,
 });
