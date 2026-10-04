@@ -18,15 +18,17 @@
  * through the item's pack size ("1 Box = 10 Pc") when one is set, and shown
  * apart when not, rather than added in the wrong unit.
  *
- * Open like the rest of the shop's functions: the Inventory site has no sign-in
- * (decided 2026-10-04). It does carry purchase prices. `pin` is still accepted,
- * and ignored, so a client that sends one keeps working.
+ * Reading stock is open. Editing counts and settings requires the Inventory
+ * PIN, kept in the deployment environment. The shop-facing list is restricted
+ * to the 37 supplied plywood rows through seedList.
  */
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { readBills } from "./lib/billRows";
 import { canonicalUnit } from "./lib/text";
+import { INVENTORY_SEED, seedRefForName } from "./lib/inventorySeed";
+import { requireInventoryPin } from "./lib/inventoryPin";
 
 /* ── which item a line is (same rules as src/lib/profit.ts) ─────────────── */
 
@@ -294,7 +296,8 @@ export const recent = query({
 /** "There are 14 on the shelf" — resets the item to what was counted. */
 export const count = mutation({
   args: { pin: v.optional(v.string()), ref: v.string(), qty: v.number(), note: v.optional(v.string()), day: v.optional(v.string()) },
-  handler: async (ctx, { ref, qty, note, day }) => {
+  handler: async (ctx, { pin, ref, qty, note, day }) => {
+    requireInventoryPin(pin);
     if (!Number.isFinite(qty) || qty < 0) throw new Error("Count must be zero or more");
     const at = Date.now();
     await ctx.db.insert("stockCounts", {
@@ -319,7 +322,8 @@ export const setItem = mutation({
     packs: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
     note: v.optional(v.string()),
   },
-  handler: async (ctx, { pin: _pin, ref, ...patch }) => {
+  handler: async (ctx, { pin, ref, ...patch }) => {
+    requireInventoryPin(pin);
     const row = await ctx.db.query("stockItems").withIndex("by_ref", (q) => q.eq("ref", ref)).first();
     const next = {
       min: patch.min === undefined ? row?.min : patch.min ?? undefined,
@@ -335,8 +339,75 @@ export const setItem = mutation({
   },
 });
 
-/** Kept for a client written for the old sign-in screen: there is no PIN now. */
+/** Unlocking the editor is read-only; mutations also check the PIN themselves. */
 export const checkPin = query({
   args: { pin: v.optional(v.string()) },
-  handler: async () => true,
+  handler: async (_ctx, { pin }) => {
+    requireInventoryPin(pin);
+    return true;
+  },
+});
+
+const today = (at: number) => new Date(at + 5.5 * 3600_000).toISOString().slice(0, 10);
+
+async function seededStock(ctx: QueryCtx) {
+  const [all, s] = await Promise.all([moves(ctx), settings(ctx)]);
+  const mapped = new Map<string, Move[]>();
+  for (const move of all) {
+    const ref = seedRefForName(move.name);
+    if (ref) mapped.set(ref, [...(mapped.get(ref) ?? []), move]);
+  }
+  const at = Date.now();
+  return INVENTORY_SEED.map((seed) => {
+    const count = s.lastCount.get(seed.ref);
+    // Until initialization, display the supplied opening quantity without
+    // applying historical bills to a notebook date the shop hasn't confirmed.
+    const baseline = count ?? { qty: seed.qty, day: today(at), at, note: "Supplied opening stock" };
+    return summarise(seed.ref, count ? mapped.get(seed.ref) ?? [] : [],
+      { min: 2, ...s.items.get(seed.ref), unit: "Pc" }, baseline,
+      { name: seed.name, unit: "Pc" });
+  });
+}
+
+export const seedList = query({
+  args: {},
+  handler: seededStock,
+});
+
+/** One-time opening stock. Re-running never resets an existing count or edit. */
+export const initializeSeed = mutation({
+  args: { pin: v.string() },
+  handler: async (ctx, { pin }) => {
+    requireInventoryPin(pin);
+    const at = Date.now();
+    let inserted = 0;
+    for (const seed of INVENTORY_SEED) {
+      const existing = await ctx.db.query("stockCounts").withIndex("by_ref", q => q.eq("ref", seed.ref)).first();
+      if (existing) continue;
+      await ctx.db.insert("stockCounts", {
+        ref: seed.ref, qty: seed.qty, day: today(at), at,
+        note: "Opening stock from supplied Ply list; notebook dated 4/9/26; loaded on entry date",
+      });
+      inserted++;
+    }
+    return { inserted, items: INVENTORY_SEED.length };
+  },
+});
+
+/** Read and adjust in the same transaction so simultaneous taps cannot overwrite one another. */
+export const adjustSeed = mutation({
+  args: { pin: v.string(), ref: v.string(), delta: v.union(v.literal(-1), v.literal(1)) },
+  handler: async (ctx, { pin, ref, delta }) => {
+    requireInventoryPin(pin);
+    if (!INVENTORY_SEED.some(i => i.ref === ref)) throw new ConvexError("This item is not in your stock list.");
+    const item = (await seededStock(ctx)).find(i => i.ref === ref)!;
+    // A physical shelf count starts at zero when old bills show a deficit.
+    const qty = Math.max(0, item.stock) + delta;
+    if (qty < 0) throw new ConvexError("Stock cannot go below zero.");
+    const at = Date.now();
+    await ctx.db.insert("stockCounts", {
+      ref, qty, day: today(at), at, note: `Inventory Edit: ${delta > 0 ? "+1" : "-1"}`,
+    });
+    return { qty };
+  },
 });

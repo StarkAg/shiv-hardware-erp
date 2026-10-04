@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 
 const TEXT = /\.(tsx?|jsx?|mjs|cjs|html|css|json|ps1|cmd|vbs)$/
 const SKIP = /(^|\/)(node_modules|dist|build|release|android|backups)\/|package-lock\.json$/
-// Pictographs, dingbats (✓ ✕ ★), misc symbols (☀ ☁ ⚠) and the emoji variation
+// Pictographs, dingbats, miscellaneous symbols and the emoji variation
 // selector. © ® ™ are plain text and stay allowed.
 const EMOJI = /(?![©®™])[\p{Extended_Pictographic}\u{2600}-\u{27BF}\u{FE0F}]/u
 

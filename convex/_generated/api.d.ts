@@ -41,6 +41,8 @@ import type * as lib_billRows from "../lib/billRows.js";
 import type * as lib_billText from "../lib/billText.js";
 import type * as lib_entries from "../lib/entries.js";
 import type * as lib_history from "../lib/history.js";
+import type * as lib_inventoryPin from "../lib/inventoryPin.js";
+import type * as lib_inventorySeed from "../lib/inventorySeed.js";
 import type * as lib_money from "../lib/money.js";
 import type * as lib_numbering from "../lib/numbering.js";
 import type * as lib_parties from "../lib/parties.js";
@@ -111,6 +113,8 @@ declare const fullApi: ApiFromModules<{
   "lib/billText": typeof lib_billText;
   "lib/entries": typeof lib_entries;
   "lib/history": typeof lib_history;
+  "lib/inventoryPin": typeof lib_inventoryPin;
+  "lib/inventorySeed": typeof lib_inventorySeed;
   "lib/money": typeof lib_money;
   "lib/numbering": typeof lib_numbering;
   "lib/parties": typeof lib_parties;
