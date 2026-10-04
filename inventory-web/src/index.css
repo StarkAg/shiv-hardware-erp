@@ -26,9 +26,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
 .tabs button.on { background: var(--brass); color: var(--brass-ink); box-shadow: 0 1px 2px rgba(0,0,0,.13); }
 .page { padding: 12px 20px calc(30px + env(safe-area-inset-bottom)); }
 .toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin-bottom: 12px; }
-.filters { display: flex; gap: 8px; }
-.filters button, .lock { min-height: 40px; padding: 6px 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--card2); font-weight: 750; }
-.filters button.active { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+.toolbar-actions { display: flex; align-items: center; gap: 8px; }
+.sort-control { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.sort-control select { min-height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); padding: 6px 30px 6px 10px; color: var(--ink); font-size: 14px; font-weight: 750; letter-spacing: 0; text-transform: none; }
+.lock { min-height: 40px; padding: 6px 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--card2); font-weight: 750; }
 .cloud-status { width: 40px; height: 40px; display: grid; place-items: center; color: var(--muted); }
 .cloud-status.waiting { color: var(--low); }
 .lock { color: var(--ink); }

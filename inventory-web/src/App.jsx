@@ -97,7 +97,7 @@ export default function App() {
   const adjust = useMutation(api.adjustSeed)
   const [device, setDevice] = useState(null)
   const [tab, setTab] = useState('stock')
-  const [filter, setFilter] = useState('all')
+  const [sort, setSort] = useState('brand')
   const [brand, setBrand] = useState('')
   const [thickness, setThickness] = useState('')
   const [search, setSearch] = useState('')
@@ -172,12 +172,13 @@ export default function App() {
   const thicknesses = useMemo(() => brand
     ? [...new Set(items.filter(item => item.brand === brand).map(item => item.mm))].sort((a, b) => a - b)
     : [], [items, brand])
-  const shown = useMemo(() => items.filter(item =>
-    (filter === 'all' || item.stock <= (item.min ?? 2)) &&
-    (!brand || item.brand === brand) &&
-    (!thickness || item.mm === thickness) &&
-    matchesStockSearch(item, search),
-  ), [items, filter, brand, thickness, search])
+  const shown = useMemo(() => items
+    .filter(item => (!brand || item.brand === brand) && (!thickness || item.mm === thickness) && matchesStockSearch(item, search))
+    .sort((a, b) => {
+      if (sort === 'stock') return a.stock - b.stock || a.brand.localeCompare(b.brand) || a.mm - b.mm
+      if (sort === 'thickness') return a.mm - b.mm || a.brand.localeCompare(b.brand) || a.size.localeCompare(b.size)
+      return BRAND_ORDER.indexOf(a.brand) - BRAND_ORDER.indexOf(b.brand) || a.mm - b.mm || a.size.localeCompare(b.size)
+    }), [items, brand, thickness, search, sort])
   const editing = tab === 'edit' && Boolean(pin)
   const locked = tab === 'edit' && !pin
 
@@ -206,12 +207,18 @@ export default function App() {
     <main className="page">
       {locked ? <PinForm onUnlock={nextPin => { setPin(nextPin); setBlocked(false); setError('') }} /> : <>
         <div className="toolbar">
-          <div className="filters" aria-label="Stock filter">
-            <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')} aria-pressed={filter === 'all'}>All</button>
-            <button className={filter === 'low' ? 'active' : ''} onClick={() => setFilter('low')} aria-pressed={filter === 'low'}>Low</button>
+          <label className="sort-control">
+            <span>Sort</span>
+            <select value={sort} onChange={event => setSort(event.target.value)} aria-label="Sort stock">
+              <option value="brand">Brand</option>
+              <option value="thickness">Thickness</option>
+              <option value="stock">Low stock first</option>
+            </select>
+          </label>
+          <div className="toolbar-actions">
             <span className={`cloud-status ${queue.length ? 'waiting' : ''}`} role="status" aria-live="polite" aria-label={status} title={status}><CloudIcon /></span>
+            {editing && <button className="lock" onClick={() => { setPin(''); setError('') }}>Lock</button>}
           </div>
-          {editing && <button className="lock" onClick={() => { setPin(''); setError('') }}>Lock</button>}
         </div>
         <div className="filter-stages" aria-label="Product filters">
           <div className="filter-stage"><span>Brand</span><div className="filter-chips">
@@ -227,7 +234,7 @@ export default function App() {
         <input className="search" type="search" aria-label="Search stock" placeholder="Search: S, SG, MS, size"
           value={search} onChange={e => setSearch(e.target.value)} />
         {error && <p className="error" role="alert">{error}</p>}
-        {!shown.length ? <p className="hint">{search || brand || thickness ? 'No matching stock.' : 'No low stock.'}</p>
+        {!shown.length ? <p className="hint">No matching stock.</p>
           : <ul className={`stock-list ${editing ? '' : 'stock-cards'}`}>
               {shown.map(item => <li key={item.ref}>
                 {editing ? <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
