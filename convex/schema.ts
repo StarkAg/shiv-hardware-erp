@@ -929,6 +929,26 @@ export default defineSchema({
     .index("by_slot", ["slot"]),
   // Customers ticked off on the Sort app's Ledger (tapped while sorting a
   // stack), shared by every phone until somebody presses Reset.
+  // Inventory site: what the shelf held when somebody counted it. Stock is the
+  // last count plus the bills after it (convex/inventory.ts).
+  stockCounts: defineTable({
+    ref: v.string(),
+    qty: v.number(),
+    day: v.string(),
+    at: v.number(),
+    note: v.optional(v.string()),
+  }).index("by_ref", ["ref"]),
+  // Inventory site: per item reorder level, rack/shelf, main unit and pack
+  // sizes ({ Box: 10 } — one Box is ten of the main unit).
+  stockItems: defineTable({
+    ref: v.string(),
+    min: v.optional(v.number()),
+    place: v.optional(v.string()),
+    unit: v.optional(v.string()),
+    packs: v.optional(v.record(v.string(), v.number())),
+    note: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_ref", ["ref"]),
   sortMarks: defineTable({
     partyLedgerId: v.id("ledgers"),
     at: v.number(),
