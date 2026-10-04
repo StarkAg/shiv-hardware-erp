@@ -30,8 +30,7 @@ function StockLine({ item }) {
     <span>{item.mm}mm <i className="item-separator">·</i></span>
     <span>{item.size.replace('x', ' × ')}</span>
     <span>{brandCode[item.brand]}</span>
-    <span>α</span>
-    <strong>{quantity(item.stock)}</strong>
+    <span className="stock-count"><span>α</span><strong>{quantity(item.stock)}</strong></span>
   </div>
 }
 

@@ -43,8 +43,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
 .item-name { display: inline-flex; align-items: baseline; min-width: 0; gap: 9px; white-space: nowrap; font-size: 20px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .item-separator { color: var(--brass); }
 .item-code { min-width: 1.5ch; }
-.stock-line { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); flex: 1; align-items: baseline; min-width: 0; font-size: 20px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stock-line { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1; align-items: baseline; min-width: 0; font-size: 20px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stock-line > * { min-width: 0; text-align: center; }
+.stock-count { display: inline-flex; justify-content: center; align-items: baseline; gap: 3px; }
 .stock-line strong { font-size: 22px; }
 .stock-line.low strong { color: var(--low); }
 .stock-line i { font-style: normal; }
