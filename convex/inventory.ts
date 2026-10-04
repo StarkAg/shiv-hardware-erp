@@ -20,7 +20,7 @@
  *
  * Reading stock is open. Editing counts and settings requires the Inventory
  * PIN, kept in the deployment environment. The shop-facing list is restricted
- * to the 37 supplied plywood rows through seedList.
+ * to the supplied plywood and 30 mm Signature door rows through seedList.
  */
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
@@ -386,7 +386,7 @@ export const initializeSeed = mutation({
       if (existing) continue;
       await ctx.db.insert("stockCounts", {
         ref: seed.ref, qty: seed.qty, day: today(at), at,
-        note: "Opening stock from supplied Ply list; notebook dated 4/9/26; loaded on entry date",
+        note: "Opening stock from the supplied plywood and door list; loaded on entry date",
       });
       inserted++;
     }
@@ -396,10 +396,27 @@ export const initializeSeed = mutation({
 
 /** Read and adjust in the same transaction so simultaneous taps cannot overwrite one another. */
 export const adjustSeed = mutation({
-  args: { pin: v.string(), ref: v.string(), delta: v.union(v.literal(-1), v.literal(1)) },
-  handler: async (ctx, { pin, ref, delta }) => {
+  args: {
+    pin: v.string(),
+    ref: v.string(),
+    delta: v.union(v.literal(-1), v.literal(1)),
+    // Generated on the device before the tap appears on screen. A lost
+    // response can therefore be retried without counting the same tap twice.
+    operationId: v.optional(v.string()),
+  },
+  handler: async (ctx, { pin, ref, delta, operationId }) => {
     requireInventoryPin(pin);
     if (!INVENTORY_SEED.some(i => i.ref === ref)) throw new ConvexError("This item is not in your stock list.");
+    if (operationId) {
+      const previous = await ctx.db
+        .query("inventorySyncOps")
+        .withIndex("by_operation", q => q.eq("operationId", operationId))
+        .unique();
+      if (previous) {
+        if (previous.ref !== ref || previous.delta !== delta) throw new ConvexError("That device operation does not match this stock change.");
+        return { qty: previous.qty, duplicate: true };
+      }
+    }
     const item = (await seededStock(ctx)).find(i => i.ref === ref)!;
     // A physical shelf count starts at zero when old bills show a deficit.
     const qty = Math.max(0, item.stock) + delta;
@@ -408,6 +425,7 @@ export const adjustSeed = mutation({
     await ctx.db.insert("stockCounts", {
       ref, qty, day: today(at), at, note: `Inventory Edit: ${delta > 0 ? "+1" : "-1"}`,
     });
-    return { qty };
+    if (operationId) await ctx.db.insert("inventorySyncOps", { operationId, ref, delta, qty, at });
+    return { qty, duplicate: false };
   },
 });

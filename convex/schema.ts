@@ -938,6 +938,15 @@ export default defineSchema({
     at: v.number(),
     note: v.optional(v.string()),
   }).index("by_ref", ["ref"]),
+  // One row for every device-side stock tap. Keeping the operation ID makes a
+  // retry after a dropped connection safe: the quantity is changed only once.
+  inventorySyncOps: defineTable({
+    operationId: v.string(),
+    ref: v.string(),
+    delta: v.union(v.literal(-1), v.literal(1)),
+    qty: v.number(),
+    at: v.number(),
+  }).index("by_operation", ["operationId"]),
   // Inventory site: per item reorder level, rack/shelf, main unit and pack
   // sizes ({ Box: 10 } — one Box is ten of the main unit).
   stockItems: defineTable({

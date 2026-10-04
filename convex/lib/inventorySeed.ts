@@ -1,5 +1,5 @@
-/** Exact Ply rows supplied by the shop on 4 October 2026. Doors excluded. */
-export const INVENTORY_SEED = [
+/** Exact plywood rows supplied by the shop on 4 October 2026. */
+const PLYWOOD_SEED = [
   {
     "ref": "seed:ply:signature:6:7x4",
     "name": "6mm Signature 7 x 4",
@@ -297,6 +297,26 @@ export const INVENTORY_SEED = [
     "qty": 1
   }
 ] as const;
+
+/** Exact 30 mm Signature door rows supplied with the opening stock. */
+const DOOR_SEED = [
+  { ref: "seed:door:signature:30:78x28", name: "30mm Signature 78 x 28", brand: "Signature", mm: 30, size: "78x28", qty: 1 },
+  { ref: "seed:door:signature:30:78x30", name: "30mm Signature 78 x 30", brand: "Signature", mm: 30, size: "78x30", qty: 2 },
+  { ref: "seed:door:signature:30:78x34", name: "30mm Signature 78 x 34", brand: "Signature", mm: 30, size: "78x34", qty: 4 },
+  { ref: "seed:door:signature:30:78x36", name: "30mm Signature 78 x 36", brand: "Signature", mm: 30, size: "78x36", qty: 5 },
+  { ref: "seed:door:signature:30:78x38", name: "30mm Signature 78 x 38", brand: "Signature", mm: 30, size: "78x38", qty: 14 },
+  { ref: "seed:door:signature:30:78x40", name: "30mm Signature 78 x 40", brand: "Signature", mm: 30, size: "78x40", qty: 1 },
+  { ref: "seed:door:signature:30:81x32", name: "30mm Signature 81 x 32", brand: "Signature", mm: 30, size: "81x32", qty: 1 },
+  { ref: "seed:door:signature:30:81x34", name: "30mm Signature 81 x 34", brand: "Signature", mm: 30, size: "81x34", qty: 1 },
+  { ref: "seed:door:signature:30:81x36", name: "30mm Signature 81 x 36", brand: "Signature", mm: 30, size: "81x36", qty: 7 },
+  { ref: "seed:door:signature:30:81x38", name: "30mm Signature 81 x 38", brand: "Signature", mm: 30, size: "81x38", qty: 6 },
+  { ref: "seed:door:signature:30:81x40", name: "30mm Signature 81 x 40", brand: "Signature", mm: 30, size: "81x40", qty: 4 },
+  { ref: "seed:door:signature:30:81x42", name: "30mm Signature 81 x 42", brand: "Signature", mm: 30, size: "81x42", qty: 4 },
+  { ref: "seed:door:signature:30:84x38", name: "30mm Signature 84 x 38", brand: "Signature", mm: 30, size: "84x38", qty: 1 },
+] as const;
+
+// Preserve the same sequence as the supplied CSV: doors, then plywood.
+export const INVENTORY_SEED = [...DOOR_SEED, ...PLYWOOD_SEED] as const;
 
 /** Match only the supplied brand / thickness / size, including old bill names. */
 export function seedRefForName(name: string): string | undefined {
