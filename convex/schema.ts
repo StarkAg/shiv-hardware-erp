@@ -913,6 +913,21 @@ export default defineSchema({
    * the rest of it: how many cards the plan was drawn for, and how far through
    * the sweeps the shop has got.
    */
+  /**
+   * A bookmark given to a customer before any of their paper has been named:
+   * added by name on the sort app's Ledger screen, so the number can be written
+   * on a card and the table laid out ahead of the stack. Counts as taken for
+   * numbering, so the customer's first named slip lands on this same bookmark,
+   * and goes back when their packet is filed (or when the hold is freed).
+   */
+  filingHolds: defineTable({
+    partyLedgerId: v.id("ledgers"),
+    slot: v.number(),
+    at: v.number(),
+  })
+    .index("by_party", ["partyLedgerId"])
+    .index("by_slot", ["slot"]),
+
   filingPlan: defineTable({
     key: v.string(),
     /** How many slots are laid out on the table — thirty or forty, reused. */

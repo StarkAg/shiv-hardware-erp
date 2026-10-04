@@ -113,7 +113,44 @@ async function slotsHeld(ctx: QueryCtx | MutationCtx) {
     if (r.stage === "filed") continue;
     if (r.slot !== undefined) byParty.set(String(r.partyLedgerId), r.slot);
   }
+  // A bookmark given out on the Ledger screen before any paper: taken all the same.
+  for (const h of await ctx.db.query("filingHolds").collect()) {
+    if (!byParty.has(String(h.partyLedgerId))) byParty.set(String(h.partyLedgerId), h.slot);
+  }
   return byParty;
+}
+
+/** The bookmark held for a customer who has no paper on it yet, if any. */
+async function holdOf(ctx: QueryCtx | MutationCtx, partyLedgerId: Id<"ledgers">) {
+  return await ctx.db
+    .query("filingHolds")
+    .withIndex("by_party", (q) => q.eq("partyLedgerId", partyLedgerId))
+    .first();
+}
+
+/** A Sundry Debtors account by this name: the existing one, or a new one opened for it. */
+async function partyByName(ctx: MutationCtx, name: string, asOf: number): Promise<Id<"ledgers">> {
+  const wanted = name.trim();
+  if (!wanted) throw new Error("Say whose bill this is");
+  const all = await ctx.db.query("ledgers").collect();
+  const exact = all.find((l) => l.name.toLowerCase() === wanted.toLowerCase());
+  if (exact) return exact._id;
+  const group = await ctx.db
+    .query("groups")
+    .withIndex("by_name", (q) => q.eq("name", "Sundry Debtors"))
+    .unique();
+  if (!group) throw new Error("The Sundry Debtors group is missing");
+  const now = Date.now();
+  return await ctx.db.insert("ledgers", {
+    name: properText(wanted),
+    groupId: group._id,
+    openingBalance: 0,
+    openingSide: "Dr",
+    openingAsOf: asOf,
+    active: true,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 /**
@@ -411,6 +448,11 @@ export const slots = query({
      * draw, so it runs to the highest bookmark in use — which shows every
      * freed number below it as a gap waiting to be reused.
      */
+    // Bookmarks given out by name, before any paper: on the table, empty so far.
+    for (const h of await ctx.db.query("filingHolds").collect()) {
+      if (!bySlot.has(h.slot)) bySlot.set(h.slot, { partyLedgerId: h.partyLedgerId, bills: 0, named: 0, since: h.at });
+    }
+
     const highest = Math.max(0, ...bySlot.keys());
     const drawTo = count ?? highest;
 
@@ -530,6 +572,8 @@ export const fileToFolder = mutation({
     if (!folder) throw new Error("Say which folder this packet goes into");
 
     for (const r of rows) await ctx.db.patch(r._id, { stage: "filed" });
+    const hold = await holdOf(ctx, partyLedgerId);
+    if (hold) await ctx.db.delete(hold._id);
     await ctx.db.patch(partyLedgerId, { folder, updatedAt: Date.now() });
 
     // A bill of somebody else's that had nowhere to go now has somewhere.
@@ -821,32 +865,7 @@ export const nameIt = mutation({
     const photo = await ctx.db.get(inboxId);
     if (!photo) throw new Error("That photograph is gone");
 
-    let ledgerId = partyLedgerId;
-    if (!ledgerId) {
-      const wanted = (partyName ?? "").trim();
-      if (!wanted) throw new Error("Say whose bill this is");
-      const all = await ctx.db.query("ledgers").collect();
-      const exact = all.find((l) => l.name.toLowerCase() === wanted.toLowerCase());
-      if (exact) ledgerId = exact._id;
-      else {
-        const group = await ctx.db
-          .query("groups")
-          .withIndex("by_name", (q) => q.eq("name", "Sundry Debtors"))
-          .unique();
-        if (!group) throw new Error("The Sundry Debtors group is missing");
-        const now = Date.now();
-        ledgerId = await ctx.db.insert("ledgers", {
-          name: properText(wanted),
-          groupId: group._id,
-          openingBalance: 0,
-          openingSide: "Dr",
-          openingAsOf: photo.at,
-          active: true,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    }
+    const ledgerId = partyLedgerId ?? (await partyByName(ctx, partyName ?? "", photo.at));
 
     const pages = photo.groupId
       ? await ctx.db
@@ -925,6 +944,9 @@ export const folders = query({
   args: {},
   handler: async (ctx) => {
     const rows = await ctx.db.query("filing").collect();
+    const holds = new Map(
+      (await ctx.db.query("filingHolds").collect()).map((h) => [h.partyLedgerId, h.slot] as const),
+    );
     const byParty = new Map<Id<"ledgers">, Doc<"filing">[]>();
     for (const r of rows) {
       const list = byParty.get(r.partyLedgerId) ?? [];
@@ -959,7 +981,7 @@ export const folders = query({
       const unpriced = list.filter(
         (r) => vouchers.get(r.voucherId)?.status === "pending",
       ).length;
-      const slot = heldSlot(list);
+      const slot = heldSlot(list) ?? holds.get(partyLedgerId) ?? null;
       out.push({
         partyLedgerId,
         name: party.name,
@@ -971,7 +993,69 @@ export const folders = query({
         slotLabel: slot === null ? null : slotLabel(slot),
       });
     }
+    // Added by name with a bookmark, no paper named yet.
+    for (const [partyLedgerId, slot] of holds) {
+      if (byParty.has(partyLedgerId)) continue;
+      const party = await ctx.db.get(partyLedgerId);
+      if (!party) continue;
+      out.push({
+        partyLedgerId,
+        name: party.name,
+        folder: party.folder ?? null,
+        bills: 0,
+        filed: 0,
+        unpriced: 0,
+        slot,
+        slotLabel: slotLabel(slot),
+      });
+    }
     return out.sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+/**
+ * A customer added by name, with no bill photographed: gives them a bookmark now.
+ *
+ * Picks an existing account or opens a new one, the same way naming a slip does.
+ * A customer already holding a bookmark keeps it; otherwise they take the lowest
+ * free number, which their slips will land on once they are named.
+ */
+export const addCustomer = mutation({
+  args: { partyLedgerId: v.optional(v.id("ledgers")), name: v.optional(v.string()) },
+  handler: async (ctx, { partyLedgerId, name }) => {
+    const ledgerId = partyLedgerId ?? (await partyByName(ctx, name ?? "", Date.now()));
+    const party = await ctx.db.get(ledgerId);
+    if (!party) throw new Error("That account is gone");
+
+    const already = (await slotsHeld(ctx)).get(String(ledgerId));
+    if (already !== undefined) {
+      return { partyLedgerId: ledgerId, name: party.name, slot: already, slotLabel: slotLabel(already), already: true };
+    }
+
+    const slot = await slotFor(ctx, ledgerId);
+    if (slot === null) throw new Error("Every bookmark on the table is taken");
+    await ctx.db.insert("filingHolds", { partyLedgerId: ledgerId, slot, at: Date.now() });
+    await record(ctx, "filing.hold", `${party.name}: added with bookmark ${slotLabel(slot)}`, {
+      entity: "ledger",
+      entityId: ledgerId,
+    });
+    return { partyLedgerId: ledgerId, name: party.name, slot, slotLabel: slotLabel(slot), already: false };
+  },
+});
+
+/** Gives back a bookmark handed out by name, while no paper has been named to it. */
+export const freeHold = mutation({
+  args: { partyLedgerId: v.id("ledgers") },
+  handler: async (ctx, { partyLedgerId }) => {
+    const hold = await holdOf(ctx, partyLedgerId);
+    if (!hold) return { freed: false };
+    await ctx.db.delete(hold._id);
+    const party = await ctx.db.get(partyLedgerId);
+    await record(ctx, "filing.hold", `${party?.name ?? "A customer"}: bookmark ${slotLabel(hold.slot)} given back`, {
+      entity: "ledger",
+      entityId: partyLedgerId,
+    });
+    return { freed: true };
   },
 });
 
@@ -1196,13 +1280,16 @@ export const partyBills = query({
     }
     bills.sort((a, b) => a.date - b.date);
 
-    const slot = heldSlot(rows);
+    const hold = await holdOf(ctx, partyLedgerId);
+    const slot = heldSlot(rows) ?? hold?.slot ?? null;
     return {
       name: party.name,
       place: party.place ?? "",
       folder: party.folder ?? null,
       slot,
       slotLabel: slot === null ? null : slotLabel(slot),
+      /** Added by name with a bookmark and no paper yet: the hold can be freed. */
+      heldOnly: !rows.some((r) => r.stage !== "filed") && Boolean(hold),
       counts: {
         all: rows.length,
         named: rows.filter((r) => r.stage === "named").length,
@@ -1291,6 +1378,7 @@ export const clearQueue = mutation({
       await ctx.db.delete(row._id);
       removed += 1;
     }
+    for (const hold of await ctx.db.query("filingHolds").collect()) await ctx.db.delete(hold._id);
     await record(ctx, "filing.clear", `${removed} bills taken out of the sorting queue`);
     return { removed };
   },

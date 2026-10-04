@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import PhotoViewer from './PhotoViewer.jsx'
+import Picker from './Picker.jsx'
 import { clean } from './match.js'
 import { RevertIcon } from './icons.jsx'
 
@@ -41,6 +42,33 @@ export default function Ledger() {
   const rows = useQuery(anyApi.filing.folders, {})
   const one = useQuery(anyApi.filing.partyBills, open ? { partyLedgerId: open } : 'skip')
   const revertBill = useMutation(anyApi.filing.revertBill)
+  // Adding a customer by name, before any of their paper: they get a bookmark now.
+  const [adding, setAdding] = useState(false)
+  const parties = useQuery(anyApi.filing.parties, adding ? {} : 'skip')
+  const addCustomer = useMutation(anyApi.filing.addCustomer)
+  const freeHold = useMutation(anyApi.filing.freeHold)
+
+  const add = async (p) => {
+    setAdding(false)
+    setError('')
+    try {
+      const res = await addCustomer(p.id ? { partyLedgerId: p.id } : { name: p.name })
+      setSaid(res.already ? `${res.name} already holds bookmark ${res.slotLabel}` : `${res.name} — bookmark ${res.slotLabel}`)
+    } catch (e) {
+      setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
+    }
+  }
+
+  const giveBack = async () => {
+    if (!open) return
+    setError('')
+    try {
+      const res = await freeHold({ partyLedgerId: open })
+      if (res.freed) setSaid(`Bookmark ${one?.slotLabel ?? ''} given back`)
+    } catch (e) {
+      setError(String(e?.data ?? e?.message ?? e).split('\n')[0])
+    }
+  }
   const [sending, setSending] = useState(null)
   const [said, setSaid] = useState('')
   const [error, setError] = useState('')
@@ -130,6 +158,9 @@ export default function Ledger() {
                 {!one.slotLabel && !one.folder && (
                   <span className="hint">No bookmark and no folder yet</span>
                 )}
+                {one.heldOnly && (
+                  <button className="linkbtn" onClick={giveBack}>Free bookmark</button>
+                )}
               </div>
               <p className="hint">
                 {one.counts.all} {one.counts.all === 1 ? 'bill' : 'bills'}
@@ -200,7 +231,7 @@ export default function Ledger() {
   /* ---------------- everybody ---------------- */
   return (
     <div className="body">
-      <div className="lg-head">
+      <div className="lg-head lg-head-row">
         <input
           className="field search"
           placeholder="Find a customer…"
@@ -209,13 +240,20 @@ export default function Ledger() {
           value={find}
           onChange={(e) => setFind(e.target.value)}
         />
+        <button className="btn go lg-add" onClick={() => setAdding(true)} aria-label="Add a customer and give them a bookmark">
+          + Add
+        </button>
       </div>
 
-      {rows === undefined ? (
+      {adding ? (
+        <div className="lg-adding">
+          <Picker parties={parties} value="" guess={null} onPick={add} onClose={() => setAdding(false)} />
+        </div>
+      ) : rows === undefined ? (
         <p className="pad hint">Loading…</p>
       ) : !shown.length ? (
         <p className="pad hint">
-          {find.trim() ? `Nobody matches “${find.trim()}”.` : 'No bills have been named yet.'}
+          {find.trim() ? `Nobody matches “${find.trim()}”.` : 'No customers yet. Name a bill, or add one with + Add.'}
         </p>
       ) : (
         <div className="lg-list">
@@ -238,6 +276,9 @@ export default function Ledger() {
           ))}
         </div>
       )}
+
+      {error && <p className="error pad" role="alert">{error}</p>}
+      {said && <div className="flash" role="status">{said}</div>}
     </div>
   )
 }
