@@ -221,13 +221,13 @@ export default function App() {
           </div>
         </div>
         <div className="filter-stages" aria-label="Product filters">
-          <div className="filter-stage"><span>Brand</span><div className="filter-chips">
+          <div className="filter-stage" aria-label="Brand"><div className="filter-chips">
             {BRAND_ORDER.map(name => <button key={name} className={brand === name ? 'active' : ''} aria-pressed={brand === name} onClick={() => {
               setBrand(current => current === name ? '' : name)
               setThickness('')
             }}>{name}</button>)}
           </div></div>
-          {brand && <div className="filter-stage"><span>Thickness</span><div className="filter-chips">
+          {brand && <div className="filter-stage" aria-label="Thickness"><div className="filter-chips">
             {thicknesses.map(mm => <button key={mm} className={thickness === mm ? 'active' : ''} aria-pressed={thickness === mm} onClick={() => setThickness(current => current === mm ? '' : mm)}>{mm}mm</button>)}
           </div></div>}
         </div>
