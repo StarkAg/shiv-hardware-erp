@@ -166,10 +166,11 @@ export default function Ledger() {
     for (const [id, at] of ticks) if (!best || at > best.at) best = { id, at }
     return best?.id ?? null
   }, [ticks])
+  // Tapping the name only ticks it (the bill is in the hand, the number is
+  // on screen); tapping the bookmark opens the customer's page.
   const tap = (r) => {
     if (r.pending) return
     send(anyApi.filing.mark, { partyLedgerId: r.partyLedgerId })
-    setOpen(r.partyLedgerId)
   }
   const resetTicks = () => {
     if (!ticks.size) return
@@ -436,10 +437,13 @@ export default function Ledger() {
       ) : (
         <div className="lg-list">
           {shown.map((r) => (
-            <button
+            <div
               key={r.partyLedgerId}
+              role="button"
+              tabIndex={0}
               className={`lg-row${r.pending ? ' pending' : ''}${ticks.has(String(r.partyLedgerId)) ? ' ticked' : ''}${lastTick === String(r.partyLedgerId) ? ' last' : ''}`}
               onClick={() => tap(r)}
+              onKeyDown={(e) => { if (e.key === 'Enter') tap(r) }}
             >
               <span className="lg-row-name">
                 <b>{r.name}</b>
@@ -454,8 +458,17 @@ export default function Ledger() {
                   the server so this and the customer's own page cannot
                   disagree about how a number is spelt. */}
               {ticks.has(String(r.partyLedgerId)) && <span className="lg-tick" aria-label="Ticked">✓</span>}
-              {r.slotLabel && <span className="lg-slot">{r.slotLabel}</span>}
-            </button>
+              {r.slotLabel && (
+                <button
+                  className="lg-slot"
+                  aria-label={`Open ${r.name}`}
+                  disabled={r.pending}
+                  onClick={(e) => { e.stopPropagation(); setOpen(r.partyLedgerId) }}
+                >
+                  {r.slotLabel}
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
