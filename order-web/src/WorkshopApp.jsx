@@ -20,6 +20,7 @@ import { fmtSize, sqftOf, inchesOf } from './dims.js'
 import {
   readJobs, writeJobs, queue, flush, pendingCount, mergeJobs, fmtDate, todayKey,
 } from './store.js'
+import { CheckIcon, CloudIcon, MoonIcon, SunIcon } from './icons.jsx'
 
 function daysTo(date) {
   if (!date) return null
@@ -141,7 +142,7 @@ export default function WorkshopApp() {
           title={sync.error ? `Not syncing — ${sync.error}` : 'Saved online'}
           aria-label="Sync"
         >
-          ☁{sync.pending > 0 && <span className="syncdot">{sync.pending > 99 ? '99+' : sync.pending}</span>}
+          <CloudIcon />{sync.pending > 0 && <span className="syncdot">{sync.pending > 99 ? '99+' : sync.pending}</span>}
         </button>
         <button
           className={`themebtn ${screen === 'rack' ? 'on' : ''}`}
@@ -152,7 +153,7 @@ export default function WorkshopApp() {
             <path d="M3 6h18M3 12h12M3 18h7" />
           </svg>
         </button>
-        <button className="themebtn" onClick={toggleTheme} aria-label="Theme">{dark ? '☀' : '☾'}</button>
+        <button className="themebtn" onClick={toggleTheme} aria-label="Theme">{dark ? <SunIcon /> : <MoonIcon />}</button>
       </div>
     </header>
   )
@@ -213,7 +214,7 @@ export default function WorkshopApp() {
                     className={`wsrow ${o.made ? 'made' : ''}`}
                     onClick={() => toggle(o.id)}
                   >
-                    <span className="wstick" aria-hidden="true">{o.made ? '✓' : ''}</span>
+                    <span className="wstick" aria-hidden="true">{o.made ? <CheckIcon /> : ''}</span>
                     <span className="wsn">{i + 1}</span>
                     <span className="wsdraw"><Opening o={o} n={null} longest={longest} /></span>
                     <span className="wsmeta">

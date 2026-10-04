@@ -22,6 +22,7 @@ import { useHotkeys } from './keys.js'
 import {
   linesFromOpenings, lineTotal, explainDelta, varianceFor, EXTRAS, inr,
 } from './rates.js'
+import { AlertIcon } from './icons.jsx'
 
 export default function Delta({ job, material, onAccept, onReprice, onRemeasure }) {
   const openings = job.openings || []
@@ -88,7 +89,7 @@ export default function Delta({ job, material, onAccept, onReprice, onRemeasure 
 
       {/* ② The shop's own number. Never leaves this screen. */}
       <div className="block warnblock">
-        <div className="blocktitle warn">⚠ Size variance — not billed</div>
+        <div className="blocktitle warn"><AlertIcon /> Size variance — not billed</div>
 
         <div className="varrow">
           <span>{variance.pieces} pieces against the size they were quoted at</span>

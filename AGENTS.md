@@ -12,5 +12,11 @@ copy of the tool there).
   lacks the other computer's files deletes those functions in production. The
   script refuses while anything is uncommitted, unpushed or behind here, or
   while the other computer has uncommitted work.
+- No emojis anywhere in the project: not in any app's screens, printed bills,
+  generated HTML, WhatsApp text or log lines. Use an icon: lucide-react in the
+  panel (`src/`), the app's own inline SVG icons in cash-web, order-web, sort-web
+  and the other small apps, and an inline `<svg>` in HTML strings. Symbols such as
+  ✓ ✕ ★ ☀ ⚠ count as emojis. `npm run check:emoji` lists any that slip in; run
+  it before committing UI work.
 - Commit and push each finished piece of work. To take one file the other computer
   has: `git checkout refs/wip-others/<computer> -- <file>` (after `npm run sync`).

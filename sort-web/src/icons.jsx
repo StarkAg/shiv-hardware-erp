@@ -40,3 +40,11 @@ export function TrashIcon({ size = 20 }) {
     </svg>
   )
 }
+
+export function CheckIcon({ size = 20 }) {
+  return (
+    <svg {...box(size)} strokeWidth="2.4">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  )
+}

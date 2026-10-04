@@ -292,6 +292,7 @@ const PAGE = /* html */ `<!doctype html>
   body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; padding:16px 16px 120px; max-width:640px; margin-inline:auto }
   h1 { font-size:20px; margin:4px 0 16px }
   .big { display:flex; gap:10px }
+  .ic { width:1.1em; height:1.1em; vertical-align:-0.18em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
   .btn { appearance:none; border:0; border-radius:12px; padding:14px 18px; font:600 16px system-ui; background:var(--ink); color:var(--bg); cursor:pointer }
   .btn.alt { background:var(--card); color:var(--ink); border:1px solid var(--line) }
   .btn.print { background:var(--accent); color:#fff; width:100%; font-size:18px; padding:16px }
@@ -322,8 +323,8 @@ const PAGE = /* html */ `<!doctype html>
 <body>
 <h1>Guarantee Cards</h1>
 <div class="big">
-  <button class="btn" onclick="pick(true)">📷 Bill photo</button>
-  <button class="btn alt" onclick="pick(false)">🖼 Gallery</button>
+  <button class="btn" onclick="pick(true)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg> Bill photo</button>
+  <button class="btn alt" onclick="pick(false)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg> Gallery</button>
 </div>
 <input id="cam" type="file" accept="image/*" capture="environment" hidden>
 <input id="gal" type="file" accept="image/*" hidden>
@@ -414,7 +415,7 @@ async function print(pass, again) {
     return draw()
   }
   if (!r.ok) S.msg = { err:'Print failed: ' + r.error }
-  else { S.printed[pass] = r.numbers; S.msg = { ok:'Printed ' + r.numbers.join(' + ') + ' ✓' } }
+  else { S.printed[pass] = r.numbers; S.msg = { ok:'Printed ' + r.numbers.join(' + ') } }
   draw()
 }
 
@@ -455,8 +456,8 @@ function draw() {
         pair.forEach((g, k) => { h += '<p class="slot">Slot ' + (k + 1) + ' → put the <b>' + esc(g.brand) + ' · ' + g.years + ' Yrs</b> card</p>' })
         h += '<div class="cards">' + pair.map((g, k) => '<img src="' + S.previews[p * 2 + k]?.url + '">').join('') + '</div><br>'
         h += S.printed[p]
-          ? '<p class="ok">Printed ' + S.printed[p].join(' + ') + ' ✓</p><button class="btn alt" onclick="print(' + p + ', true)"' + (S.busy ? ' disabled' : '') + '>Print again</button>'
-          : '<button class="btn print" onclick="print(' + p + ')"' + (S.busy || S.dirty ? ' disabled' : '') + '>🖨 Print ' + (pair.length === 2 ? 'both cards' : 'card') + '</button>'
+          ? '<p class="ok">Printed ' + S.printed[p].join(' + ') + ' <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></p><button class="btn alt" onclick="print(' + p + ', true)"' + (S.busy ? ' disabled' : '') + '>Print again</button>'
+          : '<button class="btn print" onclick="print(' + p + ')"' + (S.busy || S.dirty ? ' disabled' : '') + '><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/></svg> Print ' + (pair.length === 2 ? 'both cards' : 'card') + '</button>'
         h += '</div>'
       }
     }

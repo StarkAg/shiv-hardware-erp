@@ -705,7 +705,7 @@ export function buildBillHtml(bill) {
               : '<span style="color:#ccc">—</span>'
           }</td>`
       return `<tr>
-        <td style="${CELL};color:#888;line-height:1.3">✕</td>
+        <td style="${CELL};color:#888;line-height:1.3"><svg viewBox="0 0 24 24" style="width:2.6mm;height:2.6mm;display:block" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></td>
         ${productCols}
         <td style="${CELL};padding-left:4mm;color:#555;white-space:nowrap">${
           isRoundup(item) || isAmountOnly(item) || !Number(item.qty)

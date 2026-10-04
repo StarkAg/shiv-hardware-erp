@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { blankDim, fmtDim, SOOT_GLYPH } from './dims.js'
 import { onEnterNext } from './keys.js'
+import { CheckIcon } from './icons.jsx'
 
 export const Row = ({ children, className = '' }) => <div className={`row ${className}`}>{children}</div>
 
@@ -125,7 +126,7 @@ export function SizePad({ w: w0, h: h0, onCancel, onDone }) {
           <button className="padkey" onClick={() => tap('0')}>0</button>
           {side === 'w'
             ? <button className="padkey go" onClick={() => setSide('h')}>→</button>
-            : <button className="padkey go" onClick={() => onDone(w, h)}>✓</button>}
+            : <button className="padkey go" onClick={() => onDone(w, h)}><CheckIcon /></button>}
         </div>
 
         <button className="ghostbtn wide" onClick={onCancel}>Cancel</button>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Camera, Check, Circle } from 'lucide-react'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -194,7 +195,7 @@ function TaskButton({ label, task, flow }: { label: string; task: Task; flow: Fl
       try { await mark({ id: flow._id, task, done: !done }) }
       catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
       finally { setBusy(false) }
-    }}><span>{done ? '✓' : '○'}</span>{label}</button>
+    }}><span>{done ? <Check size={16} aria-hidden /> : <Circle size={16} aria-hidden />}</span>{label}</button>
     {error && <small className="flow-error">{error}</small>}
   </div>
 }
@@ -316,7 +317,7 @@ export function BillFlow() {
           <div className="flow-card-bottom"><span>{tab === 'intake' ? row.intakeStatus === 'ready' ? 'Ready to check' :
             row.intakeStatus === 'failed' ? 'Read failed · type manually' : 'Needs entry' : STAGES[row.stage] ?? row.stage}</span>
             <b>{row.amount ? rupees(row.amount) : '—'}</b></div>
-          {row.photos.length > 0 && <small>📷 {row.photos.length} page{row.photos.length === 1 ? '' : 's'}</small>}
+          {row.photos.length > 0 && <small><Camera size={13} aria-hidden style={{ verticalAlign: '-2px' }} /> {row.photos.length} page{row.photos.length === 1 ? '' : 's'}</small>}
         </button>)}
       </div>
       <div className="flow-panel">{selected ? tab === 'intake' && selected.intakeStatus !== 'converted'

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Zap } from 'lucide-react';
 
 const MAX_EDGE = 1800;
 
@@ -191,7 +192,7 @@ function LiveCamera({ onShot, onUnavailable, controls }) {
             onClick={toggleTorch}
             aria-label="Torch"
           >
-            ⚡
+            <Zap size={20} aria-hidden="true" />
           </button>
         )}
       </div>

@@ -78,7 +78,7 @@ const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Pro
 // ── job → documents ────────────────────────────────────────────────────────
 const job = JSON.parse(readFileSync(jobPath, 'utf8').replace(/^﻿/, '')) // tolerate a Windows BOM
 const fail = (msg) => {
-  console.error(`✖ ${msg}`)
+  console.error(`Error: ${msg}`)
   if (JSON_OUT) console.log(`@@RESULT ${JSON.stringify({ ok: false, error: msg })}`)
   process.exit(1)
 }
@@ -222,7 +222,7 @@ for (const doc of docs) {
   const json = await res.json().catch(() => null)
   if (!res.ok || !json?.ok) fail(`cloud save of ${doc.number} failed: ${JSON.stringify(json)}`)
 }
-console.log('saved to cloud ✓')
+console.log('saved to cloud')
 
 // ── print (text side) ──────────────────────────────────────────────────────
 const psArgs = [
@@ -240,14 +240,14 @@ const psArgs = [
 ]
 if (pngs[1]) psArgs.push('-ImagePath2', pngs[1])
 execFileSync('powershell.exe', psArgs, { stdio: 'inherit', windowsHide: true, timeout: 120000 })
-console.log(`printed ✓ → ${CFG.printer}`)
+console.log(`printed → ${CFG.printer}`)
 if (!outArg) for (const f of pngs) rmSync(f, { force: true })
 
 // ── WhatsApp (only when the job asks) ──────────────────────────────────────
 if (job.whatsapp && customer.mobile) {
   try {
     const res = await fetch(`${CFG.printServer}/whatsapp-notify-customer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile: customer.mobile, name: customer.name }) })
-    console.log(res.ok ? 'WhatsApp sent ✓' : `WhatsApp failed (HTTP ${res.status})`)
+    console.log(res.ok ? 'WhatsApp sent' : `WhatsApp failed (HTTP ${res.status})`)
   } catch (err) { console.log(`WhatsApp failed: ${err.message}`) }
 } else {
   console.log('WhatsApp: not sent')

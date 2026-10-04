@@ -16,7 +16,7 @@ import { send, useAnswers, useCached, useOutbox } from './local.js'
 import { anyApi } from 'convex/server'
 import PhotoViewer from './PhotoViewer.jsx'
 import { clean } from './match.js'
-import { RevertIcon } from './icons.jsx'
+import { CheckIcon, RevertIcon } from './icons.jsx'
 
 const money = (n) =>
   n === null || n === undefined ? null : `₹${Number(n).toLocaleString('en-IN')}`
@@ -457,7 +457,7 @@ export default function Ledger() {
                   named, not from when the paper reaches the table. Written by
                   the server so this and the customer's own page cannot
                   disagree about how a number is spelt. */}
-              {ticks.has(String(r.partyLedgerId)) && <span className="lg-tick" aria-label="Ticked">✓</span>}
+              {ticks.has(String(r.partyLedgerId)) && <span className="lg-tick" aria-label="Ticked"><CheckIcon size={18} /></span>}
               {r.slotLabel && (
                 <button
                   className="lg-slot"

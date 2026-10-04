@@ -242,6 +242,7 @@ function buildMobileGuaranteePageHtml(document) {
   .amt { font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
   .empty { color: #a8a29e; font-size: 14px; padding: 6px 0; }
   .total { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 2px solid #1c1917; font-weight: 700; font-size: 16px; }
+  .ic { width:1.1em; height:1.1em; vertical-align:-0.18em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
   .pdf { display: block; text-align: center; background: #0d6e3f; color: #fff; text-decoration: none; font-weight: 700; padding: 13px; border-radius: 12px; margin-bottom: 20px; }
   .muted { text-align: center; color: #a8a29e; font-size: 11px; margin: 0 0 24px; }
 </style>
@@ -265,7 +266,7 @@ function buildMobileGuaranteePageHtml(document) {
     ${total > 0 ? `<div class="total"><span>Total</span><span>₹${Math.round(total)}</span></div>` : ''}
   </div>
 
-  <a class="pdf" href="/guarantee/${encodeURIComponent(escapedNumber)}/pdf" target="_blank" rel="noreferrer">📄 Open full guarantee card (PDF)</a>
+  <a class="pdf" href="/guarantee/${encodeURIComponent(escapedNumber)}/pdf" target="_blank" rel="noreferrer"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg> Open full guarantee card (PDF)</a>
   <p class="muted">Shiv Hardware Store · Ramgarh Cantt</p>
 </main>
 </body>
@@ -377,7 +378,7 @@ const WHATSAPP_CUSTOMER_COUNTRY_CODE = String(process.env.WHATSAPP_CUSTOMER_COUN
 // value is turned into a real line break (.env files can't hold raw newlines).
 const WHATSAPP_GUARANTEE_MESSAGE = (
   process.env.WHATSAPP_GUARANTEE_MESSAGE
-  || 'Hi {name} 👋\n\nThank you for purchasing with us. Your guarantee card 💳 is processed — please collect it from the shop.'
+  || 'Hi {name},\n\nThank you for purchasing with us. Your guarantee card is processed — please collect it from the shop.'
 ).replace(/\\n/g, '\n')
 
 // First name only, proper-cased ("HARSH KUMAR" / "harsh kumar" -> "Harsh") for the greeting.
@@ -3849,6 +3850,7 @@ app.get('/track/:id', (req, res) => {
     #topbar img{width:36px;height:36px;border-radius:8px;object-fit:contain}
     #info{flex:1;min-width:0}
     #driver-name{font-size:14px;font-weight:700;color:#1c1917}
+    .ic { width:1.1em; height:1.1em; vertical-align:-0.18em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
     #status{font-size:12px;color:#78716c;margin-top:1px}
     #map{flex:1}
     #stopped-banner{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center}
@@ -3901,7 +3903,9 @@ app.get('/track/:id', (req, res) => {
     fetch(serverBase + '/delivery/' + deliveryId)
       .then(r => r.json()).then(d => {
         if (d.ok) {
-          document.getElementById('driver-name').textContent = '🚚 ' + d.driverName
+          const driver = document.getElementById('driver-name')
+          driver.innerHTML = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2M15 18H9M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62L18.3 8.38A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg> '
+          driver.append(d.driverName)
           if (d.lat) updateLocation(d.lat, d.lng)
         }
       }).catch(() => {})
@@ -3926,7 +3930,7 @@ registerCardScan(app)
 
 app.listen(PORT, '0.0.0.0', () => {
   const networkUrls = localNetworkUrls(PORT)
-  console.log(`\n✓  Shiv Print Server running`)
+  console.log(`\nShiv Print Server running`)
   console.log(`   Local:   http://localhost:${PORT}`)
   for (const url of networkUrls) console.log(`   Phone:   ${url}`)
   if (PRINT_SERVER_PUBLIC_URL) console.log(`   Public override: ${PRINT_SERVER_PUBLIC_URL}`)
@@ -3963,6 +3967,6 @@ app.listen(PORT, '0.0.0.0', () => {
   prepareEpsonPlainA4ColorDefaults(COLOR_PRINTER, 'startup')
   warmUpBrowser()
   startDropPrintFolder()
-  if (!process.env.ANTHROPIC_API_KEY) console.warn('⚠  ANTHROPIC_API_KEY not set')
+  if (!process.env.ANTHROPIC_API_KEY) console.warn('Warning: ANTHROPIC_API_KEY not set')
   console.log()
 })

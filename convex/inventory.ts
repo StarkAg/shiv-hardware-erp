@@ -32,7 +32,7 @@ import { canonicalUnit } from "./lib/text";
 
 const foldItemName = (d: unknown) =>
   String(d ?? "")
-    .replace(/[×✕]/g, "x")
+    .replace(/[×✕]/g, "x") // emoji-ok: reads a typed cross
     .replace(/[“”″]/g, '"')
     .replace(/[‘’′]/g, "'")
     .toLowerCase()

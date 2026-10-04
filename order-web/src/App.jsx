@@ -21,6 +21,7 @@ import {
   readJobs, writeJobs, queue, flush, pendingCount, mergeJobs,
   uid, todayKey, postAdvance, nextNumberFromServer,
 } from './store.js'
+import { CloudIcon, MoonIcon, SunIcon } from './icons.jsx'
 
 const STAGE_FOR = {
   estimate: 'estimate',
@@ -249,7 +250,7 @@ export default function App() {
             title={sync.pending ? `${sync.pending} waiting` : sync.error ? `Offline — ${sync.error}` : 'Saved online'}
             aria-label="Sync"
           >
-            ☁
+            <CloudIcon />
             {sync.pending > 0 && <span className="syncdot">{sync.pending > 99 ? '99+' : sync.pending}</span>}
           </button>
           <a
@@ -265,7 +266,7 @@ export default function App() {
             onClick={() => setScreen(screen === 'rates' ? 'list' : 'rates')}
             aria-label="Rates" title="Rates"
           >₹</button>
-          <button className="themebtn" onClick={toggleTheme} aria-label="Theme">{dark ? '☀' : '☾'}</button>
+          <button className="themebtn" onClick={toggleTheme} aria-label="Theme">{dark ? <SunIcon /> : <MoonIcon />}</button>
         </div>
       </header>
 

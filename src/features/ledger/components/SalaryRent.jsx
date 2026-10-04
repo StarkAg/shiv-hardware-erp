@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useMutation } from 'convex/react';
+import { Check } from 'lucide-react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { rupees, phoneDisplay, phoneHref, inputDate, today, fromInputDate } from '../lib/format';
@@ -149,7 +150,7 @@ export default function SalaryRent({ onOpen, onPay }) {
                   }
                 >
                   {done
-                    ? `${label} charged ✓`
+                    ? <>{label} charged <Check size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} /></>
                     : `Charge ${label} · ${rupees(pending.reduce((t, r) => t + r.monthly, 0))}`}
                 </button>
                 )}

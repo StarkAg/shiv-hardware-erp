@@ -15,6 +15,7 @@ import {
   cuttingPlan, rackEffect, readCutting, writeCutting, fmtInches, fmtFeet,
 } from './cutting.js'
 import { readRule, writeRule, recordRun } from './offcuts.js'
+import { CheckIcon } from './icons.jsx'
 
 export default function Materials({ job, onRecorded }) {
   const [cfg, setCfg] = useState(() => readCutting())
@@ -203,7 +204,7 @@ export default function Materials({ job, onRecorded }) {
 
           {saved ? (
             <div className="recdone">
-              ✓ Rack updated — {saved.kept} end{saved.kept === 1 ? '' : 's'} on,
+              <CheckIcon /> Rack updated — {saved.kept} end{saved.kept === 1 ? '' : 's'} on,
               {' '}{saved.consumed} spent, {saved.scrapped} scrapped.
             </div>
           ) : (

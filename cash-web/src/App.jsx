@@ -868,6 +868,24 @@ function SplitIcon() {
   )
 }
 
+// Sized in em so each icon takes the font size of the line it sits in.
+const INLINE = { verticalAlign: '-0.125em', flexShrink: 0 }
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={INLINE} aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+  )
+}
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={INLINE} aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" /><circle cx="12" cy="13" r="3" /></svg>
+  )
+}
+function StarIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" style={INLINE} aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" /></svg>
+  )
+}
+
 function PrintIcon() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="7" rx="1" /></svg>
@@ -1309,7 +1327,7 @@ function CashEntry({
             event.target.value = ''
           }} />
         <button type="button" className="billphoto-button" onClick={() => photoInput.current?.click()}>
-          📷 Bill photo{photoFiles.length ? ` · ${photoFiles.length} page${photoFiles.length === 1 ? '' : 's'}` : ''}
+          <CameraIcon /> Bill photo{photoFiles.length ? ` · ${photoFiles.length} page${photoFiles.length === 1 ? '' : 's'}` : ''}
         </button>
         {photoFiles.map((file, index) => (
           <div className="billphoto-page" key={`${file.name}-${index}`}>
@@ -1325,7 +1343,7 @@ function CashEntry({
         className="tickbar" onClick={commit} disabled={!ready || savingPhoto}
         aria-label={photoRetryId ? 'Retry bill photo' : editing ? 'Update entry' : 'Save entry'}
       >
-        {savingPhoto ? '…' : photoRetryId ? 'Retry photo' : '✓'}
+        {savingPhoto ? '…' : photoRetryId ? 'Retry photo' : <CheckIcon />}
       </button>
 
       {/* Backspace takes the twelfth cell now that the tick has its own bar.
@@ -1425,7 +1443,7 @@ function SplitModal({ title, items, draftKey, initialValues, compare, confirmLab
 
         {compare != null && ready && (
           <div className={`closediff ${diff === 0 ? 'ok' : ''}`}>
-            {diff === 0 ? 'Tallies exactly ✓' : diff < 0
+            {diff === 0 ? <>Tallies exactly <CheckIcon /></> : diff < 0
               ? `Short ${inr(Math.abs(diff))} · घट गया`
               : `Over ${inr(diff)} · बढ़ गया`}
           </div>
@@ -1569,7 +1587,7 @@ function CashTotals({
         {sales === 0 ? (
           <div className="herodelta flat">{isToday ? 'Nothing yet today' : 'Nothing that day'}</div>
         ) : best && week.filter((w) => w.sales > 0).length > 1 ? (
-          <div className="herodelta up">★ Best day of the week</div>
+          <div className="herodelta up"><StarIcon /> Best day of the week</div>
         ) : delta > 0 ? (
           <div className="herodelta up">▲ {inr(delta)} more than {prev}</div>
         ) : delta < 0 ? (
@@ -1624,7 +1642,7 @@ function CashTotals({
             <>
               <span>register {inr(bookCash)}</span>
               <span className="off">
-                {off === 0 ? 'tallied ✓' : `${off < 0 ? 'short' : 'over'} ${inr(Math.abs(off))}`}
+                {off === 0 ? <>tallied <CheckIcon /></> : `${off < 0 ? 'short' : 'over'} ${inr(Math.abs(off))}`}
               </span>
             </>
           ) : (

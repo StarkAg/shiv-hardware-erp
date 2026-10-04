@@ -38,7 +38,7 @@ import { billCharges, billLines, type Bill, type BillItem } from './types'
  */
 export function foldItemName(description: string | undefined | null): string {
   return String(description ?? '')
-    .replace(/[×✕]/g, 'x')
+    .replace(/[×✕]/g, 'x') // emoji-ok: reads a typed cross
     .replace(/[“”″]/g, '"')
     .replace(/[‘’′]/g, "'")
     .toLowerCase()

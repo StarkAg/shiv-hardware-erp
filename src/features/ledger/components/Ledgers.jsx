@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pencil, X } from 'lucide-react'
+import { ExternalLink, Pencil, X } from 'lucide-react'
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
@@ -204,7 +204,7 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
                         title="Open in a new panel"
                         onClick={() => openInPanel(l)}
                       >
-                        ↗
+                        <ExternalLink size={14} aria-hidden="true" />
                       </button>
                       <button className="xbtn" aria-label="Edit" onClick={() => setEditing(l)}><Pencil size={14} aria-hidden="true" /></button>
                       {/* An account with anything posted to it can never be

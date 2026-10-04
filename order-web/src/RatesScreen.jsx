@@ -15,6 +15,7 @@ import {
   FORMS, FORM_IDS, FILLS, FILLS_FOR, allRates, learnRate, productShort,
   readMaterial, writeMaterial, DEFAULT_MATERIAL, inr,
 } from './rates.js'
+import { CheckIcon } from './icons.jsx'
 
 export default function RatesScreen({ onChanged }) {
   const [rates, setRates] = useState(allRates())
@@ -94,7 +95,7 @@ export default function RatesScreen({ onChanged }) {
 
         <button className={`togglebtn ${mat.measured ? 'on' : ''}`} onClick={toggleMeasured}>
           {mat.measured
-            ? '✓ These are the shop’s real figures'
+            ? <><CheckIcon /> These are the shop’s real figures</>
             : 'These are still averages — warnings say “estimated”'}
         </button>
 

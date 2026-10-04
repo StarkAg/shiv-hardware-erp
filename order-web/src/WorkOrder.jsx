@@ -12,6 +12,7 @@ import { SketchGrid } from './sketch.jsx'
 import { useHotkeys } from './keys.js'
 import { inr, lineTotal, EXTRAS } from './rates.js'
 import { fmtDate, todayKey } from './store.js'
+import { CheckIcon } from './icons.jsx'
 
 export default function WorkOrder({ job, onChange, onPrint, onAdvance, onDelivered }) {
   const order = job.order || {}
@@ -71,7 +72,7 @@ export default function WorkOrder({ job, onChange, onPrint, onAdvance, onDeliver
           </button>
         </div>
         <div className={`note ${posting === 'failed' ? 'bad' : ''}`}>
-          {posting === 'done' && '✓ Written into the cash book as money received.'}
+          {posting === 'done' && <><CheckIcon /> Written into the cash book as money received.</>}
           {posting === 'failed' && 'Could not reach the cash book — it will go in when the phone is back online.'}
           {!posting && 'Goes into the register against this customer the moment it is taken.'}
         </div>
