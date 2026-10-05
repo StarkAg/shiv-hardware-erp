@@ -2,22 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="robots" content="noindex" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e8e5df" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12110f" />
+<meta name="description" content="Online guarantee card record." />
+<link rel="icon" href="/assets/shield.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <title>Guarantee card</title>
-<style>
-  :root { color-scheme: light dark; --bg: #e8e5df; --fg: #1c1917; --muted: #78716c; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #12110f; --fg: #eae7e1; --muted: #a8a29e; } }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--fg);
-    font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; }
-  h1 { font-size: 20px; margin: 0 0 6px; }
-  p { margin: 0; color: var(--muted); }
-</style>
 </head>
 <body>
-  <main>
-    <h1>Guarantee card</h1>
-    <p>Scan the QR code on your guarantee card to open it.</p>
-  </main>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

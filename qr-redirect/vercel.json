@@ -1,7 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
-    { "source": "/_next/:path*", "destination": "https://www.shivhardware.store/_next/:path*" },
-    { "source": "/assets/guarantee/:path*", "destination": "https://www.shivhardware.store/assets/guarantee/:path*" }
-  ]
+  "framework": "vite",
+  "installCommand": "npm install",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "headers": [{ "source": "/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }]
 }

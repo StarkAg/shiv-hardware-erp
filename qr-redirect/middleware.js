@@ -2,11 +2,9 @@
 //
 // For a card's first 20 days (from its own date) it redirects to the guarantee page
 // on shivhardware.store, which shows the shop's name and logo. After that the card is
-// served here instead, so the address bar never shows the shop's site: the request is
-// proxied to the same page (which is neutral by then), and vercel.json proxies its
-// scripts and images. One page to maintain, not two copies. Old cards whose QR prints
-// the shop's own address are sent here by that page once their 20 days are up.
-import { next, rewrite } from '@vercel/functions/middleware'
+// served by this project's own page (src/), which is fully separate from the shop's
+// site: nothing proxied from it, nothing linked to it, no name, logo or footer.
+import { next } from '@vercel/functions/middleware'
 
 const SITE = 'https://www.shivhardware.store/Gaurantee'
 const CONVEX = 'https://sensible-panther-176.convex.cloud'
@@ -15,7 +13,7 @@ const BRANDED_DAYS = 20
 
 export const config = { matcher: '/:number/:token' }
 
-/** When the card was issued, or 0 if it cannot be found (then it is served neutral here). */
+/** When the card was issued, or 0 if it cannot be found (then it is served here). */
 async function issuedAt(number, token) {
   try {
     const res = await fetch(`${CONVEX}/api/query`, {
@@ -37,17 +35,15 @@ export default async function middleware(request) {
   if (!m) return next()
   const [, number, token] = m
 
-  const page = new URL(`${SITE}/${encodeURIComponent(number)}`)
-  page.searchParams.set('k', token)
-  // Keep the page's own refresh parameters (Next.js _rsc) on the way through.
-  for (const [k, v] of url.searchParams) if (k !== 'k') page.searchParams.set(k, v)
+  // gc=1: the shop's page sent this card here (an old QR printing its address, past
+  // its 20 days). Never send it back, whatever the clocks say: no loop.
+  if (url.searchParams.has('gc')) return next()
 
   const issued = await issuedAt(number, token)
   if (issued && Date.now() - issued < BRANDED_DAYS * 24 * 60 * 60 * 1000) {
+    const page = new URL(`${SITE}/${encodeURIComponent(number)}`)
+    page.searchParams.set('k', token)
     return Response.redirect(page, 307)
   }
-  // Tells the page this request came through here, so it does not send the card
-  // back to this host (it does that for old QRs that print the shop's address).
-  page.searchParams.set('gc', '1')
-  return rewrite(page)
+  return next()
 }
