@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useConvex, useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
-import { BRAND_ORDER, FALLBACK_ITEMS, hydrateStockItems, matchesStockSearch } from './seed'
+import { BRAND_ORDER, FALLBACK_ITEMS, hydrateStockItems, matchesStockSearch, stockBrands, stockSubtitle, compareStock } from './seed'
 import {
   acknowledgeAdjustment, hydrateFromConvexOnce, loadDeviceInventory, nextAdjustment,
   queueAdjustment, queuedStock, recordConvexSync, rememberAddedItem,
@@ -16,15 +16,17 @@ const isOnline = () => typeof navigator === 'undefined' || navigator.onLine
 const brandCode = { Signature: 'S', 'Signature Gold': 'SG', Milton: 'MS' }
 
 function ItemLabel({ item }) {
+  if (item.category === 'other') return <span className="pack-item-name"><strong>{item.label || item.name}</strong><small>{item.brand} · {item.size}</small></span>
   return <span className="item-name">
     <span>{item.mm}mm</span>
     <span className="item-separator">·</span>
     <span>{item.size.replace('x', ' × ')}</span>
-    <span className="item-code">{brandCode[item.brand]}</span>
+    <span className="item-code">{brandCode[item.brand] || item.brand}</span>
   </span>
 }
 
 function ProductIcon({ category }) {
+  if (category === 'other') return <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 14h28l-3 28H13L10 14Z" fill="currentColor" opacity=".16" /><path d="M10 14h28l-3 28H13L10 14Zm-1-5h30v5H9V9Zm7 0V6h16v3M16 24h16M17 30h14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" /></svg>
   return category === 'door'
     ? <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="12" y="4" width="24" height="40" rx="2" fill="currentColor" opacity=".13" /><path d="M13 44V5h22v39M17 10h14M17 38h14M17 15v5m0 5v5m0 5v3m13-16h1.5" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
     : <svg viewBox="0 0 48 48" aria-hidden="true"><path d="m6 14 25-8 11 7-25 8-11-7Z" fill="currentColor" opacity=".16" /><path d="m6 14 25-8 11 7-25 8-11-7Zm0 5 11 7 25-8M6 24l11 7 25-8M6 29l11 7 25-8M17 21v15M42 13v15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -34,7 +36,7 @@ function StockCard({ item }) {
   const low = item.stock <= (item.min ?? 2)
   return <div className={`stock-card ${low ? 'low' : ''}`}>
     <span className="stock-thumbnail"><ProductIcon category={item.category} /></span>
-    <span className="stock-details"><strong>{item.size.replace('x', ' × ')}</strong><small>{item.brand} · {item.mm}mm</small></span>
+    <span className="stock-details"><strong>{item.category === 'other' ? item.size : item.size.replace('x', ' × ')}</strong><small>{stockSubtitle(item)}</small></span>
     <span className="stock-count"><span>α</span><strong>{quantity(item.stock)}</strong></span>
   </div>
 }
@@ -96,9 +98,9 @@ function syncLabel({ queue, online, syncing, pin, blocked }) {
   return `${queue.length} saved on this device · will sync when available`
 }
 
-function AddItemForm({ pin, online, initialBrand, onAdded, onCancel }) {
+function AddItemForm({ pin, online, initialBrand, brands, onAdded, onCancel }) {
   const addItem = useMutation(api.addItem)
-  const [category, setCategory] = useState('door')
+  const [category, setCategory] = useState(initialBrand && !BRAND_ORDER.slice(0, 3).includes(initialBrand) ? 'other' : 'door')
   const [brand, setBrand] = useState(initialBrand || BRAND_ORDER[0])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -109,9 +111,10 @@ function AddItemForm({ pin, online, initialBrand, onAdded, onCancel }) {
     setBusy(true)
     setError('')
     try {
-      const item = await addItem({ pin, category, brand,
-        mm: Number(form.get('mm')), height: Number(form.get('height')),
-        width: Number(form.get('width')), qty: Number(form.get('qty')) })
+      const item = await addItem({ pin, category, brand, qty: Number(form.get('qty')),
+        ...(category === 'other'
+          ? { label: form.get('label'), packSize: form.get('packSize') }
+          : { mm: Number(form.get('mm')), height: Number(form.get('height')), width: Number(form.get('width')) }) })
       await onAdded(item)
     } catch (err) {
       setError(errorText(err))
@@ -122,14 +125,22 @@ function AddItemForm({ pin, online, initialBrand, onAdded, onCancel }) {
   return <form className="add-form" onSubmit={submit} aria-labelledby="add-item-title">
     <h2 id="add-item-title">Add stock item</h2>
     <fieldset disabled={busy}>
-      <label>Type<select value={category} onChange={event => setCategory(event.target.value)}><option value="door">Door</option><option value="ply">Plywood</option></select></label>
-      <label>Brand<select value={brand} onChange={event => setBrand(event.target.value)}>{BRAND_ORDER.map(name => <option key={name}>{name}</option>)}</select></label>
-      <label>Thickness (mm)<input name="mm" type="number" min="0.001" max="1000" step="any" required autoFocus /></label>
+      <label>Type<select value={category} onChange={event => setCategory(event.target.value)}><option value="door">Door</option><option value="ply">Plywood</option><option value="other">Other / packaged item</option></select></label>
+      <label>Brand<input list="inventory-brands" value={brand} onChange={event => {
+        setBrand(event.target.value)
+        if (event.target.value.trim().toLowerCase() === 'fevicol') setCategory('other')
+      }} placeholder="Any brand, or Unbranded" maxLength={60} required /></label>
+      <datalist id="inventory-brands">{brands.map(name => <option key={name} value={name} />)}</datalist>
+      {category === 'other' ? <>
+        <label>Product / type<input name="label" placeholder="SH, Marine, wood glue, screws..." maxLength={100} required /></label>
+        <label>Pack size / unit<input name="packSize" placeholder="1 kg, 500 ml, box of 100, piece..." maxLength={60} required /></label>
+        <p className="field-hint">Count packs or individual units. For example, 4 packs of 1 kg means quantity 4.</p>
+      </> : <><label>Thickness (mm)<input name="mm" type="number" min="0.001" max="1000" step="any" required /></label>
       <div className="add-dimensions">
         <label>Height ({category === 'door' ? 'inches' : 'feet'})<input name="height" type="number" min="0.001" max="1000" step="any" required /></label>
         <label>Width ({category === 'door' ? 'inches' : 'feet'})<input name="width" type="number" min="0.001" max="1000" step="any" required /></label>
-      </div>
-      <label>Opening quantity (pieces)<input name="qty" type="number" min="0" step="1" defaultValue="0" required /></label>
+      </div></>}
+      <label>Opening quantity ({category === 'other' ? 'packs / units' : 'pieces'})<input name="qty" type="number" min="0" step="1" defaultValue="0" required /></label>
     </fieldset>
     {!online && <p className="error" role="status">Connect to the internet to add a new item.</p>}
     {error && <p className="error" role="alert">{error}</p>}
@@ -220,16 +231,13 @@ export default function App() {
   const base = device?.items ?? (remoteItems ? hydrateStockItems(remoteItems) : FALLBACK_ITEMS)
   const queue = device?.queue ?? []
   const items = useMemo(() => queuedStock(base, queue), [base, queue])
+  const brands = useMemo(() => stockBrands(items), [items])
   const thicknesses = useMemo(() => brand
-    ? [...new Set(items.filter(item => item.brand === brand).map(item => item.mm))].sort((a, b) => a - b)
+    ? [...new Set(items.filter(item => item.brand === brand && Number.isFinite(item.mm)).map(item => item.mm))].sort((a, b) => a - b)
     : [], [items, brand])
   const shown = useMemo(() => items
     .filter(item => (!brand || item.brand === brand) && (!thickness || item.mm === thickness) && matchesStockSearch(item, search))
-    .sort((a, b) => {
-      if (sort === 'stock') return a.stock - b.stock || a.brand.localeCompare(b.brand) || a.mm - b.mm
-      if (sort === 'thickness') return a.mm - b.mm || a.brand.localeCompare(b.brand) || a.size.localeCompare(b.size)
-      return BRAND_ORDER.indexOf(a.brand) - BRAND_ORDER.indexOf(b.brand) || a.mm - b.mm || a.size.localeCompare(b.size)
-    }), [items, brand, thickness, search, sort])
+    .sort((a, b) => compareStock(a, b, sort)), [items, brand, thickness, search, sort])
   const editing = tab === 'edit' && Boolean(pin)
   const locked = tab === 'edit' && !pin
 
@@ -265,27 +273,27 @@ export default function App() {
     <main className="page">
       {locked ? <PinForm onUnlock={nextPin => { setPin(nextPin); setBlocked(false); setError('') }} /> : <>
         {editing && <div className="edit-toolbar"><button className="primary add-button" aria-expanded={addOpen} onClick={() => setAddOpen(open => !open)}><StepIcon plus />Add</button><button className="lock" onClick={() => { setPin(''); setAddOpen(false); setError('') }}>Lock</button></div>}
-        {editing && addOpen && <AddItemForm pin={pin} online={online} initialBrand={brand} onCancel={() => setAddOpen(false)} onAdded={async item => {
+        {editing && addOpen && <AddItemForm pin={pin} online={online} initialBrand={brand} brands={brands} onCancel={() => setAddOpen(false)} onAdded={async item => {
           try { setDevice(await rememberAddedItem(item)) } catch {
             setError('Item saved to inventory, but this browser could not keep an offline copy. Reload when storage is available.')
           }
           setBrand(item.brand)
-          setThickness(item.mm)
+          setThickness(item.mm ?? '')
           setSearch('')
           setAddOpen(false)
         }} />}
         <div className="filter-stages" aria-label="Product filters">
           <div className="filter-stage" aria-label="Brand"><div className="filter-chips">
-            {BRAND_ORDER.map(name => <button key={name} className={brand === name ? 'active' : ''} aria-pressed={brand === name} onClick={() => {
+            {brands.map(name => <button key={name} className={brand === name ? 'active' : ''} aria-pressed={brand === name} onClick={() => {
               setBrand(current => current === name ? '' : name)
               setThickness('')
             }}>{name}</button>)}
           </div></div>
-          {brand && <div className="filter-stage" aria-label="Thickness"><div className="filter-chips">
+          {brand && thicknesses.length > 0 && <div className="filter-stage" aria-label="Thickness"><div className="filter-chips">
             {thicknesses.map(mm => <button key={mm} className={thickness === mm ? 'active' : ''} aria-pressed={thickness === mm} onClick={() => setThickness(current => current === mm ? '' : mm)}>{mm}mm</button>)}
           </div></div>}
         </div>
-        <div className="search-row"><input className="search" type="search" aria-label="Search stock" placeholder="Search: S, SG, MS, size"
+        <div className="search-row"><input className="search" type="search" aria-label="Search stock" placeholder="Search brand, product, size"
           value={search} onChange={e => setSearch(e.target.value)} /><div className="search-actions"><button type="button" className="icon-button" aria-label="Choose stock sort" title="Sort" aria-expanded={sortOpen} onClick={() => setSortOpen(open => !open)}><SortIcon /></button><button type="button" className={`icon-button cloud-status ${queue.length ? 'waiting' : ''}`} aria-label={`Convex sync: ${status}`} title="Convex sync" onClick={openSync}><CloudIcon /></button></div></div>
         {sortOpen && <div className="sort-menu" role="menu" aria-label="Sort stock">
           {[['brand', 'Brand'], ['thickness', 'Thickness'], ['stock', 'Low stock first']].map(([value, label]) => <button key={value} role="menuitemradio" aria-checked={sort === value} className={sort === value ? 'active' : ''} onClick={() => { setSort(value); setSortOpen(false) }}>{label}</button>)}

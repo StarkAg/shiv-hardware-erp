@@ -15,15 +15,16 @@ const convex = new ConvexReactClient(
   import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud',
 )
 
-if ('serviceWorker' in navigator) {
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(async registration => {
-      const active = (await navigator.serviceWorker.ready).active
-      const resources = performance.getEntriesByType('resource')
-        .map(entry => entry.name)
-        .filter(url => new URL(url).origin === location.origin)
-      active?.postMessage({ type: 'cache-shell', urls: ['/', '/index.html', ...resources] })
-      void registration.update()
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(registration => {
+      const check = () => {
+        if (navigator.onLine && document.visibilityState === 'visible') void registration.update().catch(() => undefined)
+      }
+      addEventListener('online', check)
+      document.addEventListener('visibilitychange', check)
+      setInterval(check, 60_000)
+      check()
     }).catch(() => undefined)
   })
 }

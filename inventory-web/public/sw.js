@@ -1,26 +1,49 @@
-const CACHE = 'shiv-inventory-shell-v2'
-const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png']
+﻿const PREFIX = 'shiv-inventory-shell-'
+const CACHE = `${PREFIX}__BUILD_VERSION__`
+const CORE = [/* __BUILD_ASSETS__ */]
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()))
+  // Download the complete new app before replacing the working offline copy.
+  event.waitUntil(caches.open(CACHE).then(cache =>
+    cache.addAll(CORE.map(url => new Request(url, { cache: 'reload' })))
+  ).then(() => self.skipWaiting()))
 })
 
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim()))
-})
-
-self.addEventListener('message', event => {
-  if (event.data?.type !== 'cache-shell') return
-  const urls = (event.data.urls ?? []).filter(url => {
-    try { return new URL(url, self.location.origin).origin === self.location.origin } catch { return false }
-  })
-  event.waitUntil(caches.open(CACHE).then(cache => Promise.all(urls.map(url => cache.add(url).catch(() => undefined)))))
+  event.waitUntil((async () => {
+    const previous = (await caches.keys()).filter(key => key.startsWith(PREFIX) && key !== CACHE)
+    await Promise.all(previous.map(key => caches.delete(key)))
+    await self.clients.claim()
+    // Also updates installed versions which lack controllerchange code.
+    // Stock and queued changes live in IndexedDB/localStorage, untouched.
+    if (previous.length) {
+      const windows = await self.clients.matchAll({ type: 'window' })
+      // Navigation fetches wait for activation; awaiting them here deadlocks it.
+      for (const client of windows) void client.navigate(client.url).catch(() => undefined)
+    }
+  })())
 })
 
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return
-  event.respondWith(caches.match(event.request).then(cached => cached ?? fetch(event.request).then(response => {
-    if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()))
-    return response
-  }).catch(() => event.request.mode === 'navigate' ? caches.match('/index.html') : Response.error())))
+  const request = event.request
+  const url = new URL(request.url)
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return
+  if (url.pathname === '/sw.js') return
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE)
+    if (request.mode === 'navigate') {
+      try {
+        const response = await fetch(request, { cache: 'no-store' })
+        if (response.ok) return response
+      } catch { /* Use the fully downloaded shell while offline. */ }
+      return await cache.match('/index.html') ?? Response.error()
+    }
+    const cached = await cache.match(request)
+    if (cached) return cached
+    try {
+      const response = await fetch(request)
+      if (response.ok && url.pathname.startsWith('/assets/')) await cache.put(request, response.clone())
+      return response
+    } catch { return Response.error() }
+  })())
 })

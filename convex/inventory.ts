@@ -370,7 +370,8 @@ async function seededStock(ctx: QueryCtx) {
     const baseline = count ?? { qty: seed.qty, day: today(at), at, note: "Supplied opening stock" };
     return { ...summarise(seed.ref, count ? mapped.get(seed.ref) ?? [] : [],
       { min: 2, ...s.items.get(seed.ref), unit: "Pc" }, baseline,
-      { name: seed.name, unit: "Pc" }), brand: seed.brand, mm: seed.mm, size: seed.size, category: seed.category };
+      { name: seed.name, unit: "Pc" }), brand: seed.brand, mm: seed.mm, size: seed.size, category: seed.category,
+      ...("label" in seed && seed.label ? { label: seed.label } : {}) };
   });
 }
 
@@ -382,24 +383,39 @@ export const seedList = query({
 /** New shelf items belong to the inventory catalogue, with an opening count. */
 export const addItem = mutation({
   args: {
-    pin: v.string(), category: v.union(v.literal("ply"), v.literal("door")),
-    brand: v.union(v.literal("Signature"), v.literal("Signature Gold"), v.literal("Milton")),
-    mm: v.number(), height: v.number(), width: v.number(), qty: v.number(),
+    pin: v.string(), category: v.union(v.literal("ply"), v.literal("door"), v.literal("other")),
+    brand: v.string(),
+    mm: v.optional(v.number()), height: v.optional(v.number()), width: v.optional(v.number()), qty: v.number(),
+    label: v.optional(v.string()), packSize: v.optional(v.string()),
   },
-  handler: async (ctx, { pin, category, brand, mm, height, width, qty }) => {
+  handler: async (ctx, { pin, category, brand: rawBrand, mm, height, width, qty, label: rawLabel, packSize }) => {
     requireInventoryPin(pin);
-    if (![mm, height, width].every(value => Number.isFinite(value) && value > 0 && value <= 1000)) {
+    const clean = (value: string) => value.trim().replace(/\s+/g, " ");
+    const enteredBrand = clean(rawBrand);
+    if (!enteredBrand || enteredBrand.length > 60) throw new ConvexError("Enter a brand of 1 to 60 characters, or use Unbranded.");
+    const products = await ctx.db.query("inventoryProducts").collect();
+    const brands = ["Signature", "Signature Gold", "Milton", "Fevicol", ...products.map(product => product.brand)];
+    const brand = brands.find(value => value.toLowerCase() === enteredBrand.toLowerCase()) ?? enteredBrand;
+    if (category !== "other" && ![mm, height, width].every(value => typeof value === "number" && Number.isFinite(value) && value > 0 && value <= 1000)) {
       throw new ConvexError("Enter a thickness and dimensions greater than zero and no more than 1000.");
     }
     if (!Number.isSafeInteger(qty) || qty < 0) throw new ConvexError("Opening quantity must be a whole number of zero or more.");
-    const size = `${height}x${width}`;
-    const ref = `custom:${category}:${brand.toLowerCase().replace(/ /g, "-")}:${mm}:${size}`;
+    const label = clean(rawLabel ?? "");
+    const size = category === "other" ? clean(packSize ?? "") : `${height}x${width}`;
+    if (category === "other" && (!label || label.length > 100 || !size || size.length > 60)) {
+      throw new ConvexError("Enter a product name (up to 100 characters) and pack size or unit (up to 60 characters).");
+    }
+    const key = (value: string) => encodeURIComponent(value.toLowerCase().replace(/\s+/g, ""));
+    const ref = category === "other" ? `custom:other:${key(brand)}:${key(label)}:${key(size)}`
+      : `custom:${category}:${brand.toLowerCase().replace(/ /g, "-")}:${mm}:${size}`;
     const existing = await ctx.db.query("inventoryProducts").withIndex("by_ref", q => q.eq("ref", ref)).first();
     if (existing || INVENTORY_SEED.some(seed => seed.brand === brand && seed.mm === mm && seed.size === size
       && seed.ref.startsWith(`seed:${category}:`))) {
       throw new ConvexError("This item already exists. Use its quantity buttons in Edit.");
     }
-    const product = { ref, name: `${mm}mm ${brand} ${height} x ${width}`, category, brand, mm, size };
+    const product = category === "other"
+      ? { ref, name: `${brand} ${label} ${size}`, category, brand, label, size }
+      : { ref, name: `${mm}mm ${brand} ${height} x ${width}`, category, brand, mm, size };
     await ctx.db.insert("inventoryProducts", product);
     const at = Date.now();
     await ctx.db.insert("stockCounts", { ref, qty, day: today(at), at, note: "Opening quantity from Inventory Add" });

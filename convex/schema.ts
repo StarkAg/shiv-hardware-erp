@@ -952,9 +952,10 @@ export default defineSchema({
   inventoryProducts: defineTable({
     ref: v.string(),
     name: v.string(),
-    category: v.union(v.literal("ply"), v.literal("door")),
+    category: v.union(v.literal("ply"), v.literal("door"), v.literal("other")),
     brand: v.string(),
-    mm: v.number(),
+    mm: v.optional(v.number()),
+    label: v.optional(v.string()),
     size: v.string(),
   }).index("by_ref", ["ref"]),
   stockItems: defineTable({

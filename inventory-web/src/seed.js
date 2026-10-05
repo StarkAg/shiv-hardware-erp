@@ -42,7 +42,24 @@ export const FALLBACK_ITEMS = rows.map(([category, brand, mm, size, stock]) => (
   unit: 'Pc',
 }))
 
-export const BRAND_ORDER = ['Signature', 'Signature Gold', 'Milton']
+export const BRAND_ORDER = ['Signature', 'Signature Gold', 'Milton', 'Fevicol']
+
+export function stockBrands(items) {
+  return [...new Set([...BRAND_ORDER, ...items.map(item => item.brand)])]
+}
+
+export function stockSubtitle(item) {
+  return item.category === 'other' ? `${item.brand} · ${item.label || 'Pack'}` : `${item.brand} · ${item.mm}mm`
+}
+
+export function compareStock(a, b, sort) {
+  const dimensions = (a.mm ?? 0) - (b.mm ?? 0)
+  const name = a.name.localeCompare(b.name, undefined, { numeric: true })
+  if (sort === 'stock') return a.stock - b.stock || name
+  if (sort === 'thickness') return dimensions || name
+  const rank = brand => { const index = BRAND_ORDER.indexOf(brand); return index < 0 ? BRAND_ORDER.length : index }
+  return rank(a.brand) - rank(b.brand) || a.brand.localeCompare(b.brand) || dimensions || name
+}
 const seedByRef = new Map(FALLBACK_ITEMS.map(item => [item.ref, item]))
 
 /** Convex owns the live quantities; this adds the fixed display identity back. */

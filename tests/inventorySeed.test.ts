@@ -137,6 +137,24 @@ describe('supplied plywood and door inventory', () => {
     }
     expect(await t.query(api.inventory.seedList, {})).toHaveLength(50)
   })
+
+  it('supports Fevicol and arbitrary packaged products without dimensions', async () => {
+    const t = await initialized()
+    const input = { pin, category: 'other' as const, brand: ' fevicol ', label: 'SH', packSize: '1 kg', qty: 4 }
+    const glue = await t.mutation(api.inventory.addItem, input)
+    expect(glue).toMatchObject({ name: 'Fevicol SH 1 kg', brand: 'Fevicol', size: '1 kg', stock: 4 })
+    expect(glue.mm).toBeUndefined()
+    await expect(t.mutation(api.inventory.addItem, { ...input, label: ' sh ', packSize: '1kg' })).rejects.toThrow('already exists')
+    await t.mutation(api.inventory.adjustSeed, { pin, ref: glue.ref, delta: -1, operationId: 'glue-pack' })
+    const screws = await t.mutation(api.inventory.addItem, { ...input, brand: 'Local Brand', label: 'Wood screws', packSize: 'box of 100', qty: 2 })
+    const rows = await t.query(api.inventory.seedList, {})
+    expect(rows.find(row => row.ref === glue.ref)).toMatchObject({ label: 'SH', stock: 3, category: 'other' })
+    expect(rows.find(row => row.ref === screws.ref)).toMatchObject({ brand: 'Local Brand', size: 'box of 100', stock: 2 })
+    for (const patch of [{ brand: '' }, { label: '' }, { packSize: '' }]) {
+      await expect(t.mutation(api.inventory.addItem, { ...input, ...patch })).rejects.toThrow()
+    }
+    await expect(t.mutation(api.inventory.addItem, { ...input, pin: '000000' })).rejects.toThrow('correct PIN')
+  })
 })
 
 describe('Inventory day / night theme', () => {

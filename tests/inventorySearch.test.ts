@@ -1,10 +1,19 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
-import { FALLBACK_ITEMS, hydrateStockItems, matchesStockSearch } from '../inventory-web/src/seed'
+import { FALLBACK_ITEMS, hydrateStockItems, matchesStockSearch, stockBrands, stockSubtitle, compareStock } from '../inventory-web/src/seed'
 
 const namesFor = query => FALLBACK_ITEMS.filter(item => matchesStockSearch(item, query)).map(item => item.brand)
 
 describe('Inventory shorthand search', () => {
+  it('filters and displays packaged products and custom brands without a thickness', () => {
+    const glue = { name: 'Fevicol SH 1 kg', brand: 'Fevicol', category: 'other', label: 'SH', size: '1 kg', stock: 4 }
+    const screws = { ...glue, name: 'Local Brand Screws box of 100', label: 'Screws', brand: 'Local Brand' }
+    expect(stockBrands([glue, screws])).toContain('Local Brand')
+    expect(stockSubtitle(glue)).toBe('Fevicol · SH')
+    expect(matchesStockSearch(glue, 'fevicol sh 1 kg')).toBe(true)
+    expect(matchesStockSearch(glue, 'sg')).toBe(false)
+    for (const sort of ['stock', 'thickness', 'brand']) expect(Number.isFinite(compareStock(glue, FALLBACK_ITEMS[0], sort))).toBe(true)
+  })
   it('uses S, SG and MS as unambiguous brand shortcuts', () => {
     expect(new Set(namesFor('s'))).toEqual(new Set(['Signature']))
     expect(new Set(namesFor('SG'))).toEqual(new Set(['Signature Gold']))
