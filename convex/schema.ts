@@ -190,6 +190,7 @@ export default defineSchema({
     itemIndex: v.number(),
     itemLabel: v.string(),
     doors: v.number(),
+    // 'cracks' is no longer covered or accepted (guaranteeClaims.ts); kept for claims filed before.
     issue: v.union(v.literal('borer'), v.literal('air'), v.literal('cracks')),
     description: v.string(),
     /** Proof the claimant holds the originals, and that this door is this card's. */

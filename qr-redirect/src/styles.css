@@ -165,7 +165,7 @@ body { background: #e8e5df; }
   .gc-err { font-size: 12px; font-weight: 600; color: var(--red, #9f1d20); }
   .gc-note { font-size: 12px; color: var(--muted, #78716c); }
   .gc-count { position: absolute; right: 10px; top: 0; font-size: 11px; color: var(--muted, #78716c); }
-  .gc-issues { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .gc-issues { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .gc-issue { display: grid; gap: 3px; text-align: left; padding: 10px; border-radius: 12px; border: 1.5px solid var(--line, rgba(28,25,23,.12)); background: var(--bg, #e8e5df);
     color: inherit; font: inherit; cursor: pointer; }
   .gc-issue b { font-size: 14px; }

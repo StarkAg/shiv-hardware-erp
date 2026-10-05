@@ -31,7 +31,7 @@ const STATUS: Record<Status, { label: string; tone: string }> = {
   rejected: { label: 'Not approved', tone: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300' },
   replaced: { label: 'Replaced', tone: 'bg-stone-200 text-stone-800 dark:bg-white/10 dark:text-stone-200' },
 }
-const ISSUE: Record<Claim['issue'], string> = { borer: 'Borer', air: 'Air bubbles', cracks: 'Cracks' }
+const ISSUE: Partial<Record<Claim['issue'], string>> = { borer: 'Borer', air: 'Air bubbles' }
 const WAITING: Status[] = ['new', 'reviewing']
 const DUE_DAYS = 7
 const DAY = 24 * 60 * 60 * 1000
@@ -176,7 +176,7 @@ function ClaimCard({ claim, cardLink }: { claim: Claim; cardLink: boolean }) {
           <div className="rounded-lg bg-stone-100 px-3 py-2 dark:bg-white/5">
             <p className="font-semibold">{claim.itemLabel}</p>
             <p className="text-muted">
-              {ISSUE[claim.issue]} · {claim.doors} {claim.doors === 1 ? 'door' : 'doors'}
+              {ISSUE[claim.issue] ?? claim.issue} · {claim.doors} {claim.doors === 1 ? 'door' : 'doors'}
             </p>
           </div>
           <p className="whitespace-pre-wrap">{claim.description}</p>

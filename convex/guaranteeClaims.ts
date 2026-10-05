@@ -11,7 +11,8 @@ import { cardsForQr } from './documents'
  * Without both, every call answers as if the card did not exist.
  */
 
-const ISSUES = ['borer', 'air', 'cracks'] as const
+// Cracks are not covered (no longer offered); old claims filed as cracks stay in the schema.
+const ISSUES = ['borer', 'air'] as const
 const STATUSES = ['new', 'reviewing', 'approved', 'rejected', 'replaced'] as const
 const OPEN: Doc<'guaranteeClaims'>['status'][] = ['new', 'reviewing']
 const MAX_PHOTOS = 3

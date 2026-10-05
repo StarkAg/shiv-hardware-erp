@@ -40,7 +40,7 @@ async function loadClaims(number, token) {
 }
 
 const CLAIM_STATUS = { new: 'Received', reviewing: 'Under review', approved: 'Approved', rejected: 'Not approved', replaced: 'Replaced' }
-const CLAIM_ISSUE = { borer: 'Borer', air: 'Air bubbles', cracks: 'Cracks' }
+const CLAIM_ISSUE = { borer: 'Borer', air: 'Air bubbles' }
 
 // Sizes are inches + eighths (soot). Eighths print as their fraction glyph: 44 4/8" -> 44½″.
 const EIGHTHS = ['', '⅛', '¼', '⅜', '½', '⅝', '¾', '⅞']
@@ -249,7 +249,7 @@ function CardView({ doc, token, claims, onClaimed }) {
       <div className="gc-terms-short">
         <span>Terms</span>
         <ul>
-          <li>Covers borer, air bubbles and cracks only.</li>
+          <li>Covers borer and air bubbles only.</li>
           <li>Termite damage is not covered.</li>
           <li>Valid for the years shown, from the date on this card.</li>
           <li>Replacement requires the original card and bill, subject to inspection.</li>
