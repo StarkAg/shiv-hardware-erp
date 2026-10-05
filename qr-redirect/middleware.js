@@ -4,7 +4,8 @@
 // on shivhardware.store, which shows the shop's name and logo. After that the card is
 // served here instead, so the address bar never shows the shop's site: the request is
 // proxied to the same page (which is neutral by then), and vercel.json proxies its
-// scripts and images. One page to maintain, not two copies.
+// scripts and images. One page to maintain, not two copies. Old cards whose QR prints
+// the shop's own address are sent here by that page once their 20 days are up.
 import { next, rewrite } from '@vercel/functions/middleware'
 
 const SITE = 'https://www.shivhardware.store/Gaurantee'
@@ -45,5 +46,8 @@ export default async function middleware(request) {
   if (issued && Date.now() - issued < BRANDED_DAYS * 24 * 60 * 60 * 1000) {
     return Response.redirect(page, 307)
   }
+  // Tells the page this request came through here, so it does not send the card
+  // back to this host (it does that for old QRs that print the shop's address).
+  page.searchParams.set('gc', '1')
   return rewrite(page)
 }

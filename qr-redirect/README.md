@@ -7,6 +7,9 @@ The short address printed in guarantee-card QR codes: `<host>/<card number>/<car
 - **After that:** the card is served from this host, so the shop's site never shows in
   the address bar. `middleware.js` proxies the same page (neutral by then) and
   `vercel.json` proxies its scripts and images. One page to maintain.
+- **Old cards** whose QR prints `shivhardware.store/Gaurantee/...` directly: after their
+  20 days that page redirects them here (`?gc=1`), so the shop's address goes too.
+  Requests proxied from here carry `gc=1` so the page never sends them back.
 - Anything else shows a plain page (`index.html`).
 
 `BRANDED_DAYS` here must match `BRANDED_DAYS` on the guarantee page (shivhardware.store).
