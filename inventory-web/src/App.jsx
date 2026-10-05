@@ -4,8 +4,8 @@ import { useConvex, useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import { BRAND_ORDER, FALLBACK_ITEMS, hydrateStockItems, matchesStockSearch } from './seed'
 import {
-  acknowledgeAdjustment, loadDeviceInventory, nextAdjustment, queueAdjustment,
-  queuedStock, saveRemoteInventory,
+  acknowledgeAdjustment, hydrateFromConvexOnce, loadDeviceInventory, nextAdjustment,
+  queueAdjustment, queuedStock, recordConvexSync,
 } from './localInventory'
 
 const api = anyApi.inventory
@@ -52,6 +52,10 @@ function CloudIcon() {
   </svg>
 }
 
+function SortIcon() {
+  return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4" /></svg>
+}
+
 function PinForm({ onUnlock }) {
   const convex = useConvex()
   const [pin, setPin] = useState('')
@@ -93,10 +97,13 @@ function syncLabel({ queue, online, syncing, pin, blocked }) {
 }
 
 export default function App() {
-  const remoteItems = useQuery(api.seedList, {})
-  const adjust = useMutation(api.adjustSeed)
   const [device, setDevice] = useState(null)
+  const remoteItems = useQuery(api.seedList, device?.convexHydratedAt ? 'skip' : {})
+  const adjust = useMutation(api.adjustSeed)
   const [tab, setTab] = useState('stock')
+  const [sort, setSort] = useState('brand')
+  const [sortOpen, setSortOpen] = useState(false)
+  const [syncOpen, setSyncOpen] = useState(false)
   const [brand, setBrand] = useState('')
   const [thickness, setThickness] = useState('')
   const [search, setSearch] = useState('')
@@ -120,7 +127,7 @@ export default function App() {
   useEffect(() => {
     if (!remoteItems) return
     let live = true
-    saveRemoteInventory(hydrateStockItems(remoteItems)).then(state => { if (live) setDevice(state) }).catch(() => {
+    hydrateFromConvexOnce(hydrateStockItems(remoteItems)).then(state => { if (live) setDevice(state) }).catch(() => {
       if (live) setError('This browser cannot save inventory changes on this device.')
     })
     return () => { live = false }
@@ -132,6 +139,7 @@ export default function App() {
     setSyncing(true)
     setBlocked(false)
     try {
+      let uploaded = 0
       for (;;) {
         if (!pinRef.current || !isOnline()) break
         const operation = await nextAdjustment()
@@ -139,7 +147,9 @@ export default function App() {
         const result = await adjust({ pin: pinRef.current, ref: operation.ref, delta: operation.delta, operationId: operation.id })
         const state = await acknowledgeAdjustment(operation.id, operation.ref, result.qty)
         setDevice(state)
+        uploaded += 1
       }
+      if (uploaded) setDevice(await recordConvexSync())
     } catch (err) {
       if (isOnline()) {
         setBlocked(true)
@@ -172,8 +182,12 @@ export default function App() {
     ? [...new Set(items.filter(item => item.brand === brand).map(item => item.mm))].sort((a, b) => a - b)
     : [], [items, brand])
   const shown = useMemo(() => items
-    .filter(item => (!brand || item.brand === brand) && (!thickness || item.mm === thickness) && matchesStockSearch(item, search)),
-  [items, brand, thickness, search])
+    .filter(item => (!brand || item.brand === brand) && (!thickness || item.mm === thickness) && matchesStockSearch(item, search))
+    .sort((a, b) => {
+      if (sort === 'stock') return a.stock - b.stock || a.brand.localeCompare(b.brand) || a.mm - b.mm
+      if (sort === 'thickness') return a.mm - b.mm || a.brand.localeCompare(b.brand) || a.size.localeCompare(b.size)
+      return BRAND_ORDER.indexOf(a.brand) - BRAND_ORDER.indexOf(b.brand) || a.mm - b.mm || a.size.localeCompare(b.size)
+    }), [items, brand, thickness, search, sort])
   const editing = tab === 'edit' && Boolean(pin)
   const locked = tab === 'edit' && !pin
 
@@ -192,6 +206,13 @@ export default function App() {
   }
 
   const status = syncLabel({ queue, online, syncing, pin, blocked })
+  const lastSynced = device?.lastConvexSyncAt
+    ? new Date(device.lastConvexSyncAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+    : 'Not yet synced on this device'
+  const openSync = () => {
+    setSyncOpen(true)
+    void sync()
+  }
   return <div className="app">
     <header className="top">
       <nav className="tabs" aria-label="Sections">
@@ -214,7 +235,10 @@ export default function App() {
           </div></div>}
         </div>
         <div className="search-row"><input className="search" type="search" aria-label="Search stock" placeholder="Search: S, SG, MS, size"
-          value={search} onChange={e => setSearch(e.target.value)} /><span className={`cloud-status ${queue.length ? 'waiting' : ''}`} role="status" aria-live="polite" aria-label={status} title={status}><CloudIcon /></span></div>
+          value={search} onChange={e => setSearch(e.target.value)} /><div className="search-actions"><button type="button" className="icon-button" aria-label="Choose stock sort" title="Sort" aria-expanded={sortOpen} onClick={() => setSortOpen(open => !open)}><SortIcon /></button><button type="button" className={`icon-button cloud-status ${queue.length ? 'waiting' : ''}`} aria-label={`Convex sync: ${status}`} title="Convex sync" onClick={openSync}><CloudIcon /></button></div></div>
+        {sortOpen && <div className="sort-menu" role="menu" aria-label="Sort stock">
+          {[['brand', 'Brand'], ['thickness', 'Thickness'], ['stock', 'Low stock first']].map(([value, label]) => <button key={value} role="menuitemradio" aria-checked={sort === value} className={sort === value ? 'active' : ''} onClick={() => { setSort(value); setSortOpen(false) }}>{label}</button>)}
+        </div>}
         {error && <p className="error" role="alert">{error}</p>}
         {!shown.length ? <p className="hint">No matching stock.</p>
           : <ul className={`stock-list ${editing ? '' : 'stock-cards'}`}>
@@ -226,6 +250,13 @@ export default function App() {
                 </div></> : <StockCard item={item} />}
               </li>)}
             </ul>}
+        {syncOpen && <div className="sync-backdrop" role="presentation" onMouseDown={() => setSyncOpen(false)}><section className="sync-modal" role="dialog" aria-modal="true" aria-labelledby="sync-title" onMouseDown={event => event.stopPropagation()}>
+          <div className="sync-modal-head"><div><h2 id="sync-title">Convex sync</h2><p>{status}</p></div><button type="button" className="close-modal" aria-label="Close sync status" onClick={() => setSyncOpen(false)}>Close</button></div>
+          <div className="sync-time"><span>Last synced</span><strong>{lastSynced}</strong></div>
+          <div className="pending-uploads"><span>Pending uploads</span><strong>{queue.length}</strong></div>
+          {!pin && queue.length > 0 && <p className="sync-note">Unlock Edit to send saved quantity changes to Convex.</p>}
+          <button type="button" className="primary" onClick={() => void sync()} disabled={syncing || !pin || !online}>{syncing ? 'Syncing…' : 'Sync now'}</button>
+        </section></div>}
       </>}
     </main>
   </div>

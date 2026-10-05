@@ -71,6 +71,16 @@ function serial(change) {
 }
 export function loadDeviceInventory() { return writing.then(read) }
 export function saveRemoteInventory(items) { return serial(async state => ({ ...state, items: copy(items) })) }
+/** The stock catalogue is downloaded only once for each phone/browser. */
+export function hydrateFromConvexOnce(items, at = Date.now()) {
+  return serial(async state => state.convexHydratedAt
+    ? state
+    : { ...state, items: copy(items), convexHydratedAt: at, lastConvexSyncAt: at })
+}
+/** A successful upload is kept on the device for the Sync panel. */
+export function recordConvexSync(at = Date.now()) {
+  return serial(async state => ({ ...state, lastConvexSyncAt: at }))
+}
 export function queueAdjustment(ref, delta) {
   return serial(async state => ({ ...state, queue: [...state.queue, {
     id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,

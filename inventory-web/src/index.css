@@ -32,6 +32,24 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
 .lock { color: var(--ink); }
 .search-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
 .search { flex: 1; min-width: 0; min-height: 48px; border: 1px solid var(--line); background: var(--card2); padding: 0 14px; border-radius: 12px; font-size: 16px; box-shadow: inset 0 1px 0 var(--sheen); }
+.search-actions { display: flex; align-items: center; gap: 4px; }
+.icon-button { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); color: var(--muted); }
+.icon-button:hover { border-color: var(--brass); color: var(--ink); }
+.icon-button.cloud-status { width: 40px; height: 40px; }
+.sort-menu { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: -6px 0 14px; padding: 5px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: 0 6px 18px rgba(28, 25, 23, .1); }
+.sort-menu button { min-height: 34px; min-width: 0; overflow: hidden; border: 1px solid transparent; border-radius: 8px; background: transparent; padding: 5px 4px; color: var(--muted); font-size: 11px; font-weight: 750; white-space: nowrap; }
+.sort-menu button.active { border-color: var(--brass); background: var(--brass); color: var(--brass-ink); }
+.sync-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: end center; padding: 16px; background: rgba(28, 25, 23, .28); }
+.sync-modal { width: min(100%, 420px); border: 1px solid var(--line); border-radius: 18px; background: var(--card2); padding: 18px; box-shadow: 0 20px 50px rgba(28, 25, 23, .25); }
+.sync-modal-head { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.sync-modal h2 { margin: 0; font-size: 19px; }
+.sync-modal p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.close-modal { border: 0; background: transparent; padding: 4px 0; color: var(--muted); font-size: 13px; font-weight: 750; }
+.sync-time, .pending-uploads { display: grid; gap: 2px; margin: 12px 0; padding: 12px; border-radius: 12px; background: var(--paper); }
+.sync-time span, .pending-uploads span { color: var(--muted); font-size: 12px; font-weight: 750; }
+.sync-time strong, .pending-uploads strong { font-size: 15px; }
+.sync-note { margin-bottom: 12px !important; }
+.sync-modal .primary { width: 100%; }
 .filter-stages { display: grid; gap: 10px; margin: 0 0 14px; }
 .filter-stage { min-width: 0; }
 .filter-chips { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 5px; min-width: 0; }
