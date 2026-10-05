@@ -71,11 +71,15 @@ function serial(change) {
 }
 export function loadDeviceInventory() { return writing.then(read) }
 export function saveRemoteInventory(items) { return serial(async state => ({ ...state, items: copy(items) })) }
-/** The stock catalogue is downloaded only once for each phone/browser. */
+/** Download quantities once; discover newly added items without replacing local counts. */
 export function hydrateFromConvexOnce(items, at = Date.now()) {
   return serial(async state => state.convexHydratedAt
-    ? state
+    ? { ...state, items: [...state.items, ...copy(items).filter(item => !state.items.some(saved => saved.ref === item.ref))] }
     : { ...state, items: copy(items), convexHydratedAt: at, lastConvexSyncAt: at })
+}
+export function rememberAddedItem(item) {
+  return serial(async state => state.items.some(saved => saved.ref === item.ref)
+    ? state : { ...state, items: [...state.items, copy(item)] })
 }
 /** A successful upload is kept on the device for the Sync panel. */
 export function recordConvexSync(at = Date.now()) {

@@ -29,7 +29,7 @@ describe('supplied plywood and door inventory', () => {
     expect(rows).toHaveLength(50)
     expect(rows.reduce((sum, r) => sum + r.stock, 0)).toBe(170)
     expect(rows.map(r => r.ref)).toEqual(INVENTORY_SEED.map(r => r.ref))
-    expect(rows.filter(r => r.name.includes('Signature Gold')).reduce((s,r) => s+r.stock,0)).toBe(10)
+    expect(rows.filter(r => r.name.includes('Signature Gold')).reduce((s,r) => s+r.stock,0)).toBe(12)
   })
 
   it('protects all write paths and the editor unlock with the server PIN', async () => {
@@ -94,11 +94,48 @@ describe('supplied plywood and door inventory', () => {
   })
 
   it('matches only supplied brands, sizes and thicknesses', () => {
+    expect(seedRefForName('30mm SG 78 X 30')).toBe('seed:door:signature:30:78x30')
+    expect(seedRefForName('30mm S 78 X 30')).toBeUndefined()
     expect(seedRefForName('19mm B.Board S 7 X 4')).toBe('seed:ply:signature:19:7x4')
     expect(seedRefForName('19mm Solid SG 8 X 4')).toBe('seed:ply:signature-gold:19:8x4')
     expect(seedRefForName('6mm Milton 8x3.5 ft')).toBe('seed:ply:milton:6:8x3.5')
     expect(seedRefForName('30mm S 78 X 38')).toBe('seed:door:signature:30:78x38')
     for (const name of ['19mm Amron 8 X 4','18mm HDMR S 8 X 4','12mm S 5 X 3','Door Magnet']) expect(seedRefForName(name)).toBeUndefined()
+  })
+
+  it('keeps saved counts and pending operations when correcting the door brand', async () => {
+    const t = await initialized()
+    const ref = 'seed:door:signature:30:78x30'
+    await t.mutation(api.inventory.count, { pin, ref, qty: 8 })
+    await t.mutation(api.inventory.adjustSeed, { pin, ref, delta: 1, operationId: 'old-phone-door' })
+    expect((await t.query(api.inventory.seedList, {})).find(item => item.ref === ref))
+      .toMatchObject({ name: '30mm Signature Gold 78 x 30', brand: 'Signature Gold', stock: 9 })
+  })
+
+  it('adds a new item with an opening count and supports later quantity edits', async () => {
+    const t = await initialized()
+    const input = { pin, category: 'door' as const, brand: 'Signature Gold' as const, mm: 35, height: 81, width: 32, qty: 7 }
+    const added = await t.mutation(api.inventory.addItem, input)
+    expect(added).toMatchObject({ name: '35mm Signature Gold 81 x 32', stock: 7 })
+    expect((await t.query(api.inventory.seedList, {})).find(item => item.ref === added.ref)).toMatchObject({ stock: 7, category: 'door', mm: 35, size: '81x32' })
+    await t.mutation(api.inventory.adjustSeed, { pin, ref: added.ref, delta: -1, operationId: 'new-item-tap' })
+    await t.mutation(api.inventory.initializeSeed, { pin })
+    await expect(t.mutation(api.inventory.addItem, input)).rejects.toThrow('already exists')
+    expect((await t.query(api.inventory.seedList, {})).find(item => item.ref === added.ref)?.stock).toBe(6)
+  })
+
+  it('validates new items and prevents duplicate seed entries', async () => {
+    const t = await initialized()
+    const input = { pin, category: 'door' as const, brand: 'Signature Gold' as const, mm: 30, height: 78, width: 30, qty: 2 }
+    await expect(t.mutation(api.inventory.addItem, { ...input, pin: '000000' })).rejects.toThrow('correct PIN')
+    await expect(t.mutation(api.inventory.addItem, input)).rejects.toThrow('already exists')
+    for (const patch of [{ mm: 0 }, { height: -1 }, { width: Infinity }]) {
+      await expect(t.mutation(api.inventory.addItem, { ...input, ...patch })).rejects.toThrow('dimensions')
+    }
+    for (const qty of [-1, 1.5]) {
+      await expect(t.mutation(api.inventory.addItem, { ...input, qty })).rejects.toThrow('whole number')
+    }
+    expect(await t.query(api.inventory.seedList, {})).toHaveLength(50)
   })
 })
 

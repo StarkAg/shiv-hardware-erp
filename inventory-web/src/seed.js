@@ -16,7 +16,7 @@ const plywoodRows = [
 ]
 
 const rows = [
-  ['door', 'Signature', 30, '78x28', 1], ['door', 'Signature', 30, '78x30', 2],
+  ['door', 'Signature', 30, '78x28', 1], ['door', 'Signature Gold', 30, '78x30', 2],
   ['door', 'Signature', 30, '78x34', 4], ['door', 'Signature', 30, '78x36', 5],
   ['door', 'Signature', 30, '78x38', 14], ['door', 'Signature', 30, '78x40', 1],
   ['door', 'Signature', 30, '81x32', 1], ['door', 'Signature', 30, '81x34', 1],
@@ -29,7 +29,9 @@ const rows = [
 const key = brand => brand.toLowerCase().replace(' ', '-')
 
 export const FALLBACK_ITEMS = rows.map(([category, brand, mm, size, stock]) => ({
-  ref: `seed:${category}:${key(brand)}:${mm}:${size}`,
+  // This corrected row retains its original identity for saved counts and queued taps.
+  ref: category === 'door' && brand === 'Signature Gold' && mm === 30 && size === '78x30'
+    ? 'seed:door:signature:30:78x30' : `seed:${category}:${key(brand)}:${mm}:${size}`,
   name: `${mm}mm ${brand} ${size.replace('x', ' x ')}`,
   category,
   brand,
@@ -47,7 +49,7 @@ const seedByRef = new Map(FALLBACK_ITEMS.map(item => [item.ref, item]))
 export function hydrateStockItems(items) {
   return items.map(item => {
     const seed = seedByRef.get(item.ref)
-    return seed ? { ...seed, ...item, brand: seed.brand, mm: seed.mm, size: seed.size, min: item.min ?? seed.min } : item
+    return seed ? { ...seed, ...item, name: seed.name, brand: seed.brand, mm: seed.mm, size: seed.size, min: item.min ?? seed.min } : item
   })
 }
 

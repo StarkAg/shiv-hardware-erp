@@ -5,7 +5,7 @@ import { anyApi } from 'convex/server'
 import { BRAND_ORDER, FALLBACK_ITEMS, hydrateStockItems, matchesStockSearch } from './seed'
 import {
   acknowledgeAdjustment, hydrateFromConvexOnce, loadDeviceInventory, nextAdjustment,
-  queueAdjustment, queuedStock, recordConvexSync,
+  queueAdjustment, queuedStock, recordConvexSync, rememberAddedItem,
 } from './localInventory'
 
 const api = anyApi.inventory
@@ -96,14 +96,56 @@ function syncLabel({ queue, online, syncing, pin, blocked }) {
   return `${queue.length} saved on this device · will sync when available`
 }
 
+function AddItemForm({ pin, online, initialBrand, onAdded, onCancel }) {
+  const addItem = useMutation(api.addItem)
+  const [category, setCategory] = useState('door')
+  const [brand, setBrand] = useState(initialBrand || BRAND_ORDER[0])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const submit = async event => {
+    event.preventDefault()
+    if (busy || !online) return
+    const form = new FormData(event.currentTarget)
+    setBusy(true)
+    setError('')
+    try {
+      const item = await addItem({ pin, category, brand,
+        mm: Number(form.get('mm')), height: Number(form.get('height')),
+        width: Number(form.get('width')), qty: Number(form.get('qty')) })
+      await onAdded(item)
+    } catch (err) {
+      setError(errorText(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return <form className="add-form" onSubmit={submit} aria-labelledby="add-item-title">
+    <h2 id="add-item-title">Add stock item</h2>
+    <fieldset disabled={busy}>
+      <label>Type<select value={category} onChange={event => setCategory(event.target.value)}><option value="door">Door</option><option value="ply">Plywood</option></select></label>
+      <label>Brand<select value={brand} onChange={event => setBrand(event.target.value)}>{BRAND_ORDER.map(name => <option key={name}>{name}</option>)}</select></label>
+      <label>Thickness (mm)<input name="mm" type="number" min="0.001" max="1000" step="any" required autoFocus /></label>
+      <div className="add-dimensions">
+        <label>Height ({category === 'door' ? 'inches' : 'feet'})<input name="height" type="number" min="0.001" max="1000" step="any" required /></label>
+        <label>Width ({category === 'door' ? 'inches' : 'feet'})<input name="width" type="number" min="0.001" max="1000" step="any" required /></label>
+      </div>
+      <label>Opening quantity (pieces)<input name="qty" type="number" min="0" step="1" defaultValue="0" required /></label>
+    </fieldset>
+    {!online && <p className="error" role="status">Connect to the internet to add a new item.</p>}
+    {error && <p className="error" role="alert">{error}</p>}
+    <div className="add-actions"><button className="lock" type="button" onClick={onCancel} disabled={busy}>Cancel</button><button className="primary" disabled={busy || !online}>{busy ? 'Adding...' : 'Add item'}</button></div>
+  </form>
+}
+
 export default function App() {
   const [device, setDevice] = useState(null)
-  const remoteItems = useQuery(api.seedList, device?.convexHydratedAt ? 'skip' : {})
+  const remoteItems = useQuery(api.seedList, {})
   const adjust = useMutation(api.adjustSeed)
   const [tab, setTab] = useState('stock')
   const [sort, setSort] = useState('brand')
   const [sortOpen, setSortOpen] = useState(false)
   const [syncOpen, setSyncOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
   const [brand, setBrand] = useState('')
   const [thickness, setThickness] = useState('')
   const [search, setSearch] = useState('')
@@ -222,7 +264,16 @@ export default function App() {
     </header>
     <main className="page">
       {locked ? <PinForm onUnlock={nextPin => { setPin(nextPin); setBlocked(false); setError('') }} /> : <>
-        {editing && <div className="edit-toolbar"><button className="lock" onClick={() => { setPin(''); setError('') }}>Lock</button></div>}
+        {editing && <div className="edit-toolbar"><button className="primary add-button" aria-expanded={addOpen} onClick={() => setAddOpen(open => !open)}><StepIcon plus />Add</button><button className="lock" onClick={() => { setPin(''); setAddOpen(false); setError('') }}>Lock</button></div>}
+        {editing && addOpen && <AddItemForm pin={pin} online={online} initialBrand={brand} onCancel={() => setAddOpen(false)} onAdded={async item => {
+          try { setDevice(await rememberAddedItem(item)) } catch {
+            setError('Item saved to inventory, but this browser could not keep an offline copy. Reload when storage is available.')
+          }
+          setBrand(item.brand)
+          setThickness(item.mm)
+          setSearch('')
+          setAddOpen(false)
+        }} />}
         <div className="filter-stages" aria-label="Product filters">
           <div className="filter-stage" aria-label="Brand"><div className="filter-chips">
             {BRAND_ORDER.map(name => <button key={name} className={brand === name ? 'active' : ''} aria-pressed={brand === name} onClick={() => {

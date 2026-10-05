@@ -301,7 +301,8 @@ const PLYWOOD_SEED = [
 /** Exact 30 mm Signature door rows supplied with the opening stock. */
 const DOOR_SEED = [
   { ref: "seed:door:signature:30:78x28", name: "30mm Signature 78 x 28", brand: "Signature", mm: 30, size: "78x28", qty: 1 },
-  { ref: "seed:door:signature:30:78x30", name: "30mm Signature 78 x 30", brand: "Signature", mm: 30, size: "78x30", qty: 2 },
+  // Keep the original reference so saved counts and pending device taps survive the correction.
+  { ref: "seed:door:signature:30:78x30", name: "30mm Signature Gold 78 x 30", brand: "Signature Gold", mm: 30, size: "78x30", qty: 2 },
   { ref: "seed:door:signature:30:78x34", name: "30mm Signature 78 x 34", brand: "Signature", mm: 30, size: "78x34", qty: 4 },
   { ref: "seed:door:signature:30:78x36", name: "30mm Signature 78 x 36", brand: "Signature", mm: 30, size: "78x36", qty: 5 },
   { ref: "seed:door:signature:30:78x38", name: "30mm Signature 78 x 38", brand: "Signature", mm: 30, size: "78x38", qty: 14 },

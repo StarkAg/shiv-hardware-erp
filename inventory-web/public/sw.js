@@ -1,4 +1,4 @@
-const CACHE = 'shiv-inventory-shell-v1'
+const CACHE = 'shiv-inventory-shell-v2'
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', event => {

@@ -949,6 +949,14 @@ export default defineSchema({
   }).index("by_operation", ["operationId"]),
   // Inventory site: per item reorder level, rack/shelf, main unit and pack
   // sizes ({ Box: 10 } — one Box is ten of the main unit).
+  inventoryProducts: defineTable({
+    ref: v.string(),
+    name: v.string(),
+    category: v.union(v.literal("ply"), v.literal("door")),
+    brand: v.string(),
+    mm: v.number(),
+    size: v.string(),
+  }).index("by_ref", ["ref"]),
   stockItems: defineTable({
     ref: v.string(),
     min: v.optional(v.number()),

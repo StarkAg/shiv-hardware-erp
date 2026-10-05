@@ -351,27 +351,60 @@ export const checkPin = query({
 const today = (at: number) => new Date(at + 5.5 * 3600_000).toISOString().slice(0, 10);
 
 async function seededStock(ctx: QueryCtx) {
-  const [all, s] = await Promise.all([moves(ctx), settings(ctx)]);
+  const [all, s, products] = await Promise.all([moves(ctx), settings(ctx), ctx.db.query("inventoryProducts").collect()]);
+  const customByName = new Map(products.map(product => [foldItemName(product.name), product.ref]));
   const mapped = new Map<string, Move[]>();
   for (const move of all) {
-    const ref = seedRefForName(move.name);
+    const ref = seedRefForName(move.name) ?? customByName.get(foldItemName(move.name));
     if (ref) mapped.set(ref, [...(mapped.get(ref) ?? []), move]);
   }
   const at = Date.now();
-  return INVENTORY_SEED.map((seed) => {
+  const catalogue = [
+    ...INVENTORY_SEED.map(seed => ({ ...seed, category: seed.ref.startsWith("seed:door:") ? "door" : "ply" })),
+    ...products.map(product => ({ ...product, qty: 0 })),
+  ];
+  return catalogue.map((seed) => {
     const count = s.lastCount.get(seed.ref);
     // Until initialization, display the supplied opening quantity without
     // applying historical bills to a notebook date the shop hasn't confirmed.
     const baseline = count ?? { qty: seed.qty, day: today(at), at, note: "Supplied opening stock" };
-    return summarise(seed.ref, count ? mapped.get(seed.ref) ?? [] : [],
+    return { ...summarise(seed.ref, count ? mapped.get(seed.ref) ?? [] : [],
       { min: 2, ...s.items.get(seed.ref), unit: "Pc" }, baseline,
-      { name: seed.name, unit: "Pc" });
+      { name: seed.name, unit: "Pc" }), brand: seed.brand, mm: seed.mm, size: seed.size, category: seed.category };
   });
 }
 
 export const seedList = query({
   args: {},
   handler: seededStock,
+});
+
+/** New shelf items belong to the inventory catalogue, with an opening count. */
+export const addItem = mutation({
+  args: {
+    pin: v.string(), category: v.union(v.literal("ply"), v.literal("door")),
+    brand: v.union(v.literal("Signature"), v.literal("Signature Gold"), v.literal("Milton")),
+    mm: v.number(), height: v.number(), width: v.number(), qty: v.number(),
+  },
+  handler: async (ctx, { pin, category, brand, mm, height, width, qty }) => {
+    requireInventoryPin(pin);
+    if (![mm, height, width].every(value => Number.isFinite(value) && value > 0 && value <= 1000)) {
+      throw new ConvexError("Enter a thickness and dimensions greater than zero and no more than 1000.");
+    }
+    if (!Number.isSafeInteger(qty) || qty < 0) throw new ConvexError("Opening quantity must be a whole number of zero or more.");
+    const size = `${height}x${width}`;
+    const ref = `custom:${category}:${brand.toLowerCase().replace(/ /g, "-")}:${mm}:${size}`;
+    const existing = await ctx.db.query("inventoryProducts").withIndex("by_ref", q => q.eq("ref", ref)).first();
+    if (existing || INVENTORY_SEED.some(seed => seed.brand === brand && seed.mm === mm && seed.size === size
+      && seed.ref.startsWith(`seed:${category}:`))) {
+      throw new ConvexError("This item already exists. Use its quantity buttons in Edit.");
+    }
+    const product = { ref, name: `${mm}mm ${brand} ${height} x ${width}`, category, brand, mm, size };
+    await ctx.db.insert("inventoryProducts", product);
+    const at = Date.now();
+    await ctx.db.insert("stockCounts", { ref, qty, day: today(at), at, note: "Opening quantity from Inventory Add" });
+    return { ...product, stock: qty, min: 2, unit: "Pc" };
+  },
 });
 
 /** One-time opening stock. Re-running never resets an existing count or edit. */
@@ -406,7 +439,10 @@ export const adjustSeed = mutation({
   },
   handler: async (ctx, { pin, ref, delta, operationId }) => {
     requireInventoryPin(pin);
-    if (!INVENTORY_SEED.some(i => i.ref === ref)) throw new ConvexError("This item is not in your stock list.");
+    if (!INVENTORY_SEED.some(i => i.ref === ref)
+      && !await ctx.db.query("inventoryProducts").withIndex("by_ref", q => q.eq("ref", ref)).first()) {
+      throw new ConvexError("This item is not in your stock list.");
+    }
     if (operationId) {
       const previous = await ctx.db
         .query("inventorySyncOps")

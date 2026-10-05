@@ -15,17 +15,26 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
 :root[data-theme="dark"] body { background: linear-gradient(180deg, #12110f 0%, #1a1815 54%, #100f0e 100%); }
-button, input { font: inherit; color: inherit; }
+button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 button:disabled { opacity: .4; cursor: default; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 .app { max-width: 760px; margin: auto; min-height: 100vh; }
 .top { position: sticky; top: 0; z-index: 2; padding: calc(8px + env(safe-area-inset-top)) 12px 8px; background: var(--glass); border-bottom: 1px solid var(--line); box-shadow: var(--navdrop); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .tabs { display: flex; width: 100%; gap: 4px; background: var(--card2); padding: 4px; border: 1px solid var(--line); border-radius: 12px; }
 .tabs button { flex: 1; border: 0; background: none; padding: 8px 17px; border-radius: 8px; color: var(--muted); font-weight: 750; }
 .tabs button.on { background: var(--brass); color: var(--brass-ink); box-shadow: 0 1px 2px rgba(0,0,0,.13); }
 .page { padding: 12px 20px calc(30px + env(safe-area-inset-bottom)); }
-.edit-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.edit-toolbar { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.add-button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 18px; }
+.add-form { margin-bottom: 18px; padding: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; }
+.add-form h2 { margin: 0 0 14px; font-size: 20px; }
+.add-form fieldset { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.add-form label { display: grid; gap: 5px; min-width: 0; font-size: 13px; font-weight: 650; }
+.add-form input, .add-form select { width: 100%; min-width: 0; min-height: 46px; padding: 8px 12px; font-size: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); }
+.add-dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.add-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+.add-actions .primary { padding: 8px 24px; }
 .lock { min-height: 40px; padding: 6px 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--card2); font-weight: 750; }
 .cloud-status { width: 40px; height: 40px; display: grid; place-items: center; color: var(--muted); }
 .cloud-status.waiting { color: var(--low); }
