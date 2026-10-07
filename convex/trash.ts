@@ -1,4 +1,6 @@
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { record, money } from "./lib/history";
 import { requirePin } from "./lib/pin";
@@ -97,30 +99,57 @@ export const restore = mutation({
     if (!row) throw new Error("That entry is no longer in the trash");
     if (row.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Record a new payment in Cashier → Staff Payments so wages and cash stay together.');
 
-    const { _id, _creationTime, entries, deletedAt, ...voucher } = row;
-    const voucherId = await ctx.db.insert("vouchers", voucher);
-    for (const line of entries) {
-      await ctx.db.insert("voucherEntries", {
-        voucherId,
-        ledgerId: line.ledgerId,
-        side: line.side,
-        amount: line.amount,
-        date: voucher.date,
-      });
+    // A W/B sale's receipt is only that sale's cash; alone it would clear an
+    // account of a sale that is not there.
+    if (row.paysFor) {
+      const sale = await ctx.db.query("vouchers")
+        .filter((q) => q.eq(q.field("refNo"), row.paysFor)).first();
+      if (!sale) {
+        throw new Error(`This receipt is the cash for ${row.paysFor.replace("BILL-", "bill ")}. Restore that bill and it comes back with it.`);
+      }
     }
-    const type = await ctx.db.get(voucher.typeId);
-    const party = await ctx.db.get(voucher.partyLedgerId);
-    await ctx.db.delete(id);
-    await record(
-      ctx,
-      "voucher.restore",
-      `Restored ${type?.abbr ?? "VCH"}-${String(voucher.voucherNo).padStart(4, "0")} · ` +
-        `${party?.name ?? "—"} · ${money(voucher.amount)} from Trash`,
-      { entity: "voucher", entityId: voucherId }
-    );
+
+    const voucherId = await putBack(ctx, row);
+
+    // And it comes back with its sale, unless one is already live.
+    if (row.refNo?.startsWith("BILL-")) {
+      const live = await ctx.db.query("vouchers")
+        .filter((q) => q.eq(q.field("paysFor"), row.refNo)).first();
+      if (!live) {
+        const receipt = (await ctx.db.query("trash").withIndex("by_deletedAt").order("desc").collect())
+          .find((r) => r.paysFor === row.refNo);
+        if (receipt) await putBack(ctx, receipt);
+      }
+    }
     return voucherId;
   },
 });
+
+/** Writes a deleted voucher back, lines and all, and takes it out of the trash. */
+async function putBack(ctx: MutationCtx, row: Doc<"trash">) {
+  const { _id, _creationTime, entries, deletedAt, ...voucher } = row;
+  const voucherId = await ctx.db.insert("vouchers", voucher);
+  for (const line of entries) {
+    await ctx.db.insert("voucherEntries", {
+      voucherId,
+      ledgerId: line.ledgerId,
+      side: line.side,
+      amount: line.amount,
+      date: voucher.date,
+    });
+  }
+  const type = await ctx.db.get(voucher.typeId);
+  const party = await ctx.db.get(voucher.partyLedgerId);
+  await ctx.db.delete(_id);
+  await record(
+    ctx,
+    "voucher.restore",
+    `Restored ${type?.abbr ?? "VCH"}-${String(voucher.voucherNo).padStart(4, "0")} · ` +
+      `${party?.name ?? "—"} · ${money(voucher.amount)} from Trash`,
+    { entity: "voucher", entityId: voucherId }
+  );
+  return voucherId;
+}
 
 /** Destroys one deleted voucher for good, bill photos included. */
 export const purge = mutation({
@@ -133,6 +162,14 @@ export const purge = mutation({
     await deleteUnreferencedFiles(ctx, attachmentIds(row.attachments));
     await record(ctx, "trash.purge",
       `Purged voucher no. ${row.voucherNo} · ${money(row.amount)} for good`);
+    // A W/B sale's receipt has nothing to come back to once the sale is gone.
+    if (row.refNo?.startsWith("BILL-")) {
+      for (const r of (await ctx.db.query("trash").collect()).filter((t) => t.paysFor === row.refNo)) {
+        await ctx.db.delete(r._id);
+        await record(ctx, "trash.purge",
+          `Purged voucher no. ${r.voucherNo} · ${money(r.amount)} for good, with ${row.refNo}`);
+      }
+    }
   },
 });
 

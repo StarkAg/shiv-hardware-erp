@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { round2, signed, sideOf } from "./lib/money";
+import { GRN_TYPE, allBills, billOf, isGoods } from "./lib/receipts";
 
 /**
  * What happened first, when several vouchers share a date.
@@ -27,6 +28,9 @@ const SAME_DAY_ORDER: Record<string, number> = {
   Journal: 1,
 };
 const dayRank = (typeName?: string) => SAME_DAY_ORDER[typeName ?? ""] ?? 5;
+
+/** The party's side that money taken with a bill lands on. */
+const SETTLED_SIDE: Record<string, "Dr" | "Cr"> = { Sale: "Cr", Purchase: "Dr" };
 
 async function context(ctx: QueryCtx) {
   const [ledgers, groups, types] = await Promise.all([
@@ -342,6 +346,24 @@ export const dayBook = query({
         a.voucherNo - b.voucherNo
     );
 
+    // A delivery has no amount to show, so it is known by what came: the
+    // first thing on its slip, and how many. Bills are read only on a day that
+    // has one.
+    const isGrn = (vch: Doc<"vouchers">) => typeById.get(vch.typeId)?.name === GRN_TYPE;
+    const bills = inWindow.some(isGrn) ? await allBills(ctx) : [];
+    const firstItem = (vch: Doc<"vouchers">) => {
+      const goods = (billOf(bills, vch)?.items ?? []).filter(isGoods);
+      if (!goods.length) return undefined;
+      const i = goods[0];
+      const qty = Number(i.qty) || 0;
+      return {
+        text: [String(i.description).trim(), qty ? `${qty} ${String(i.unit ?? "").trim()}`.trim() : ""]
+          .filter(Boolean)
+          .join(" · "),
+        more: goods.length - 1,
+      };
+    };
+
     return Promise.all(
       inWindow.map(async (vch) => {
         const type = typeById.get(vch.typeId);
@@ -368,6 +390,17 @@ export const dayBook = query({
           narration: vch.narration ?? "",
           amount: vch.amount,
           status: vch.status,
+          // Money taken with the bill: on a sale paid at the counter the
+          // customer is debited the bill and credited what they handed over,
+          // on the one voucher. A purchase paid on the spot is the mirror.
+          settled: SETTLED_SIDE[type?.name ?? ""]
+            ? round2(
+                lines
+                  .filter((l) => l.ledgerId === vch.partyLedgerId && l.side === SETTLED_SIDE[type!.name])
+                  .reduce((t, l) => t + l.amount, 0)
+              )
+            : 0,
+          firstItem: isGrn(vch) ? firstItem(vch) : undefined,
           attachmentUrls: await urlsFor(ctx, vch.attachments),
         };
       })

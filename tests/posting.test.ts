@@ -585,17 +585,65 @@ describe('one party, one account', () => {
 })
 
 
-it('posts a W/B item sale as cash with a zero net party entry', async () => {
-  const t = await shop()
-  const result = await t.mutation(api.billLedger.postBill, { bill: aBill({
+describe('a W/B sale', () => {
+  const wbBill = (over: Record<string, unknown> = {}) => aBill({
     customerName: 'W/B', customerPhone: '9876543210', customerUid: '123456789012', paidAmount: 0,
     items: [{ id: 'goods', description: 'Plywood', qty: 2, unit: 'Pc', amount: 1000 }],
-  }) })
-  const entries = await lines(t)
-  const partyEntries = entries.filter(e => String(e.ledgerId) === String(result.ledgerId))
-  expect(partyEntries.reduce((sum, e) => sum + (e.side === 'Dr' ? e.amount : -e.amount), 0)).toBe(0)
-  expect(partyEntries).toHaveLength(2)
-  expect(result.bill.paidAmount).toBe(1000)
-  expect(result.bill.customerPhone).toBe('')
-  expect(result.bill.customerUid).toBe('')
+    ...over,
+  })
+  const receipts = async (t: ReturnType<typeof convexTest>) =>
+    (await vouchers(t)).filter(v => v.paysFor === 'BILL-1')
+
+  it('posts the sale on W/B and its cash as a receipt of its own', async () => {
+    const t = await shop()
+    const result = await t.mutation(api.billLedger.postBill, { bill: wbBill() })
+    const entries = await lines(t)
+    const partyEntries = entries.filter(e => String(e.ledgerId) === String(result.ledgerId))
+    expect(partyEntries.reduce((sum, e) => sum + (e.side === 'Dr' ? e.amount : -e.amount), 0)).toBe(0)
+    expect(partyEntries).toHaveLength(2)
+    expect(result.bill.paidAmount).toBe(1000)
+    expect(result.bill.customerPhone).toBe('')
+    expect(result.bill.customerUid).toBe('')
+
+    const sale = (await vouchers(t)).find(v => v._id === result.voucherId)!
+    const saleLines = entries.filter(e => e.voucherId === sale._id)
+    expect(saleLines.map(e => [e.side, e.amount])).toEqual([['Dr', 1000], ['Cr', 1000]])
+
+    const [receipt] = await receipts(t)
+    expect(receipt).toMatchObject({ amount: 1000, status: 'final', partyLedgerId: result.ledgerId, voucherNo: 1 })
+    const cash = await t.run(ctx => ctx.db.query('ledgers').filter(q => q.eq(q.field('name'), 'Cash')).first())
+    expect(entries.filter(e => e.voucherId === receipt._id).map(e => [String(e.ledgerId), e.side, e.amount]))
+      .toEqual([[String(cash!._id), 'Dr', 1000], [String(result.ledgerId), 'Cr', 1000]])
+  })
+
+  it('rewrites the one receipt when the bill is saved again', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: wbBill() })
+    await t.mutation(api.billLedger.postBill, { bill: wbBill({
+      total: 1500, items: [{ id: 'goods', description: 'Plywood', qty: 3, unit: 'Pc', amount: 1500 }],
+    }) })
+    const all = await receipts(t)
+    expect(all).toHaveLength(1)
+    expect(all[0]).toMatchObject({ amount: 1500, voucherNo: 1 })
+  })
+
+  it('drops the receipt when the bill moves to a customer on credit', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: wbBill() })
+    await t.mutation(api.billLedger.postBill, { bill: wbBill({ customerName: 'Ramesh Kumar' }) })
+    expect(await receipts(t)).toHaveLength(0)
+  })
+
+  it('takes the receipt with the bill to the trash, and back', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: wbBill() })
+    await t.mutation(api.bills.remove, { id: 'bill-a' })
+    expect(await vouchers(t)).toHaveLength(0)
+    expect(await lines(t)).toHaveLength(0)
+
+    const [row] = await t.run(ctx => ctx.db.query('billsTrash').collect())
+    await t.mutation(api.bills.restore, { id: row._id })
+    expect(await receipts(t)).toHaveLength(1)
+    expect(await vouchers(t)).toHaveLength(2)
+  })
 })

@@ -2,7 +2,7 @@ import { isWithoutBillParty } from './lib/text'
 import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
-import type { Id } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { fyOf, round2 } from './lib/money'
 import { findParty, openParty } from './lib/parties'
 import { nextVoucherNo, nextBillNo } from './lib/numbering'
@@ -13,6 +13,7 @@ import { GRN_ABBR, GRN_TYPE, isGoods } from './lib/receipts'
 import { readBills, writeBills } from './lib/billRows'
 import { ensureVoucherFlow, flowForVoucher } from './lib/billFlow'
 import { postCashEntry } from './cash'
+import { trashVoucher } from './vouchers'
 
 /**
  * Saving a bill, in one piece.
@@ -117,6 +118,73 @@ async function billNumberFor(ctx: MutationCtx, bill: any): Promise<string> {
     if (!clash) return wanted
   }
   return String(await nextBillNo(ctx))
+}
+
+/**
+ * The receipt a W/B sale's cash is written on, brought in step with its bill.
+ *
+ * One per bill, found by the bill's reference: written the first time,
+ * rewritten when the bill is saved again, and sent to the trash when the bill
+ * no longer takes money that way — re-priced to nothing, or moved off W/B.
+ */
+async function syncBillReceipt(
+  ctx: MutationCtx,
+  { ref, number, ledgerId, date, amount, drawer }: {
+    ref: string
+    number: string
+    ledgerId: Id<'ledgers'>
+    date: number
+    amount: number
+    drawer: Doc<'ledgers'> | null
+  },
+) {
+  const linked = await ctx.db
+    .query('vouchers')
+    .filter((q) => q.eq(q.field('paysFor'), ref))
+    .collect()
+  const [keep, ...extra] = linked
+  for (const old of extra) await trashVoucher(ctx, old._id)
+  if (!(amount > 0) || !drawer) {
+    if (keep) await trashVoucher(ctx, keep._id)
+    return
+  }
+
+  const type = await ctx.db
+    .query('voucherTypes')
+    .withIndex('by_name', (q) => q.eq('name', 'Receipt'))
+    .unique()
+  if (!type) throw new Error('The "Receipt" voucher type is not set up.')
+
+  const now = Date.now()
+  const narration = `${drawer.name === 'Bank' ? 'Paid online' : 'Cash'} with bill ${number}`
+  let id: Id<'vouchers'>
+  if (keep) {
+    await ctx.db.patch(keep._id, {
+      typeId: type._id, date, partyLedgerId: ledgerId, amount, status: 'final', narration, updatedAt: now,
+    })
+    id = keep._id
+    await clearLines(ctx, id)
+  } else {
+    const fy = fyOf(date)
+    id = await ctx.db.insert('vouchers', {
+      typeId: type._id,
+      voucherNo: await nextVoucherNo(ctx, type, fy),
+      fy,
+      date,
+      partyLedgerId: ledgerId,
+      narration,
+      status: 'final',
+      amount,
+      attachments: [],
+      paysFor: ref,
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+  await writeLines(ctx, id, date, [
+    { ledgerId: drawer._id, side: 'Dr', amount },
+    { ledgerId, side: 'Cr', amount },
+  ])
 }
 
 export const ensureParty = mutation({
@@ -240,7 +308,22 @@ export const postBill = mutation({
     }
     const asked = args.cashEntryId ? 0 : Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0
     // No money changes hands on a goods return; a refund is its own receipt or payment.
-    const received = spec.settles || kind === 'return' ? 0 : round2(Math.min(Math.max(asked, 0), Number(bill.total) || 0))
+    const taken = spec.settles || kind === 'return' ? 0 : round2(Math.min(Math.max(asked, 0), Number(bill.total) || 0))
+    /**
+     * A W/B sale's cash is a receipt of its own.
+     *
+     * Every other sale takes money as a line of the same voucher. A W/B sale
+     * is cash by definition, and the counter wants to see that cash among the
+     * receipts — the RCT series, the day's receipt lines — not folded into the
+     * sale. So the sale goes on the W/B account in full and a receipt clears
+     * it, kept in step with the bill here: re-saving rewrites it, and deleting
+     * or restoring the sale takes it along.
+     *
+     * Only for the shop's own bills, which carry the BILL-n reference the
+     * receipt follows; and never when a cashier entry already posted the money.
+     */
+    const wbReceipt = kind === 'sale' && keepAsBill && isWithoutBillParty(customerName) && !args.cashEntryId
+    const received = wbReceipt ? 0 : taken
 
     /**
      * Discount given up at settlement — allowed on a receipt, received on a
@@ -288,8 +371,8 @@ export const postBill = mutation({
     const account = hasAmount ? await byName(accountName) : null
     if (hasAmount && !account) throw new Error(`The "${accountName}" account is missing — set it up in Account Masters before saving this bill.`)
 
-    const settlement = received > 0 ? await byName(drawer) : null
-    if (received > 0 && !settlement) {
+    const settlement = taken > 0 ? await byName(drawer) : null
+    if (taken > 0 && !settlement) {
       throw new Error(`The "${drawer}" account is missing — set it up in Account Masters before taking money against this bill.`)
     }
 
@@ -433,6 +516,17 @@ export const postBill = mutation({
           ? [{ ledgerId: discountAccount._id, side: spec.other, amount: discount }]
           : []),
       ].filter((line) => line.amount > 0))
+    }
+
+    if (keepAsBill) {
+      await syncBillReceipt(ctx, {
+        ref,
+        number,
+        ledgerId,
+        date,
+        amount: wbReceipt && hasAmount ? taken : 0,
+        drawer: settlement,
+      })
     }
 
     /**

@@ -49,7 +49,25 @@ const RULED: React.CSSProperties = {
   minHeight: LINE * LINES,
 }
 
-type Line = { key: string; party: string; amount: number | null }
+type Line = { key: string; party: string; amount: number | null; tag?: string; item?: string }
+
+/**
+ * Entries kept on another kind's quarter. Goods that came in before their bill
+ * are written on the purchase lines, marked GRN, as the counter does by hand.
+ * With no amount until the bill prices them, the line carries the first thing
+ * that came instead.
+ */
+const SAME_QUARTER: Record<string, { type: string; tag: string }> = {
+  'Goods Received': { type: 'Purchase', tag: 'GRN' },
+}
+
+/**
+ * Where the money taken with a bill is written as well. A sale paid at the
+ * counter is one entry, but on the sheet it is two lines — the sale, and the
+ * cash received for it — so it is on the receipts too; a purchase paid on the
+ * spot goes on the payments the same way.
+ */
+const PAID_ON: Record<string, string> = { Sale: 'Receipt', Purchase: 'Payment' }
 
 /** A calendar day as the shop's clock has it, "2026-09-15". */
 const isoDay = (d: Date) =>
@@ -94,8 +112,19 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
             className="flex items-end justify-between gap-3 pl-9 pr-1 text-sm text-stone-800"
             style={{ height: LINE }}
           >
-            <span className="truncate pb-1">{r.party}</span>
-            <span className="shrink-0 pb-1 tabular-nums">{r.amount === null ? '—' : rupees(r.amount)}</span>
+            <span className={`flex min-w-0 items-center gap-1.5 pb-1 ${r.item ? 'max-w-[50%] shrink-0' : ''}`}>
+              {r.tag && (
+                <span className="shrink-0 rounded border border-amber-400 bg-amber-50 px-1 text-[10px] font-bold leading-4 text-amber-700">
+                  {r.tag}
+                </span>
+              )}
+              <span className="truncate">{r.party}</span>
+            </span>
+            {r.item ? (
+              <span className="min-w-0 truncate pb-1 text-right text-stone-500" title={r.item}>{r.item}</span>
+            ) : (
+              <span className="shrink-0 pb-1 tabular-nums">{r.amount === null ? '—' : rupees(r.amount)}</span>
+            )}
           </li>
         ))}
       </ol>
@@ -115,9 +144,24 @@ function PaperFor({ day }: { day: string }) {
 
   const byType = new Map<string, Line[]>()
   for (const v of [...(vouchers ?? [])].sort((a, b) => (a.createdAt ?? a.date) - (b.createdAt ?? b.date))) {
-    const list = byType.get(v.vchType) ?? []
-    list.push({ key: v._id, party: v.party, amount: v.status === 'pending' ? null : v.amount ?? null })
-    byType.set(v.vchType, list)
+    const moved = SAME_QUARTER[v.vchType]
+    const type = moved?.type ?? v.vchType
+    const list = byType.get(type) ?? []
+    list.push({
+      key: v._id,
+      party: v.party,
+      amount: v.status === 'final' ? v.amount ?? null : null,
+      tag: moved?.tag,
+      item: v.firstItem ? `${v.firstItem.text}${v.firstItem.more > 0 ? ` +${v.firstItem.more}` : ''}` : undefined,
+    })
+    byType.set(type, list)
+
+    const paidOn = PAID_ON[v.vchType]
+    if (paidOn && v.status === 'final' && v.settled > 0) {
+      const paid = byType.get(paidOn) ?? []
+      paid.push({ key: `${v._id}-paid`, party: v.party, amount: v.settled })
+      byType.set(paidOn, paid)
+    }
   }
 
   return <Sheet lines={(i) => byType.get(QUARTERS[i].type)} />

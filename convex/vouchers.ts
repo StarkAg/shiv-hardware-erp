@@ -759,6 +759,15 @@ export async function trashVoucher(ctx: MutationCtx, id: Id<"vouchers">) {
     entity: "voucher",
     entityId: id,
   });
+
+  // A W/B sale's receipt goes with it; it records nothing but that sale's cash.
+  if (voucher.refNo?.startsWith("BILL-")) {
+    const receipts = await ctx.db
+      .query("vouchers")
+      .filter((q) => q.eq(q.field("paysFor"), voucher.refNo))
+      .collect();
+    for (const r of receipts) await trashVoucher(ctx, r._id);
+  }
   return trashId;
 }
 

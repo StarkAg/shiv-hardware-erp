@@ -3129,8 +3129,8 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     // saved before sheets carried a square-foot rate and not touched since.
     const result = await postStored({
       ...priced,
-      // A sale with no goods lines goes in as paid unless somebody said
-      // otherwise — see src/lib/paidDefault.ts. Anything in `over` still wins.
+      // A W/B sale goes in as paid in full — see src/lib/paidDefault.ts.
+      // Anything in `over` still wins.
       ...withPaidDefault(priced, total),
       total,
       ...((draft.kind ?? 'sale') === 'purchase' ? { checks: checksRef.current } : {}),
@@ -3974,8 +3974,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                     square with nobody having touched this box would otherwise
                     look like a mistake. */}
                 {paidByDefault(draft, total) && (
-                  <span className="text-xs text-muted" title={isWithoutBillSale ? 'W/B is a cash sale, settled in full.' : 'A sale with no goods lines is paid on the spot. Type 0 if it is on credit.'}>
-                    {isWithoutBillSale ? 'Cash sale — paid in full' : 'no goods lines — paid · 0 for credit'}
+                  <span className="text-xs text-muted" title="W/B is a cash sale, settled in full.">
+                    Cash sale — paid in full
                   </span>
                 )}
                 {/* When the money came in. Blank is the usual counter sale —

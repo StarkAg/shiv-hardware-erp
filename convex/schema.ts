@@ -46,6 +46,10 @@ const receiptFields = {
   fromReceipts: v.optional(v.array(v.id("vouchers"))),
   // What the checks said when the bill was saved against its deliveries.
   checks: v.optional(v.array(v.string())),
+  // On the receipt written by itself for a W/B sale: that sale's BILL-n
+  // reference. The reference, not the voucher id, because a voucher put back
+  // from the trash comes back under a new id and its bill number does not.
+  paysFor: v.optional(v.string()),
 };
 
 export default defineSchema({

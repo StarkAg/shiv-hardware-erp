@@ -5,10 +5,10 @@ const amountOnly = { id: 'amount', description: 'On account', qty: 1, unit: 'Pc'
 const goods = { id: 'goods', description: 'Plywood', qty: 1, unit: 'Pc', amount: 500 }
 
 describe('sale payment default', () => {
-  it('takes an amount-only sale as paid without a separate receipt', () => {
-    const sale = { kind: 'sale' as const, items: [amountOnly], paidAmount: undefined, paid: false }
-    expect(paidByDefault(sale, 500)).toBe(true)
-    expect(withPaidDefault(sale, 500)).toEqual({ paidAmount: 500, paid: true })
+  it('leaves an amount-only sale to a party on credit', () => {
+    const sale = { customerName: 'Ramesh', kind: 'sale' as const, items: [amountOnly], paidAmount: undefined, paid: false }
+    expect(paidByDefault(sale, 500)).toBe(false)
+    expect(withPaidDefault(sale, 500)).toEqual({ paidAmount: undefined, paid: false })
   })
 
   it('settles W/B goods sales even when an old draft says credit', () => {
