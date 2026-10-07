@@ -292,6 +292,13 @@ export function nextQuoteNumber(bills: { kind?: BillKind; number?: string; fromQ
   return `Q-${used + 1}`
 }
 
+/** One item from the stock list, and how many moved. */
+export interface StockLine {
+  ref: string
+  name: string
+  qty: number
+}
+
 export interface BillItem {
   id: string
   /** Free-text label (always set; auto-generated for catalog items) */
@@ -455,6 +462,12 @@ export interface Bill extends BillCharges {
   grnIds?: string[]
   /** On a purchase: what the checks against its deliveries said at saving. */
   checks?: string[]
+  /**
+   * Stock this bill moved without listing it as lines — a bill entered as its
+   * total still takes plywood off the shelf, or puts it on. Inventory counts
+   * these exactly as it counts goods lines; nothing here prints or prices.
+   */
+  stock?: StockLine[]
   notes?: string
   /**
    * @deprecated There are no drafts. A bill is written and saved, or it is not

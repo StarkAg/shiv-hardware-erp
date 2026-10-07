@@ -1,5 +1,5 @@
 import { isWithoutBillParty } from './lib/text'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { mutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
@@ -187,6 +187,16 @@ async function syncBillReceipt(
   ])
 }
 
+/** Runs a mutation body, passing any error on as a ConvexError so its message reaches the counter. */
+async function inWords<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (err) {
+    if (err instanceof ConvexError) throw err
+    throw new ConvexError(err instanceof Error ? err.message : String(err))
+  }
+}
+
 export const ensureParty = mutation({
   args: { name: v.string(), phone: v.optional(v.string()) },
   handler: async (ctx, { name, phone }) => openParty(ctx, name, { phone }),
@@ -208,7 +218,9 @@ export const postBill = mutation({
     flowId: v.optional(v.id('billFlows')),
     cashEntryId: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  // Said in the server's own words: production hides a plain Error behind
+  // "Server Error", and the counter has to know why a bill did not save.
+  handler: async (ctx, args) => inWords(async () => {
     // Written the shop's way before anything reads it: the party in proper
     // case, item codes in capitals, one spelling per unit.
     const bill: any = tidyBill(args.bill ?? {})
@@ -419,6 +431,18 @@ export const postBill = mutation({
           .filter((q) => q.eq(q.field('refNo'), ref))
           .first()
     if (bill.voucherId && !existing) {
+      // Most often it was deleted from the books while the bill stayed open;
+      // then it is in the Trash, and putting it back is the fix.
+      const binned = (await ctx.db.query('trash').collect())
+        .filter((row) => row.refNo === ref)
+        .sort((a, b) => b.deletedAt - a.deletedAt)[0]
+      if (binned) {
+        const binType = await ctx.db.get(binned.typeId)
+        throw new Error(
+          `${binType?.abbr ?? 'VCH'}-${String(binned.voucherNo).padStart(4, '0')}, the entry this bill posted, was deleted on ${day(binned.deletedAt)}. ` +
+          'Restore it from Trash, then save again.',
+        )
+      }
       throw new Error('The voucher this bill was opened from is no longer in the books.')
     }
 
@@ -644,5 +668,5 @@ export const postBill = mutation({
     }
 
     return { ledgerId, voucherId, number, bill: stored }
-  },
+  }),
 })

@@ -260,6 +260,9 @@ export const ledger = query({
         balance: running,
         balanceSide: sideOf(running),
         commissionPaid: voucher.commissionPaid === true,
+        // The money taken with a sale or a purchase, on the party's other side.
+        // It can be taken out on its own, leaving the bill on credit.
+        settlement: SETTLED_SIDE[type?.name ?? ""] === line.side,
         attachmentUrls: await urlsFor(ctx, voucher.attachments),
       });
     }

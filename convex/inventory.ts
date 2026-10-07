@@ -94,6 +94,8 @@ type Move = {
   number: string;
   billId: string;
   name: string;
+  // The stock-list item it was picked as, when the bill named one outright.
+  stockRef?: string;
 };
 
 async function moves(ctx: QueryCtx) {
@@ -151,6 +153,28 @@ async function moves(ctx: QueryCtx) {
         number: String(bill.number ?? ""),
         billId: String(bill.id ?? ""),
         name: String(item.description ?? "").trim(),
+      });
+    }
+    // A bill entered as its total still says what it took off or put on the
+    // shelf, picked from the stock list rather than written as lines.
+    for (const line of bill.stock ?? []) {
+      const qty = Number(line?.qty);
+      if (!line?.ref || !(qty > 0)) continue;
+      const name = String(line.name ?? "").trim();
+      out.push({
+        ref: resolve(`name:${foldItemName(name)}`),
+        stockRef: String(line.ref),
+        day: dayOf(bill.date),
+        at: Number(bill.updatedAt ?? 0),
+        kind: dir,
+        why,
+        qty,
+        unit: "Pc",
+        each: null,
+        party: String(bill.customerName ?? ""),
+        number: String(bill.number ?? ""),
+        billId: String(bill.id ?? ""),
+        name,
       });
     }
   }
@@ -355,7 +379,7 @@ async function seededStock(ctx: QueryCtx) {
   const customByName = new Map(products.map(product => [foldItemName(product.name), product.ref]));
   const mapped = new Map<string, Move[]>();
   for (const move of all) {
-    const ref = seedRefForName(move.name) ?? customByName.get(foldItemName(move.name));
+    const ref = move.stockRef ?? seedRefForName(move.name) ?? customByName.get(foldItemName(move.name));
     if (ref) mapped.set(ref, [...(mapped.get(ref) ?? []), move]);
   }
   const at = Date.now();

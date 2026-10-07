@@ -9,7 +9,7 @@ import { writeLines, clearLines } from "./lib/entries";
 import { requirePin } from "./lib/pin";
 import { attachmentIds, deleteUnreferencedFiles } from './lib/attachmentFiles';
 import { GRN_ABBR, GRN_TYPE } from './lib/receipts';
-import { readBills } from './lib/billRows';
+import { readBills, writeBills } from './lib/billRows';
 import { ensureVoucherFlow } from './lib/billFlow';
 
 const attachmentKind = v.union(
@@ -726,6 +726,77 @@ export const remove = mutation({
     }
 
     return await trashVoucher(ctx, id);
+  },
+});
+
+/**
+ * Takes out the money that was taken with a bill, and leaves the bill.
+ *
+ * A sale paid on the spot is one voucher: the customer debited the bill and
+ * credited what they paid, with the drawer taking that cash. When the money
+ * was never actually taken — a credit sale saved as paid — deleting the
+ * voucher would lose the sale too. This drops only the payment half, so the
+ * sale stands and the customer owes it. A purchase paid on the spot is the
+ * mirror.
+ */
+export const dropSettlement = mutation({
+  args: { id: v.id("vouchers") },
+  handler: async (ctx, { id }) => {
+    const voucher = await ctx.db.get(id);
+    if (!voucher) throw new Error("Voucher not found");
+    const type = await ctx.db.get(voucher.typeId);
+    const paidSide = type?.name === "Sale" ? "Cr" : type?.name === "Purchase" ? "Dr" : null;
+    if (!paidSide) throw new Error("Only a sale or a purchase carries money taken with it.");
+    const drawerSide = paidSide === "Cr" ? "Dr" : "Cr";
+
+    const lines = await ctx.db
+      .query("voucherEntries")
+      .withIndex("by_voucher", (q) => q.eq("voucherId", id))
+      .collect();
+    const paid = lines.filter((l) => l.ledgerId === voucher.partyLedgerId && l.side === paidSide);
+    const taken = round2(paid.reduce((t, l) => t + l.amount, 0));
+    if (!(taken > 0)) throw new Error("Nothing was taken with this bill, so there is nothing to remove.");
+
+    // The drawer's side of that money: Cash or Bank, as much as was taken.
+    const drawers = new Set(
+      (await ctx.db.query("ledgers").collect())
+        .filter((l) => l.name === "Cash" || l.name === "Bank")
+        .map((l) => String(l._id))
+    );
+    let left = taken;
+    const dropped = new Set(paid.map((l) => String(l._id)));
+    const trimmed = new Map<string, number>();
+    for (const l of lines) {
+      if (!(left > 0)) break;
+      if (l.side !== drawerSide || !drawers.has(String(l.ledgerId))) continue;
+      const cut = Math.min(l.amount, left);
+      left = round2(left - cut);
+      if (cut >= l.amount) dropped.add(String(l._id));
+      else trimmed.set(String(l._id), round2(l.amount - cut));
+    }
+    if (left > 0) throw new Error("This voucher's cash lines do not match what was taken. Edit it instead.");
+
+    const kept = lines
+      .filter((l) => !dropped.has(String(l._id)))
+      .map((l) => ({ ledgerId: l.ledgerId, side: l.side, amount: trimmed.get(String(l._id)) ?? l.amount }));
+    await clearLines(ctx, id);
+    await writeLines(ctx, id, voucher.date, kept);
+    await ctx.db.patch(id, { updatedAt: Date.now() });
+
+    // The bill must agree, or saving it again would take the money a second time.
+    const ref = voucher.refNo ?? "";
+    const bill = (await readBills(ctx)).find(
+      (b) => String(b?.voucherId ?? "") === String(id) || (ref.startsWith("BILL-") && String(b?.number) === ref.slice(5))
+    );
+    if (bill) await writeBills(ctx, [{ ...bill, paidAmount: 0, paid: false, paidDate: undefined, updatedAt: Date.now() }]);
+
+    await record(
+      ctx,
+      "voucher.unsettle",
+      `Took ${money(taken)} received off ${await describeVoucher(ctx, id)} — now on credit`,
+      { entity: "voucher", entityId: id }
+    );
+    return { removed: taken };
   },
 });
 

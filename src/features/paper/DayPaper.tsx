@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { ChevronLeft, ChevronRight, CreditCard, IndianRupee, Package, ReceiptText, type LucideIcon } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
@@ -49,7 +49,36 @@ const RULED: React.CSSProperties = {
   minHeight: LINE * LINES,
 }
 
-type Line = { key: string; party: string; amount: number | null; tag?: string; item?: string }
+type Line = {
+  key: string
+  party: string
+  amount: number | null
+  tag?: string
+  item?: string
+  /** The party's ledger, which the line opens. */
+  to?: string
+  partyId?: string
+  /** A sale with no receipt of the same amount from the same party that day. */
+  unpaid?: boolean
+}
+
+/**
+ * Sales with nothing received for them that day.
+ *
+ * Each sale looks for a receipt of the same amount from the same party, and a
+ * receipt answers for one sale only — so two ₹500 sales and one ₹500 receipt
+ * leave one of them marked. A credit sale is meant to stay that way; the mark
+ * is there so a cash sale whose receipt was never written is seen the same day.
+ */
+function markUnpaid(sales: Line[] | undefined, receipts: Line[] | undefined) {
+  const left = [...(receipts ?? [])]
+  for (const sale of sales ?? []) {
+    if (!(sale.amount && sale.amount > 0)) continue
+    const at = left.findIndex((r) => r.partyId === sale.partyId && Math.abs((r.amount ?? 0) - sale.amount!) < 0.5)
+    if (at === -1) sale.unpaid = true
+    else left.splice(at, 1)
+  }
+}
 
 /**
  * Entries kept on another kind's quarter. Goods that came in before their bill
@@ -88,52 +117,76 @@ const validDay = (day: string | null) => !!day && /^\d{4}-\d{2}-\d{2}$/.test(day
 function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
   const q = QUARTERS[index]
   const Icon = q.icon
+  const navigate = useNavigate()
   const rows = lines ?? []
   const shown = rows.slice(0, LINES)
   const more = rows.length - shown.length
   const total = rows.reduce((t, r) => t + (r.amount ?? 0), 0)
+  const fresh = `/bills?new=${q.kind}`
 
+  // The quarter still opens a new voucher when tapped anywhere off its lines;
+  // a line opens its party's account instead.
   return (
-    <Link
-      to={`/bills?new=${q.kind}`}
-      aria-label={`New ${q.title}`}
-      className={`group flex flex-col border-dashed border-stone-300 p-4 transition-colors hover:bg-amber-50 focus:outline-none focus-visible:bg-amber-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-shiv-green ${FOLDS[index]}`}
+    <div
+      onClick={() => navigate(fresh)}
+      className={`group flex cursor-pointer flex-col border-dashed border-stone-300 p-4 transition-colors hover:bg-amber-50/60 ${FOLDS[index]}`}
     >
-      <div className="flex items-center gap-2 pb-1">
+      <Link
+        to={fresh}
+        aria-label={`New ${q.title}`}
+        onClick={(e) => e.stopPropagation()}
+        className="flex items-center gap-2 rounded pb-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-shiv-green"
+      >
         <Icon size={16} className="text-stone-500" aria-hidden="true" />
         <span className="text-base font-bold text-stone-900">{q.title}</span>
         <span className="ml-auto rounded border border-stone-300 px-1.5 text-[11px] font-semibold text-stone-500">{q.key}</span>
-      </div>
+      </Link>
 
       <ol className="flex-1" style={RULED}>
-        {shown.map((r) => (
-          <li
-            key={r.key}
-            className="flex items-end justify-between gap-3 pl-9 pr-1 text-sm text-stone-800"
-            style={{ height: LINE }}
-          >
-            <span className={`flex min-w-0 items-center gap-1.5 pb-1 ${r.item ? 'max-w-[50%] shrink-0' : ''}`}>
-              {r.tag && (
-                <span className="shrink-0 rounded border border-amber-400 bg-amber-50 px-1 text-[10px] font-bold leading-4 text-amber-700">
-                  {r.tag}
-                </span>
+        {shown.map((r) => {
+          const body = (
+            <>
+              <span className={`flex min-w-0 items-center gap-1.5 pb-1 ${r.item ? 'max-w-[50%] shrink-0' : ''}`}>
+                {r.tag && (
+                  <span className="shrink-0 rounded border border-amber-400 bg-amber-50 px-1 text-[10px] font-bold leading-4 text-amber-700">
+                    {r.tag}
+                  </span>
+                )}
+                <span className="truncate group-hover/line:underline">{r.party}</span>
+              </span>
+              {r.item ? (
+                <span className="min-w-0 truncate pb-1 text-right text-stone-500" title={r.item}>{r.item}</span>
+              ) : (
+                <span className="shrink-0 pb-1 tabular-nums">{r.amount === null ? '—' : rupees(r.amount)}</span>
               )}
-              <span className="truncate">{r.party}</span>
-            </span>
-            {r.item ? (
-              <span className="min-w-0 truncate pb-1 text-right text-stone-500" title={r.item}>{r.item}</span>
-            ) : (
-              <span className="shrink-0 pb-1 tabular-nums">{r.amount === null ? '—' : rupees(r.amount)}</span>
-            )}
-          </li>
-        ))}
+            </>
+          )
+          const tone = r.unpaid ? 'text-red-700 bg-red-50/70 hover:bg-red-100' : 'text-stone-800 hover:bg-amber-100'
+          const cls = `group/line flex items-end justify-between gap-3 rounded-sm pl-9 pr-1 text-sm transition-colors ${tone}`
+          return (
+            <li key={r.key} style={{ height: LINE }}>
+              {r.to ? (
+                <Link
+                  to={r.to}
+                  onClick={(e) => e.stopPropagation()}
+                  title={r.unpaid ? `${r.party} — no receipt of this amount today` : `Open ${r.party}'s account`}
+                  className={`${cls} h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-shiv-green`}
+                >
+                  {body}
+                </Link>
+              ) : (
+                <div className={`${cls} h-full`}>{body}</div>
+              )}
+            </li>
+          )
+        })}
       </ol>
 
       <div className="flex items-center justify-between border-t border-stone-400 pt-1 text-sm">
         <span className="text-xs text-stone-500">{more > 0 ? `+${more}` : ''}</span>
         <span className="font-bold tabular-nums text-stone-900">{rupees(total)}</span>
       </div>
-    </Link>
+    </div>
   )
 }
 
@@ -147,7 +200,12 @@ function PaperFor({ day }: { day: string }) {
     const moved = SAME_QUARTER[v.vchType]
     const type = moved?.type ?? v.vchType
     const list = byType.get(type) ?? []
+    const to = v.partyLedgerId
+      ? `/ledger/${v.partyGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'}/${v.partyLedgerId}`
+      : undefined
     list.push({
+      to,
+      partyId: v.partyLedgerId,
       key: v._id,
       party: v.party,
       amount: v.status === 'final' ? v.amount ?? null : null,
@@ -159,10 +217,12 @@ function PaperFor({ day }: { day: string }) {
     const paidOn = PAID_ON[v.vchType]
     if (paidOn && v.status === 'final' && v.settled > 0) {
       const paid = byType.get(paidOn) ?? []
-      paid.push({ key: `${v._id}-paid`, party: v.party, amount: v.settled })
+      paid.push({ key: `${v._id}-paid`, party: v.party, amount: v.settled, to, partyId: v.partyLedgerId })
       byType.set(paidOn, paid)
     }
   }
+
+  markUnpaid(byType.get('Sale'), byType.get('Receipt'))
 
   return <Sheet lines={(i) => byType.get(QUARTERS[i].type)} />
 }

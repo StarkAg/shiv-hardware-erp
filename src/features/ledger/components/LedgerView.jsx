@@ -104,6 +104,10 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const [deleting, setDeleting] = useState(null);
   const [editParty, setEditParty] = useState(false);
   const removeVoucher = useMutation(api.vouchers.remove);
+  const dropSettlement = useMutation(api.vouchers.dropSettlement);
+  // The money line of a sale or purchase paid on the spot: its X takes out
+  // only that money, leaving the bill on credit.
+  const [unsettling, setUnsettling] = useState(null);
   const setCommissionPaid = useMutation(api.vouchers.setCommissionPaid);
   // Deleting the account itself, from its own page — the same rule as Account
   // Masters: only an empty account, behind the shop's code, and the bin's hold
@@ -687,9 +691,20 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       >
                         <Pencil size={14} aria-hidden="true" />
                       </button>
-                      <button className="xbtn del" onClick={() => setDeleting(item.r)} aria-label="Delete">
-                        <X size={14} aria-hidden="true" />
-                      </button>
+                      {item.r.settlement ? (
+                        <button
+                          className="xbtn del"
+                          onClick={() => setUnsettling(item.r)}
+                          aria-label="Remove receipt"
+                          title="Remove only this money — the bill stays, on credit"
+                        >
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      ) : (
+                        <button className="xbtn del" onClick={() => setDeleting(item.r)} aria-label="Delete">
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )
@@ -740,6 +755,17 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
           danger
           onConfirm={() => removeVoucher({ id: deleting.voucherId ?? deleting._id })}
           onClose={() => setDeleting(null)}
+        />
+      )}
+
+      {unsettling && (
+        <Confirm
+          title={`Remove the ${rupees(unsettling.amount)} received on ${unsettling.vchLabel}?`}
+          body={`${account?.name} · ${shortDate(unsettling.date)}. Only the money comes off — the ${unsettling.vchType === 'Purchase' ? 'purchase' : 'sale'} stays, on credit.`}
+          confirmLabel="Remove receipt"
+          danger
+          onConfirm={() => dropSettlement({ id: unsettling.voucherId })}
+          onClose={() => setUnsettling(null)}
         />
       )}
 

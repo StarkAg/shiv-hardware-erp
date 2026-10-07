@@ -66,6 +66,8 @@ import { canonicalUnit, foldName, isWithoutBillParty } from '../../../convex/lib
 import { catalogChangesFor } from '../../lib/learnCatalog'
 import { paidByDefault, withPaidDefault } from '../../lib/paidDefault'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
+import { StockMoves } from './StockMoves'
+import { convexEnabled } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
@@ -3079,7 +3081,10 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       if (keepAsBill) saveBill(stored)
       return { bill: stored, ledgerId: (res?.ledgerId as string) ?? undefined }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      // The server's reason travels as a ConvexError's data; the plain message
+      // carries request ids and call-site noise around it.
+      const data = (err as { data?: unknown })?.data
+      const message = typeof data === 'string' ? data : err instanceof Error ? err.message : String(err)
       console.error('[ledger] posting failed', err)
       if (keepAsBill) saveBill({ ...bill, postError: message })
       toast(`Not saved to the books\n${message}\nKept on this PC as unposted.`, 'error')
@@ -3925,6 +3930,12 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           >
             <Plus size={13} /> Add Item
           </button>
+
+          {/* The total as one figure, and the stock it moved — for a bill
+              entered from its photo rather than line by line. */}
+          {convexEnabled() && !isQuotation(draft) && (
+            <StockMoves bill={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} />
+          )}
 
           {/* A delivery note is goods and counts; tax and discount belong to the bill. */}
           {(draft.kind ?? 'sale') !== 'grn' && (

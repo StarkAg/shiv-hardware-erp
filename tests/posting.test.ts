@@ -647,3 +647,18 @@ describe('a W/B sale', () => {
     expect(await vouchers(t)).toHaveLength(2)
   })
 })
+
+describe('taking the money off a paid sale', () => {
+  it('leaves the sale on credit and the bill unpaid', async () => {
+    const t = await shop()
+    const res = await t.mutation(api.billLedger.postBill, { bill: aBill({ paidAmount: 1000, paid: true }) })
+    expect(await lines(t)).toHaveLength(4)
+
+    await t.mutation(api.vouchers.dropSettlement, { id: res.voucherId })
+    const left = await lines(t)
+    expect(left.map(l => [l.side, l.amount]).sort()).toEqual([['Cr', 1000], ['Dr', 1000]])
+    expect(left.find(l => l.side === 'Dr')!.ledgerId).toBe(res.ledgerId)
+    const [bill] = await stored(t)
+    expect(bill).toMatchObject({ paidAmount: 0, paid: false })
+  })
+})
