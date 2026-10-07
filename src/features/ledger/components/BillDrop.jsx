@@ -12,7 +12,6 @@ import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
 
 const OK = (f) => f.type.startsWith('image/') || f.type === 'application/pdf';
 const key = (f) => `${f.name}:${f.size}:${f.lastModified}`;
-const SHOOTER_URL = import.meta.env.VITE_VOUCHER_SHOOTER_URL || 'https://shivhardware-voucher.vercel.app';
 
 const size = (bytes) =>
   bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
@@ -230,9 +229,6 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
           </div>)}
         </div>}
       </div>}
-      <div className="voucher-shooter-link">
-        Take a bill photo on your phone: <a href={SHOOTER_URL} target="_blank" rel="noreferrer">Open voucher shooter</a>
-      </div>
       {onPick && (
         <div className="fromphone">
           <div className="fromphone-head">From the phone</div>

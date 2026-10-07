@@ -7,6 +7,7 @@ import type { Id } from '../../../convex/_generated/dataModel'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import { rupees } from '../ledger/lib/format'
 import './BillFlow.css'
+import { DEFAULT_PAYMENT_MODE } from '../../lib/types'
 
 type Kind = 'sale' | 'purchase' | 'grn' | 'receipt' | 'payment' | 'unknown'
 type Route = 'unset' | 'handover' | 'rack' | 'order' | 'fabrication' | 'mixed'
@@ -114,7 +115,7 @@ function IntakeEditor({ flow, candidates, onDone }: { flow: Flow; candidates: Fl
           bill: {
             id: `flow-${flow._id}`, number: '', kind, date,
             customerName: party.trim(), items, total: kind === 'grn' ? 0 : toNumber(amount),
-            paid: false, paidAmount: 0, paymentMode: 'cash', notes: flow.readDraft?.notes ?? '',
+            paid: false, paidAmount: 0, paymentMode: DEFAULT_PAYMENT_MODE, notes: flow.readDraft?.notes ?? '',
           },
           attachments: flow.photos.map(storageId => ({ storageId, kind: 'bill' })),
           keepAsBill: true, flowId: flow._id, cashEntryId: flow.cashEntryId,

@@ -139,6 +139,11 @@ export function Profit() {
   const bills = useStore((s) => s.bills)
   const saved = useQuery(api.itemCosts.all, {})
   const paired = useQuery(api.itemSame.all, {})
+  const masters = useQuery(api.masters.all, {})
+  const suppliers = useMemo(
+    () => new Set((masters?.ledgers ?? []).filter((l: any) => l.groupName === 'Sundry Creditors').map((l: any) => String(l._id))),
+    [masters],
+  )
   const [params, setParams] = useSearchParams()
   const [open, setOpen] = useState<string | null>(null)
   const [editing, setEditing] = useState<ItemRow | null>(null)
@@ -169,7 +174,7 @@ export function Profit() {
   const savedByRef = useMemo(() => new Map((saved ?? []).map((o) => [o.ref, o])), [saved])
   const pairedByRef = useMemo(() => new Map((paired ?? []).map((p) => [p.from, p])), [paired])
 
-  const all = useMemo(() => profitLines(bills, { costs, same }), [bills, costs, same])
+  const all = useMemo(() => profitLines(bills, { costs, same, suppliers }), [bills, costs, same, suppliers])
   const lines = useMemo(() => within(all, from, to), [all, from, to])
   const purchases = useMemo(() => purchasedItems(bills, same), [bills, same])
 

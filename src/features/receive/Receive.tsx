@@ -9,6 +9,7 @@ import { foldName } from '../../../convex/lib/text'
 import { newId, readNote, type Known, type Line } from './readNote'
 import { useUploader } from '../ledger/lib/upload'
 import { CheckedBy } from '../bills/Deliveries'
+import { DEFAULT_PAYMENT_MODE } from '../../lib/types'
 
 /**
  * Goods Received, on the phone.
@@ -134,7 +135,7 @@ export function Receive() {
           items: all.map((l) => ({ id: newId(), description: l.name, qty: l.qty, unit: l.unit, amount: 0 })),
           total: 0,
           paid: false,
-          paymentMode: 'cash',
+          paymentMode: DEFAULT_PAYMENT_MODE,
         },
         attachments: ids.map((storageId) => ({ storageId: storageId as Id<'_storage'>, kind: 'challan' as const })),
       })

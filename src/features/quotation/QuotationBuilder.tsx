@@ -324,14 +324,8 @@ export function QuotationBuilder() {
             {aluLike && (
               <div className="mt-3 md:mt-4">
                 <div className="grid grid-cols-2 gap-1.5 md:flex md:flex-wrap md:gap-2.5">
-                  {[
-                    { key: 'chaukhat' as const, label: 'Chaukhat', show: cat === 'aluminium-door' || cat === 'upvc-2-track' || cat === 'upvc-2.5-track' || cat === 'upvc-3-track' },
-                    { key: 'accessories' as const, label: 'Accessories', show: cat === 'aluminium-door' || cat === 'upvc-door' },
-                    { key: 'ssNet' as const, label: 'SS Net', show: cat === 'window-2-track' || cat === 'upvc-2-track' || cat === 'upvc-2.5-track' || cat === 'upvc-3-track' },
-                    { key: 'decorFilm' as const, label: 'Decor Film', show: cat === 'aluminium-door' },
-                    { key: 'brownCoated' as const, label: 'Brown Coated', show: alu || cat === 'upvc-2-track' || cat === 'upvc-2.5-track' || cat === 'upvc-3-track' },
-                  ]
-                    .filter((o) => o.show)
+                  {ADDONS
+                    .filter((o) => o.offered(cat))
                     .map((o) => (
                       <button
                         key={o.key}
@@ -756,14 +750,24 @@ function InlineQuotationPreview({ quote }: { quote: Quotation }) {
   )
 }
 
+const UPVC_WINDOWS: ProductCategory[] = ['upvc-2-track', 'upvc-2.5-track', 'upvc-3-track']
+
+/**
+ * The extras each product offers. One table for the tick boxes and for what
+ * the saved quotation lists, so anything ticked — and so priced — is written
+ * on the quote too. It used to be two lists, and a UPVC window priced with
+ * its chaukhat and net printed without saying so.
+ */
+const ADDONS: { key: 'chaukhat' | 'accessories' | 'ssNet' | 'decorFilm' | 'brownCoated'; label: string; offered: (cat: ProductCategory) => boolean }[] = [
+  { key: 'chaukhat', label: 'Chaukhat', offered: (cat) => cat === 'aluminium-door' || UPVC_WINDOWS.includes(cat) },
+  { key: 'accessories', label: 'Accessories', offered: (cat) => cat === 'aluminium-door' || cat === 'upvc-door' },
+  { key: 'ssNet', label: 'SS Net', offered: (cat) => cat === 'window-2-track' || UPVC_WINDOWS.includes(cat) },
+  { key: 'decorFilm', label: 'Decor Film', offered: (cat) => cat === 'aluminium-door' },
+  { key: 'brownCoated', label: 'Brown Coated', offered: (cat) => isAluminium(cat) || UPVC_WINDOWS.includes(cat) },
+]
+
 function activeAddonLabels(cat: ProductCategory, a: AluAddons): string[] {
-  const out: string[] = []
-  if (cat === 'aluminium-door' && a.chaukhat) out.push('Chaukhat')
-  if (cat === 'aluminium-door' && a.accessories) out.push('Accessories')
-  if (cat === 'window-2-track' && a.ssNet) out.push('SS Net')
-  if (cat === 'aluminium-door' && a.decorFilm) out.push('Decor Film')
-  if (a.brownCoated) out.push('Brown Coated')
-  return out
+  return ADDONS.filter((o) => o.offered(cat) && a[o.key]).map((o) => o.label)
 }
 
 

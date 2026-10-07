@@ -14,7 +14,7 @@
  * and what counts as an item already known.
  */
 import type { BillItem, BillKind, CustomCatalogEntry } from './types'
-import { isAmountOnlyLine, isChargeName, isRoundupLine } from './types'
+import { isAmountOnlyLine, isBuyingBill, isChargeName, isRoundupLine } from './types'
 import { canonicalUnit, foldName } from '../../convex/lib/text'
 import { withUnitRate } from './linePick'
 
@@ -34,7 +34,6 @@ export const RATES_KEPT = 8
  * default stays a selling price, because a default quietly set to cost price
  * sells the stock at cost.
  */
-const isBuying = (kind: BillKind) => kind === 'purchase' || kind === 'grn'
 
 /** The per-piece figure this line was billed at, or 0 when there is none. */
 export function unitRateOf(item: Pick<BillItem, 'qty' | 'amount'>): number {
@@ -57,8 +56,10 @@ export function catalogChangesFor(
   items: BillItem[],
   catalog: CustomCatalogEntry[],
   kind: BillKind,
+  /** The bill's account is a supplier's — decides a goods return. */
+  supplier = false,
 ): CatalogChange[] {
-  const buying = isBuying(kind)
+  const buying = isBuyingBill(kind, supplier)
   const changes: CatalogChange[] = []
   // Names added earlier in this same bill, so two lines of the same new item
   // do not each add their own entry.

@@ -10,8 +10,8 @@
  * Each side of the books keeps to its own: what a supplier sold the shop says
  * nothing about how the shop sells it.
  */
-import type { Bill, BillItem, BillKind } from './types'
-import { isAmountOnlyLine, isChargeName, isRoundupLine } from './types'
+import type { Bill, BillItem } from './types'
+import { isAmountOnlyLine, isBuyingBill, isChargeName, isRoundupLine, MONEY_BILL_KINDS } from './types'
 import { canonicalUnit, foldName } from '../../convex/lib/text'
 
 export interface RecalledItem {
@@ -36,7 +36,6 @@ export interface ItemHistory {
 
 const RECENT_KEPT = 40
 
-const buyingKind = (kind: BillKind | undefined) => kind === 'purchase' || kind === 'grn'
 
 /** A line that is goods, as against a fare, a round-off, a discount or a blank. */
 export function isGoodsLine(i: BillItem): boolean {
@@ -63,10 +62,14 @@ export function recalled(i: BillItem): RecalledItem {
  * taken newest first by when they were written, and lines within a bill last
  * first, so "most recent" means what the counter last typed.
  */
-export function itemHistory(bills: Bill[], kind: BillKind | undefined): ItemHistory {
-  const buying = buyingKind(kind)
+/**
+ * `buying` is the side this bill is on (see isBuyingBill); `suppliers` are the
+ * supplier accounts, so a past goods return is read on the side it was on.
+ */
+export function itemHistory(bills: Bill[], buying: boolean, suppliers: Set<string> = new Set()): ItemHistory {
   const ordered = bills
-    .filter((b) => buyingKind(b.kind) === buying && b.kind !== 'receipt' && b.kind !== 'payment' && b.kind !== 'refund')
+    .filter((b) => isBuyingBill(b.kind, suppliers.has(String(b.ledgerId ?? ''))) === buying
+      && !MONEY_BILL_KINDS.includes(b.kind ?? 'sale'))
     .slice()
     .sort((a, b) => (b.updatedAt ?? b.postedAt ?? 0) - (a.updatedAt ?? a.postedAt ?? 0) || b.date.localeCompare(a.date))
 

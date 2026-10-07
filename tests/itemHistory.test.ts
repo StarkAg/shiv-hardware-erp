@@ -15,25 +15,38 @@ describe('what the shop billed lately', () => {
   ]
 
   test('an item opens in the unit it last went out in', () => {
-    const h = itemHistory(bills, 'sale')
+    const h = itemHistory(bills, false)
     expect(h.unitOf.get('screw 1 inch')).toBe('Pkt')
     expect(h.unitOfEntry.get('scr')).toBe('Pkt')
   })
 
   test('the last item entered comes first, each item once, with its rate', () => {
-    const h = itemHistory(bills, 'sale')
+    const h = itemHistory(bills, false)
     expect(h.recent.map((r) => r.description)).toEqual(['Fevicol 1kg', 'Screw 1 Inch'])
     expect(h.recent[1].rate).toBe(250)
   })
 
   test('purchases and sales keep their own history', () => {
-    expect(itemHistory(bills, 'purchase').recent.map((r) => r.description)).toEqual(['Plywood 19mm'])
-    expect(itemHistory(bills, 'sale').unitOf.has('plywood 19mm')).toBe(false)
+    expect(itemHistory(bills, true).recent.map((r) => r.description)).toEqual(['Plywood 19mm'])
+    expect(itemHistory(bills, false).unitOf.has('plywood 19mm')).toBe(false)
   })
 
   test('Up offers the lines above first, nearest first, without repeats', () => {
-    const h = itemHistory(bills, 'sale')
+    const h = itemHistory(bills, false)
     const above = [line('Hinge 4 Inch', 'Pc', 4, 80), line('Fevicol 1kg', 'Pc', 1, 420)]
     expect(recallList(above, h.recent).map((r) => r.description)).toEqual(['Fevicol 1kg', 'Hinge 4 Inch', 'Screw 1 Inch'])
+  })
+})
+
+describe('a goods return', () => {
+  test('is read on the side of the account it was on', () => {
+    const ret = (ledgerId: string, description: string) => ({
+      id: ledgerId, number: '9', date: '2026-10-01', customerName: 'X', kind: 'return' as const, ledgerId,
+      items: [{ id: 'a', description, qty: 1, unit: 'Pc', amount: 100 }],
+    })
+    const bills = [ret('sup', 'Sent Back'), ret('cus', 'Came Back')] as never
+    const suppliers = new Set(['sup'])
+    expect(itemHistory(bills, true, suppliers).recent.map((r) => r.description)).toEqual(['Sent Back'])
+    expect(itemHistory(bills, false, suppliers).recent.map((r) => r.description)).toEqual(['Came Back'])
   })
 })

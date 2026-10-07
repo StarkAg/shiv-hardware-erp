@@ -43,10 +43,10 @@ const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
   onClose: () => void
 }) => JSX.Element
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
-import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS, isQuotation, nextQuoteNumber } from '../../lib/types'
+import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS, isQuotation, isBuyingBill, nextQuoteNumber, DEFAULT_PAYMENT_MODE } from '../../lib/types'
 import type { BillKind } from '../../lib/types'
 import { DEFAULT_GST_RATE, GST_RATES, handLines, withCharges, type BillCharges } from '../../lib/billCharges'
-import { buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
+import { MONEY_KINDS, buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
 import { deviceId, deviceName } from '../../lib/device'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
@@ -66,7 +66,7 @@ import { canonicalUnit, foldName, isWithoutBillParty } from '../../../convex/lib
 import { catalogChangesFor } from '../../lib/learnCatalog'
 import { paidByDefault, withPaidDefault } from '../../lib/paidDefault'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
-import { StockMoves } from './StockMoves'
+import { StockMoves, stockGoesOut } from './StockMoves'
 import { convexEnabled } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
@@ -373,6 +373,8 @@ function buildDescription(category: ProductCategory | undefined, brandName: stri
 
 // --- Smart item row -------------------------------------------------------
 interface SmartItemRowProps {
+  /** The bill's account is a supplier's — decides which side a goods return is on. */
+  supplierSide?: boolean
   item: BillItem
   idx: number
   onUpdate: (id: string, patch: Partial<BillItem>) => void
@@ -401,7 +403,7 @@ interface SmartItemRowProps {
   linesAbove: BillItem[]
 }
 
-function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, myItems, kind, disabled, history, sold, lines, linesAbove }: SmartItemRowProps) {
+function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone, myItems, kind, supplierSide = false, disabled, history, sold, lines, linesAbove }: SmartItemRowProps) {
   const { sets, hardwareCatalog, setHardwareCatalog, customCatalog, addCustomEntry, updateCustomEntry, units, addUnit } = useStore()
 
   /** Stored units plus an "add" row, so the list only holds what the shop uses. */
@@ -451,7 +453,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   }
   const activeSet = sets[0]
   /** A supplier's side of the books: its prices are never a selling rate. */
-  const buying = kind === 'purchase' || kind === 'grn'
+  const buying = isBuyingBill(kind, supplierSide)
   const catSizes  = (cat: ProductCategory) => hardwareCatalog[cat]?.sizes ?? []
   const catBrands = (cat: ProductCategory) => hardwareCatalog[cat]?.brands ?? []
   const catFields = (cat: ProductCategory) => (hardwareCatalog[cat]?.fields ?? []).filter(f => f.values.length > 0)
@@ -2087,7 +2089,6 @@ type PartyOption = {
  * both the customer's; a purchase and a payment are both the supplier's.
  */
 /** The two vouchers that are money and nothing else. */
-const MONEY_KINDS: BillKind[] = ['receipt', 'payment', 'refund']
 
 const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier' | 'both'> = {
   sale: 'customer',
@@ -2116,7 +2117,7 @@ function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
     items: [emptyItem()],
     total: 0,
     paid: false,
-    paymentMode: 'cash',
+    paymentMode: DEFAULT_PAYMENT_MODE,
     upiRef: '',
     notes: '',
   }
@@ -2330,9 +2331,6 @@ export function BillBuilder() {
 
   const existing = id ? bills.find((b) => b.id === id) : undefined
   const [draft, setDraft] = useState<Bill>(() => (existing ? forEditing(existing) : emptyBill(nextBillNumber())))
-  // What this side of the books has billed lately, newest first.
-  const historyKind = (draft.kind ?? 'sale') === 'purchase' || draft.kind === 'grn' ? 'purchase' : 'sale'
-  const history = useMemo(() => itemHistory(bills, historyKind), [bills, historyKind])
   /** A quotation takes the next Q- number; everything else the next bill number. */
   const numberFor = (k: BillKind) => (k === 'quotation' ? nextQuoteNumber(bills) : nextBillNumber())
   const [panelList, setPanelList] = useState<PanelList | null>(null)
@@ -2379,15 +2377,6 @@ export function BillBuilder() {
       ? [partyGroup, 'Staff', 'Rent Payable']
       : [partyGroup]
   const masters = useQuery(api.masters.all, {})
-  // What each item last sold at, for a sale line this bill does not already
-  // price: the panel's own sales and the customers' slips read into the books,
-  // read as Shiv Rates reads them.
-  const scanned = useQuery(api.review.goods, historyKind === 'sale' ? { limit: 5000 } : 'skip')
-  const sold = useMemo(() => {
-    if (historyKind !== 'sale') return new Map<string, SoldRate>()
-    const customers = new Set((masters?.ledgers ?? []).filter(l => l.groupName === 'Sundry Debtors').map(l => String(l._id)))
-    return lastSoldRates(bills, scanned?.lines ?? [], (id) => customers.has(id))
-  }, [bills, scanned, masters, historyKind])
   // The deliveries a purchase can be the bill for, and the ones this very
   // purchase already bills.
   const deliveries = useQuery(
@@ -2409,6 +2398,23 @@ export function BillBuilder() {
   }, [masters, draft.customerName, kind])
   /** Which side of the books this voucher's party is on, as far as can be told. */
   const sideGroup = kind === 'return' ? (namedAccount?.groupName ?? 'Sundry Debtors') : partyGroup
+  /** Buying or selling — a return to a supplier is buying. Decides which rates are offered and learned. */
+  const buying = isBuyingBill(kind, sideGroup === 'Sundry Creditors')
+  const suppliers = useMemo(
+    () => new Set((masters?.ledgers ?? []).filter((l: any) => l.groupName === 'Sundry Creditors').map((l: any) => String(l._id))),
+    [masters],
+  )
+  // What this side of the books has billed lately, newest first.
+  const history = useMemo(() => itemHistory(bills, buying, suppliers), [bills, buying, suppliers])
+  // What each item last sold at, for a sale line this bill does not already
+  // price: the panel's own sales and the customers' slips read into the books,
+  // read as Shiv Rates reads them.
+  const scanned = useQuery(api.review.goods, !buying ? { limit: 5000 } : 'skip')
+  const sold = useMemo(() => {
+    if (buying) return new Map<string, SoldRate>()
+    const customers = new Set((masters?.ledgers ?? []).filter(l => l.groupName === 'Sundry Debtors').map(l => String(l._id)))
+    return lastSoldRates(bills, scanned?.lines ?? [], (id) => customers.has(id))
+  }, [bills, scanned, masters, buying])
 
   const liveCustomers = useMemo<PartyOption[]>(() => {
     const byName = new Map<string, PartyOption>()
@@ -2698,7 +2704,6 @@ export function BillBuilder() {
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoPicked, setPhotoPicked] = useState<{ _id: string; storageId: string; source?: 'voucher' | 'legacy' }[]>([])
   const ledgerDark = useLedgerTheme()
-  const [photoOpen, setPhotoOpen] = useState(false)
   const [photoShown, setPhotoShown] = useState<unknown>(null)
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
@@ -3170,7 +3175,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
    * src/lib/learnCatalog.ts, where it is tested. This only applies the answer.
    */
   function learnItemsFrom(items: BillItem[], kind: BillKind) {
-    for (const change of catalogChangesFor(items, customCatalog, kind)) {
+    for (const change of catalogChangesFor(items, customCatalog, kind, sideGroup === 'Sundry Creditors')) {
       if (change.op === 'add') {
         const { op: _op, name, ...rest } = change
         const id = addCustomEntry(name)
@@ -3706,7 +3711,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               the purchase book — not a customer on credit whose phone and
               Aadhaar are taken so they can be chased. Asking for them on a
               purchase is two boxes to tab past on every voucher. */}
-          {!isSupplierVoucher && !isWithoutBillSale && (
+          {!isSupplierVoucher && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">Phone (optional)</label>
             <input
@@ -3737,7 +3742,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             />
           </div>
           )}
-          {!isSupplierVoucher && !isWithoutBillSale && (
+          {!isSupplierVoucher && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">UID (optional)</label>
             <input
@@ -3914,6 +3919,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 onBlankRowDone={finishItemEntry}
                 myItems={myItems}
                 kind={draft.kind ?? 'sale'}
+                supplierSide={sideGroup === 'Sundry Creditors'}
                 disabled={draft.items.length === 1}
                 history={history}
                 sold={sold}
@@ -3934,7 +3940,11 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           {/* The total as one figure, and the stock it moved — for a bill
               entered from its photo rather than line by line. */}
           {convexEnabled() && !isQuotation(draft) && (
-            <StockMoves bill={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} />
+            <StockMoves
+              bill={draft}
+              out={stockGoesOut(draft.kind, sideGroup)}
+              onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+            />
           )}
 
           {/* A delivery note is goods and counts; tax and discount belong to the bill. */}
@@ -4006,20 +4016,27 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             )}
             {(isMoneyVoucher || (draft.paidAmount ?? 0) > 0 || paidByDefault(draft, total)) && (
               <div className="flex items-center gap-1 rounded-xl bg-stone-100 p-1 dark:bg-stone-800">
-                {(['cash', 'online'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setDraft((d) => ({ ...d, paymentMode: mode }))}
-                    className={`rounded-lg px-3 py-1 text-xs font-semibold capitalize ${
-                      (draft.paymentMode ?? 'cash') === mode
-                        ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-white'
-                        : 'text-muted'
-                    }`}
-                  >
-                    {mode === 'cash' ? 'Cash' : 'Bank'}
-                  </button>
-                ))}
+                {/* UPI first and picked on a new bill. An older bill marked
+                    "online" went to Bank the same way, so it shows as UPI; one
+                    with no mode at all was posted as cash, and shows as Cash. */}
+                {(['upi', 'cash'] as const).map((mode) => {
+                  const current = draft.paymentMode ?? 'cash'
+                  const on = mode === 'cash' ? current === 'cash' : current !== 'cash'
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setDraft((d) => ({ ...d, paymentMode: mode }))}
+                      className={`rounded-lg px-3 py-1 text-xs font-semibold ${
+                        on
+                          ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-white'
+                          : 'text-muted'
+                      }`}
+                    >
+                      {mode === 'cash' ? 'Cash' : 'UPI'}
+                    </button>
+                  )
+                })}
               </div>
             )}
             <div className="rounded-xl bg-stone-100 px-5 py-2 dark:bg-stone-800">
@@ -4097,52 +4114,30 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           )}
         </div>
 
-        {/* The paper this was written from, if there is any.
-            Closed until asked for: the picker lists every photograph the phone
-            has sent in and nobody has filed, which is a wall of pictures on a
-            bill that has none — and most bills written at the counter have
-            none, because the counter is where the bill is being made.
+        {/* The paper this was written from. Always open, under its own
+            heading: most bills now go in from their photo, so the photo is
+            where the entry starts, not something to go looking for.
             Quotations can keep the same supporting photos as a bill. */}
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPhotoOpen((open) => !open)}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                photoOpen
-                  ? 'border-shiv-green bg-shiv-green/10 text-stone-900 dark:text-white'
-                  : 'border-stone-300 border-dashed text-muted hover:border-stone-400 hover:bg-stone-50 dark:border-white/15  dark:hover:bg-white/5'
-              }`}
-            >
-              <Camera size={15} />
-              {photoLabel}
-              {photoCount > 0 && (
-                <span className="rounded-full bg-shiv-green px-1.5 py-0.5 text-[10px] font-bold text-stone-950">
-                  {photoCount}
-                </span>
-              )}
-              {photoOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-
-            {!photoOpen && photoCount > 0 && (
-              <span className="text-xs text-muted">
-                attached to this bill
+          <div className="flex items-center gap-2 border-b border-stone-200 pb-1.5 dark:border-white/10">
+            <Camera size={15} className="text-muted" aria-hidden="true" />
+            <h3 className="text-sm font-bold text-stone-900 dark:text-white">{photoLabel}</h3>
+            {photoCount > 0 && (
+              <span className="rounded-full bg-shiv-green px-1.5 py-0.5 text-[10px] font-bold text-stone-950">
+                {photoCount}
               </span>
             )}
           </div>
-
-          {photoOpen && (
-            <div className={`ledger-root mt-2 ${ledgerDark ? 'dark' : ''}`}>
-              <BillDrop
-                files={photoFiles}
-                attached={draft.attachments ?? []}
-                onChange={setPhotoFiles}
-                picked={photoPicked}
-                onPick={setPhotoPicked}
-                onViewBill={setPhotoShown}
-              />
-            </div>
-          )}
+          <div className={`ledger-root mt-2 ${ledgerDark ? 'dark' : ''}`}>
+            <BillDrop
+              files={photoFiles}
+              attached={draft.attachments ?? []}
+              onChange={setPhotoFiles}
+              picked={photoPicked}
+              onPick={setPhotoPicked}
+              onViewBill={setPhotoShown}
+            />
+          </div>
         </div>
 
         {photoShown != null && (
@@ -4283,6 +4278,16 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   // Every bill is a bill: there are no drafts to keep apart any more.
   const finished = bills
 
+  // Whose side a bill not yet in the books is on: its kind says, except a
+  // goods return, which goes by the group of the account it names.
+  const masters = useQuery(api.masters.all, {})
+  const billSide = (b: Bill): 'customers' | 'suppliers' => {
+    const side = PARTY_SIDE[b.kind ?? 'sale']
+    if (side !== 'both') return side === 'supplier' ? 'suppliers' : 'customers'
+    const group = (masters?.ledgers ?? []).find((l: any) => String(l._id) === String(b.ledgerId ?? ''))?.groupName
+    return group === 'Sundry Creditors' ? 'suppliers' : 'customers'
+  }
+
   const rows = useMemo<DayRow[]>(() => {
     // Notes written in the cash drawer are posted to the books (ref CASH-c-…)
     // so the ledgers balance, but they belong to the Cash page, not here.
@@ -4334,7 +4339,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         party: b.customerName || '—',
         partyId: b.ledgerId,
         ref: b.ref || '',
-        side: sideOf(billLabel(b)),
+        side: billSide(b),
         account: quote ? 'Quotation — not in the books' : b.postError ? `Not posted — ${b.postError}` : 'Not posted',
         quote,
         amount: b.total,
@@ -4354,7 +4359,8 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     return byDate
       ? list.sort((a, b) => b.date - a.date || b.label.localeCompare(a.label))
       : list.sort((a, b) => b.entered - a.entered || b.label.localeCompare(a.label))
-  }, [vouchers, finished, from, to, bills, onRetry, byDate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vouchers, finished, from, to, bills, onRetry, byDate, masters])
 
   const total = rows.reduce((s, r) => s + (r.quote ? 0 : r.amount ?? 0), 0)
 

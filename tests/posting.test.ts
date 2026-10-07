@@ -602,8 +602,9 @@ describe('a W/B sale', () => {
     expect(partyEntries.reduce((sum, e) => sum + (e.side === 'Dr' ? e.amount : -e.amount), 0)).toBe(0)
     expect(partyEntries).toHaveLength(2)
     expect(result.bill.paidAmount).toBe(1000)
-    expect(result.bill.customerPhone).toBe('')
-    expect(result.bill.customerUid).toBe('')
+    // A walk-in's number is kept when it was typed, like anybody else's.
+    expect(result.bill.customerPhone).toBe('9876543210')
+    expect(result.bill.customerUid).toBe('123456789012')
 
     const sale = (await vouchers(t)).find(v => v._id === result.voucherId)!
     const saleLines = entries.filter(e => e.voucherId === sale._id)

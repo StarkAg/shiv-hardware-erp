@@ -23,7 +23,11 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
   const [name, setName] = useState(edit?.name ?? '');
   const [groupId, setGroupId] = useState(edit?.groupId ?? creditorGroup?._id ?? groups[0]?._id ?? '');
   const [opening, setOpening] = useState(edit?.openingBalance ? String(edit.openingBalance) : '');
-  const [side, setSide] = useState(edit?.openingSide ?? 'Cr');
+  // A new account's opening sits on its group's normal side — a customer owes
+  // (Dr), a supplier is owed (Cr) — and follows the group until it is set by hand.
+  const sideOf = (id) => groups.find((g) => g._id === id)?.normalSide ?? 'Cr';
+  const [side, setSide] = useState(edit?.openingSide ?? sideOf(edit?.groupId ?? creditorGroup?._id ?? groups[0]?._id));
+  const [sideSet, setSideSet] = useState(Boolean(edit));
   const [asOf, setAsOf] = useState(inputDate(edit?.openingAsOf ?? today()));
   const [phone, setPhone] = useState(edit?.phone ?? '');
   const [aadhaar, setAadhaar] = useState(aadhaarGroups(edit?.aadhaar ?? ''));
@@ -107,7 +111,10 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
                   type="button"
                   key={g._id}
                   className={`chip${groupId === g._id ? ' on' : ''}`}
-                  onClick={() => setGroupId(g._id)}
+                  onClick={() => {
+                    setGroupId(g._id);
+                    if (!sideSet) setSide(sideOf(g._id));
+                  }}
                 >
                   {g.label}
                 </button>
@@ -135,7 +142,7 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
                   type="button"
                   key={s_}
                   className={`chip${side === s_ ? ' on' : ''}`}
-                  onClick={() => setSide(s_)}
+                  onClick={() => { setSide(s_); setSideSet(true); }}
                 >
                   {s_}
                 </button>

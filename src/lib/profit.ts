@@ -1,4 +1,4 @@
-import { billCharges, billLines, type Bill, type BillItem } from './types'
+import { billCharges, billLines, isBuyingBill, type Bill, type BillItem } from './types'
 
 /**
  * What the shop actually made on what it sold.
@@ -267,6 +267,8 @@ export interface Books {
   same?: SameGoods[]
   /** Costs the shop has settled by hand. */
   costs?: CostOverride[]
+  /** Supplier accounts: a goods return on one went back to a supplier, so it is no sale. */
+  suppliers?: Set<string>
 }
 
 /**
@@ -286,6 +288,8 @@ export function profitLines(bills: Bill[], books: Books = {}): ProfitLine[] {
   for (const bill of bills) {
     const kind = bill.kind ?? 'sale'
     if (kind !== 'sale' && kind !== 'return') continue
+    // Goods sent back to a supplier are the buying side, not a sale undone.
+    if (isBuyingBill(kind, books.suppliers?.has(String(bill.ledgerId ?? '')))) continue
     const sign = kind === 'return' ? -1 : 1
 
     for (const item of billLines(bill.items ?? [])) {

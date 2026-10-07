@@ -80,14 +80,35 @@ function markUnpaid(sales: Line[] | undefined, receipts: Line[] | undefined) {
   }
 }
 
+/** Entries that belong on none of the four quarters: discounts, journals, expenses. */
+const OTHER = 'Other'
+
 /**
- * Entries kept on another kind's quarter. Goods that came in before their bill
- * are written on the purchase lines, marked GRN, as the counter does by hand.
- * With no amount until the bill prices them, the line carries the first thing
- * that came instead.
+ * Where an entry is written on the sheet. Every kind lands somewhere — a page
+ * that leaves entries off is a page nobody can trust.
+ *
+ * The four kinds go on their own quarters. The rest go where the counter would
+ * write them by hand, marked so they read for what they are: goods that came
+ * in before their bill on the purchases (GRN), carrying the first thing that
+ * came since there is no amount yet; a goods return on the side it came from
+ * or went back to (RET), taken off that quarter's total; a refund with the
+ * payments (REF), since it is money handed out. Anything else is listed under
+ * the sheet.
  */
-const SAME_QUARTER: Record<string, { type: string; tag: string }> = {
-  'Goods Received': { type: 'Purchase', tag: 'GRN' },
+function placeOf(v: { vchType: string; vchLabel: string; partyGroup?: string }): { type: string; tag?: string; minus?: boolean } {
+  const supplier = v.partyGroup === 'Sundry Creditors'
+  switch (v.vchType) {
+    case 'Purchase': case 'Payment': case 'Receipt': case 'Sale':
+      return { type: v.vchType }
+    case 'Goods Received':
+      return { type: 'Purchase', tag: 'GRN' }
+    case 'Goods Return': case 'Purchase Return':
+      return { type: supplier ? 'Purchase' : 'Sale', tag: 'RET', minus: true }
+    case 'Refund':
+      return { type: 'Payment', tag: 'REF' }
+    default:
+      return { type: OTHER, tag: v.vchLabel.split('-')[0] }
+  }
 }
 
 /**
@@ -197,8 +218,9 @@ function PaperFor({ day }: { day: string }) {
 
   const byType = new Map<string, Line[]>()
   for (const v of [...(vouchers ?? [])].sort((a, b) => (a.createdAt ?? a.date) - (b.createdAt ?? b.date))) {
-    const moved = SAME_QUARTER[v.vchType]
-    const type = moved?.type ?? v.vchType
+    const place = placeOf(v)
+    const type = place.type
+    const amount = v.status === 'final' && v.amount != null ? (place.minus ? -v.amount : v.amount) : null
     const list = byType.get(type) ?? []
     const to = v.partyLedgerId
       ? `/ledger/${v.partyGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'}/${v.partyLedgerId}`
@@ -208,8 +230,8 @@ function PaperFor({ day }: { day: string }) {
       partyId: v.partyLedgerId,
       key: v._id,
       party: v.party,
-      amount: v.status === 'final' ? v.amount ?? null : null,
-      tag: moved?.tag,
+      amount,
+      tag: place.tag,
       item: v.firstItem ? `${v.firstItem.text}${v.firstItem.more > 0 ? ` +${v.firstItem.more}` : ''}` : undefined,
     })
     byType.set(type, list)
@@ -224,7 +246,12 @@ function PaperFor({ day }: { day: string }) {
 
   markUnpaid(byType.get('Sale'), byType.get('Receipt'))
 
-  return <Sheet lines={(i) => byType.get(QUARTERS[i].type)} />
+  return (
+    <>
+      <Sheet lines={(i) => byType.get(QUARTERS[i].type)} />
+      <Others lines={byType.get(OTHER)} />
+    </>
+  )
 }
 
 function Sheet({ lines }: { lines: (index: number) => Line[] | undefined }) {
@@ -233,6 +260,32 @@ function Sheet({ lines }: { lines: (index: number) => Line[] | undefined }) {
       {QUARTERS.map((q, i) => (
         <Quarter key={q.kind} index={i} lines={lines(i)} />
       ))}
+    </div>
+  )
+}
+
+/** The day's other entries, under the sheet — only when there are any. */
+function Others({ lines }: { lines?: Line[] }) {
+  if (!lines?.length) return null
+  return (
+    <div className="mx-auto mt-3 max-w-5xl rounded-sm bg-[#fffdf8] p-4 shadow-sm ring-1 ring-stone-300">
+      <div className="pb-1 text-sm font-bold text-stone-900">Other entries</div>
+      <ul className="divide-y divide-dashed divide-stone-200">
+        {lines.map((r) => (
+          <li key={r.key}>
+            <Link
+              to={r.to ?? '#'}
+              className="flex items-center gap-2 rounded-sm px-1 py-1.5 text-sm text-stone-800 hover:bg-amber-100"
+            >
+              {r.tag && (
+                <span className="shrink-0 rounded border border-stone-300 px-1 text-[10px] font-bold leading-4 text-stone-600">{r.tag}</span>
+              )}
+              <span className="min-w-0 flex-1 truncate">{r.party}</span>
+              <span className="shrink-0 tabular-nums">{r.amount === null ? '—' : rupees(r.amount)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

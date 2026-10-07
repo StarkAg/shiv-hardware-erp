@@ -30,11 +30,22 @@ const isBillLine = (i: BillItem) => !!i.amountOnly && /^bill$/i.test(i.descripti
 const hasGoodsLines = (items: BillItem[]) =>
   items.some((i) => i.description.trim() && !isAmountOnlyLine(i) && !isRoundupLine(i))
 
-export function StockMoves({ bill, onChange }: { bill: Bill; onChange: (patch: Partial<Bill>) => void }) {
+/**
+ * Which way this bill moves the shelf, the way the stock count reads it: a sale
+ * or a return to a supplier takes off; a purchase, a delivery or a customer's
+ * return puts on.
+ */
+export const stockGoesOut = (kind: Bill['kind'], partyGroup?: string) =>
+  (kind ?? 'sale') === 'sale' || ((kind ?? 'sale') === 'return' && partyGroup === 'Sundry Creditors')
+
+export function StockMoves({ bill, out, onChange }: {
+  bill: Bill
+  /** Whether the stock leaves the shelf — see `stockGoesOut`. */
+  out: boolean
+  onChange: (patch: Partial<Bill>) => void
+}) {
   const list = useQuery(api.inventory.seedList, {}) as StockRow[] | undefined
   const lines = bill.stock ?? []
-  const kind = bill.kind ?? 'sale'
-  const out = kind === 'sale'
   const billLine = bill.items.find(isBillLine)
   const showTotal = !hasGoodsLines(bill.items)
 

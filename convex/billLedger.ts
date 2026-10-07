@@ -313,8 +313,6 @@ export const postBill = mutation({
     // A cashier entry has already posted the money. The goods voucher must not
     // post that same cash again, even if the read draft carries "paid".
     if (kind === 'sale' && isWithoutBillParty(customerName)) {
-      bill.customerPhone = ''
-      bill.customerUid = ''
       bill.paidAmount = hasAmount ? total : 0
       bill.paid = hasAmount
     }

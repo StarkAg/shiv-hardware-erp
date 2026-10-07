@@ -2,7 +2,7 @@
 // Used for the in-app preview (iframe srcdoc) so preview === printed output.
 
 import type { Bill } from './types'
-import { isRoundupLine, isAmountOnlyLine, billLines, billCharges } from './types'
+import { isRoundupLine, isAmountOnlyLine, billLines, billCharges, MONEY_BILL_KINDS } from './types'
 
 const BILL_LABEL: Record<string, string> = {
   'block-board-19': '19mm Block Board',
@@ -192,12 +192,18 @@ export function rupeesInWords(amount: number): string {
  * a bill with one odd line on it and a total that read as a demand for money
  * already in the drawer.
  */
+/** Money moving and nothing else: a receipt, a payment, or a refund handed back. */
+export const MONEY_KINDS = MONEY_BILL_KINDS
+export const isMoneyKind = (kind: Bill['kind']) => !!kind && MONEY_KINDS.includes(kind)
+
 function buildReceiptHtml(bill: Bill): string {
-  const paying = bill.kind === 'payment'
-  const discount = Math.max(0, Number(bill.discount) || 0)
+  // A refund is money paid out too, only to a customer; nothing is let off it.
+  const refund = bill.kind === 'refund'
+  const paying = bill.kind === 'payment' || refund
+  const discount = refund ? 0 : Math.max(0, Number(bill.discount) || 0)
   const settled = Number(bill.total) || 0
   const money = Math.max(0, settled - discount)
-  const mode = bill.paymentMode === 'online' || bill.paymentMode === 'upi' ? 'Bank' : 'Cash'
+  const mode = bill.paymentMode === 'upi' ? 'UPI' : bill.paymentMode === 'online' ? 'Bank' : 'Cash'
 
   const row = (label: string, value: string) => `
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6mm;padding:1.4mm 0;border-bottom:0.5px dotted #bbb">
@@ -207,7 +213,7 @@ function buildReceiptHtml(bill: Bill): string {
 
   return `<div style="position:relative;width:148mm;min-height:210mm;margin:0 auto;padding:10mm 9mm;box-sizing:border-box;background:#fff">
     <div style="display:flex;justify-content:space-between;align-items:center;font-size:7.5pt;letter-spacing:5px;color:#888;text-transform:uppercase;padding-bottom:1.5mm;border-bottom:0.5px solid #bbb">
-      <span>${paying ? 'Payment Voucher' : 'Receipt'}</span>
+      <span>${refund ? 'Refund' : paying ? 'Payment Voucher' : 'Receipt'}</span>
       <span>${esc(bill.number)}</span>
     </div>
 
@@ -246,7 +252,7 @@ function buildReceiptHtml(bill: Bill): string {
 export function buildBillHtml(bill: Bill): string {
   // A receipt and a payment are money, not goods, and print as their own
   // document — one page, no item table, no running total.
-  const pagesHtml = (bill.kind === 'receipt' || bill.kind === 'payment')
+  const pagesHtml = isMoneyKind(bill.kind)
     ? buildReceiptHtml(bill)
     : buildEstimatePages(bill)
   return wrapPages(pagesHtml)
@@ -323,7 +329,7 @@ function buildEstimatePages(bill: Bill): string {
 
     // Money taken against the bill, and what is still owed after it. A receipt
     // or a payment is the money itself, so there is nothing to take off it.
-    const isMoneyVoucher = bill.kind === 'receipt' || bill.kind === 'payment'
+    const isMoneyVoucher = isMoneyKind(bill.kind)
     const received = isMoneyVoucher
       ? 0
       : Math.min(Math.max(Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0, 0), Number(bill.total) || 0)

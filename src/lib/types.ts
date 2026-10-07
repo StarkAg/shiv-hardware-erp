@@ -257,6 +257,9 @@ export const CATEGORY_META: Record<
 
 export type BillPaymentMode = 'cash' | 'online' | 'upi'
 
+/** How money on a new bill is taken unless somebody taps otherwise. UPI and online post to Bank. */
+export const DEFAULT_PAYMENT_MODE: BillPaymentMode = 'upi'
+
 /** The four vouchers the bill builder can write. */
 /**
  * `return` is a Goods Return: goods coming back from a customer or going back to
@@ -363,6 +366,22 @@ const AMOUNT_ONLY_NAMES = /^(?:bill|fare|cartage|freight|labour|labor|transport|
 
 /** A name the counter writes for a charge on the bill rather than goods. */
 export const isChargeName = (name: string | undefined) => AMOUNT_ONLY_NAMES.test((name ?? '').trim())
+
+/**
+ * Whether a bill is the shop buying — its prices are cost — or selling.
+ *
+ * Purchases and deliveries are buying. A goods return goes by whose account it
+ * is on: back to a supplier is the buying side (its prices are what the shop
+ * paid), back from a customer is the selling side. Asked by every place that
+ * learns a rate or counts a sale, so they cannot disagree.
+ */
+/** Money moving and nothing else: a receipt, a payment, or a refund handed back. */
+export const MONEY_BILL_KINDS: BillKind[] = ['receipt', 'payment', 'refund']
+
+export const isBuyingBill = (kind: BillKind | undefined, supplier = false) => {
+  const k = kind ?? 'sale'
+  return k === 'purchase' || k === 'grn' || (k === 'return' && supplier)
+}
 
 export const isAmountOnlyLine = (i: Pick<BillItem, 'amountOnly' | 'description'>) =>
   !!i.amountOnly || AMOUNT_ONLY_NAMES.test((i.description ?? '').trim())
