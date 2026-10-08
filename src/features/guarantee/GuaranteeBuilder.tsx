@@ -622,7 +622,6 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-3 dark:border-white/10">
                 <div>
                   <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Items</h2>
-                  <p className="text-xs text-muted">One guarantee period applies to every item on this card.</p>
                 </div>
                 <label className="flex items-center gap-2 text-xs font-semibold text-muted">
                   Guarantee period

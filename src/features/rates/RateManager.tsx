@@ -103,7 +103,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
     <div>
       <PageHeader
         title="Rate Manager"
-        subtitle="Maintain price sets — rates are ₹ per sqft"
+        subtitle="₹ per sqft"
         actions={
           <>
             {dirty && (
@@ -159,7 +159,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={addSet} className="flex items-center gap-1.5">
-              <Copy size={15} /> Duplicate to new set
+              <Copy size={15} /> Duplicate
             </Button>
             <Button
               variant="ghost"

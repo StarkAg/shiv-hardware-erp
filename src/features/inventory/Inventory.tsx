@@ -327,9 +327,6 @@ export function Inventory() {
 
       {tab === 'catalog' && (
         <div className="mx-auto max-w-2xl space-y-3 px-4 pb-24 pt-4">
-          <p className="text-xs text-muted">
-            Manage sizes, brands and custom fields for each item. Changes reflect instantly in bill making.
-          </p>
 
           {/* Built-in categories */}
           {HARDWARE_CATS.map((cat) => (
@@ -364,7 +361,7 @@ export function Inventory() {
               <input
                 autoFocus
                 type="text"
-                placeholder="Item name (e.g. Drawer Channel)"
+                placeholder="Item name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {

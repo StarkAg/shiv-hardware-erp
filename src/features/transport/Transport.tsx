@@ -75,7 +75,7 @@ export function Transport() {
             New Order
           </Button>
           <p className="text-sm text-muted">
-            {totoDrivers.length} vehicles · starts a fresh call round
+            {totoDrivers.length} vehicles
           </p>
         </div>
       )}

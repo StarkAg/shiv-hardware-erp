@@ -326,7 +326,7 @@ export function GuaranteeHistory() {
       <Page>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="w-full max-w-sm">
-            <Input placeholder="Search number, name, mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           {convexReady && <CloudGuaranteeSync />}
         </div>

@@ -54,7 +54,7 @@ export function GuaranteeClaims({ cardLinks = false }: { cardLinks?: boolean }) 
   const convexReady = Boolean(import.meta.env.VITE_CONVEX_URL)
   return (
     <Page>
-      <PageHeader title="Guarantee Claims" subtitle="Filed by customers from their card's QR page" />
+      <PageHeader title="Claims" />
       {convexReady ? <ClaimList cardLinks={cardLinks} /> : <Card className="p-6 text-sm text-muted">Claims need the cloud connection (VITE_CONVEX_URL).</Card>}
     </Page>
   )

@@ -26,14 +26,14 @@ const NAV = [
   {
     label: 'Quotations',
     items: [
-      { to: '/quote-options', label: 'New Quotation', icon: FileText },
+      { to: '/quote-options', label: 'Quote', icon: FileText },
     ],
   },
   {
     label: 'Guarantee',
     items: [
-      { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck },
-      { to: '/guarantee/history', label: 'Guarantee History', icon: History },
+      { to: '/guarantee/card', label: 'Card', icon: ShieldCheck },
+      { to: '/guarantee/history', label: 'History', icon: History },
       { to: '/guarantee/claims', label: 'Claims', icon: Inbox, badge: true },
     ],
   },

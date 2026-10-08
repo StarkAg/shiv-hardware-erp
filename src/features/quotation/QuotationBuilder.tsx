@@ -245,7 +245,7 @@ export function QuotationBuilder() {
         {/* Optional customer details — hidden for fixed rate cards (no inputs) */}
         {!fixed && (
         <div className="shrink-0">
-          <Toggle checked={withCustomer} onChange={setWithCustomer} label="Add customer details (optional)" />
+          <Toggle checked={withCustomer} onChange={setWithCustomer} label="Customer details" />
         </div>
         )}
 
@@ -343,6 +343,20 @@ export function QuotationBuilder() {
         {/* On a phone the prices come first, straight under the size; the
             page as it prints follows below them. */}
         <div className="order-last md:order-none">
+          {/* What goes on the page is decided right above the page itself. */}
+          {hasSections(cat) && (
+              <button
+                type="button"
+                onClick={toggleWaterProofOnly}
+                aria-pressed={waterProofOnly}
+                className="mb-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-stone-200/90 bg-stone-50 px-3 py-2 text-left text-sm font-semibold shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 md:mb-3"
+              >
+                <span>Water proof only</span>
+                <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition ${waterProofOnly ? 'bg-shiv-green' : 'bg-stone-300 dark:bg-stone-700'}`}>
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${waterProofOnly ? 'left-[18px]' : 'left-0.5'}`} />
+                </span>
+              </button>
+            )}
           <InlineQuotationPreview quote={doc} />
         </div>
 
@@ -379,20 +393,27 @@ export function QuotationBuilder() {
               </table>
             ) : !aluLike ? (
             <>
-            {hasSections(cat) && (
-              <button
-                type="button"
-                onClick={toggleWaterProofOnly}
-                aria-pressed={waterProofOnly}
-                className="flex w-full items-center justify-between gap-3 border-b border-stone-100 px-3 py-2 text-left text-sm font-semibold dark:border-white/10"
-              >
-                <span>Water proof only <span className="font-normal text-muted">— leave out semi water proof &amp; commercial</span></span>
-                <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition ${waterProofOnly ? 'bg-shiv-green' : 'bg-stone-300 dark:bg-stone-700'}`}>
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${waterProofOnly ? 'left-[18px]' : 'left-0.5'}`} />
-                </span>
-              </button>
+            {/* On a phone, the prices as a list: the brand and its guarantee on
+                the left, what it costs large on the right, the rate under it. */}
+            {!editMode && (
+              <ul className="divide-y divide-stone-100 dark:divide-white/10 md:hidden">
+                {rows.map((r, i) => (
+                  <li key={i} className="flex items-center justify-between gap-3 px-3 py-2.5" style={tintedRowStyle(r)}>
+                    <div className="min-w-0">
+                      <div className="truncate text-[15px] font-semibold text-stone-900 dark:text-stone-50">{r.brandName}</div>
+                      {r.guaranteeYears ? (
+                        <div className="text-xs font-semibold text-shiv-red">{coverageLabel(r.coverage)} {r.guaranteeYears} years</div>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-base font-bold tabular-nums text-stone-900 dark:text-stone-50">{hasSize ? formatINR(r.cost) : '—'}</div>
+                      <div className="text-[11px] tabular-nums text-muted">₹{r.rate}/sqft</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
-            <table className="w-full table-fixed text-[11px] leading-tight md:text-sm">
+            <table className={`w-full table-fixed text-[11px] leading-tight md:text-sm ${editMode ? '' : 'hidden md:table'}`}>
               <thead className="bg-stone-50 text-left text-[11px] uppercase text-muted dark:bg-white/5 dark:text-muted md:text-xs">
                 <tr>
                   <th className={`${editMode ? 'w-[52%]' : 'w-[44%]'} px-2 py-1.5 md:px-4 md:py-2`}>Brand</th>
