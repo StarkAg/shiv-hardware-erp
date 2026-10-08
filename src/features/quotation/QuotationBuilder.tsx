@@ -69,7 +69,8 @@ export function QuotationBuilder() {
   )
   const [h, setH] = useState<Dimension>(existing?.height ?? blankDim())
   const [w, setW] = useState<Dimension>(existing?.width ?? blankDim())
-  const [qty, setQty] = useState<number>(existing?.qty ?? 1)
+  // Always one piece: the counter quotes per piece, so there is no quantity to ask for.
+  const qty = existing?.qty ?? 1
   const [addons, setAddons] = useState<AluAddons>(defaultAddons())
   // selected price set
   const [setId, setSetId] = useState(sets[0]?.id)
@@ -284,17 +285,6 @@ export function QuotationBuilder() {
             <div className="grid grid-cols-2 gap-2 md:grid-cols-10 md:items-end md:gap-3">
               <DimInput label="Height" dim={h} onChange={setH} onKeyDown={focusNextSizeEntry} feet={foot} className="min-w-0 md:col-span-5" />
               <DimInput label="Width" dim={w} onChange={setW} onKeyDown={focusNextSizeEntry} feet={foot} className="min-w-0 md:col-span-5" />
-            </div>
-            <div className="mt-2 md:mt-3">
-              <label className="mb-1 block text-xs font-medium text-muted">Qty</label>
-              <input
-                type="number"
-                min={1}
-                inputMode="numeric"
-                value={qty || ''}
-                onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-                className="w-24 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-shiv-green focus:ring-1 focus:ring-shiv-green dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-              />
             </div>
 
             {/* Aluminium / UPVC options */}

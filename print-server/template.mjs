@@ -225,9 +225,12 @@ export async function buildQuotationHtml(quote) {
     const r = item.row
     const gty = Number(r.guaranteeYears)
     const isWarranty = r.coverage === 'warranty'
+    // As on the shop's own sheet: 7 years in black, the rest in red
+    // (src/features/print/QuotationPrint.tsx yearsColor follows the same rule).
+    const tone = `style="color:${gty === 7 ? '#000000' : 'red'}"`
     const gtySpan = twoCol
-      ? `<span class="guarantee">${gty && !isWarranty ? `${gty} Years` : ''}</span><span class="warranty">${gty && isWarranty ? `${gty} Years` : ''}</span>`
-      : `<span class="guarantee">${gty ? `${gty} Years` : ''}</span>`
+      ? `<span class="guarantee" ${tone}>${gty && !isWarranty ? `${gty} Years` : ''}</span><span class="warranty" ${tone}>${gty && isWarranty ? `${gty} Years` : ''}</span>`
+      : `<span class="guarantee" ${tone}>${gty ? `${gty} Years` : ''}</span>`
     const bgDiv = r.accentColor
       ? `<div style="position:absolute;top:0;bottom:0;left:29mm;right:${tintRight};background:${esc(r.accentColor)}"></div>`
       : ''
@@ -260,13 +263,15 @@ export async function buildQuotationHtml(quote) {
     <img class="legacy-head" src="${header}" />
     <div class="legacy-title">${esc(legacyCategoryLabel(category))}</div>
     <div class="legacy-info" style="left:29mm;top:94.6mm">Thickness</div>
-    <div class="legacy-info" style="left:108mm;top:94.6mm">Height</div>
-    <div class="legacy-info" style="left:142mm;top:94.6mm">Width</div>
+    <div class="legacy-info" style="left:96mm;top:94.6mm">Height</div>
+    <div class="legacy-info" style="left:120mm;top:94.6mm">Width</div>
+    <div class="legacy-info" style="left:148mm;top:94.6mm;width:30mm;text-align:center">Quantity</div>
     <div style="position:absolute;left:29mm;top:100mm;height:7mm;right:${twoCol ? '2mm' : '34mm'};background:#FFFF00"></div>
     <div class="legacy-info" style="left:29mm;top:101.3mm">${esc(legacyThickness(category))}</div>
-    <div class="legacy-info" style="left:102mm;top:101.3mm;width:21mm;text-align:right">${esc(legacyDimension(height))}</div>
-    <div class="legacy-info" style="left:130mm;top:101.3mm;width:5mm;text-align:center">X</div>
-    <div class="legacy-info" style="left:142mm;top:101.3mm">${esc(legacyDimension(width))}</div>
+    <div class="legacy-info" style="left:88mm;top:101.3mm;width:21mm;text-align:right">${esc(legacyDimension(height))}</div>
+    <div class="legacy-info" style="left:114mm;top:101.3mm;width:5mm;text-align:center">X</div>
+    <div class="legacy-info" style="left:122mm;top:101.3mm">${esc(legacyDimension(width))}</div>
+    <div class="legacy-info" style="left:148mm;top:101.3mm;width:30mm;text-align:center">${esc(quote.qty ?? 1)}</div>
     <div class="legacy-line" style="right:${twoCol ? '2mm' : '34mm'}"></div>
     <div class="legacy-info" style="left:29mm;top:113.5mm">Rate</div>
     <div class="legacy-info" style="left:56.4mm;top:113.5mm">Brand</div>

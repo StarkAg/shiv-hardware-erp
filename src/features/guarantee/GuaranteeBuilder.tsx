@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Check, Copy, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
+import { Check, Copy, Eye, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
@@ -167,6 +167,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
+  // On a phone the card preview is folded away until asked for.
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [period1, setPeriod1] = useState<GuaranteeYears | ''>('')
   const [generating, setGenerating] = useState(false)
   const [showWhatsAppLogin, setShowWhatsAppLogin] = useState(false)
@@ -555,17 +557,18 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
               </div>
             ) : (
               <div className="no-print flex flex-wrap items-center justify-center gap-3">
-                <Button onClick={generateCard} disabled={!hasRows || generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                {/* On a phone these two live in the bar at the bottom, next to where the card is filled in. */}
+                <Button onClick={generateCard} disabled={!hasRows || generating} className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
                   <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
                 </Button>
-                <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
                   <Printer size={20} /> Print
                 </Button>
                 <button
                   onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: `/guarantee/${layout}` } })}
-                  className="flex min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10"
+                  className="flex w-full min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10 md:w-auto"
                 >
-                  <FileText size={20} /> Select Bill
+                  <FileText size={20} /> From a bill
                 </button>
               </div>
             )}
@@ -639,7 +642,16 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           </div>
 
           {layout === 'card' && (
-            <aside className="lg:sticky lg:top-0 lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setPreviewOpen((open) => !open)}
+              className="no-print flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 text-sm font-semibold text-stone-700 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 md:hidden"
+            >
+              <Eye size={16} /> {previewOpen ? 'Hide preview' : 'Preview card'}
+            </button>
+          )}
+          {layout === 'card' && (
+            <aside className={`${previewOpen ? '' : 'hidden'} md:block lg:sticky lg:top-0 lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto`}>
                 <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
                   {/* Slot 1 above slot 2. Stacked, the two 86 mm cards can be taller than
                       the window, so the panel (the <aside>) scrolls on its own rather
@@ -690,7 +702,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                         <button
                           type="button"
                           onClick={() => { setSecondCardOn(true); setTab(2) }}
-                          className="flex h-[86mm] w-[54mm] flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-stone-300 bg-stone-50 text-muted transition hover:border-shiv-green hover:text-shiv-green dark:border-white/15 dark:bg-white/5"
+                          className="hidden h-[86mm] w-[54mm] flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed md:flex border-stone-300 bg-stone-50 text-muted transition hover:border-shiv-green hover:text-shiv-green dark:border-white/15 dark:bg-white/5"
                         >
                           <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-current">
                             <Check size={16} />
@@ -705,6 +717,17 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             </aside>
           )}
         </div>
+
+        {!editing && (
+          <div className="no-print sticky -bottom-3 z-10 -mx-3 -mb-3 mt-3 flex gap-2 border-t border-stone-200/90 bg-stone-100/95 px-3 py-2 backdrop-blur dark:border-white/10 dark:bg-stone-950/95 md:hidden">
+            <Button variant="outline" onClick={generateCard} disabled={!hasRows || generating} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl text-base font-semibold">
+              <Send size={18} /> {generating ? 'Saving…' : 'Generate'}
+            </Button>
+            <Button onClick={printCard} disabled={!hasRows || generating} className="flex min-h-12 flex-[1.4] items-center justify-center gap-2 rounded-xl text-base font-semibold">
+              <Printer size={18} /> Print
+            </Button>
+          </div>
+        )}
       </div>
 
       <WhatsAppLoginModal open={showWhatsAppLogin} onClose={() => setShowWhatsAppLogin(false)} />

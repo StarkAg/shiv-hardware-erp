@@ -81,6 +81,13 @@ export function firstSectionRows<T extends { brandName: string }>(category: Prod
   return cut === -1 ? rows : rows.slice(0, cut)
 }
 
+/**
+ * The colour a guarantee prints in, as on the shop's own sheet: 7 years in
+ * black, the rest in red. The print server's layout (print-server/template.mjs)
+ * follows the same rule.
+ */
+export const yearsColor = (years: number) => (years === 7 ? '#000000' : '#dc2626')
+
 const ROW_H = 6.39
 const BRAND_START = 126.75
 const SECTION_GAP = 3 // mm gap before 2nd/3rd section headers
@@ -186,15 +193,15 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
                 <span className="absolute left-[127mm]">{Math.round(row.cost || 0)}</span>
                 {twoCol ? (
                   <>
-                    <span className="absolute left-[148mm] w-[30mm] text-center text-red-600">
+                    <span className="absolute left-[148mm] w-[30mm] text-center" style={{ color: yearsColor(row.guaranteeYears) }}>
                       {row.guaranteeYears && row.coverage !== 'warranty' ? `${row.guaranteeYears} Years` : ''}
                     </span>
-                    <span className="absolute left-[178mm] w-[30mm] text-center text-red-600">
+                    <span className="absolute left-[178mm] w-[30mm] text-center" style={{ color: yearsColor(row.guaranteeYears) }}>
                       {row.guaranteeYears && row.coverage === 'warranty' ? `${row.guaranteeYears} Years` : ''}
                     </span>
                   </>
                 ) : (
-                  <span className="absolute left-[148mm] w-[30mm] text-center text-red-600">
+                  <span className="absolute left-[148mm] w-[30mm] text-center" style={{ color: yearsColor(row.guaranteeYears) }}>
                     {row.guaranteeYears ? `${row.guaranteeYears} Years` : ''}
                   </span>
                 )}
