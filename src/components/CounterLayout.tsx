@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  CarTaxiFront, FileText, History, IndianRupee, Inbox, Moon, Package, ShieldCheck, Sun, Users,
+  CarTaxiFront, FileText, History, IndianRupee, Inbox, Moon, Package, ShieldCheck, Sun,
 } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { isDarkMode, toggleTheme } from '../lib/theme'
@@ -27,15 +27,12 @@ const NAV = [
     label: 'Quotations',
     items: [
       { to: '/quote-options', label: 'New Quotation', icon: FileText },
-      { to: '/history', label: 'Quote History', icon: History },
-      { to: '/customers', label: 'Customers', icon: Users },
     ],
   },
   {
     label: 'Guarantee',
     items: [
       { to: '/guarantee/card', label: 'Guarantee Card', icon: ShieldCheck },
-      { to: '/guarantee/a4', label: 'Guarantee A4', icon: FileText },
       { to: '/guarantee/history', label: 'Guarantee History', icon: History },
       { to: '/guarantee/claims', label: 'Claims', icon: Inbox, badge: true },
     ],
@@ -65,9 +62,20 @@ export function CounterLayout() {
   const [dark, setDark] = useState(isDarkMode)
 
   const rows = NAV.flatMap((area) => area.items)
+  // Keep the page in use visible in the bottom bar, wherever it scrolled to.
+  const bar = useRef<HTMLElement>(null)
+  useEffect(() => {
+    bar.current?.querySelector<HTMLElement>('[data-on]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+  }, [pathname])
 
   return (
-    <div className="flex min-h-screen bg-stone-100 dark:bg-stone-950">
+    // The counter has no top bar on a phone, only the bottom tabs: the screen
+    // heights shared with the panel must not hold back the panel's 57px bar,
+    // just the phone's own status bar when installed full screen.
+    <div
+      className="flex min-h-screen bg-stone-100 dark:bg-stone-950"
+      style={{ '--mobile-topbar-height': 'env(safe-area-inset-top, 0px)' } as CSSProperties}
+    >
       <aside className="no-print hidden w-60 shrink-0 flex-col border-r border-stone-200/80 bg-stone-50 dark:border-white/10 dark:bg-stone-900 md:flex">
         <div className="flex items-center gap-3 border-b border-stone-200/80 px-5 py-5 dark:border-white/10">
           <img src="./counter/icon.svg" alt="" className="h-10 w-10 shrink-0 rounded-xl shadow-sm" />
@@ -114,20 +122,24 @@ export function CounterLayout() {
         </button>
       </aside>
 
-      <main className="min-w-0 flex-1 pb-20 md:pb-0">
+      <main className="min-w-0 flex-1 pt-[env(safe-area-inset-top,0px)] pb-20 md:pb-0 md:pt-0">
         <Outlet />
       </main>
 
-      {/* The same rows across the bottom on a phone, where the counter's
-          tablet usually is. */}
-      <nav className="no-print fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 gap-1 border-t border-stone-200/90 bg-stone-50/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-lg dark:border-white/10 dark:bg-stone-950/95 md:hidden">
-        {rows.slice(0, 4).map((item) => (
+      {/* Every row across the bottom on a phone, four in view and the rest a
+          swipe away; the page in use is scrolled into view. */}
+      <nav
+        ref={bar}
+        className="no-print fixed inset-x-0 bottom-0 z-40 flex snap-x snap-mandatory gap-1 overflow-x-auto overscroll-x-contain border-t border-stone-200/90 bg-stone-50/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-lg [scrollbar-width:none] dark:border-white/10 dark:bg-stone-950/95 md:hidden [&::-webkit-scrollbar]:hidden"
+      >
+        {rows.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             aria-label={item.label}
+            data-on={owns(item.to, pathname) ? '1' : undefined}
             style={{ touchAction: 'manipulation' }}
-            className={`flex min-h-[3.5rem] flex-col items-center justify-center gap-1 rounded-lg px-0.5 text-[9px] font-semibold leading-tight ${
+            className={`flex min-h-[3.5rem] w-[calc((100vw-1.25rem)/4)] shrink-0 snap-start flex-col items-center justify-center gap-1 rounded-lg px-0.5 text-[9px] font-semibold leading-tight ${
               owns(item.to, pathname)
                 ? 'bg-shiv-green/20 text-stone-950 dark:text-shiv-green'
                 : 'text-muted'
