@@ -202,7 +202,7 @@ function LiveCapture({ onRead, onFail, hint, extra }) {
 
 /* ── photo ────────────────────────────────────────────────────────────── */
 
-async function loadPhoto(file) {
+export async function loadPhoto(file) {
   const url = URL.createObjectURL(file)
   try {
     const img = new Image()
@@ -219,11 +219,17 @@ async function loadPhoto(file) {
   }
 }
 
-function PhotoCapture({ onRead, hint, extra }) {
+const startBox = (canvas) => {
+  const size = Math.round(Math.min(canvas.width, canvas.height) * 0.3)
+  return { x: Math.round((canvas.width - size) / 2), y: Math.round((canvas.height - size) / 2), size }
+}
+
+/** A photo with the square placed on it by hand. `initial` is a photo already loaded. */
+export function PhotoCapture({ onRead, hint, extra, initial = null, own = true }) {
   const view = useRef(null)
   const { w: cw, h: ch } = useSize(view)
-  const [photo, setPhoto] = useState(null)
-  const [box, setBox] = useState(null)
+  const [photo, setPhoto] = useState(initial)
+  const [box, setBox] = useState(() => (initial ? startBox(initial) : null))
   const shown = useRef(null)
   const stage = useRef(null)
   const drag = useRef(null)
@@ -235,9 +241,8 @@ function PhotoCapture({ onRead, hint, extra }) {
     e.target.value = ''
     if (!file) return
     const canvas = await loadPhoto(file)
-    const size = Math.round(Math.min(canvas.width, canvas.height) * 0.3)
     setPhoto(canvas)
-    setBox({ x: Math.round((canvas.width - size) / 2), y: Math.round((canvas.height - size) / 2), size })
+    setBox(startBox(canvas))
   }
 
   useEffect(() => {
@@ -317,8 +322,8 @@ function PhotoCapture({ onRead, hint, extra }) {
             onChange={resize}
           />
         )}
-        <button type="button" className="primary" onClick={() => camera.current?.click()}>{photo ? 'New photo' : 'Photo'}</button>
-        <button type="button" className="glass" onClick={() => gallery.current?.click()}>Gallery</button>
+        {own && <button type="button" className="primary" onClick={() => camera.current?.click()}>{photo ? 'New photo' : 'Photo'}</button>}
+        {own && <button type="button" className="glass" onClick={() => gallery.current?.click()}>Gallery</button>}
         {extra}
         <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={take} />
         <input ref={gallery} type="file" accept="image/*" hidden onChange={take} />

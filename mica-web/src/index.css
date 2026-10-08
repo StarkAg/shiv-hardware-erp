@@ -116,3 +116,15 @@ button.result { text-align: left; font-weight: inherit; color: inherit; min-heig
 .score.poor { color: var(--poor); }
 .compare-text { display: grid; gap: 2px; min-width: 0; }
 .tabs button { font-size: 14px; }
+
+/* One compare screen: the reference, the camera, the likeness. */
+.title { font-weight: 800; font-size: 17px; }
+.refcard { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.refcard > img, .refcard > .nophoto { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; flex: none; display: grid; place-items: center; color: var(--muted); font-weight: 800; }
+.ref-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.ref-actions { display: flex; gap: 6px; flex: none; }
+.ref-actions button { min-height: 38px; padding: 4px 10px; font-size: 14px; }
+.compare-result { min-height: 76px; }
+.score { font-size: 38px; }
+.stack { flex: 1; min-height: 140px; position: relative; display: flex; flex-direction: column; }
+.over { position: absolute; inset: 0; display: flex; flex-direction: column; z-index: 2; }
