@@ -2784,6 +2784,14 @@ async function markCloudJob(path, body) {
   })
 }
 
+/** A queued file kept in storage arrives as a link; fetch it into the shape an upload has. */
+async function withFileData(file) {
+  if (file?.data || !file?.url) return file
+  const response = await fetch(file.url)
+  if (!response.ok) throw new Error(`${file.name ?? 'file'}: could not be fetched (${response.status})`)
+  return { ...file, data: Buffer.from(await response.arrayBuffer()).toString('base64') }
+}
+
 async function printCloudJob(job) {
   const copies = sanitizeCopies(job.copies)
   if (job.kind === 'quotation') {
@@ -2817,9 +2825,18 @@ async function printCloudJob(job) {
 
   if (job.kind === 'raw-file') {
     const files = Array.isArray(job.payload?.files) ? job.payload.files : [job.payload]
+    // Shared from a phone (print-web): B/W to the HP, colour to the Epson,
+    // each falling back to the other as a WhatsApp print does.
+    const mode = job.payload?.mode === 'color' || job.payload?.mode === 'bw' ? job.payload.mode : null
     const results = []
     for (let i = 0; i < files.length; i += 1) {
-      results.push(await printUploadedFile(decodeUploadedFile(files[i], i), copies))
+      const file = decodeUploadedFile(await withFileData(files[i]), i)
+      if (mode) {
+        const route = await routeWhatsAppPrintJob(mode, file)
+        results.push(await printUploadedFile(file, copies, route.printer, route.printSettings))
+      } else {
+        results.push(await printUploadedFile(file, copies))
+      }
     }
     return { files: results }
   }

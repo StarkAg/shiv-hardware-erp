@@ -1,5 +1,7 @@
-import { v } from 'convex/values'
-import { mutation, query } from './lib/guarded'
+import { ConvexError, v } from 'convex/values'
+import type { Id } from './_generated/dataModel'
+import type { MutationCtx } from './_generated/server'
+import { deviceOf, mutation, query } from './lib/guarded'
 
 const jobKind = v.union(v.literal('quotation'), v.literal('guarantee'), v.literal('raw-file'))
 const jobSource = v.union(v.literal('android'), v.literal('web'), v.literal('whatsapp'), v.literal('server'))
@@ -67,6 +69,51 @@ export const create = mutation({
     })
   },
 })
+
+/** What the print server can print as it is. */
+const PRINTABLE = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+
+/**
+ * Any paper, from anywhere: files shared from a phone (print-web, "Shiv
+ * Print" in Android's share menu) printed at the shop. The files go to
+ * storage first; the job carries their ids, and the print server is handed a
+ * link to each when it takes the job (claimNext). Black and white goes to the
+ * HP, colour to the Epson, each falling back to the other.
+ */
+export const sendFiles = mutation({
+  args: {
+    files: v.array(v.object({ storageId: v.id('_storage'), name: v.string(), mediaType: v.string() })),
+    mode: v.union(v.literal('bw'), v.literal('color')),
+    copies: v.optional(v.number()),
+  },
+  handler: async (ctx, { files, mode, copies }) => {
+    if (!files.length || files.length > 20) throw new ConvexError('Choose 1 to 20 files.')
+    for (const file of files) {
+      if (!PRINTABLE.has(file.mediaType)) throw new ConvexError(`${file.name}: only PDFs and photos print.`)
+      if (!(await ctx.db.system.get(file.storageId))) throw new ConvexError(`${file.name} did not upload. Try again.`)
+    }
+    const now = Date.now()
+    const device = await deviceOf(ctx)
+    return await ctx.db.insert('printJobs', {
+      status: 'pending',
+      kind: 'raw-file',
+      source: 'android',
+      payload: { files, mode },
+      copies: Math.min(20, Math.max(1, Math.trunc(copies ?? 1))),
+      requestedBy: device?.name,
+      createdAt: now,
+      updatedAt: now,
+    })
+  },
+})
+
+/** A shared file's stored copy is only for printing; it goes once printed. */
+async function dropStoredFiles(ctx: MutationCtx, payload: any) {
+  for (const file of Array.isArray(payload?.files) ? payload.files : []) {
+    if (!file?.storageId) continue
+    try { await ctx.storage.delete(file.storageId as Id<'_storage'>) } catch { /* already gone */ }
+  }
+}
 
 export const listPending = query({
   args: {
@@ -140,7 +187,19 @@ export const claimNext = mutation({
       })
     }
 
-    return jobs
+    // A file kept in storage goes to the print server as a link to fetch it by.
+    return await Promise.all(jobs.map(async (job) => {
+      const files = job.kind === 'raw-file' && Array.isArray(job.payload?.files) ? job.payload.files : null
+      if (!files?.some((f: any) => f?.storageId)) return job
+      return {
+        ...job,
+        payload: {
+          ...job.payload,
+          files: await Promise.all(files.map(async (f: any) =>
+            f?.storageId ? { ...f, url: await ctx.storage.getUrl(f.storageId as Id<'_storage'>) } : f)),
+        },
+      }
+    }))
   },
 })
 
@@ -177,6 +236,7 @@ export const complete = mutation({
     }
 
     const now = Date.now()
+    await dropStoredFiles(ctx, job.payload)
     await ctx.db.patch(args.id, {
       status: 'printed',
       claimedBy: args.printerId,
