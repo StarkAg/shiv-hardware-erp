@@ -212,16 +212,33 @@ let inFlight: Promise<string | null> | null = null
 let searchedAt = 0
 const RETRY_AFTER_MS = 30_000
 
+/**
+ * Whether this page may talk to that address at all.
+ *
+ * A page served securely (the counter and panel on Vercel) is not allowed to
+ * call a plain-http address on the shop Wi-Fi — the browser blocks it before
+ * it is sent — except the computer's own localhost. Trying anyway cost a phone
+ * the whole Wi-Fi scan before it could fall back to printing through the
+ * internet; now it knows at once and goes there.
+ */
+export const reachableFromHere = (url: string) =>
+  typeof window === 'undefined' || window.location.protocol !== 'https:' ||
+  url.startsWith('https:') || /^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)
+
 async function search(scan: boolean) {
   // 1. High-confidence hosts (configured + last-saved + page host) get a generous
   //    timeout so a sleeping Wi-Fi radio's first slow response doesn't drop us to a scan.
-  for (const url of candidatePrintServerUrls()) {
+  for (const url of candidatePrintServerUrls().filter(reachableFromHere)) {
     if (await probeServer(url, KNOWN_HOST_TIMEOUT_MS)) {
       savePrintServerUrl(url)
       cachedServerUrl = url
       return url
     }
   }
+
+  // Every address below is plain http on the shop Wi-Fi, which a secure page
+  // cannot reach; there is nothing more to try from here.
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') return null
 
   // 2. Cloud-assisted exact-IP lookup and brute-force subnet scan run together; take
   //    whichever finds the server first. The cloud is bounded so it can never stall.
@@ -268,9 +285,10 @@ export async function fetchPrintServer(
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err
 
-    // The resolved server stopped responding — drop the cached URL and re-discover.
+    // The resolved server stopped responding — drop the cached URL and re-discover
+    // (not from a secure page, which could reach none of the addresses a scan finds).
     cachedServerUrl = null
-    const discovered = await discoverPrintServer()
+    const discovered = window.location.protocol === 'https:' ? null : await discoverPrintServer()
     if (discovered && discovered !== url) return await fetchWithTimeout(`${discovered}${path}`, init, timeoutMs)
     throw err
   }

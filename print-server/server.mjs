@@ -2794,9 +2794,24 @@ async function printCloudJob(job) {
   if (job.kind === 'guarantee') {
     const document = job.payload?.document ?? job.payload
     const layout = job.payload?.layout ?? 'a4'
-    const result = await printDocumentPayload({ kind: 'guarantee', document: withGuaranteeQr(document, null), layout }, copies)
-    notifyCustomerGuaranteeReady(document).catch(err =>
-      console.error('[whatsapp-notify] unhandled', err?.message ?? err))
+    // A phone sends the same card job the counter does: the tray slot, and a
+    // second card for slot 2 when two are printed together.
+    const documents = Array.isArray(job.payload?.documents) && job.payload.documents.length
+      ? job.payload.documents.slice(0, 2).map(doc => withGuaranteeQr(doc, null))
+      : undefined
+    const slot = job.payload?.slot === 2 ? 2 : layout === 'card' ? 1 : undefined
+    const result = await printDocumentPayload({
+      kind: 'guarantee', document: withGuaranteeQr(document, null), layout,
+      ...(slot ? { slot } : {}), ...(documents ? { documents } : {}),
+    }, copies)
+    const told = new Set()
+    for (const doc of documents ?? [document]) {
+      const mobile = String(doc?.customer?.mobile ?? '').trim()
+      if (mobile && told.has(mobile)) continue
+      told.add(mobile)
+      notifyCustomerGuaranteeReady(doc).catch(err =>
+        console.error('[whatsapp-notify] unhandled', err?.message ?? err))
+    }
     return result
   }
 

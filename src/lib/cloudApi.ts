@@ -21,6 +21,9 @@ export type CreateCloudPrintJobPayload =
       kind: 'guarantee'
       document: GuaranteeDocument
       layout?: 'a4' | 'card'
+      /** Card layout only: the Epson tray slot, and both cards when two print together. */
+      slot?: 1 | 2
+      documents?: GuaranteeDocument[]
       copies?: number
       source?: CloudPrintJobSource
       requestedBy?: string
@@ -88,7 +91,12 @@ export async function createCloudPrintJob(payload: CreateCloudPrintJobPayload): 
         copies: payload.copies ?? 1,
         requestedBy: payload.requestedBy,
         assignedPrinterId: payload.assignedPrinterId,
-        payload: { document: payload.document, layout: payload.layout ?? 'a4' },
+        payload: {
+          document: payload.document,
+          layout: payload.layout ?? 'a4',
+          ...(payload.slot ? { slot: payload.slot } : {}),
+          ...(payload.documents?.length ? { documents: payload.documents } : {}),
+        },
       }
 
   return await cloudFetch<CreateCloudPrintJobResult>('/api/print-jobs', {

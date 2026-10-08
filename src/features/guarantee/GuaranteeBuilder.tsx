@@ -17,7 +17,8 @@ import {
 import { GuaranteeCardFace } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
 import { fetchLatestGuaranteeSeq } from '../../lib/convexSync'
-import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, printOnServer, type ServerPrintPayload } from '../../lib/printServer'
+import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, type ServerPrintPayload } from '../../lib/printServer'
+import { printViaShop } from '../../lib/printViaShop'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
 
@@ -462,8 +463,13 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       const payload: ServerPrintPayload = layout === 'card'
         ? { kind: 'guarantee', document: printDoc, layout, slot: 1, ...(printDoc2 ? { documents: printDocs } : {}) }
         : { kind: 'guarantee', document: printDoc, layout }
-      const result = await printOnServer(payload)
-      toast(`Sent ${label} to ${result.printer}`)
+      if (payload.kind !== 'guarantee') return false
+      // The shop PC: on its Wi-Fi directly, from anywhere else through the online
+      // queue — where the PC also WhatsApps the customer when it prints.
+      const sent = await printViaShop(payload, {
+        onDone: (r) => toast(r.ok ? `${label} printed at the shop` : `${label} not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
+      })
+      toast(sent.via === 'shop' ? `Sent ${label} to ${sent.printer}` : `${label} sent to the shop PC`, sent.via === 'shop' ? 'ok' : 'info')
       return true
     } catch (err) {
       toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')

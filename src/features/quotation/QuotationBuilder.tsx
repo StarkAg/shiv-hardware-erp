@@ -25,8 +25,8 @@ import { FIXED_CARDS, FIXED_CARD_META, isFixedCard } from '../../lib/data/fixedC
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Button, Input, Toggle } from '../../components/ui'
 import { QuotationPrint } from '../print/QuotationPrint'
-import { printOnServer, renderPngOnServer } from '../../lib/printServer'
-import { createCloudPrintJob } from '../../lib/cloudApi'
+import { printViaShop } from '../../lib/printViaShop'
+import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
 import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
@@ -136,49 +136,20 @@ export function QuotationBuilder() {
     if (!silent) toast(`Saved ${number}`)
   }
 
+  /** The quotation as a JPG, made on this phone from the layout that prints — works anywhere. */
   async function shareWhatsApp() {
     if (!hasSize && !fixed) return
     setSharing(true)
     try {
       save({ silent: true })
-      const shareDoc = buildQuote()
-      const png = await renderPngOnServer({ kind: 'quotation', quote: shareDoc })
-      const dataUrl = `data:${png.mime};base64,${png.image}`
-      const blob = await (await fetch(dataUrl)).blob()
-      const fileName = `${shareDoc.number}.png`
-      const shareText = `${shareDoc.number} - ${CATEGORY_LABELS[shareDoc.category] ?? 'Quotation'}`
-
-      // Create download link
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName
-
-      // Method 1: Try native share API first (mobile only)
-      const file = new File([blob], fileName, { type: png.mime })
-      if (navigator.share && navigator.canShare?.({ files: [file] }) !== false) {
-        try {
-          await navigator.share({ files: [file], title: 'Quotation', text: shareText })
-          URL.revokeObjectURL(url)
-          return
-        } catch (shareErr) {
-          console.log('Share cancelled or failed:', shareErr)
-        }
-      }
-
-      // Method 2: Download file and trigger system share (works on most mobile)
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      // Open WhatsApp
-      const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`
-      setTimeout(() => {
-        window.location.href = waUrl
-      }, 500)
-
-      toast(`${fileName} downloaded`)
-      URL.revokeObjectURL(url)
+      const shareDoc = enrichQuotation(buildQuote())
+      const blob = await elementToJpeg(<QuotationPrint quote={shareDoc} />)
+      const how = await shareJpeg(
+        blob,
+        `${shareDoc.number}.jpg`,
+        `${shareDoc.number} - ${CATEGORY_LABELS[shareDoc.category] ?? 'Quotation'}`,
+      )
+      if (how === 'saved') toast(`${shareDoc.number}.jpg saved — send it from your photos`)
     } catch (err) {
       toast(`Share failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
@@ -201,23 +172,20 @@ export function QuotationBuilder() {
         setTimeout(() => setPrintState(null), 2500)
         return
       } catch {
-        // fall through to server / cloud below
+        // fall through to the shop PC below
       }
     }
 
+    // The shop PC: directly on its Wi-Fi, or through the online queue from anywhere.
     try {
-      await printOnServer({ kind: 'quotation', quote: printDoc })
+      const sent = await printViaShop({ kind: 'quotation', quote: printDoc }, {
+        onDone: (r) => toast(r.ok ? `${printDoc.number} printed at the shop` : `Not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
+      })
+      if (sent.via === 'queue') toast(`${printDoc.number} sent to the shop PC`, 'info')
       setPrintState('done')
       setTimeout(() => setPrintState(null), 2500)
-    } catch (serverErr) {
-      // fallback: cloud print job (needs internet)
-      try {
-        await createCloudPrintJob({ kind: 'quotation', quote: printDoc })
-        setPrintState('done')
-        setTimeout(() => setPrintState(null), 2500)
-      } catch (cloudErr) {
-        setPrintState({ error: cloudErr instanceof Error ? cloudErr.message : String(cloudErr) })
-      }
+    } catch (err) {
+      setPrintState({ error: err instanceof Error ? err.message : String(err) })
     }
   }
 
