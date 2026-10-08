@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, Copy, Eye, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
@@ -196,6 +196,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // Unfiltered brand list — the Items table's Type column can match any known
   // brand regardless of category, since there's no Product picker anymore.
   const brandOptions = sets[0]?.brands ?? []
+  const picks = usePicks(guarantees, brandOptions)
   const hasRows = rows.some(isRowFilled)
 
   const years1 = cardYears(rows, brandOptions, period1)
@@ -636,8 +637,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 </label>
               </div>
               {onCard2
-                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brandOptions={brandOptions} datalistId="type-options-2" />
-                : <SizeTable key="t1" rows={rows} setRows={setRows} brandOptions={brandOptions} datalistId="type-options-1" />}
+                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brandOptions={brandOptions} datalistId="type-options-2" picks={picks} />
+                : <SizeTable key="t1" rows={rows} setRows={setRows} brandOptions={brandOptions} datalistId="type-options-1" picks={picks} />}
             </Card>
           </div>
 
@@ -846,17 +847,153 @@ function GuaranteeSelect({
   )
 }
 
+/** Tap-to-fill suggestions for a card row on a phone. */
+type Picks = {
+  brands: { name: string; years: number }[]
+  thicknesses: string[]
+  sizes: { label: string; length: number; lengthSoot: number; height: number; heightSoot: number }[]
+}
+
+const dimLabel = (inches: number, soot: number) => (soot ? `${inches} ${soot}/8` : String(inches))
+
+/**
+ * What the counter usually writes on a card, most used first: brands that
+ * carry a guarantee (from the price list, ordered by how often past cards
+ * used them), and the thicknesses and sizes of past cards.
+ */
+function usePicks(guarantees: GuaranteeDocument[], brandOptions: Brand[]): Picks {
+  return useMemo(() => {
+    const items = guarantees.slice(-300).flatMap((g) => g.items ?? [])
+
+    const used = new Map<string, number>()
+    for (const it of items) {
+      const k = String(it.brandName ?? '').trim().toLowerCase()
+      if (k) used.set(k, (used.get(k) ?? 0) + 1)
+    }
+    const seen = new Set<string>()
+    const brands = brandOptions
+      .filter((b) => b.guaranteeYears > 0)
+      .filter((b) => {
+        const k = b.name.trim().toLowerCase()
+        if (seen.has(k)) return false
+        seen.add(k)
+        return true
+      })
+      .map((b) => ({ name: b.name, years: b.guaranteeYears, n: used.get(b.name.trim().toLowerCase()) ?? 0 }))
+      .sort((a, b) => b.n - a.n || b.years - a.years || a.name.localeCompare(b.name))
+      .slice(0, 12)
+      .map(({ name, years }) => ({ name, years }))
+
+    const thick = new Map<string, number>()
+    for (const it of items) {
+      const t = String(it.thickness ?? '').trim()
+      if (t) thick.set(t, (thick.get(t) ?? 0) + 1)
+    }
+    const thicknesses = [...thick].sort((a, b) => b[1] - a[1]).map(([t]) => t)
+    for (const t of ['30mm', '32mm', '19mm', '12mm']) if (!thicknesses.includes(t)) thicknesses.push(t)
+
+    const size = new Map<string, Picks['sizes'][number] & { n: number }>()
+    for (const it of items) {
+      const h = it.height
+      const w = it.width
+      if (!h?.inches || !w?.inches) continue
+      const key = `${h.inches}.${h.soot ?? 0}x${w.inches}.${w.soot ?? 0}`
+      const was = size.get(key)
+      if (was) was.n += 1
+      else size.set(key, {
+        label: `${dimLabel(h.inches, h.soot ?? 0)} × ${dimLabel(w.inches, w.soot ?? 0)}`,
+        length: h.inches, lengthSoot: h.soot ?? 0, height: w.inches, heightSoot: w.soot ?? 0, n: 1,
+      })
+    }
+    const sizes = [...size.values()]
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 10)
+      .map(({ label, length, lengthSoot, height, heightSoot }) => ({ label, length, lengthSoot, height, heightSoot }))
+
+    return { brands, thicknesses: thicknesses.slice(0, 8), sizes }
+  }, [guarantees, brandOptions])
+}
+
+/** One row of tap buttons, scrolling sideways when it is longer than the screen. */
+function PickRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 px-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">{label}</div>
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{children}</div>
+    </div>
+  )
+}
+
+const chip = (on: boolean) =>
+  `h-9 shrink-0 whitespace-nowrap rounded-full border px-3 text-sm font-semibold transition ${
+    on
+      ? 'border-shiv-green bg-shiv-green text-stone-950'
+      : 'border-stone-300 bg-white text-stone-700 dark:border-white/15 dark:bg-stone-900 dark:text-stone-200'
+  }`
+
+const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** Brand, thickness and size for the row being filled, a tap each — typing still works below. */
+function QuickPicks({ row, picks, onPick }: { row: SizeRow; picks: Picks; onPick: (patch: Partial<SizeRow>) => void }) {
+  return (
+    <div className="col-span-6 grid gap-2 border-b border-stone-200 pb-2 dark:border-white/10 md:hidden">
+      {picks.brands.length > 0 && (
+        <PickRow label="Brand">
+          {picks.brands.map((b) => (
+            <button key={b.name} type="button" className={chip(sameText(row.type, b.name))} onClick={() => onPick({ type: b.name })}>
+              {b.name} <span className="font-normal opacity-70">{b.years}y</span>
+            </button>
+          ))}
+        </PickRow>
+      )}
+      <PickRow label="Thickness">
+        {picks.thicknesses.map((t) => (
+          <button key={t} type="button" className={chip(sameText(row.thickness, t))} onClick={() => onPick({ thickness: t })}>
+            {t}
+          </button>
+        ))}
+      </PickRow>
+      {picks.sizes.length > 0 && (
+        <PickRow label="Size">
+          {picks.sizes.map((z) => {
+            const on = row.length === z.length && Number(row.lengthSoot || 0) === z.lengthSoot
+              && row.height === z.height && Number(row.heightSoot || 0) === z.heightSoot
+            return (
+              <button
+                key={z.label}
+                type="button"
+                className={chip(on)}
+                onClick={() => onPick({
+                  length: z.length, lengthSoot: z.lengthSoot || '', height: z.height, heightSoot: z.heightSoot || '', qty: row.qty || 1,
+                })}
+              >
+                {z.label}
+              </button>
+            )
+          })}
+        </PickRow>
+      )}
+    </div>
+  )
+}
+
 function SizeTable({
   rows,
   setRows,
   brandOptions,
   datalistId,
+  picks,
 }: {
   rows: SizeRow[]
   setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void
   brandOptions: Brand[]
   datalistId: string
+  picks: Picks
 }) {
+  // The row the tap buttons fill: the one last touched, else the first still empty.
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const active = rows.find((r) => r.id === activeId)?.id
+    ?? (rows.find((r) => !isRowFilled(r)) ?? rows[rows.length - 1]).id
   const cellClass =
     'w-full min-w-0 rounded border border-stone-200 bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:text-stone-100 dark:focus:bg-stone-950 md:dark:border-transparent'
   const sootClass =
@@ -943,8 +1080,18 @@ function SizeTable({
         {rows.map((row) => (
           <div
             key={row.id}
-            className={`relative grid grid-cols-6 gap-x-2 gap-y-1.5 rounded-lg border border-stone-200 p-2 pr-9 md:items-center md:gap-1 md:rounded-none md:border-0 md:border-b md:border-stone-100 md:p-0.5 md:pr-0.5 md:last:border-b-0 dark:border-white/10 md:dark:border-white/5 ${gridCols}`}
+            onFocusCapture={() => setActiveId(row.id)}
+            onPointerDown={() => setActiveId(row.id)}
+            className={`relative grid grid-cols-6 gap-x-2 gap-y-1.5 rounded-lg border p-2 pr-9 md:items-center md:gap-1 md:rounded-none md:border-0 md:border-b md:border-stone-100 md:bg-transparent md:p-0.5 md:pr-0.5 md:last:border-b-0 dark:border-white/10 md:dark:border-white/5 ${row.id === active ? 'border-shiv-green/60 bg-shiv-green/5' : 'border-stone-200'} ${gridCols}`}
           >
+            {row.id === active && (
+              <QuickPicks
+                row={row}
+                picks={picks}
+                // Filling the last row adds a blank one under it; the buttons stay on this row.
+                onPick={(patch) => { setActiveId(row.id); updateSizeRow(setRows, row.id, patch) }}
+              />
+            )}
             <label className="col-span-2 min-w-0 md:col-span-1">
               <span className={labelClass}>Thickness</span>
               <input
@@ -1026,19 +1173,37 @@ function SizeTable({
                 <span className="shrink-0 text-xs text-muted">/8</span>
               </div>
             </div>
-            <label className="col-span-2 min-w-0 md:col-span-1">
+            <label className="col-span-3 min-w-0 md:col-span-1">
               <span className={labelClass}>Pcs</span>
-              <input
-                type="number"
-                min={1}
-                value={row.qty}
-                placeholder="1"
-                onFocus={(e) => e.currentTarget.select()}
-                onChange={(e) => updateSizeRow(setRows, row.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
-                className={`${cellClass} text-right`}
-              />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="One piece less"
+                  onClick={() => updateSizeRow(setRows, row.id, { qty: Math.max(1, (Number(row.qty) || 1) - 1) })}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-lg font-bold text-stone-700 dark:border-white/10 dark:text-stone-200 md:hidden"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  value={row.qty}
+                  placeholder="1"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => updateSizeRow(setRows, row.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
+                  className={`${cellClass} text-center md:text-right`}
+                />
+                <button
+                  type="button"
+                  aria-label="One piece more"
+                  onClick={() => updateSizeRow(setRows, row.id, { qty: (Number(row.qty) || 1) + 1 })}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-lg font-bold text-stone-700 dark:border-white/10 dark:text-stone-200 md:hidden"
+                >
+                  +
+                </button>
+              </div>
             </label>
-            <label className="col-span-2 min-w-0 md:col-span-1">
+            <label className="col-span-3 min-w-0 md:col-span-1">
               <span className={labelClass}>Rate</span>
               <input
                 type="number"
