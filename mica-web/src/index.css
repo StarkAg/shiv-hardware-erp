@@ -84,3 +84,11 @@ label { display: grid; gap: 4px; font-size: 13px; font-weight: 650; min-width: 0
 @media (max-width: 380px) {
   .fields, .filters { grid-template-columns: 1fr; }
 }
+
+.viewer.live { min-height: 200px; touch-action: auto; }
+.viewer.live video { display: block; width: 100%; height: auto; }
+.square.frozen { border-color: var(--brass); }
+.starting { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-weight: 650; }
+.live-controls { display: flex; align-items: center; gap: 10px; }
+.live-controls .size { flex: 1; }
+button.link { justify-self: start; min-height: 36px; padding: 4px 0; border: 0; background: none; color: var(--brass); text-decoration: underline; }

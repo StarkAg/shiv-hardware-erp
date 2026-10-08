@@ -1,8 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { labToHex, readSquare } from './color'
 
 /**
- * A photo, and the square on it that is read.
+ * The camera, and the square in it that is read.
+ *
+ * Live by default: the camera stays open with a square fixed in the middle,
+ * and whatever is under the square is read several times a second — point
+ * the phone at a chip and the reading (and, on Find, the matches) follow.
+ * Freeze holds the reading still. Where the camera cannot be opened — no
+ * permission, an old phone, a desktop with none — it falls back to a photo,
+ * on which the square is placed by hand.
+ *
+ * Below: the photo way.
+ *
  *
  * The photo is taken with the phone's own camera (or picked from the gallery)
  * and drawn here at a working size. Tap where the square should go, or drag
@@ -41,7 +51,7 @@ export function Shades({ shades, height = 14 }) {
   )
 }
 
-export function Capture({ onRead, hint }) {
+function PhotoCapture({ onRead, hint }) {
   const [photo, setPhoto] = useState(null)
   const [box, setBox] = useState(null)
   const [reading, setReading] = useState(null)
@@ -136,7 +146,7 @@ export function Capture({ onRead, hint }) {
         <input ref={gallery} type="file" accept="image/*" hidden onChange={take} />
       </div>
 
-      {!photo && <p className="hint">{hint}</p>}
+      {!photo && hint && <p className="hint">{hint}</p>}
 
       {photo && box && (
         <>
@@ -181,22 +191,146 @@ export function Capture({ onRead, hint }) {
         </>
       )}
 
-      {reading && (
-        <div className="reading">
-          <img src={reading.thumb.toDataURL('image/jpeg', 0.85)} alt="The square, colour-corrected" />
-          <div className="reading-text">
-            <Shades shades={reading.shades} />
-            <div className={reading.corrected ? 'ok' : 'warn'}>
-              {reading.corrected
-                ? 'Corrected by the white paper around it'
-                : 'No white paper found around the square — colours are the camera’s own. Lay the piece on white paper, or keep paper inside the dashed frame.'}
-            </div>
-            <div className="muted">
-              {reading.shades.length} shade{reading.shades.length === 1 ? '' : 's'} · pattern {reading.texture < 2 ? 'plain' : reading.texture < 4 ? 'light' : 'busy'}
-            </div>
-          </div>
-        </div>
-      )}
+      {reading && <ReadingCard reading={reading} />}
     </div>
+  )
+}
+
+/** The square, colour-corrected, its shades, and whether white paper was found. */
+function ReadingCard({ reading }) {
+  return (
+    <div className="reading">
+      <img src={reading.thumb.toDataURL('image/jpeg', 0.85)} alt="The square, colour-corrected" />
+      <div className="reading-text">
+        <Shades shades={reading.shades} />
+        <div className={reading.corrected ? 'ok' : 'warn'}>
+          {reading.corrected
+            ? 'Corrected by the white paper around it'
+            : 'No white paper inside the dashed frame — colours are the camera’s own. Lay the piece on white paper.'}
+        </div>
+        <div className="muted">
+          {reading.shades.length} shade{reading.shades.length === 1 ? '' : 's'} · pattern {reading.texture < 2 ? 'plain' : reading.texture < 4 ? 'light' : 'busy'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const EVERY = 300 // ms between live readings
+const LIVE = 960 // longest side a live frame is read at
+
+/**
+ * The live way: the camera's picture with the square in its middle, read
+ * every few hundred milliseconds. The square is a share of the picture's
+ * shorter side, set by the slider; aim the phone, not the square.
+ */
+function LiveCapture({ onRead, onFail }) {
+  const video = useRef(null)
+  const frame = useRef(null)
+  const [ready, setReady] = useState(false)
+  const [frozen, setFrozen] = useState(false)
+  const [reading, setReading] = useState(null)
+  const [share, setShare] = useState(28) // % of the shorter side
+  const shareRef = useRef(share)
+  shareRef.current = share
+  const frozenRef = useRef(frozen)
+  frozenRef.current = frozen
+
+  useEffect(() => {
+    let stream = null
+    let stopped = false
+    ;(async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        })
+        if (stopped) return stream.getTracks().forEach((t) => t.stop())
+        video.current.srcObject = stream
+        await video.current.play()
+        setReady(true)
+      } catch {
+        onFail?.()
+      }
+    })()
+    return () => { stopped = true; stream?.getTracks().forEach((t) => t.stop()) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const readNow = useCallback(() => {
+    const v = video.current
+    if (!v || !v.videoWidth) return
+    const scale = Math.min(1, LIVE / Math.max(v.videoWidth, v.videoHeight))
+    const c = frame.current ?? (frame.current = document.createElement('canvas'))
+    c.width = Math.round(v.videoWidth * scale)
+    c.height = Math.round(v.videoHeight * scale)
+    c.getContext('2d', { willReadFrequently: true }).drawImage(v, 0, 0, c.width, c.height)
+    const size = Math.round((shareRef.current / 100) * Math.min(c.width, c.height))
+    const r = readSquare(c, { x: Math.round((c.width - size) / 2), y: Math.round((c.height - size) / 2), size })
+    setReading(r)
+    onRead?.(r)
+  }, [onRead])
+
+  useEffect(() => {
+    if (!ready) return
+    const t = setInterval(() => { if (!frozenRef.current && document.visibilityState === 'visible') readNow() }, EVERY)
+    return () => clearInterval(t)
+  }, [ready, readNow])
+
+  // Frozen, the picture holds still too, so what is read is what is seen.
+  useEffect(() => {
+    const v = video.current
+    if (!v || !ready) return
+    if (frozen) v.pause()
+    else void v.play().catch(() => undefined)
+  }, [frozen, ready])
+
+  // The square and its frame, as shares of the picture.
+  const w = video.current?.videoWidth || 16
+  const h = video.current?.videoHeight || 9
+  const side = (share / 100) * Math.min(w, h)
+  const ring = side * 1.56
+  const box = (s) => ({ left: `${((w - s) / 2 / w) * 100}%`, top: `${((h - s) / 2 / h) * 100}%`, width: `${(s / w) * 100}%`, height: `${(s / h) * 100}%` })
+
+  return (
+    <div className="capture">
+      <div className="viewer live">
+        <video ref={video} playsInline muted autoPlay />
+        {ready && <div className="ring" style={box(ring)} />}
+        {ready && <div className={`square${frozen ? ' frozen' : ''}`} style={box(side)} />}
+        {!ready && <div className="starting">Opening the camera…</div>}
+      </div>
+      <div className="live-controls">
+        <label className="size">
+          <span>Square</span>
+          <input type="range" min="8" max="45" value={share} onChange={(e) => setShare(Number(e.target.value))} />
+        </label>
+        <button type="button" className={frozen ? 'primary' : ''} onClick={() => setFrozen((f) => !f)} disabled={!ready}>
+          {frozen ? 'Go live' : 'Freeze'}
+        </button>
+      </div>
+      {reading && <ReadingCard reading={reading} />}
+    </div>
+  )
+}
+
+/** Live camera, or a photo where the camera cannot be had or is not wanted. */
+export function Capture({ onRead, hint }) {
+  const canLive = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+  const [mode, setMode] = useState(canLive ? 'live' : 'photo')
+  const [failed, setFailed] = useState(false)
+  return (
+    <>
+      <p className="hint">{hint}</p>
+      {failed && <p className="warn">The camera could not be opened here, so take a photo instead.</p>}
+      {mode === 'live'
+        ? <LiveCapture onRead={onRead} onFail={() => { setFailed(true); setMode('photo') }} />
+        : <PhotoCapture onRead={onRead} hint="" />}
+      {canLive && !failed && (
+        <button type="button" className="link" onClick={() => setMode(mode === 'live' ? 'photo' : 'live')}>
+          {mode === 'live' ? 'Use a photo instead' : 'Use the live camera'}
+        </button>
+      )}
+    </>
   )
 }

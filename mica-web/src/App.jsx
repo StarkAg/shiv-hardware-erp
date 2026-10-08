@@ -54,7 +54,7 @@ function Find({ chips }) {
     <>
       <Capture
         onRead={setReading}
-        hint="Lay the customer's piece on white paper, shoot it straight on under the shop light, no flash. Then place the square on it."
+        hint="Lay the customer's piece on white paper and hold the phone straight over it under the shop light. Keep the piece in the square and white paper in the dashed frame."
       />
       {reading && (
         <>
@@ -131,7 +131,7 @@ function Add({ chips }) {
         shades: reading.shades, texture: reading.texture, corrected: reading.corrected, photo: storageId,
       })
       remember('brand', brand); remember('catalog', catalog); remember('finish', finish)
-      setSaid({ ok: true, text: `${res.replaced ? 'Updated' : 'Saved'} ${code.trim().toUpperCase()}. Move the square to the next chip.` })
+      setSaid({ ok: true, text: `${res.replaced ? 'Updated' : 'Saved'} ${code.trim().toUpperCase()}. Point at the next chip.` })
       setCode('')
     } catch (err) {
       const text = typeof err?.data === 'string' ? err.data : err?.message ?? String(err)
@@ -160,7 +160,7 @@ function Add({ chips }) {
 
       <Capture
         onRead={setReading}
-        hint="Shoot the catalog page straight on under the shop light, no flash, with the white board around the chips in view. One photo can do a whole page."
+        hint="Hold the phone straight over the catalog page under the shop light. Put one chip in the square with the white board in the dashed frame, type its code, save — then move to the next chip."
       />
 
       {reading && (
