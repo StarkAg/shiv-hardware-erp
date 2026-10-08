@@ -68,6 +68,29 @@ export function CounterLayout() {
     bar.current?.querySelector<HTMLElement>('[data-on]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
   }, [pathname])
 
+  // Installed on an iPhone, the page itself never needs to scroll: each screen
+  // scrolls inside its own box. But when the keyboard closes, iOS can leave the
+  // whole page shifted up, which opens a gap between a screen's bottom buttons
+  // (Generate / Print) and the tab bar. Put it back whenever that happens.
+  useEffect(() => {
+    const settle = () => {
+      const typing = document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')
+      const keyboardUp = (window.visualViewport?.height ?? window.innerHeight) < window.innerHeight - 120
+      if (typing || keyboardUp) return                                    // moving between fields: leave iOS alone
+      const page = document.scrollingElement ?? document.documentElement
+      if (window.scrollY > 0 && page.scrollHeight <= window.innerHeight + 2) window.scrollTo(0, 0)
+    }
+    const later = () => window.setTimeout(settle, 60)
+    window.visualViewport?.addEventListener('resize', later)
+    window.addEventListener('focusout', later)
+    window.addEventListener('orientationchange', later)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', later)
+      window.removeEventListener('focusout', later)
+      window.removeEventListener('orientationchange', later)
+    }
+  }, [])
+
   return (
     // The counter has no top bar on a phone, only the bottom tabs: the screen
     // heights shared with the panel must not hold back the panel's 57px bar,
