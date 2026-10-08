@@ -12,6 +12,33 @@ import { toJpeg } from 'html-to-image'
  * very layout that prints, means it is instant and works anywhere.
  */
 
+/** Safari, and every browser on an iPhone, which are all Safari underneath. */
+const isWebKit = () =>
+  /AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|Edg\//.test(navigator.userAgent) ||
+  /iPhone|iPad|iPod/.test(navigator.userAgent)
+
+/**
+ * Puts the picture's own bytes into the <img> and waits until it is decoded,
+ * so the copy taken of the page has it. A picture still loading, or only
+ * linked by address, is what came out blank.
+ */
+async function inlineImage(img: HTMLImageElement): Promise<void> {
+  try {
+    if (img.src && !img.src.startsWith('data:')) {
+      const blob = await (await fetch(img.src)).blob()
+      img.src = await new Promise<string>((done, fail) => {
+        const reader = new FileReader()
+        reader.onload = () => done(String(reader.result))
+        reader.onerror = () => fail(reader.error)
+        reader.readAsDataURL(blob)
+      })
+    }
+    await img.decode()
+  } catch {
+    // A picture that will not load is left as it is; the rest still goes.
+  }
+}
+
 /** Draws `element` off-screen at its printed size and returns it as a JPEG. */
 export async function elementToJpeg(element: ReactElement, { scale = 2, quality = 0.92 } = {}): Promise<Blob> {
   const host = document.createElement('div')
@@ -24,11 +51,16 @@ export async function elementToJpeg(element: ReactElement, { scale = 2, quality 
     // Fonts and pictures (logos, the QR code, a card's background) must be in
     // before the picture is taken, or they come out blank.
     await document.fonts?.ready
-    await Promise.all([...host.querySelectorAll('img')].map((img) =>
-      img.complete ? Promise.resolve() : new Promise((done) => { img.onload = img.onerror = () => done(undefined) })))
+    await Promise.all([...host.querySelectorAll('img')].map(inlineImage))
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
     const node = (host.firstElementChild as HTMLElement | null) ?? host
-    const url = await toJpeg(node, { quality, pixelRatio: scale, backgroundColor: '#ffffff', cacheBust: true })
+    const options = { quality, pixelRatio: scale, backgroundColor: '#ffffff' }
+    // On an iPhone the first picture taken leaves out the images — the
+    // visiting card at the top of a quotation came out as a blank space —
+    // because Safari has not drawn them inside the picture yet. The second is
+    // whole. Elsewhere one is enough.
+    if (isWebKit()) await toJpeg(node, options)
+    const url = await toJpeg(node, options)
     return await (await fetch(url)).blob()
   } finally {
     root.unmount()
@@ -41,11 +73,14 @@ export async function elementToJpeg(element: ReactElement, { scale = 2, quality 
  * where the browser cannot share files, saves it to be sent by hand.
  * Returns how it went, for the message shown after.
  */
-export async function shareJpeg(blob: Blob, fileName: string, text: string): Promise<'shared' | 'saved' | 'cancelled'> {
+export async function shareJpeg(blob: Blob, fileName: string): Promise<'shared' | 'saved' | 'cancelled'> {
   const file = new File([blob], fileName, { type: 'image/jpeg' })
   if (navigator.share && navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: text, text })
+      // The picture alone. A title or text rides along as WhatsApp's caption
+      // ("SH-2026-0002 - Water Proof Block Board 19mm"), which the shop does
+      // not want under a quotation sent to a customer.
+      await navigator.share({ files: [file] })
       return 'shared'
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled'

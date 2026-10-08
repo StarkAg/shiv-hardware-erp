@@ -154,11 +154,7 @@ export function QuotationBuilder() {
       save({ silent: true })
       const shareDoc = enrichQuotation(buildQuote())
       const blob = await elementToJpeg(<QuotationPrint quote={shareDoc} />)
-      const how = await shareJpeg(
-        blob,
-        `${shareDoc.number}.jpg`,
-        `${shareDoc.number} - ${CATEGORY_LABELS[shareDoc.category] ?? 'Quotation'}`,
-      )
+      const how = await shareJpeg(blob, `${shareDoc.number}.jpg`)
       if (how === 'saved') toast(`${shareDoc.number}.jpg saved — send it from your photos`)
     } catch (err) {
       toast(`Share failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
