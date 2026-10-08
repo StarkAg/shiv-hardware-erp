@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
 import App from './App.jsx'
+import { PinGate } from './deviceTrust/PinGate.jsx'
 import './index.css'
 
 const CONVEX_URL =
@@ -22,7 +23,10 @@ document.addEventListener(
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ConvexProvider client={convex}>
-      <App />
+      {/* The shop PIN once per device (Shiv_Panel convex/devices.ts). */}
+      <PinGate convexUrl={CONVEX_URL} app="Attendance" client={convex}>
+        <App />
+      </PinGate>
     </ConvexProvider>
   </React.StrictMode>,
 )

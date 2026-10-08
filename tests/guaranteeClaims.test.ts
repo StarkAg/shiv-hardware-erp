@@ -6,7 +6,7 @@
  * stored without its reason (which the customer also reads on the card page).
  * The menu badge counts only claims still waiting on the shop.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'

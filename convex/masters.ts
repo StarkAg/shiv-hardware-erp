@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./lib/guarded";
 import { readBills, writeBills } from "./lib/billRows";
 import { properText } from "./lib/text";
 import { v, ConvexError } from "convex/values";

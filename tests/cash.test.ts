@@ -2,7 +2,7 @@
 /**
  * The drawer: what is kept, what each day opens with, and the counts.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'

@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./lib/guarded";
 import { v } from "convex/values";
 import { requirePin } from "./lib/pin";
 

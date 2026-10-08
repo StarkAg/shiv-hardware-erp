@@ -6,7 +6,7 @@
  * that saved while its voucher failed, two PCs handing out the same number,
  * and a deletion that only happened on one machine.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'

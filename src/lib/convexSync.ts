@@ -6,6 +6,7 @@
  * uses useQuery hooks and keeps the Zustand store updated without loops.
  */
 import { ConvexHttpClient } from 'convex/browser'
+import { authorizeHttp } from './deviceTrust/deviceTrust.js'
 import { api } from '../../convex/_generated/api'
 import type { Bill, BrandSet, CustomCatalogEntry, HardwareCatalog, TotoDriver } from './types'
 
@@ -15,7 +16,9 @@ let _client: ConvexHttpClient | null = null
 function client(): ConvexHttpClient | null {
   if (!CONVEX_URL) return null
   _client ??= new ConvexHttpClient(CONVEX_URL)
-  return _client
+  // Carries this device's trust token (see lib/deviceTrust), read fresh each
+  // time so a device trusted a moment ago is not still calling without it.
+  return authorizeHttp(_client)
 }
 
 export const convexEnabled = () => Boolean(CONVEX_URL)

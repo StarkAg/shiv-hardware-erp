@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { mutation, query } from './lib/guarded'
 
 const jobKind = v.union(v.literal('quotation'), v.literal('guarantee'), v.literal('raw-file'))
 const jobSource = v.union(v.literal('android'), v.literal('web'), v.literal('whatsapp'), v.literal('server'))

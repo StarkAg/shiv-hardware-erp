@@ -2,7 +2,7 @@
 /**
  * A rename is only a rename if the old name goes wherever it was written.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'

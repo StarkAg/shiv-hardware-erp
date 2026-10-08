@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { mutation } from "./lib/guarded";
 import { record } from "./lib/history";
 import { withCourtesy, properCase } from "./masters";
 import { requirePin } from "./lib/pin";

@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { query } from "./lib/guarded";
 import { v } from "convex/values";
 
 /** Everything that has been done, newest first. */

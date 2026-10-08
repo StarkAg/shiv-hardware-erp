@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation } from "./lib/guarded";
 import { v } from "convex/values";
 import { fyOf, round2 } from "./lib/money";
 import type { Id } from "./_generated/dataModel";

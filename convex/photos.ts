@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { query } from "./lib/guarded";
 import type { Id } from "./_generated/dataModel";
 
 type Attachment =

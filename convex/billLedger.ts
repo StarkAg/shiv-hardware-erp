@@ -1,6 +1,6 @@
 import { isWithoutBillParty } from './lib/text'
 import { ConvexError, v } from 'convex/values'
-import { mutation } from './_generated/server'
+import { mutation } from './lib/guarded'
 import type { MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { fyOf, round2 } from './lib/money'

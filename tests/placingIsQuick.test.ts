@@ -12,7 +12,7 @@
  * the loop being written back in by hand later, since a sequential await
  * inside a loop reads perfectly innocent.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'

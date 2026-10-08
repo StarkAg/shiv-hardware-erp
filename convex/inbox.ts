@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./lib/guarded";
 import { v } from "convex/values";
 import { record } from "./lib/history";
 import { autoTagFor } from "./tags";

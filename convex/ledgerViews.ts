@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { query } from './_generated/server'
+import { query } from './lib/guarded'
 
 /**
  * Read-only views of the books for the panel.

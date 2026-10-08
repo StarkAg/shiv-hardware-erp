@@ -23,7 +23,7 @@
  * to the supplied plywood and 30 mm Signature door rows through seedList.
  */
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./lib/guarded";
 import type { QueryCtx } from "./_generated/server";
 import { readBills } from "./lib/billRows";
 import { canonicalUnit } from "./lib/text";

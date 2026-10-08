@@ -53,6 +53,17 @@ const receiptFields = {
 };
 
 export default defineSchema({
+  // The devices and servers allowed to call this deployment (convex/devices.ts).
+  trustedDevices: defineTable({
+    name: v.string(),
+    app: v.string(),
+    kind: v.union(v.literal('device'), v.literal('server')),
+    createdAt: v.number(),
+    lastSeenAt: v.number(),
+  }),
+  // Wrong PINs, so guessing it is paused after a few.
+  pinAttempts: defineTable({ at: v.number() }).index('by_at', ['at']),
+
   // ── Bills backup (single-row snapshot; all bills incl. drafts) ────────────
   // Now only the running bill number and when a bill last changed; the bills
   // themselves are in `bills`. `bills` here is what is left from before the

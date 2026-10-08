@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
-import { internalMutation, mutation, query } from './_generated/server'
+import { internalMutation } from './_generated/server'
+import { mutation, query } from './lib/guarded'
 import { api } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { requirePin } from './lib/pin'

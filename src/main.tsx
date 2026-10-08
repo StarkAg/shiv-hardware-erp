@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import { PinGate } from './lib/deviceTrust/PinGate.jsx'
 import './index.css'
 import { AppLayout } from './components/AppLayout'
 import { ConvexSync } from './components/ConvexSync'
@@ -38,6 +39,7 @@ const QuickEntry = page(() => import('./features/mobile/QuickEntry'), 'QuickEntr
 const DayPaper = page(() => import('./features/paper/DayPaper'), 'DayPaper')
 const Receive = page(() => import('./features/receive/Receive'), 'Receive')
 const BillFlow = page(() => import('./features/flow/BillFlow'), 'BillFlow')
+const TrustedDevices = page(() => import('./features/devices/TrustedDevices'), 'TrustedDevices')
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
@@ -169,6 +171,7 @@ const router = createHashRouter([
       { path: 'quotations',     element: <QuotationList /> },
       { path: 'cash-review',    element: <CashReview /> },
       { path: 'trash',          element: <BillTrash /> },
+      { path: 'devices',        element: <TrustedDevices /> },
       { path: 'printer-queue',  element: <PrinterQueue /> },
       // The quotation half's own customer list. Not the books' party list —
       // these are people who may only ever have had a quotation. Named for
@@ -194,8 +197,11 @@ const router = createHashRouter([
 const app = convex
   ? (
     <ConvexProvider client={convex}>
-      <ConvexSync />
-      <RouterProvider router={router} future={{ v7_startTransition: true }} />
+      {/* The shop PIN once per device; nothing reaches the server before it. */}
+      <PinGate convexUrl={CONVEX_URL} app="Panel" client={convex}>
+        <ConvexSync />
+        <RouterProvider router={router} future={{ v7_startTransition: true }} />
+      </PinGate>
     </ConvexProvider>
   )
   : <RouterProvider router={router} future={{ v7_startTransition: true }} />

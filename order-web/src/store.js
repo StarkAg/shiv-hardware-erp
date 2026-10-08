@@ -16,6 +16,7 @@
 //     newer correction made at the counter
 
 import { ConvexHttpClient } from 'convex/browser'
+import { authorizeHttp } from './deviceTrust/deviceTrust.js'
 import { anyApi } from 'convex/server'
 
 const JOBS_KEY = 'shiv-orders:jobs'
@@ -50,14 +51,16 @@ export const pendingCount = () => readOutbox().length
 
 let client = null
 function convex() {
-  if (client) return client
+  if (client) return authorizeHttp(client)
   // Public URL, baked in the same way the cash book bakes it: the deploy must
   // not depend on an environment variable being remembered in the hosting
   // project a year from now.
   const url = import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
   if (!url) return null
   client = new ConvexHttpClient(url)
-  return client
+  // Carries this device's trust token; read each time, so a device trusted a
+  // moment ago is not still calling without it.
+  return authorizeHttp(client)
 }
 
 /** Push, then pull — so a change made here is on the server before the

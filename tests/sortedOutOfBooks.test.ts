@@ -11,7 +11,7 @@
  * These are the two halves of the rule: out of the books while unpriced, and
  * back in the moment somebody prices one.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'

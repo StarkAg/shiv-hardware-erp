@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./lib/guarded";
 
 /**
  * Mica Match — the shop's own colour list of laminate chips.

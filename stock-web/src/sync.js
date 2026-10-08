@@ -15,17 +15,20 @@
 // worker and no outbox here — unlike the cash book, which owns its rows.
 
 import { ConvexHttpClient } from 'convex/browser'
+import { authorizeHttp } from './deviceTrust/deviceTrust.js'
 import { anyApi } from 'convex/server'
 import { normalize } from './catalog.js'
 
 let client = null
 function convex() {
-  if (client) return client
+  if (client) return authorizeHttp(client)
   // Public deployment URL, baked in as a fallback the same way the cash book
   // does it, so a forgotten environment variable cannot break a deploy.
   const url = import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
   client = new ConvexHttpClient(url)
-  return client
+  // Carries this device's trust token; read each time, so a device trusted a
+  // moment ago is not still calling without it.
+  return authorizeHttp(client)
 }
 
 export async function fetchSnapshot() {

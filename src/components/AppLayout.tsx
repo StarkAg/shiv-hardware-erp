@@ -6,7 +6,7 @@ import { assetPath } from '../lib/assets'
 import {
   ChevronLeft,
   Moon,
-  Trash2,
+  Trash2, MonitorSmartphone,
   Users,
   ReceiptText,
   Sun,
@@ -139,6 +139,7 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     label: 'Settings',
     items: [
       { to: '/trash', label: 'Trash', icon: Trash2 },
+      { to: '/devices', label: 'Trusted Devices', icon: MonitorSmartphone },
       /*
        * Bill Scanner and Printer Queue are not listed.
        *

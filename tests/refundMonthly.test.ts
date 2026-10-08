@@ -3,7 +3,7 @@
  * Money handed back to a customer, and the months that fall due on staff and
  * premises.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api, internal } from '../convex/_generated/api'

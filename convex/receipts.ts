@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
-import { internalMutation, query } from './_generated/server'
+import { internalMutation } from './_generated/server'
+import { query } from './lib/guarded'
 import type { Doc } from './_generated/dataModel'
 import { fyOf } from './lib/money'
 import { nextVoucherNo } from './lib/numbering'

@@ -1,5 +1,8 @@
 import { v } from 'convex/values'
-import { internalMutation, mutation, query, type QueryCtx } from './_generated/server'
+import { internalMutation, type QueryCtx } from './_generated/server'
+import { mutation, query } from './lib/guarded'
+// Reached by customers from a guarantee card's QR code, with no device to trust.
+import { query as openQuery } from './_generated/server'
 import { requirePin } from './lib/pin'
 
 export const recentQuotations = query({
@@ -88,7 +91,7 @@ export const recentGuarantees = query({
  * A wrong token, a missing token and a card that does not exist all answer the
  * same way, so a guesser learns nothing about which numbers are real.
  */
-export const getGuaranteeByNumber = query({
+export const getGuaranteeByNumber = openQuery({
   args: {
     number: v.string(),
     token: v.optional(v.string()),

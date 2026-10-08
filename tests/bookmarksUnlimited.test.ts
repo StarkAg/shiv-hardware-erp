@@ -16,7 +16,7 @@
  * packet is filed, so they stay small and readable on an ordinary day. They
  * simply carry on past forty when a sort genuinely needs them to.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'

@@ -1,5 +1,8 @@
 import { ConvexError, v } from 'convex/values'
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
+import { internalMutation, type MutationCtx, type QueryCtx } from './_generated/server'
+import { mutation, query } from './lib/guarded'
+// Reached by customers from a guarantee card's QR code, with no device to trust.
+import { query as openQuery, mutation as openMutation } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { cardsForQr } from './documents'
 
@@ -51,7 +54,7 @@ const text = (value: string, field: string, min: number, max: number) => {
 }
 
 /** One upload link per photo, only for someone holding the card. */
-export const uploadUrl = mutation({
+export const uploadUrl = openMutation({
   args: { number: v.string(), token: v.string() },
   handler: async (ctx, { number, token }) => {
     await cardFor(ctx, number, token)
@@ -59,7 +62,7 @@ export const uploadUrl = mutation({
   },
 })
 
-export const submit = mutation({
+export const submit = openMutation({
   args: {
     number: v.string(),
     token: v.string(),
@@ -147,7 +150,7 @@ export const submit = mutation({
 })
 
 /** The card holder's own claims and where each one stands (for the card page). */
-export const forCard = query({
+export const forCard = openQuery({
   args: { number: v.string(), token: v.string() },
   handler: async (ctx, { number, token }) => {
     const card = (await cardsForQr(ctx, number, token))[0]

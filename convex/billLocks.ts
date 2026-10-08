@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { mutation, query } from './lib/guarded'
 
 /**
  * Soft locks on bills, so two counters don't type into the same one.

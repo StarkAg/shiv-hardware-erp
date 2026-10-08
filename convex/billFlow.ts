@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
-import { mutation, query, internalMutation, internalQuery } from './_generated/server'
+import { internalMutation, internalQuery } from './_generated/server'
+import { mutation, query } from './lib/guarded'
 import { ensureCashFlow } from './lib/billFlow'
 import { flowStage, requiredTasksDone, type FlowRoute } from './lib/billFlowStages'
 import { postCashEntry } from './cash'

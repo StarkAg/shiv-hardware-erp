@@ -1,5 +1,5 @@
 import { v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { mutation, query } from './lib/guarded'
 
 /** Replace the single-row toto contacts snapshot. Creates the row if absent. */
 export const save = mutation({

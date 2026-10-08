@@ -22,6 +22,11 @@ if (!CONVEX_URL) {
 }
 
 const convex = new ConvexHttpClient(CONVEX_URL)
+// A server key from the trusted-device list (convex/devices.ts):
+//   npx convex run --prod devices:issueServerKey '{"name":"cloud-api"}'
+// Without it every call to the books is refused.
+if (process.env.SHIV_DEVICE_TOKEN) convex.setAuth(process.env.SHIV_DEVICE_TOKEN)
+else console.warn('SHIV_DEVICE_TOKEN is not set: the books will refuse this server.')
 const app = express()
 
 app.use(cors())

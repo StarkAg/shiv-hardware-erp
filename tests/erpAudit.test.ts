@@ -2,7 +2,7 @@
  * The defects found by the ERP audit of 2026-10-08, each held to the
  * behaviour the shop chose for it.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, test } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'

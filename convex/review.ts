@@ -1,11 +1,7 @@
 import { v } from "convex/values";
 import { properItem } from "./lib/text";
-import {
-  internalMutation,
-  internalQuery,
-  mutation,
-  query,
-} from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
+import { mutation, query } from "./lib/guarded";
 import type { MutationCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";

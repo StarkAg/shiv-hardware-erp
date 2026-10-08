@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import { PinGate } from './lib/deviceTrust/PinGate.jsx'
 import './index.css'
 import { CounterLayout } from './components/CounterLayout'
 import { ConvexSync } from './components/ConvexSync'
@@ -115,8 +116,11 @@ const router = createHashRouter([
 const app = convex
   ? (
     <ConvexProvider client={convex}>
-      <ConvexSync />
-      <RouterProvider router={router} future={{ v7_startTransition: true }} />
+      {/* The shop PIN once per device; nothing reaches the server before it. */}
+      <PinGate convexUrl={CONVEX_URL} app="Counter" client={convex}>
+        <ConvexSync />
+        <RouterProvider router={router} future={{ v7_startTransition: true }} />
+      </PinGate>
     </ConvexProvider>
   )
   : <RouterProvider router={router} future={{ v7_startTransition: true }} />

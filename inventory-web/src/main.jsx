@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
 import App from './App.jsx'
+import { PinGate } from './deviceTrust/PinGate.jsx'
 import './index.css'
 import { startTheme } from './theme'
 
@@ -11,9 +12,8 @@ if (import.meta.hot) import.meta.hot.dispose(stopTheme)
 // Live client, so a count saved on one phone shows on another at once. The URL is
 // baked in as a fallback like the sort and cash sites, so a forgotten environment
 // variable cannot ship a dead build.
-const convex = new ConvexReactClient(
-  import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud',
-)
+const CONVEX_URL = import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
+const convex = new ConvexReactClient(CONVEX_URL)
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   addEventListener('load', () => {
@@ -32,7 +32,10 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ConvexProvider client={convex}>
-      <App />
+      {/* The shop PIN once per device (Shiv_Panel convex/devices.ts). */}
+      <PinGate convexUrl={CONVEX_URL} app="Inventory" client={convex}>
+        <App />
+      </PinGate>
     </ConvexProvider>
   </React.StrictMode>,
 )

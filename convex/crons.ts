@@ -22,4 +22,7 @@ crons.interval(
   {},
 )
 
+// Wrong-PIN marks older than the lockout window are no use to anyone.
+crons.daily('clear old wrong PINs', { hourUTC: 21, minuteUTC: 0 }, internal.devices.sweepAttempts, {})
+
 export default crons

@@ -2,7 +2,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action } from "./lib/guarded";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 

@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
-import { action, internalQuery, internalMutation } from './_generated/server'
+import { internalQuery, internalMutation } from './_generated/server'
+import { action } from './lib/guarded'
 import { internal } from './_generated/api'
 
 /**

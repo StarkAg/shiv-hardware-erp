@@ -16,6 +16,7 @@
 //     newer correction made somewhere else
 
 import { ConvexHttpClient } from 'convex/browser'
+import { authorizeHttp } from './deviceTrust/deviceTrust.js'
 import { anyApi } from 'convex/server'
 
 const OUTBOX_KEY = 'shiv-cash:outbox'
@@ -43,14 +44,16 @@ export function queue(op) {
 
 let client = null
 export function convex() {
-  if (client) return client
+  if (client) return authorizeHttp(client)
   // The same fallback the attendance app carries: this URL is public and is
   // already baked into that bundle, so the deploy does not depend on an
   // environment variable being remembered in the hosting project.
   const url = import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
   if (!url) return null
   client = new ConvexHttpClient(url)
-  return client
+  // Carries this device's trust token; read each time, so a device trusted a
+  // moment ago is not still calling without it.
+  return authorizeHttp(client)
 }
 
 // Push, then pull. In that order, so a change made here is on the server before

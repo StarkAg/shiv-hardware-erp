@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
-import { internalMutation, query } from './_generated/server'
+import { internalMutation } from './_generated/server'
+import { query } from './lib/guarded'
 
 /**
  * What the nightly backup reports about itself.

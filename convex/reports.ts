@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { query } from "./lib/guarded";
 import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";

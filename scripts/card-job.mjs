@@ -63,6 +63,8 @@ const CFG = {
   convex: (appEnv.VITE_CONVEX_URL || '').replace(/\/+$/, ''),
   cloudApi: (appEnv.VITE_CLOUD_API_URL || '').replace(/\/+$/, ''),
   cloudKey: appEnv.VITE_CLOUD_API_KEY || '',
+  // This PC's server key from the trusted-device list (convex/devices.ts).
+  deviceToken: appEnv.SHIV_DEVICE_TOKEN || '',
   site: (psEnv.GUARANTEE_PUBLIC_URL || appEnv.VITE_GUARANTEE_PUBLIC_URL || 'https://www.shivhardware.store/Gaurantee').replace(/\/+$/, ''),
   // The short link (qr-redirect/) printed on every card: <short>/<number>/<token>.
   short: (psEnv.GUARANTEE_SHORT_URL ?? appEnv.VITE_GUARANTEE_SHORT_URL ?? 'https://gcvf.vercel.app').replace(/\/+$/, ''),
@@ -146,7 +148,7 @@ const cards = job.cards.map((card, i) => {
 const TOKEN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const mintToken = () => Array.from(randomBytes(20), (b) => TOKEN_ALPHABET[b % TOKEN_ALPHABET.length]).join('')
 async function convexQuery(path, a) {
-  const res = await fetch(`${CFG.convex}/api/query`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, args: a, format: 'json' }) })
+  const res = await fetch(`${CFG.convex}/api/query`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(CFG.deviceToken ? { Authorization: `Bearer ${CFG.deviceToken}` } : {}) }, body: JSON.stringify({ path, args: a, format: 'json' }) })
   const json = await res.json()
   if (json.status !== 'success') throw new Error(json.errorMessage || `Convex ${path} failed`)
   return json.value

@@ -2,7 +2,7 @@
 /**
  * Holes that only open when two safe-looking operations meet.
  */
-import { convexTest } from 'convex-test'
+import { convexTest } from './trustedConvex'
 import { describe, expect, it, vi } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'

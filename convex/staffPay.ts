@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
-import { internalMutation, mutation, query } from './_generated/server'
+import { internalMutation } from './_generated/server'
+import { mutation, query } from './lib/guarded'
 import { account, amount, assertUnsettled, indiaToday, validDate } from './lib/staffPay'
 import { foldName } from './lib/text'
 import { POST_TO_BOOKS, postCashEntry } from './cash'

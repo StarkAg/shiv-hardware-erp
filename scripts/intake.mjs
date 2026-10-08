@@ -48,9 +48,16 @@ function envUrl() {
   })
 }
 
+// This PC's server key from the trusted-device list (convex/devices.ts),
+// SHIV_DEVICE_TOKEN in .env.local.
+const deviceToken = readFile(join(root, '.env.local'), 'utf8')
+  .then(data => data.match(/^SHIV_DEVICE_TOKEN=(.*)$/m)?.[1]?.trim() || '')
+  .catch(() => '')
+
 async function convex(url, type, path, args) {
+  const token = await deviceToken
   const response = await fetch(`${url}/api/${type}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ path, args, format: 'json' }),
   })
   const result = await response.json()

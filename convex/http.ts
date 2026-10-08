@@ -18,6 +18,19 @@ import { internal } from './_generated/api'
 
 const http = httpRouter()
 
+/**
+ * The public half of the key device tokens are signed with. Convex reads it
+ * here to check a token (auth.config.ts). DEVICE_JWKS is set with the key
+ * pair; see convex/deviceKeys.ts.
+ */
+http.route({
+  path: '/.well-known/jwks.json',
+  method: 'GET',
+  handler: httpAction(async () => new Response(process.env.DEVICE_JWKS ?? '{"keys":[]}', {
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
+  })),
+})
+
 // Meta calls this once when you save the callback URL. It must echo back
 // hub.challenge as PLAIN TEXT — returning JSON or a redirect fails the check.
 http.route({
