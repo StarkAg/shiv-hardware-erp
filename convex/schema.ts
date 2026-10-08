@@ -1025,4 +1025,30 @@ export default defineSchema({
     name: v.string(),
     value: v.number(),
   }).index("by_name", ["name"]),
+
+  /**
+   * Mica Match: one laminate chip from a catalog, read off a phone photo.
+   *
+   * A sheet is seldom one colour, so it is kept as its main shades — each a
+   * CIE L*a*b* colour and the share of the square it covers — plus how busy
+   * the pattern is, from 0 (plain) up. The colours are measured after the
+   * photo is corrected against the white paper around the chip, so chips shot
+   * on different days under different light compare fairly.
+   */
+  micaChips: defineTable({
+    brand: v.string(),
+    catalog: v.optional(v.string()),
+    code: v.string(),
+    finish: v.optional(v.string()),
+    shades: v.array(v.object({ L: v.number(), a: v.number(), b: v.number(), w: v.number() })),
+    texture: v.number(),
+    // Whether a white reference was found beside the chip; without one the
+    // colours are the camera's own and less trustworthy.
+    corrected: v.boolean(),
+    photo: v.optional(v.id("_storage")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_brand", ["brand"])
+    .index("by_code", ["code"]),
 })

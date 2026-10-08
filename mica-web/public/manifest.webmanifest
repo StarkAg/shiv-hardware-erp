@@ -1,0 +1,12 @@
+{
+  "name": "Shiv Hardware Mica Match",
+  "short_name": "Mica Match",
+  "description": "Find the closest laminate across catalogs from a phone photo.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f0ea",
+  "theme_color": "#f4f1ea",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
