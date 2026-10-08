@@ -17,11 +17,16 @@ import { Inventory } from './features/inventory/Inventory'
 import { RateManager } from './features/rates/RateManager'
 import { Transport } from './features/transport/Transport'
 import { Customers } from './features/customers/Customers'
-import { AppError, NotFound } from './components/RouteFallbacks'
+import { AppError, HOME, NotFound } from './components/RouteFallbacks'
+
 import { startProperInputs } from './lib/properInputs'
 import { startEnterFlow } from './lib/enterFlow'
 import { startOfflineSync } from './lib/offlineSync'
 import { useStore } from './lib/store'
+
+// The counter opens on the quotation chooser; the recovery screens' Home
+// button goes there, not to the panel's /home.
+HOME.path = '/quote-options'
 
 /**
  * The counter, as its own site.

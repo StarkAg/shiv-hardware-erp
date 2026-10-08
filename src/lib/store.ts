@@ -6,6 +6,7 @@ import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
 import { pushBillsToConvex, pushCatalogToConvex, pushTotoToConvex, removeBillFromConvex } from './convexSync'
+import { indiaYear } from './businessDate'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const codeSets = (sets: BrandSet[]): BrandSet[] => sets.map((s, i) => ({ ...s, name: `C${i + 1}` }))
@@ -158,7 +159,7 @@ const guaranteeKey = (g: GuaranteeDocument) => g.token || g.id
  */
 export function guaranteeSeqOf(number: string): number | null {
   const m = /^GC-(\d{4})-(\d{4})$/.exec(number)
-  return m && Number(m[1]) === new Date().getFullYear() ? Number(m[2]) : null
+  return m && Number(m[1]) === indiaYear() ? Number(m[2]) : null
 }
 /**
  * Cards removed from the cloud on 2026-10-04 — two duplicate saves of
@@ -300,7 +301,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   nextQuoteNumber: () => {
     const seq = get().quoteSeq + 1
-    const year = new Date().getFullYear()
+    const year = indiaYear()
     return `SH-${year}-${String(seq).padStart(4, '0')}`
   },
 
@@ -485,7 +486,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   nextGuaranteeNumber: (offset = 0) => {
     const seq = startingSeq(get().guaranteeSeq, get().guarantees) + 1 + Math.max(0, Math.trunc(offset))
-    const year = new Date().getFullYear()
+    const year = indiaYear()
     return `GC-${year}-${String(seq).padStart(4, '0')}`
   },
 

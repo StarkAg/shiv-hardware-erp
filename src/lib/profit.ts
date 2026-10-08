@@ -1,4 +1,4 @@
-import { billCharges, billLines, isBuyingBill, type Bill, type BillItem } from './types'
+import { billCharges, billLines, isAmountOnlyLine, isBuyingBill, type Bill, type BillItem } from './types'
 
 /**
  * What the shop actually made on what it sold.
@@ -136,12 +136,25 @@ export interface PurchaseRate {
   party: string
 }
 
+/**
+ * Whether the books took a bill. One the ledger refused is on this device
+ * only: counting it showed profit on a sale the accounts never recorded, and
+ * let a purchase the accounts never recorded set what an item cost.
+ */
+export const inTheBooks = (bill: Bill) => !bill.postError
+
+/** The sales, returns and purchases left out because the books refused them. */
+export function leftOut(bills: Bill[]): { count: number; value: number } {
+  const out = bills.filter((b) => !inTheBooks(b) && ['sale', 'return', 'purchase'].includes(b.kind ?? 'sale'))
+  return { count: out.length, value: out.reduce((sum, b) => sum + (Number(b.total) || 0), 0) }
+}
+
 /** Every rate ever paid, by item, oldest first. */
 export function costBook(bills: Bill[], same: SameGoods[] = []): Map<ItemRef, PurchaseRate[]> {
   const resolve = resolver(same)
   const book = new Map<ItemRef, PurchaseRate[]>()
   for (const bill of bills) {
-    if (bill.kind !== 'purchase') continue
+    if (bill.kind !== 'purchase' || !inTheBooks(bill)) continue
     for (const { item, each } of pricedLines(bill)) {
       const ref = resolve(refOf(item))
       const rates = book.get(ref) ?? []
@@ -288,15 +301,23 @@ export function profitLines(bills: Bill[], books: Books = {}): ProfitLine[] {
   for (const bill of bills) {
     const kind = bill.kind ?? 'sale'
     if (kind !== 'sale' && kind !== 'return') continue
+    if (!inTheBooks(bill)) continue
     // Goods sent back to a supplier are the buying side, not a sale undone.
     if (isBuyingBill(kind, books.suppliers?.has(String(bill.ledgerId ?? '')))) continue
     const sign = kind === 'return' ? -1 : 1
 
-    for (const item of billLines(bill.items ?? [])) {
-      const qty = Number(item.qty)
-      const amount = Number(item.amount)
-      if (!(qty > 0) || !(amount > 0)) continue
+    // A sale written as one "Bill" figure has no goods line, and billLines
+    // drops it as a charge — so it vanished from Profit altogether, even from
+    // the list of what still needs a cost. It is kept here and marked a lump.
+    const goodsAndLumps = (bill.items ?? []).filter(
+      (i) => billLines([i]).length || (isAmountOnlyLine(i) && LUMP.test(String(i.description ?? '').trim())),
+    )
+    for (const item of goodsAndLumps) {
       const name = String(item.description ?? '').trim()
+      const amount = Number(item.amount)
+      // A bare figure carries no real quantity; it is one of itself.
+      const qty = LUMP.test(name) ? Number(item.qty) || 1 : Number(item.qty)
+      if (!(qty > 0) || !(amount > 0)) continue
 
       const line: ProfitLine = {
         billId: bill.id,

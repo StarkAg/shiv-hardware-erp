@@ -8,6 +8,7 @@ import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import { rupees } from '../ledger/lib/format'
 import './BillFlow.css'
 import { DEFAULT_PAYMENT_MODE } from '../../lib/types'
+import { indiaToday } from '../../lib/businessDate'
 
 type Kind = 'sale' | 'purchase' | 'grn' | 'receipt' | 'payment' | 'unknown'
 type Route = 'unset' | 'handover' | 'rack' | 'order' | 'fabrication' | 'mixed'
@@ -36,7 +37,7 @@ const KINDS: Record<string, string> = {
   sale: 'Customer sale', purchase: 'Purchase bill', grn: 'Goods received',
   receipt: 'Customer receipt', payment: 'Supplier payment', unknown: 'Unclassified',
 }
-const today = () => new Date().toISOString().slice(0, 10)
+const today = indiaToday
 const id = () => globalThis.crypto?.randomUUID?.() ?? `line-${Date.now()}-${Math.random()}`
 const toNumber = (value: unknown) => Number(String(value ?? '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)?.[0]) || 0
 const dateText = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : today()

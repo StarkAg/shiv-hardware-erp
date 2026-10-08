@@ -21,6 +21,7 @@ import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, type ServerPrintPay
 import { printViaShop } from '../../lib/printViaShop'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
+import { indiaYear } from '../../lib/businessDate'
 
 type GuaranteeLayout = 'card' | 'a4'
 
@@ -155,14 +156,14 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // Each Save or Print mints a fresh GC-YYYY-NNNN ref number from the store sequence,
   // so every card becomes a permanent entry in the History tab and gets a stable QR.
   const [ref, setRef] = useState<CardRef>(() => {
-    const number = `GC-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`
+    const number = `GC-${indiaYear()}-${Date.now().toString().slice(-5)}`
     return { number, id: number, token: mintCardToken() }
   })
   // The slot-2 card is its own card: its own number and its own QR secret.
   // (It used to share slot 1's, so both cards' QRs were identical and the
   // online view could only ever open one of them.)
   const [ref2, setRef2] = useState<CardRef>(() => {
-    const number = `GC-${new Date().getFullYear()}-${(Date.now() + 1).toString().slice(-5)}`
+    const number = `GC-${indiaYear()}-${(Date.now() + 1).toString().slice(-5)}`
     return { number, id: number, token: mintCardToken() }
   })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
@@ -213,7 +214,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
    */
   async function catchUpGuaranteeSeq() {
     const latest = await Promise.race([
-      fetchLatestGuaranteeSeq(new Date().getFullYear()),
+      fetchLatestGuaranteeSeq(indiaYear()),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
     ])
     if (latest != null) raiseGuaranteeSeq(latest)

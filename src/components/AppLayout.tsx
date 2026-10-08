@@ -263,7 +263,7 @@ export function AppLayout() {
           <button
             onClick={toggleRail}
             aria-label={railed ? 'Open sidebar' : 'Collapse sidebar'}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto' : 'ml-auto order-last'}`}
+            className={`flex shrink-0 items-center justify-center rounded-lg text-muted hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto h-10 w-10' : 'ml-auto order-last h-8 w-8'}`}
           >
             {railed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
           </button>
@@ -279,7 +279,7 @@ export function AppLayout() {
         </div>
       </div>
 
-      <nav className={`flex-1 overflow-y-auto py-3 space-y-1 ${railed ? "px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "px-3"}`}>
+      <nav className={`flex-1 overflow-y-auto py-3 ${railed ? "space-y-1.5 px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:space-y-1.5" : "space-y-1 px-3"}`}>
         {AREAS.map((area) => (
           <div key={area.label} className={area.label === 'Home' ? '' : 'pt-2'}>
             {area.label !== 'Home' && !railed && (
@@ -287,22 +287,44 @@ export function AppLayout() {
                 {area.label}
               </div>
             )}
-            {area.label !== 'Home' && railed && <div className="mx-3 mb-2 border-t border-stone-200/80 dark:border-white/10" />}
+            {area.label !== 'Home' && railed && <div className="mx-auto mb-2 w-8 border-t border-stone-200/80 dark:border-white/10" />}
 
             {area.items.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                title={item.label}
-                className={linkClass({ isActive: isCurrent(item, location.pathname, location.search) })}
-              >
-                <item.icon size={18} />
-                <span className="flex-1">{item.label}</span>
-                {item.badge && CONVEX_READY && <ClaimsBadge />}
-                {item.key && (
-                  <span className="text-[11px] font-semibold text-muted">{item.key}</span>
-                )}
-              </Link>
+              // Collapsed, a row is its icon and nothing else: the name and
+              // the F-key squeezed the icon smaller than its neighbours and
+              // pushed it off the rail's centre line. Both are in the tooltip.
+              railed ? (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  title={item.key ? `${item.label}  ${item.key}` : item.label}
+                  aria-label={item.label}
+                  className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-lg transition ${
+                    isCurrent(item, location.pathname, location.search)
+                      ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
+                      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
+                  }`}
+                >
+                  <item.icon size={18} className="shrink-0" />
+                  {item.badge && CONVEX_READY && (
+                    <span className="absolute -right-1 -top-1 scale-75"><ClaimsBadge /></span>
+                  )}
+                </Link>
+              ) : (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  title={item.label}
+                  className={linkClass({ isActive: isCurrent(item, location.pathname, location.search) })}
+                >
+                  <item.icon size={18} className="shrink-0" />
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge && CONVEX_READY && <ClaimsBadge />}
+                  {item.key && (
+                    <span className="text-[11px] font-semibold text-muted">{item.key}</span>
+                  )}
+                </Link>
+              )
             ))}
 
             {/* Quotations open onto the shop's own product list — the fastest
@@ -314,8 +336,8 @@ export function AppLayout() {
         <button
           onClick={() => setDark(toggleTheme())}
           title={dark ? 'Light mode' : 'Dark mode'}
-          className={`flex w-full items-center rounded-lg py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition ${
-            railed ? 'justify-center px-0' : 'gap-2 px-3'
+          className={`flex items-center rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition ${
+            railed ? 'mx-auto h-10 w-10 justify-center' : 'w-full gap-2 px-3 py-2'
           }`}
         >
           {dark ? <Sun size={16} /> : <Moon size={16} />}
@@ -365,7 +387,7 @@ export function AppLayout() {
         </button>
       </div>
 
-      <aside className={`no-print sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-stone-200/80 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 transition-[width] duration-200 dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100 md:flex ${railed ? "w-16 [&_nav_a]:!mx-auto [&_nav_a]:!w-11 [&_nav_a]:!justify-center [&_nav_a]:!gap-0 [&_nav_a]:!px-0 [&_nav_a]:text-[0px] [&_nav_button]:!mx-auto [&_nav_button]:!w-11 [&_nav_button]:!justify-center [&_nav_button]:!gap-0 [&_nav_button]:!px-0 [&_nav_button]:text-[0px] [&_nav_button>span]:!gap-0 [&_nav>div>button>svg:last-child]:hidden [&_nav_div]:!ml-0 [&_nav_div]:!pl-0 [&_nav_div]:!border-l-0" : "w-64"}`}>
+      <aside className={`no-print sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-stone-200/80 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 transition-[width] duration-200 dark:border-white/10 dark:bg-[linear-gradient(180deg,#151515_0%,#24211d_58%,#171514_100%)] dark:text-stone-100 md:flex ${railed ? "w-16" : "w-64"}`}>
         {sidebar}
       </aside>
 

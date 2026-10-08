@@ -23,7 +23,7 @@ import { QuickEntry } from './features/mobile/QuickEntry'
 import { DayPaper } from './features/paper/DayPaper'
 import { Receive } from './features/receive/Receive'
 import { BillFlow } from './features/flow/BillFlow'
-import { AppError, NotFound, VoucherRedirect } from './components/RouteFallbacks'
+import { AppError, NotFound, VoucherRedirect, MovedToCounter } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
 import { startProperInputs } from './lib/properInputs'
 import { useStore } from './lib/store'
@@ -183,6 +183,11 @@ const router = createHashRouter([
       // what it is in the menu until the two lists are actually merged.
       // Links from older versions of the panel, kept working rather than 404.
       { path: 'voucher/:kind',  element: <VoucherRedirect /> },
+      // The quotation and guarantee screens moved to the counter on 2026-09-11.
+      ...['quote-options', 'quote/*', 'quote', 'product/*', 'history/*', 'history', 'guarantee/card',
+        'guarantee/a4', 'guarantee/history/*', 'guarantee/select-bill', 'guarantee/bill/*', 'inventory/*',
+        'inventory', 'rates/*', 'rates', 'transport/*', 'transport', 'customers']
+        .map((path) => ({ path, element: <MovedToCounter /> })),
       { path: 'pdf-viewer',     element: <PdfViewer /> },
       { path: '*',              element: <NotFound /> },
     ],

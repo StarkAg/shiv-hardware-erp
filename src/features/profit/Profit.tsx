@@ -11,6 +11,7 @@ import {
   byDay,
   byItem,
   gaps,
+  leftOut,
   profitLines,
   purchasedItems,
   totalsOf,
@@ -23,6 +24,7 @@ import {
   type Totals,
 } from '../../lib/profit'
 import { SetCost } from './SetCost'
+import { indiaToday } from '../../lib/businessDate'
 
 /**
  * Profit, item by item and bill by bill.
@@ -192,8 +194,13 @@ export function Profit() {
   const billRows = useMemo(() => byBill(lines, bills), [lines, bills])
   const dayRows = useMemo(() => byDay(lines), [lines])
   const gapRows = useMemo(() => gaps(lines), [lines])
+  const refused = useMemo(
+    () => leftOut(bills.filter((b) => (!from || b.date >= from) && (!to || b.date <= to))),
+    [bills, from, to],
+  )
 
-  const today = new Date()
+  // India's day, read as a local date so the month arithmetic below holds.
+  const today = new Date(`${indiaToday()}T00:00:00`)
   const thisMonth = monthOf(today)
   const lastMonth = monthOf(new Date(today.getFullYear(), today.getMonth() - 1, 1))
   const periods: [string, string, string][] = [
@@ -252,6 +259,15 @@ export function Profit() {
           <Figure label="Gross profit" value={rupees(totals.profit)} note="on the costed part" />
           <Figure label="Margin" value={totals.costedSales ? pc(totals.margin) : '—'} note="profit over costed sales" />
         </div>
+
+        {refused.count > 0 && (
+          <div className="flex items-start gap-2 rounded-xl border border-red-400/40 bg-red-50 px-4 py-3 text-sm dark:border-red-300/20 dark:bg-red-500/10">
+            <CircleAlert size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+            <p>
+              {refused.count} {refused.count === 1 ? 'bill' : 'bills'} not in the books ({rupees(refused.value)}), not counted.
+            </p>
+          </div>
+        )}
 
         {totals.coverage < 0.9 && (
           <div className="flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-50 px-4 py-3 text-sm dark:border-amber-300/20 dark:bg-amber-500/10">

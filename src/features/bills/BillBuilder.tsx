@@ -71,6 +71,7 @@ import { convexEnabled } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
+import { indiaDate, indiaToday } from '../../lib/businessDate'
 
 /**
  * Square-foot pricing for boards and doors is parked, not removed.
@@ -259,7 +260,7 @@ function moveBillFocus(dir: 1 | -1) {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10)
-const today = () => new Date().toISOString().slice(0, 10)
+const today = indiaToday
 
 /** The financial year a date falls in, written the way Tally's title bar does. */
 function fyLabel(date: string): string {
@@ -4172,10 +4173,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
 // has finished. Rendered inside `.ledger-root`, which is where that table's
 // styling lives, so this reads exactly as the ledger's did.
 
-const iso = (d: Date) => {
-  const t = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-  return t.toISOString().slice(0, 10)
-}
+const iso = (d: Date) => indiaDate(d)
 
 /**
  * The series a bill belongs to, in the books' own abbreviations. A bill is a

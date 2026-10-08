@@ -5,6 +5,7 @@ import {
   byItem,
   foldItemName,
   gaps,
+  leftOut,
   profitLines,
   purchasedItems,
   refOf,
@@ -336,5 +337,30 @@ describe('adding it up', () => {
     expect(byDay(lines).map((d) => d.date)).toEqual(['2026-09-13', '2026-09-09'])
     expect(within(lines, '2026-09-13', '2026-09-13')).toHaveLength(2)
     expect(within(lines, '', '2026-09-09')).toHaveLength(1)
+  })
+})
+
+describe('bills the books refused', () => {
+  const cost = bill('purchase', '1', '2026-09-01', [line('Hinge 4in', 1, 600)])
+  const sold = { ...bill('sale', '2', '2026-09-02', [line('Hinge 4in', 1, 1000)]), postError: 'refused', total: 1000 } as Bill
+
+  test('a sale the ledger refused makes no profit', () => {
+    expect(profitLines([cost, sold])).toEqual([])
+    expect(totalsOf(profitLines([cost, sold])).profit).toBe(0)
+  })
+
+  test('a purchase the ledger refused sets no cost', () => {
+    const refused = { ...cost, postError: 'refused' } as Bill
+    const ok = bill('sale', '3', '2026-09-02', [line('Hinge 4in', 1, 1000)])
+    expect(profitLines([refused, ok])[0].gap).toBe('never-bought')
+  })
+
+  test('they are counted so the screen can say what is missing', () => {
+    expect(leftOut([cost, sold])).toEqual({ count: 1, value: 1000 })
+  })
+
+  test('a lump sale with no quantity still shows as needing a cost', () => {
+    const lump = bill('sale', '4', '2026-09-03', [{ ...line('Bill', 0, 12000), amountOnly: true } as BillItem])
+    expect(profitLines([lump])[0]).toMatchObject({ gap: 'lump', sales: 12000 })
   })
 })

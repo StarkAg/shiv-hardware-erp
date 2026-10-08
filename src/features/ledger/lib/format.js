@@ -1,3 +1,5 @@
+import { indiaTodayMs } from '../../../lib/businessDate';
+
 const money = new Intl.NumberFormat('en-IN', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -34,10 +36,8 @@ export const fromInputDate = (str) => {
   return Date.UTC(y, m - 1, d);
 };
 
-export const today = () => {
-  const now = new Date();
-  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-};
+// India's date, not the device's: a PC on another time zone dated the day wrong.
+export const today = () => indiaTodayMs();
 
 const ONES = [
   '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',

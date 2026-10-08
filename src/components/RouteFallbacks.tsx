@@ -1,4 +1,5 @@
-import { Navigate, useNavigate, useParams, useRouteError, isRouteErrorResponse } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Navigate, useLocation, useNavigate, useParams, useRouteError, isRouteErrorResponse } from 'react-router-dom'
 import { AlertTriangle, Home, RotateCw } from 'lucide-react'
 
 /**
@@ -8,6 +9,29 @@ import { AlertTriangle, Home, RotateCw } from 'lucide-react'
  * Application Error", a floppy disk and a note about ErrorBoundary — to
  * whoever is standing at the counter.
  */
+
+/**
+ * Where Home is. The panel and the counter share these screens but not their
+ * first page: the panel opens on /home, the counter on /quote-options. Sending
+ * the panel to the counter's page left it on "This page has moved" for ever.
+ */
+export const HOME = { path: '/home' }
+
+/** The counter's own site, where the quotation and guarantee screens moved. */
+const COUNTER_SITE = 'https://shivhardware-counter.vercel.app/'
+
+/**
+ * A panel link to a screen that now lives in the counter — quotations,
+ * guarantee cards, rates, the catalogue. Sent on to the same screen there
+ * rather than shown as missing.
+ */
+export function MovedToCounter() {
+  const { pathname, search } = useLocation()
+  useEffect(() => {
+    window.location.replace(`${COUNTER_SITE}#${pathname}${search}`)
+  }, [pathname, search])
+  return null
+}
 
 /** The voucher chooser is gone; its links open the bill builder instead. */
 export function VoucherRedirect() {
@@ -29,7 +53,7 @@ export function NotFound() {
         </p>
       </div>
       <button
-        onClick={() => navigate('/quote-options')}
+        onClick={() => navigate(HOME.path)}
         className="flex items-center gap-2 rounded-xl bg-shiv-green px-4 py-2 text-sm font-bold text-stone-950 hover:bg-[#c6a15a]"
       >
         <Home size={15} /> Home
@@ -64,7 +88,7 @@ export function AppError() {
           <RotateCw size={15} /> Reload
         </button>
         <button
-          onClick={() => { window.location.hash = '#/quote-options'; window.location.reload() }}
+          onClick={() => { window.location.hash = `#${HOME.path}`; window.location.reload() }}
           className="flex items-center gap-2 rounded-xl bg-stone-100 px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-200 dark:bg-white/10 dark:text-stone-200"
         >
           <Home size={15} /> Home
