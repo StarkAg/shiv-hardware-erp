@@ -241,3 +241,29 @@ describe('#5 an old copy of the price list cannot undo a newer one', () => {
     expect(merged.customCatalog.map((e: any) => e.id)).toEqual(['hinge', 'nail'])
   })
 })
+
+describe('#11 unsaved typing is kept on the device', () => {
+  test('a new voucher is kept by kind, a saved bill by its id, a ledger voucher by its id', async () => {
+    const { draftKey } = await import('../src/lib/formDrafts')
+    expect(draftKey({ kind: 'receipt', isNew: true, billId: 'x' })).toBe('new:receipt')
+    expect(draftKey({ billId: 'b1', isNew: false })).toBe('bill:b1')
+    expect(draftKey({ voucherId: 'v1', isNew: false })).toBe('vch:v1')
+  })
+
+  test('what is kept comes back, and is gone once cleared', async () => {
+    const store = new Map<string, string>()
+    const { vi } = await import('vitest')
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v) },
+      removeItem: (k: string) => { store.delete(k) },
+    })
+    try {
+      const { saveFormDraft, loadFormDraft, clearFormDraft } = await import('../src/lib/formDrafts')
+      saveFormDraft('new:receipt', bill({ kind: 'receipt', customerName: 'ERP Audit Unsaved', moneyAmount: 123 }) as any)
+      expect(loadFormDraft('new:receipt')).toMatchObject({ customerName: 'ERP Audit Unsaved', moneyAmount: 123 })
+      clearFormDraft('new:receipt')
+      expect(loadFormDraft('new:receipt')).toBeNull()
+    } finally { vi.unstubAllGlobals() }
+  })
+})

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Camera, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Camera, RotateCcw, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
 // The ledger's own photo picker: files chosen here, and photographs the phone
@@ -72,6 +72,7 @@ import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
 import { indiaDate, indiaToday } from '../../lib/businessDate'
+import { clearFormDraft, draftKey, loadFormDraft, saveFormDraft } from '../../lib/formDrafts'
 
 /**
  * Square-foot pricing for boards and doors is parked, not removed.
@@ -2332,6 +2333,24 @@ export function BillBuilder() {
 
   const existing = id ? bills.find((b) => b.id === id) : undefined
   const [draft, setDraft] = useState<Bill>(() => (existing ? forEditing(existing) : emptyBill(nextBillNumber())))
+  /**
+   * Unsaved typing, kept on this device (src/lib/formDrafts.ts). `opened` is
+   * the form as it was opened, so an edit to a saved bill counts as typing
+   * only once it differs from it; `quiet` stops the keeping once the voucher
+   * has been saved, printed or discarded.
+   */
+  const opened = useRef<Bill | null>(existing ? forEditing(existing) : null)
+  const quiet = useRef(false)
+  const lastDraftKey = useRef<string | null>(null)
+  const [restored, setRestored] = useState(false)
+  /** Opens a form on `bill`, or on the typing left on it last time. */
+  const openOn = (bill: Bill, key: string): Bill => {
+    opened.current = bill
+    quiet.current = false
+    const kept = loadFormDraft(key)
+    setRestored(!!kept)
+    return kept ?? bill
+  }
   /** A quotation takes the next Q- number; everything else the next bill number. */
   const numberFor = (k: BillKind) => (k === 'quotation' ? nextQuoteNumber(bills) : nextBillNumber())
   const [panelList, setPanelList] = useState<PanelList | null>(null)
@@ -2562,12 +2581,13 @@ export function BillBuilder() {
   useEffect(() => {
     if (!voucherId || !voucher || builtVoucher.current === voucherId) return
     builtVoucher.current = voucherId
+    const fromBooks = (bill: Bill) => openOn(bill, draftKey({ voucherId, isNew: false }))
     const kindOf: Record<string, BillKind> = {
       sale: 'sale', purchase: 'purchase', receipt: 'receipt', payment: 'payment', 'goods return': 'return',
       refund: 'refund',
       'goods received': 'grn',
     }
-    setDraft({
+    setDraft(fromBooks({
       ...emptyBill(String(voucher.vchLabel ?? ''), kindOf[voucher.kind] ?? 'sale'),
       id: `vch-${voucherId}`,
       number: String(voucher.vchLabel ?? ''),
@@ -2601,7 +2621,7 @@ export function BillBuilder() {
       attachments: (voucher.attachments ?? []).map((a: any) => ({
         storageId: a.storageId, kind: a.kind ?? 'bill',
       })),
-    })
+    }))
     setView('form')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voucherId, voucher, voucherReload])
@@ -2638,14 +2658,23 @@ export function BillBuilder() {
      * business on a sale, so a switch across sides drops the name and takes the
      * account with it. Within a side — a sale becoming a receipt — it stays.
      */
+    // A fresh form brings back what was typed on one of this kind and left
+    // unsaved — unless it was opened for a named party, which is new work.
+    const current = draftRef.current
+    const startedNow = view === 'form' && hasMeaningfulContent({ ...current, total: calcTotal(current.items) })
+    const freshForm = !startedNow || (kind === 'quotation' && !!current.postedAt)
+    const fresh = emptyBill(numberFor(kind), kind)
+    const freshBill = freshForm
+      ? (newParty
+        ? (() => { opened.current = fresh; quiet.current = false; setRestored(false); return { ...fresh, customerName: toProperCase(newParty) } })()
+        // A kept new voucher takes today's next number: its old one may have
+        // been issued since.
+        : (() => { const kept = openOn(fresh, draftKey({ kind, isNew: true })); return kept === fresh ? fresh : { ...kept, number: fresh.number } })())
+      : null
     setDraft((d) => {
-      const started = view === 'form' && hasMeaningfulContent({ ...d, total: calcTotal(d.items) })
       // A bill already in the books cannot become a quotation by switching —
       // its voucher would stay posted behind it — so that starts a fresh one.
-      if (!started || (kind === 'quotation' && d.postedAt)) {
-        const fresh = emptyBill(numberFor(kind), kind)
-        return newParty ? { ...fresh, customerName: toProperCase(newParty) } : fresh
-      }
+      if (freshBill) return freshBill
       // Into a goods return the party always carries — it takes either side.
       const crossed = PARTY_SIDE[kind] !== 'both' && PARTY_SIDE[d.kind ?? 'sale'] !== PARTY_SIDE[kind]
       return {
@@ -2687,7 +2716,7 @@ export function BillBuilder() {
     const bill = bills.find((b) => b.id === id)
     if (!bill) return
     openedFor.current = id
-    setDraft(forEditing(bill))
+    setDraft(openOn(forEditing(bill), draftKey({ billId: id, isNew: false })))
     // "Convert to sale" from the customer's account lands here ready to save.
     if (pageParams.get('convert') === 'sale' && isQuotation(bill)) convertToSale()
     setView('form')
@@ -2847,6 +2876,32 @@ export function BillBuilder() {
   /** Set to true whenever the bill is explicitly committed (save / print / cancel) so the
    *  unmount cleanup doesn't double-save. */
   const committedRef = useRef(false)
+
+  /**
+   * Keeps the typing as it happens, so leaving by any route — the menu, a
+   * shortcut, the Day Book, closing the tab — loses nothing. A new voucher is
+   * kept once it has a name or a line; a saved one once it differs from how
+   * it was opened.
+   */
+  useEffect(() => {
+    if (view !== 'form' || readOnly || quiet.current) return
+    const isNew = !voucherId && !bills.some((b) => b.id === draft.id)
+    const key = draftKey({ billId: draft.id, voucherId, kind: draft.kind, isNew })
+    // A new voucher switched to another kind moves its typing with it.
+    if (lastDraftKey.current && lastDraftKey.current !== key && lastDraftKey.current.startsWith('new:')) {
+      clearFormDraft(lastDraftKey.current)
+    }
+    lastDraftKey.current = key
+    const timer = setTimeout(() => {
+      const typed = isNew
+        ? hasMeaningfulContent(draft)
+        : !!opened.current && JSON.stringify(draft) !== JSON.stringify(opened.current)
+      if (typed) saveFormDraft(key, draft)
+      else clearFormDraft(key)
+    }, 600)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, view, readOnly])
 
   // Leaving the page files nothing: an unsaved bill was never written down,
   // and half of one is not a bill.
@@ -3243,6 +3298,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     if (isQuotation(draft)) {
       const quote = await saveQuote()
       if (!quote) return
+      finishDraft()
       setView('list')
       navigate(quote.ledgerId ? `/ledger/customers/${quote.ledgerId}` : '/day', { replace: true })
       return
@@ -3263,6 +3319,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     try {
       const saved = await postDraft()
       if (!saved) return
+      finishDraft()
       if (draft.kind === 'purchase' && saved.bill.kind === 'grn') {
         toast('Filed as Goods Received. Enter the supplier bill amount when it arrives.', 'ok')
       }
@@ -3402,6 +3459,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
     saveBill(purchase)
     const bought = await postStored(purchase, true)
     if (bought) toast(`Filed as a delivery and a purchase, both on ${purchase.date}.`, 'ok')
+    finishDraft()
     setView('list')
     navigate(purchase.ledgerId ? `/ledger/suppliers/${purchase.ledgerId}` : '/day', { replace: true })
   }
@@ -3423,13 +3481,22 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
       !bills.find((b) => b.id === draft.id) &&
       (hasMeaningfulContent({ ...draft, total }) || photoFiles.length > 0 || photoPicked.length > 0)
     if (unsaved) { setAsking('leave'); return }
+    finishDraft()
     myItems.sweep()
     setView('list')
     navigate('/day', { replace: true })
   }
 
+  /** The voucher is saved, printed or discarded: its kept typing goes. */
+  function finishDraft() {
+    quiet.current = true
+    setRestored(false)
+    if (lastDraftKey.current) clearFormDraft(lastDraftKey.current)
+  }
+
   /** Leaves the bill for good — what Alt+D and a discarded draft both end in. */
   function leave() {
+    finishDraft()
     committedRef.current = true
     myItems.sweep()
     setView('list')
@@ -3483,11 +3550,11 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
      */
     if (isQuotation(draft)) {
       const quote = await saveQuote()
-      if (quote) doPrint(quote)
+      if (quote) { finishDraft(); doPrint(quote) }
       return
     }
     const done = await postDraft()
-    if (done) { doPrint(done.bill); return }
+    if (done) { finishDraft(); doPrint(done.bill); return }
     if (draft.postedAt) doPrint({ ...priced, total })
   }
 
@@ -3564,6 +3631,22 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           <div className="flex items-center gap-2 rounded-lg border border-amber-400/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
             <Lock size={15} className="shrink-0" />
             <span>Being edited on <b>{lockedBy}</b> — read only until they finish.</span>
+          </div>
+        )}
+        {restored && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-400/60 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+            <RotateCcw size={15} className="shrink-0" />
+            <span className="flex-1">Unsaved typing brought back.</span>
+            <button
+              className="rounded-md border border-sky-500/50 px-2.5 py-1 text-xs font-semibold hover:bg-sky-100 dark:hover:bg-sky-500/20"
+              onClick={() => {
+                if (lastDraftKey.current) clearFormDraft(lastDraftKey.current)
+                if (opened.current) setDraft(opened.current)
+                setRestored(false)
+              }}
+            >
+              Discard
+            </button>
           </div>
         )}
         {stale && (
