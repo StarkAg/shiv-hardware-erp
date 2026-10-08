@@ -62,14 +62,15 @@ describe('cashier daily staff payments', () => {
     expect(await balance(t)).toMatchObject({ due: 0, advance: 250, earned: 750 })
     expect(await balance(t, '2026-08-30')).toMatchObject({ due: 0, advance: 0 })
   })
-  it('writes one cash row and balanced voucher for a wage; retries never pay twice', async () => {
+  // The cash book stays out of the books (2026-10-04): a wage is one cash row
+  // and nothing in the ledger.
+  it('writes one cash row and no voucher for a wage; retries never pay twice', async () => {
     const t = await shop(); await setup(t); await mark(t, '2026-09-01', 'P')
     await pay(t); await pay(t)
     const rows = await t.run(async ctx => ({ cash: await ctx.db.query('cashEntries').collect(), vouchers: await ctx.db.query('vouchers').collect(), lines: await ctx.db.query('voucherEntries').collect(), payments: await ctx.db.query('staffPayments').collect() }))
-    expect(rows.cash).toHaveLength(1); expect(rows.vouchers).toHaveLength(1); expect(rows.payments).toHaveLength(1)
-    expect(rows.lines).toHaveLength(2)
-    expect(rows.lines.filter(l => l.side === 'Dr').reduce((n, l) => n + l.amount, 0)).toBe(500)
-    expect(rows.lines.filter(l => l.side === 'Cr').reduce((n, l) => n + l.amount, 0)).toBe(500)
+    expect(rows.cash).toHaveLength(1); expect(rows.vouchers).toHaveLength(0); expect(rows.payments).toHaveLength(1)
+    expect(rows.lines).toHaveLength(0)
+    expect(rows.cash[0]).toMatchObject({ amount: 500, kind: 'out' })
     expect(await balance(t)).toMatchObject({ due: 0, paid: 500 })
     await expect(pay(t, { amount: 100 })).rejects.toThrow('reference already used')
   })
@@ -138,8 +139,6 @@ describe('cashier daily staff payments', () => {
     expect((await t.run(ctx => ctx.db.query('cashEntries').collect()))[0]).toMatchObject({ deleted: true })
     expect(await t.run(ctx => ctx.db.query('vouchers').collect())).toHaveLength(0)
     expect(await t.run(ctx => ctx.db.query('voucherEntries').collect())).toHaveLength(0)
-    const [trash] = await t.run(ctx => ctx.db.query('trash').collect())
-    await expect(t.mutation(api.trash.restore, { id: trash._id })).rejects.toThrow('Staff Payments')
   })
   it('reverses advances without leaving an attendance advance behind', async () => {
     const t = await shop(); await setup(t); await pay(t, { kind: 'advance' })
@@ -157,23 +156,17 @@ describe('cashier daily staff payments', () => {
   it('prevents edits in other screens from separating staff and cash records', async () => {
     const t = await shop(); await setup(t); await pay(t, { kind: 'advance' })
     const [cash] = await t.run(ctx => ctx.db.query('cashEntries').collect())
-    await expect(t.mutation(api.cash.push, { ops: [{ t: 'entry', entryId: cash.entryId, amount: 1 }] })).rejects.toThrow('Staff Payments')
-    await expect(t.mutation(api.cash.assign, { entryId: cash.entryId, ledgerId: cash.ledgerId! })).rejects.toThrow('Staff Payments')
-    await expect(t.mutation(api.vouchers.remove, { id: cash.voucherId! })).rejects.toThrow('Staff Payments')
-    await expect(t.mutation(api.vouchers.update, { id: cash.voucherId!, date: 1 })).rejects.toThrow('Staff Payments')
-    await expect(t.mutation(api.vouchers.price, { id: cash.voucherId!, amount: 1, accountLedgerId: cash.ledgerId! })).rejects.toThrow('Staff Payments')
-    await expect(t.mutation(api.vouchers.retype, { id: cash.voucherId!, to: 'Receipt' })).rejects.toThrow('Staff Payments')
+    await expect(t.mutation(api.cash.push, { ops: [{ t: 'entry', entryId: cash.entryId, date: cash.date, kind: cash.kind, mode: cash.mode, name: cash.name, amount: 1, at: cash.at, updatedAt: Date.now() }] })).rejects.toThrow('Staff Payments')
     const [advance] = await t.run(ctx => ctx.db.query('attendanceAdvances').collect())
     await expect(t.mutation(api.attendance.removeAdvance, { id: advance._id })).rejects.toThrow('Staff Payments')
     await expect(t.mutation(api.attendance.addAdvance, { staff: 'Vijay', date: '2026-09-01', amount: 100 })).rejects.toThrow('Staff Payments')
   })
-  it('rolls back every record if the accounting side cannot post', async () => {
+  it('pays with no account set up in the books, since the cash book does not post', async () => {
     const t = await shop(); await setup(t)
     await t.run(async ctx => { for (const type of await ctx.db.query('voucherTypes').collect()) await ctx.db.delete(type._id) })
-    await expect(pay(t, { kind: 'advance' })).rejects.toThrow('Account Masters')
-    expect(await t.run(ctx => ctx.db.query('staffPayments').collect())).toHaveLength(0)
-    expect(await t.run(ctx => ctx.db.query('cashEntries').collect())).toHaveLength(0)
-    expect(await t.run(ctx => ctx.db.query('attendanceAdvances').collect())).toHaveLength(0)
+    await pay(t, { kind: 'advance' })
+    expect(await t.run(ctx => ctx.db.query('staffPayments').collect())).toHaveLength(1)
+    expect(await t.run(ctx => ctx.db.query('cashEntries').collect())).toHaveLength(1)
   })
   it.each([0, -1, NaN, Infinity, 1.001, 10000001])('rejects invalid amounts (%s)', async value => {
     const t = await shop(); await setup(t)

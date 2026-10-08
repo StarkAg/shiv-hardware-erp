@@ -80,7 +80,6 @@ function FromTheBooks() {
   // answer something the others had already read.
   const data = useQuery(api.reports.dashboard, { from: today, to: today + 86_399_999 })
   const review = useQuery(api.review.counts, {})
-  const cashWaiting = useQuery(api.cash.unposted, {})
   const backup = useQuery(api.backups.latest, {})
   // A night is missed if the last good copy is more than a day and a half old.
   const backupLate = backup !== undefined &&
@@ -89,7 +88,7 @@ function FromTheBooks() {
 
   const waiting =
     (review?.unread ?? 0) + (review?.ready ?? 0) +
-    (cashWaiting?.length ?? 0) + (data?.unpriced ?? 0) + (backupLate ? 1 : 0)
+    (data?.unpriced ?? 0) + (backupLate ? 1 : 0)
 
   return (
     <>
@@ -131,9 +130,6 @@ function FromTheBooks() {
               to="/home"
               tone="attention"
             />
-          )}
-          {(cashWaiting?.length ?? 0) > 0 && (
-            <Figure label="Cash notes without a party" value={String(cashWaiting!.length)} to="/cash-pending" tone="attention" />
           )}
         </div>
       )}

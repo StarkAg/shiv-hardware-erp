@@ -3,7 +3,6 @@ import { mutation, query, internalMutation, internalQuery } from './_generated/s
 import { ensureCashFlow } from './lib/billFlow'
 import { flowStage, requiredTasksDone, type FlowRoute } from './lib/billFlowStages'
 import { postCashEntry } from './cash'
-import { openParty } from './lib/parties'
 
 export const list = query({
   args: {},
@@ -76,44 +75,6 @@ export const beginReading = internalMutation({
     if (!flow) throw new Error('This intake card is missing.')
     if (flow.intakeStatus === 'uploading') throw new Error('Wait for every page to upload before reading.')
     await ctx.db.patch(id, { intakeStatus: 'reading', readError: undefined, updatedAt: Date.now() })
-  },
-})
-
-/** A cashier receipt/payment is already money in the books. Conversion checks
- * and attaches evidence to that voucher, never posts another one. */
-export const convertMoney = mutation({
-  args: { id: v.id('billFlows'), kind: v.union(v.literal('receipt'), v.literal('payment')),
-    party: v.string(), ledgerId: v.optional(v.id('ledgers')) },
-  handler: async (ctx, { id, kind, party, ledgerId }) => {
-    const flow = await ctx.db.get(id)
-    if (!flow?.cashEntryId) throw new Error('This card has no cashier entry.')
-    const cash = await ctx.db.query('cashEntries').withIndex('by_entry_id', q => q.eq('entryId', flow.cashEntryId!)).unique()
-    if (!cash || cash.deleted) throw new Error('The cashier entry is missing.')
-    if ((kind === 'receipt') !== (cash.kind === 'in')) throw new Error('The photo type does not match the cash direction.')
-    const chosen = ledgerId ?? await openParty(ctx, party, {
-      group: kind === 'payment' ? 'Sundry Creditors' : 'Sundry Debtors',
-    })
-    if (cash.ledgerId !== chosen) await ctx.db.patch(cash._id, { ledgerId: chosen })
-    if (cash.ledgerId !== chosen || !cash.voucherId) await postCashEntry(ctx, cash.entryId)
-    const refreshed = await ctx.db.get(cash._id)
-    const voucherId = refreshed?.voucherId
-    if (!voucherId) throw new Error('Assign this cash entry to a party account before converting it.')
-    const voucher = await ctx.db.get(voucherId)
-    if (!voucher) throw new Error('The cashier voucher is missing.')
-    const existing = new Set((voucher.attachments ?? []).map(a => typeof a === 'string' ? a : a.storageId))
-    const added = flow.photos.filter(photo => !existing.has(photo))
-    const now = Date.now()
-    if (added.length) await ctx.db.patch(voucherId, {
-      attachments: [...voucher.attachments, ...added.map(storageId => ({ storageId, kind: 'receipt' as const }))],
-      updatedAt: now,
-    })
-    await ctx.db.patch(id, {
-      documentKind: kind, party: (await ctx.db.get(chosen))?.name ?? party,
-      voucherId, cashVoucherId: voucherId, intakeStatus: 'converted',
-      stage: kind === 'payment' ? 'complete' : flow.stage,
-      updatedAt: now, history: [...flow.history, { at: now, action: 'Cash voucher confirmed with photo' }],
-    })
-    return voucherId
   },
 })
 

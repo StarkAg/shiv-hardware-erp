@@ -21,7 +21,7 @@ import { trashVoucher } from './vouchers'
  * next time it is touched — `unpostAll` did that for every one at once.
  * Set to true only if the shop asks for the books to follow the drawer again.
  */
-const POST_TO_BOOKS = false
+export const POST_TO_BOOKS = false
 
 /**
  * The drawer, in the books.
@@ -554,88 +554,10 @@ export const totals = query({
   },
 })
 
-export const unposted = query({
-  args: {},
-  handler: async (ctx) => {
-    const rows = (await ctx.db.query('cashEntries')
-      .withIndex('by_voucher', q => q.eq('voucherId', undefined))
-      .collect())
-      .filter((row) => !row.deleted)
-      .sort((a, b) => b.at - a.at)
-
-    const books = await readBooks(ctx)
-    const out = []
-    for (const row of rows) {
-      const why = blockedBecause(books, row)
-      if (!why) continue
-      out.push({
-        _id: row._id,
-        entryId: row.entryId,
-        date: row.date,
-        kind: row.kind,
-        mode: row.mode,
-        name: row.name,
-        amount: row.amount,
-        dealer: !!row.dealer,
-        why,
-      })
-    }
-    return out
-  },
-})
-
-/**
- * Say whose a drawer note is, and post it.
- *
- * The account is remembered on the note, so a later correction at the counter
- * re-posts to the same party rather than falling back into the queue.
- */
-export const assign = mutation({
-  args: { entryId: v.string(), ledgerId: v.id('ledgers') },
-  handler: async (ctx, { entryId, ledgerId }) => {
-    const row = await ctx.db
-      .query('cashEntries')
-      .withIndex('by_entry_id', (q) => q.eq('entryId', entryId))
-      .unique()
-    if (!row) throw new Error('That drawer note is no longer here.')
-    if (row.staffPaymentId) throw new Error('Manage this payment in Cashier → Staff Payments.')
-    await ctx.db.patch(row._id, { ledgerId })
-    await postCashEntry(ctx, entryId)
-
-    const posted = await ctx.db
-      .query('cashEntries')
-      .withIndex('by_entry_id', (q) => q.eq('entryId', entryId))
-      .unique()
-    if (!posted?.voucherId) {
-      throw new Error(blockedBecause(await readBooks(ctx), posted ?? row) ?? 'The books did not take this note.')
-    }
-    return { voucherId: posted.voucherId }
-  },
-})
-
-/**
- * Post every drawer note the books can take.
- *
- * For the notes already in the drawer before any of this existed, and for the
- * ones that were waiting on an account somebody has since opened.
- */
-export const postBacklog = mutation({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, { limit }) => {
-    const rows = (await ctx.db.query('cashEntries').collect())
-      .filter((row) => !row.deleted && !row.voucherId && row.amount > 0)
-      .sort((a, b) => a.at - b.at)
-      .slice(0, limit ?? 200)
-
-    let posted = 0
-    for (const row of rows) {
-      await postCashEntry(ctx, row.entryId)
-      const after = await ctx.db.get(row._id)
-      if (after?.voucherId) posted++
-    }
-    return { looked: rows.length, posted, waiting: rows.length - posted }
-  },
-})
+// `unposted`, `assign` and `postBacklog` were the Cash Pending screen's: a
+// queue of drawer notes waiting for an account so they could post. The cash
+// book does not post (POST_TO_BOOKS above), so the queue could only grow and
+// every action on it failed. Removed with the screen on 2026-10-09.
 
 /**
  * Takes every voucher the cash book ever posted back out of the books (to the

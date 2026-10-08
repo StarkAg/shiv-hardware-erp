@@ -2,7 +2,7 @@ import { v } from 'convex/values'
 import { internalMutation, mutation, query } from './_generated/server'
 import { account, amount, assertUnsettled, indiaToday, validDate } from './lib/staffPay'
 import { foldName } from './lib/text'
-import { postCashEntry } from './cash'
+import { POST_TO_BOOKS, postCashEntry } from './cash'
 
 const DEFAULT_STAFF = ['Vijay', 'Anup', 'Sonu', 'Anand', 'Vicky', 'Dharmendra']
 const statusArg = v.union(v.literal('P'), v.literal('H'), v.literal('N'), v.literal('L'), v.literal('C'), v.literal(''))
@@ -194,7 +194,9 @@ export const pay = mutation({
       at: now, updatedAt: now, ledgerId: profile.ledgerId, staffPaymentId: args.requestId,
     })
     await postCashEntry(ctx, entryId)
-    if (!(await ctx.db.get(cashId))?.voucherId) throw new Error('Cash/Bank or Payment account is missing. Set up Account Masters before paying.')
+    // Only while the cash book posts to the books. Since 2026-10-04 it does
+    // not, and demanding a voucher here refused every staff payment.
+    if (POST_TO_BOOKS && !(await ctx.db.get(cashId))?.voucherId) throw new Error('Cash/Bank or Payment account is missing. Set up Account Masters before paying.')
     const what = `${args.staff}: ${args.kind === 'advance' ? 'advance' : 'daily wages'} ₹${args.amount} · ${args.mode}${args.note ? ` · ${args.note}` : ''}`
     await ctx.db.insert('cashLog', { logId: `staff-pay-${args.requestId}`, at: now, kind: 'staff-pay', date: args.date, what })
     await ctx.db.insert('attendanceLog', { at: now, action: 'payment', date: args.date, summary: what })

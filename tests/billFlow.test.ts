@@ -53,7 +53,9 @@ describe('Bill Flow', () => {
     expect((await flows(t))[0]).toMatchObject({ photos: [first, second], intakeStatus: 'waiting' })
   })
 
-  it('links a photographed sale to cash already posted and reuses its bill on retry', async () => {
+  // The cash book does not post (2026-10-04): the cashier note stays a note,
+  // and only the sale reaches the books.
+  it('posts a photographed cashier sale once and reuses its bill on retry', async () => {
     const t = await shop()
     await t.mutation(api.cash.push, { ops: [cash()] })
     const photo = await t.run(ctx => ctx.storage.store(new Blob(['bill'], { type: 'image/jpeg' })))
@@ -67,26 +69,11 @@ describe('Bill Flow', () => {
     const again = await t.mutation(api.billLedger.postBill, { ...args, attachments: args.attachments as never })
     expect(again.voucherId).toBe(first.voucherId)
     const vouchers = await t.run(ctx => ctx.db.query('vouchers').collect())
-    expect(vouchers).toHaveLength(2)
-    const cashVoucher = vouchers.find(row => row.refNo === 'CASH-cash-1')!
-    const saleVoucher = vouchers.find(row => row.refNo?.startsWith('BILL-'))!
-    const saleLines = await t.run(ctx => ctx.db.query('voucherEntries').withIndex('by_voucher', q => q.eq('voucherId', saleVoucher._id)).collect())
-    expect(saleLines).toHaveLength(2)
-    expect(saleLines.some(line => line.amount === 400)).toBe(false)
-    expect((await flows(t))[0]).toMatchObject({ voucherId: saleVoucher._id, cashVoucherId: cashVoucher._id,
-      cashEntryId: 'cash-1', billId: bill.id, intakeStatus: 'converted' })
-  })
-
-  it('confirms a cashier receipt by attaching evidence without posting another receipt', async () => {
-    const t = await shop()
-    await t.mutation(api.cash.push, { ops: [cash()] })
-    const photo = await t.run(ctx => ctx.storage.store(new Blob(['receipt'], { type: 'image/jpeg' })))
-    const { id } = await t.mutation(api.billFlow.attachCashPhoto, { entryId: 'cash-1', storageId: photo, batchId: 'one', pageCount: 1 })
-    await t.mutation(api.billFlow.convertMoney, { id, kind: 'receipt', party: 'Ramesh Kumar' })
-    const vouchers = await t.run(ctx => ctx.db.query('vouchers').collect())
     expect(vouchers).toHaveLength(1)
-    expect(vouchers[0].attachments).toEqual([{ storageId: photo, kind: 'receipt' }])
-    expect((await flows(t))[0].intakeStatus).toBe('converted')
+    const saleVoucher = vouchers[0]
+    expect(saleVoucher.refNo?.startsWith('BILL-')).toBe(true)
+    expect((await flows(t))[0]).toMatchObject({ voucherId: saleVoucher._id,
+      cashEntryId: 'cash-1', billId: bill.id, intakeStatus: 'converted' })
   })
 
   it('links a cashier photo to a separately entered sale without posting again', async () => {
@@ -102,7 +89,7 @@ describe('Bill Flow', () => {
     await t.mutation(api.billFlow.linkExisting, { cashFlowId: source.id, billFlowId: target._id })
     expect(await flows(t)).toHaveLength(1)
     expect((await flows(t))[0]).toMatchObject({ cashEntryId: 'cash-1', voucherId: sale.voucherId, photos: [photo] })
-    expect(await t.run(ctx => ctx.db.query('vouchers').collect())).toHaveLength(2)
+    expect(await t.run(ctx => ctx.db.query('vouchers').collect())).toHaveLength(1)
   })
 
   it('puts dealer payments on the dashboard with no goods work', async () => {

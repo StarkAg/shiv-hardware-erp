@@ -64,7 +64,6 @@ function PhotoStrip({ flow }: { flow: Flow }) {
 function IntakeEditor({ flow, candidates, onDone }: { flow: Flow; candidates: Flow[]; onDone: () => void }) {
   const read = useAction(anyApi.ai.readFlow)
   const postBill = useMutation(anyApi.billLedger.postBill)
-  const convertMoney = useMutation(anyApi.billFlow.convertMoney)
   const linkExisting = useMutation(anyApi.billFlow.linkExisting)
   const [kind, setKind] = useState<Kind>('unknown')
   const [party, setParty] = useState('')
@@ -75,7 +74,14 @@ function IntakeEditor({ flow, candidates, onDone }: { flow: Flow; candidates: Fl
   const [error, setError] = useState('')
   const [existingId, setExistingId] = useState('')
   const cashIn = flow.documentKind === 'receipt' || flow.documentKind === 'sale'
-  const choices: Kind[] = cashIn ? ['sale', 'receipt'] : ['purchase', 'grn', 'payment']
+  // A cashier photo is never turned into a receipt or payment: the cash book
+  // stays out of the books (2026-10-04), so there is no voucher to confirm and
+  // writing one would join the two again. It can still become the sale or
+  // purchase it was for. Any other photo of a receipt posts as one.
+  const choices: Kind[] = flow.cashEntryId
+    ? (cashIn ? ['sale'] : ['purchase', 'grn'])
+    : (cashIn ? ['sale', 'receipt'] : ['purchase', 'grn', 'payment'])
+  const money = kind === 'receipt' || kind === 'payment'
 
   useEffect(() => {
     const draft = flow.readDraft
@@ -99,13 +105,21 @@ function IntakeEditor({ flow, candidates, onDone }: { flow: Flow; candidates: Fl
     setError('')
     if (!party.trim()) return setError('Enter the party name.')
     if (!dateText(date) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return setError('Enter the document date.')
-    if (kind !== 'grn' && kind !== 'receipt' && kind !== 'payment' && !(toNumber(amount) > 0)) {
-      return setError('Enter the bill total, or choose Goods received if the amount is not known.')
+    if (kind !== 'grn' && !(toNumber(amount) > 0)) {
+      return setError(money ? 'Enter the amount.' : 'Enter the bill total, or choose Goods received if the amount is not known.')
     }
     setBusy(true)
     try {
-      if (kind === 'receipt' || kind === 'payment') {
-        await convertMoney({ id: flow._id, kind, party: party.trim() })
+      if (money) {
+        await postBill({
+          bill: {
+            id: `flow-${flow._id}`, number: '', kind, date, customerName: party.trim(), items: [],
+            moneyAmount: toNumber(amount), total: toNumber(amount), paymentMode: DEFAULT_PAYMENT_MODE,
+            notes: flow.readDraft?.notes ?? '',
+          },
+          attachments: flow.photos.map(storageId => ({ storageId, kind: 'receipt' })),
+          keepAsBill: true, flowId: flow._id,
+        })
       } else {
         const items = lines.filter(line => line.description.trim()).map(line => ({
           id: line.id, description: line.description.trim(), qty: toNumber(line.qty) || 1,
@@ -148,9 +162,9 @@ function IntakeEditor({ flow, candidates, onDone }: { flow: Flow; candidates: Fl
       </select></label>
       <label>Party<input value={party} onChange={event => setParty(event.target.value)} /></label>
       <label>Date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
-      <label>{kind === 'receipt' || kind === 'payment' ? 'Cashier amount already recorded' : 'Bill total'}
-        <input inputMode="decimal" value={kind === 'receipt' || kind === 'payment' ? String(flow.amount ?? '') : amount}
-          disabled={kind === 'receipt' || kind === 'payment' || kind === 'grn'}
+      <label>{money ? 'Amount' : 'Bill total'}
+        <input inputMode="decimal" value={amount}
+          disabled={kind === 'grn'}
           onChange={event => setAmount(event.target.value)} /></label>
     </div>
     {!['receipt', 'payment'].includes(kind) && <div className="flow-lines">
@@ -164,7 +178,6 @@ function IntakeEditor({ flow, candidates, onDone }: { flow: Flow; candidates: Fl
         <button aria-label="Remove item" onClick={() => setLines(current => current.filter(item => item.id !== line.id))}>×</button>
       </div>)}
     </div>}
-    {flow.cashEntryId && <p className="flow-hint">Cashier entry {flow.cashEntryId} is already recorded. Converting this photo will link that payment, without recording the money again.</p>}
     {error && <p className="flow-error" role="alert">{error}</p>}
     <button className="flow-primary" disabled={busy} onClick={convert}>{busy ? 'Working…' : `Convert to ${KINDS[kind]}`}</button>
     {candidates.length > 0 && <div className="flow-existing">

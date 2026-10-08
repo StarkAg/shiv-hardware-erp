@@ -15,7 +15,6 @@ import { BillTrash } from './features/bills/BillTrash'
 import { QuotationList } from './features/bills/QuotationList'
 import { PrinterQueue } from './features/print/PrinterQueue'
 import { CashReview } from './features/cash/CashReview'
-import { CashPending } from './features/cash/CashPending'
 import { Home } from './features/home/Home'
 import { PdfViewer } from './features/pdf/PdfViewer'
 import { MobileView } from './features/mobile/MobileView'
@@ -174,9 +173,6 @@ const router = createHashRouter([
       // Every quotation given, open and sold.
       { path: 'quotations',     element: <QuotationList /> },
       { path: 'cash-review',    element: <CashReview /> },
-      // The accounting side of the drawer: notes still needing an account.
-      // Deliberately not in the menu — cash and the books are kept apart.
-      { path: 'cash-pending',   element: <CashPending /> },
       { path: 'trash',          element: <BillTrash /> },
       { path: 'printer-queue',  element: <PrinterQueue /> },
       // The quotation half's own customer list. Not the books' party list —
