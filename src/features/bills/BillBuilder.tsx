@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Camera, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
 // The ledger's own photo picker: files chosen here, and photographs the phone
@@ -2557,6 +2557,8 @@ export function BillBuilder() {
     voucherId ? ({ id: voucherId } as never) : 'skip',
   ) as any
   const builtVoucher = useRef<string | null>(null)
+  // Bumped by "Load newer" to read the voucher into the form again.
+  const [voucherReload, setVoucherReload] = useState(0)
   useEffect(() => {
     if (!voucherId || !voucher || builtVoucher.current === voucherId) return
     builtVoucher.current = voucherId
@@ -2589,6 +2591,7 @@ export function BillBuilder() {
         ? { moneyAmount: voucher.moneyAmount ?? voucher.amount ?? 0, discount: voucher.discount ?? 0 }
         : {}),
       ...(voucher.paymentMode ? { paymentMode: voucher.paymentMode } : {}),
+      rev: voucher.rev ?? 0,
       total: voucher.amount ?? 0,
       // Zero is deliberate here: an older ledger-only credit sale must stay
       // credit when opened in the bill editor and saved without changes.
@@ -2601,7 +2604,7 @@ export function BillBuilder() {
     })
     setView('form')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voucherId, voucher])
+  }, [voucherId, voucher, voucherReload])
 
   // `/bills?new=purchase` from the sidebar or an F-key: start that kind of
   // bill at once, and spend the link so a refresh doesn't open a second one.
@@ -2755,6 +2758,8 @@ export function BillBuilder() {
   }, [view, draft.id, claimLock, releaseLock])
 
   const readOnly = lockedBy !== null
+  /** Set when a save was refused because another counter saved first. */
+  const [stale, setStale] = useState<{ newer: Bill | null } | null>(null)
 
   /**
    * Everything typed into a column, kept for Up to walk back through.
@@ -3074,10 +3079,17 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     keepAsBill: boolean,
   ): Promise<{ bill: Bill & { total: number }; ledgerId?: string } | null> {
     try {
+      // What this copy was opened from. A posted bill sends the server's count
+      // it carries; a bill never in the books says so with null; a bill whose
+      // state is not known here (an older copy without a voucher id) is not
+      // checked rather than refused for nothing.
+      const known = bills.find((b) => b.id === bill.id && !b.postError)
+      const expectedRev = bill.voucherId ? bill.rev ?? 0 : known ? undefined : null
       const res = await postToLedger({
         bill: plain(bill) as never,
         attachments: (bill.attachments ?? []) as never,
         keepAsBill,
+        ...(expectedRev !== undefined ? { expectedRev } : {}),
       })
       const stored = { ...bill, ...((res?.bill as Bill) ?? {}) } as Bill & { total: number }
       // Whatever went wrong last time is over; the mark has to go with it, or
@@ -3091,6 +3103,14 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       // The server's reason travels as a ConvexError's data; the plain message
       // carries request ids and call-site noise around it.
       const data = (err as { data?: unknown })?.data
+      // Another counter saved this bill after it was opened here. Nothing is
+      // written and nothing is marked: the typing stays on screen, and the
+      // newer copy is offered to look at.
+      if (data && typeof data === 'object' && (data as { code?: string }).code === 'stale') {
+        setStale({ newer: ((data as { newer?: Bill }).newer ?? null) })
+        toast('Changed on another counter since you opened it.\nNot saved. Your typing is still here.', 'error')
+        return null
+      }
       const message = typeof data === 'string' ? data : err instanceof Error ? err.message : String(err)
       console.error('[ledger] posting failed', err)
       if (keepAsBill) saveBill({ ...bill, postError: message })
@@ -3544,6 +3564,24 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           <div className="flex items-center gap-2 rounded-lg border border-amber-400/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
             <Lock size={15} className="shrink-0" />
             <span>Being edited on <b>{lockedBy}</b> — read only until they finish.</span>
+          </div>
+        )}
+        {stale && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-400/60 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span className="flex-1">Changed on another counter. Not saved.</span>
+            <button
+              className="rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700"
+              onClick={() => {
+                // Their version, in place of this copy. For a voucher from the
+                // ledger, reading it again is what brings theirs.
+                if (stale.newer) setDraft(stale.newer)
+                else if (voucherId) { builtVoucher.current = null; setVoucherReload((n) => n + 1) }
+                setStale(null)
+              }}
+            >
+              Load newer
+            </button>
           </div>
         )}
         {/* Tally's voucher chrome: what screen this is on the left, whose books

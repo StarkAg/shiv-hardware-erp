@@ -151,3 +151,55 @@ describe('#3 an upload cannot part a bill from its voucher', () => {
     expect((await t.query(api.bills.get, {}))!.bills[0].total).toBe(1500)
   })
 })
+
+describe('#4 a save from an old copy is refused', () => {
+  test('counter A cannot write its old 1,000 over counter B’s 2,000', async () => {
+    const t = await shop()
+    const first = await t.mutation(api.billLedger.postBill, { bill: bill(), expectedRev: null } as any)
+    const opened = first.bill // both counters open it at rev 1
+    expect(opened.rev).toBe(1)
+    await t.mutation(api.billLedger.postBill, { bill: { ...opened, total: 2000 }, expectedRev: opened.rev } as any)
+    await expect(
+      t.mutation(api.billLedger.postBill, { bill: { ...opened, notes: 'A' }, expectedRev: opened.rev } as any),
+    ).rejects.toMatchObject({ data: { code: 'stale' } })
+    expect((await t.run((ctx) => ctx.db.get(first.voucherId)))?.amount).toBe(2000)
+  })
+
+  test('the refusal carries the newer bill', async () => {
+    const t = await shop()
+    const first = await t.mutation(api.billLedger.postBill, { bill: bill(), expectedRev: null } as any)
+    await t.mutation(api.billLedger.postBill, { bill: { ...first.bill, total: 2000 }, expectedRev: 1 } as any)
+    const err: any = await t.mutation(api.billLedger.postBill, { bill: first.bill, expectedRev: 1 } as any).catch((e) => e)
+    expect(err.data.newer.total).toBe(2000)
+  })
+
+  test('an edit from the ledger also makes the open copy old', async () => {
+    const t = await shop()
+    const first = await t.mutation(api.billLedger.postBill, { bill: bill(), expectedRev: null } as any)
+    const v = (await t.run((ctx) => ctx.db.get(first.voucherId)))!
+    const sales = await t.run(async (ctx) => (await ctx.db.query('ledgers').filter((q) => q.eq(q.field('name'), 'Sales')).first())!._id)
+    await t.mutation(api.vouchers.edit, {
+      id: first.voucherId, date: v.date, partyLedgerId: v.partyLedgerId, accountLedgerId: sales, amount: 1500,
+    } as any)
+    await expect(
+      t.mutation(api.billLedger.postBill, { bill: first.bill, expectedRev: first.bill.rev } as any),
+    ).rejects.toMatchObject({ data: { code: 'stale' } })
+  })
+
+  test('a new bill that someone else already posted is refused too', async () => {
+    const t = await shop()
+    await t.mutation(api.billLedger.postBill, { bill: bill() } as any)
+    await expect(
+      t.mutation(api.billLedger.postBill, { bill: bill(), expectedRev: null } as any),
+    ).rejects.toMatchObject({ data: { code: 'stale' } })
+  })
+
+  test('a voucher with its commission marked can still be deleted', async () => {
+    const t = await shop()
+    const first = await t.mutation(api.billLedger.postBill, { bill: bill() } as any)
+    await t.mutation(api.vouchers.setCommissionPaid, { id: first.voucherId, paid: true } as any)
+    const { trashVoucher } = await import('../convex/vouchers')
+    await t.run((ctx) => trashVoucher(ctx as any, first.voucherId))
+    expect(await t.run((ctx) => ctx.db.get(first.voucherId))).toBeNull()
+  })
+})

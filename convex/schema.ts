@@ -564,6 +564,10 @@ export default defineSchema({
     // on an account that owes nobody a commission it stays unset forever and
     // is never asked about.
     commissionPaid: v.optional(v.boolean()),
+    // The server's count of saves that changed what the voucher posts. A
+    // counter saving a copy it opened at an older count is refused, rather
+    // than writing an old amount over a newer save from another counter.
+    rev: v.optional(v.number()),
     ...receiptFields,
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -601,6 +605,10 @@ export default defineSchema({
     amount: v.optional(v.number()),
     attachments,
     tags: v.optional(v.array(v.string())),
+    // Carried over whole from the voucher: without these a voucher with its
+    // commission marked could not be deleted at all.
+    commissionPaid: v.optional(v.boolean()),
+    rev: v.optional(v.number()),
     ...receiptFields,
     createdAt: v.number(),
     updatedAt: v.number(),

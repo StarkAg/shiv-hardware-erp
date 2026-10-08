@@ -10,7 +10,7 @@ import { writeLines, clearLines } from './lib/entries'
 import { record, money, day } from './lib/history'
 import { tidyBill } from './lib/billText'
 import { GRN_ABBR, GRN_TYPE, isGoods } from './lib/receipts'
-import { readBills, writeBills } from './lib/billRows'
+import { readBill, readBills, writeBills } from './lib/billRows'
 import { ensureVoucherFlow, flowForVoucher } from './lib/billFlow'
 import { postCashEntry } from './cash'
 import { trashVoucher } from './vouchers'
@@ -224,6 +224,12 @@ export const postBill = mutation({
     keepAsBill: v.optional(v.boolean()),
     flowId: v.optional(v.id('billFlows')),
     cashEntryId: v.optional(v.string()),
+    /**
+     * The voucher's `rev` when the counter opened this bill; null for a bill
+     * not yet in the books. Sent by the bill editor, which then cannot save an
+     * old copy over a newer save from another counter. Left out, no check.
+     */
+    expectedRev: v.optional(v.union(v.number(), v.null())),
   },
   // Said in the server's own words: production hides a plain Error behind
   // "Server Error", and the counter has to know why a bill did not save.
@@ -451,6 +457,27 @@ export const postBill = mutation({
       throw new Error('The voucher this bill was opened from is no longer in the books.')
     }
 
+    /**
+     * Saved from an old copy? The soft lock only stops a second counter from
+     * opening the bill; a counter that lost its lock (a sleeping laptop, a
+     * dropped connection) could still send what it had, and posting replaced
+     * the newer voucher with it. Refused instead, with the newer bill, so the
+     * counter can see what changed — its own typing stays on its screen.
+     */
+    if (args.expectedRev !== undefined) {
+      const current = existing ? existing.rev ?? 0 : null
+      if (current !== args.expectedRev) {
+        const newer = keepAsBill && bill.id ? await readBill(ctx, String(bill.id)) : null
+        throw new ConvexError({
+          code: 'stale',
+          message: 'Changed on another counter since you opened it. Not saved.',
+          newer,
+          updatedAt: existing?.updatedAt ?? null,
+        })
+      }
+    }
+    const rev = (existing?.rev ?? 0) + 1
+
     let voucherId: Id<'vouchers'>
     if (existing) {
       // Added to, never replaced: a photo filed against this voucher from the
@@ -470,7 +497,7 @@ export const postBill = mutation({
       await ctx.db.patch(existing._id, {
         typeId: type._id,
         ...(retyped ? { voucherNo: await nextVoucherNo(ctx, type, fy), fy } : {}),
-        date, partyLedgerId: ledgerId, updatedAt: now,
+        date, partyLedgerId: ledgerId, updatedAt: now, rev,
         ...(hasAmount
           ? { amount: total, status: 'final' as const }
           : { amount: undefined, status: kind === 'grn' ? 'received' as const : 'pending' as const }),
@@ -504,6 +531,7 @@ export const postBill = mutation({
           : {}),
         ...(hasAmount ? { amount: total } : {}),
         attachments,
+        rev,
         createdAt: now,
         updatedAt: now,
       })
@@ -632,6 +660,7 @@ export const postBill = mutation({
         attachments,
         postedAt: now,
         updatedAt: now,
+        rev,
       }
       // A bill that posted has no failure to remember.
       delete stored.postError
@@ -676,6 +705,6 @@ export const postBill = mutation({
       }
     }
 
-    return { ledgerId, voucherId, number, bill: stored }
+    return { ledgerId, voucherId, number, bill: stored, rev }
   }),
 })

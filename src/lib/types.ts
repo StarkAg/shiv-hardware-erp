@@ -508,6 +508,11 @@ export interface Bill extends BillCharges {
    */
   postedAt?: number
   /**
+   * The voucher's save count on the server when this copy was taken. Saving
+   * sends it back; a copy older than the server's is refused, not written.
+   */
+  rev?: number
+  /**
    * Why the last save did not reach the books. A bill carrying this is on this
    * device only: it is not pushed to the server, it shows as unposted in the
    * list, and it stays that way until a retry succeeds.

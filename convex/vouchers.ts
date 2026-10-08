@@ -446,6 +446,7 @@ export const detail = query({
       kind: (type?.name ?? "Purchase").toLowerCase(),
       ...(paymentMode ? { paymentMode } : {}),
       ...(settles ? { moneyAmount, discount } : {}),
+      rev: voucher.rev ?? 0,
       vchLabel: `${type?.abbr ?? "VCH"}-${String(voucher.voucherNo).padStart(4, "0")}`,
       date: voucher.date,
       partyLedgerId: voucher.partyLedgerId,
@@ -549,6 +550,8 @@ export const edit = mutation({
       narration: args.narration,
       amount: pending ? undefined : round2(args.amount!),
       status: toGrn ? "received" : pending ? "pending" : "final",
+      // A bill editor holding the older count can no longer save over this.
+      rev: (voucher.rev ?? 0) + 1,
       updatedAt: Date.now(),
     });
 
