@@ -267,3 +267,14 @@ describe('#11 unsaved typing is kept on the device', () => {
     } finally { vi.unstubAllGlobals() }
   })
 })
+
+describe('#14 a failed local save is reported, not hidden', () => {
+  test('a full or blocked storage says it did not keep the state', async () => {
+    const { vi } = await import('vitest')
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError') }, removeItem: () => {} })
+    try {
+      const { localAdapter } = await import('../src/lib/db/adapter')
+      expect(await localAdapter.save({} as any)).toBe(false)
+    } finally { vi.unstubAllGlobals() }
+  })
+})

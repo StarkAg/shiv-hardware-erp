@@ -22,7 +22,7 @@ import { AppError, HOME, NotFound } from './components/RouteFallbacks'
 import { startProperInputs } from './lib/properInputs'
 import { startEnterFlow } from './lib/enterFlow'
 import { startOfflineSync } from './lib/offlineSync'
-import { useStore } from './lib/store'
+import { hydrateStore, useStore } from './lib/store'
 
 // The counter opens on the quotation chooser; the recovery screens' Home
 // button goes there, not to the panel's /home.
@@ -45,7 +45,6 @@ startEnterFlow()
 // Retry cards/quotations whose cloud save failed (as the panel's main.tsx does).
 // Without it a failed save sat in the queue until the next card was made.
 startOfflineSync()
-useStore.getState().normalizeCustomerNames()
 
 // Installed on a phone (Add to Home Screen) it opens at once and survives a
 // bad signal. Only on the website: the desktop app loads from disk.
@@ -122,6 +121,11 @@ const app = convex
   )
   : <RouterProvider router={router} future={{ v7_startTransition: true }} />
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>{app}</React.StrictMode>,
-)
+// Drawn once this device's copy is read from IndexedDB, so nothing on screen
+// (or synced) starts from the empty defaults. A failed read draws anyway.
+void hydrateStore().catch(() => undefined).then(() => {
+  useStore.getState().normalizeCustomerNames()
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>{app}</React.StrictMode>,
+  )
+})

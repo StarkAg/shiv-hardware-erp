@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import type { Bill, Brand, BrandSet, CustomCatalogEntry, Customer, GuaranteeDocument, HardwareCatalog, ProductCategory, Quotation, TotoAvailability, TotoDriver, VehicleType } from './types'
 import { DEFAULT_HARDWARE_CATALOG, TOTO_SEED } from './types'
 import { SEED_SETS } from './data/brands'
-import { db } from './db/adapter'
+import { db, type PersistedState } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
 import { fetchCatalogFromConvex, pushBillsToConvex, pushCatalogToConvex, pushTotoToConvex, removeBillFromConvex } from './convexSync'
 import { applyCatalogDiff, catalogDiff, isEmptyDiff, type CatalogSnap } from './catalogMerge'
@@ -253,9 +253,13 @@ function rememberDeletedGuarantee(g: GuaranteeDocument) {
   }
 }
 
-function persist(get: () => AppState) {
-  const s = get()
-  db.save({
+/**
+ * Everything this device keeps, in one place. The syncs used to write their
+ * own shorter list, which left out the units and the toto drivers — so every
+ * bill arriving from another counter quietly wiped both from this device.
+ */
+function snapshotOf(s: AppState): PersistedState {
+  return {
     sets: s.sets,
     customers: s.customers,
     quotations: s.quotations,
@@ -268,34 +272,59 @@ function persist(get: () => AppState) {
     customCatalog: s.customCatalog,
     units: s.units,
     totoDrivers: s.totoDrivers,
-  })
+  }
+}
+
+/**
+ * Nothing is written until this device's copy has been read. Before that the
+ * store holds defaults — an empty bill list — and writing them would put that
+ * over the real copy.
+ */
+let hydrated = false
+
+/** Keeps the state on this device only, without sending anything anywhere. */
+function keepLocal(get: () => AppState) {
+  if (!hydrated) return
+  void db.save(snapshotOf(get()))
+}
+
+function persist(get: () => AppState) {
+  keepLocal(get)
   scheduleConvexBillsPush(get)
   scheduleConvexCatalogPush(get)
   scheduleConvexTotoPush(get)
 }
 
+/** The state a saved copy stands for, filled out with defaults. */
+function fromSaved(saved: Partial<PersistedState> | null) {
+  return {
+    sets: codeSets((saved?.sets as BrandSet[]) ?? SEED_SETS),
+    customers: (saved?.customers as Customer[]) ?? [],
+    quotations: (saved?.quotations as Quotation[]) ?? [],
+    quoteSeq: (saved?.quoteSeq as number) ?? 0,
+    bills: (saved?.bills as Bill[]) ?? [],
+    billSeq: (saved?.billSeq as number) ?? 0,
+    guarantees: ((saved?.guarantees as GuaranteeDocument[]) ?? []).filter(notRetired),
+    guaranteeSeq: startingSeq(saved?.guaranteeSeq as number | undefined, (saved?.guarantees as GuaranteeDocument[]) ?? []),
+    hardwareCatalog: (saved?.hardwareCatalog as HardwareCatalog) ?? DEFAULT_HARDWARE_CATALOG,
+    customCatalog: (saved?.customCatalog as CustomCatalogEntry[]) ?? [],
+    // Seeded from whatever past bills actually used, so nothing already written
+    // loses its unit — not from a fixed list of options nobody picked.
+    // One spelling per unit, whatever this device saved before the rule:
+    // "kg" and "Kg" were two entries, "sit" a Sheet, "Bl" a B/L.
+    units: Array.from(new Set(
+      ((saved?.units as string[]) ?? ['Pc', ...((saved?.bills as Bill[]) ?? []).flatMap(b => b.items ?? []).map(i => i.unit ?? '')])
+        .map(u => canonicalUnit(u))
+        .filter(Boolean),
+    )),
+    totoDrivers: (saved?.totoDrivers as TotoDriver[]) ?? TOTO_SEED,
+  }
+}
+
 const saved = db.load()
 
 export const useStore = create<AppState>((set, get) => ({
-  sets: codeSets((saved?.sets as BrandSet[]) ?? SEED_SETS),
-  customers: (saved?.customers as Customer[]) ?? [],
-  quotations: (saved?.quotations as Quotation[]) ?? [],
-  quoteSeq: (saved?.quoteSeq as number) ?? 0,
-  bills: (saved?.bills as Bill[]) ?? [],
-  billSeq: (saved?.billSeq as number) ?? 0,
-  guarantees: ((saved?.guarantees as GuaranteeDocument[]) ?? []).filter(notRetired),
-  guaranteeSeq: startingSeq(saved?.guaranteeSeq as number | undefined, (saved?.guarantees as GuaranteeDocument[]) ?? []),
-  hardwareCatalog: (saved?.hardwareCatalog as HardwareCatalog) ?? DEFAULT_HARDWARE_CATALOG,
-  customCatalog: (saved?.customCatalog as CustomCatalogEntry[]) ?? [],
-  // Seeded from whatever past bills actually used, so nothing already written
-  // loses its unit — not from a fixed list of options nobody picked.
-  // One spelling per unit, whatever this device saved before the rule:
-  // "kg" and "Kg" were two entries, "sit" a Sheet, "Bl" a B/L.
-  units: Array.from(new Set(
-    ((saved?.units as string[]) ?? ['Pc', ...((saved?.bills as Bill[]) ?? []).flatMap(b => b.items ?? []).map(i => i.unit ?? '')])
-      .map(u => canonicalUnit(u))
-      .filter(Boolean),
-  )),
+  ...fromSaved(saved),
 
   setSets: (sets) => {
     set({ sets: codeSets(sets) })
@@ -509,8 +538,7 @@ export const useStore = create<AppState>((set, get) => ({
       return { bills, billSeq: Math.max(st.billSeq, remoteBillSeq) }
     })
     // Save to localStorage only — no remote push to avoid sync loops
-    const s = get()
-    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+    keepLocal(get)
   },
 
   dropBills: (ids) => {
@@ -526,8 +554,7 @@ export const useStore = create<AppState>((set, get) => ({
       return removed ? { bills } : {}
     })
     if (!removed) return
-    const s = get()
-    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+    keepLocal(get)
   },
 
   syncCatalogFromRemote: (snap, opts) => {
@@ -550,9 +577,8 @@ export const useStore = create<AppState>((set, get) => ({
     const next = pending && !isEmptyDiff(pending) ? applyCatalogDiff(applied, pending) : applied
     set({ hardwareCatalog: next.hardwareCatalog, customCatalog: next.customCatalog, sets: codeSets(next.sets) })
     if (pending && !isEmptyDiff(pending) && !opts?.quiet) scheduleConvexCatalogPush(get)
-    // Save to localStorage only
-    const s = get()
-    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+    // Kept on this device only
+    keepLocal(get)
   },
 
   nextGuaranteeNumber: (offset = 0) => {
@@ -645,8 +671,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   syncGuaranteesFromRemote: (remoteGuarantees, remoteSeq) => {
     set((st) => ({ guarantees: remoteGuarantees, guaranteeSeq: Math.max(sane(st.guaranteeSeq) ?? 0, sane(remoteSeq) ?? 0) }))
-    const s = get()
-    db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: remoteGuarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
+    keepLocal(get)
   },
 
   setHardwareCatalog: (c) => {
@@ -659,7 +684,6 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get)
   },
 
-  totoDrivers: (saved?.totoDrivers as TotoDriver[]) ?? TOTO_SEED,
 
   setTotoAvailability: (id, availability) => {
     set((st) => ({ totoDrivers: st.totoDrivers.map(d => d.id === id ? { ...d, availability } : d) }))
@@ -708,3 +732,22 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get)
   },
 }))
+
+/**
+ * Loads this device's copy from IndexedDB before the app draws. Until a device
+ * has moved, its data is still in localStorage (already read above) and is
+ * written across here; after that IndexedDB is the copy.
+ */
+let hydrating: Promise<void> | null = null
+export function hydrateStore(): Promise<void> {
+  hydrating ??= (async () => {
+    const durable = await db.loadDurable()
+    if (durable) useStore.setState(fromSaved(durable))
+    hydrated = true
+    if (!durable && saved) await db.save(snapshotOf(useStore.getState()))
+  })()
+  return hydrating
+}
+
+/** Whether everything handed to this device's storage has been kept. */
+export const flushLocal = () => db.flush()

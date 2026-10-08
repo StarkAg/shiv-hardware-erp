@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Camera, RotateCcw, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
-import { useStore } from '../../lib/store'
+import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
+import { flushLocal, useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
 // The ledger's own photo picker: files chosen here, and photographs the phone
 // has already sent in. One picker for the whole shop rather than a second one
@@ -2787,6 +2787,31 @@ export function BillBuilder() {
   }, [view, draft.id, claimLock, releaseLock])
 
   const readOnly = lockedBy !== null
+  /** A bill neither the books nor this PC's storage would take: on screen only. */
+  const [unkept, setUnkept] = useState<Bill | null>(null)
+  const openCopyInput = useRef<HTMLInputElement>(null)
+  /** The bill as a file, to keep when nothing else would. */
+  function downloadCopy(bill: Bill) {
+    const blob = new Blob([JSON.stringify({ shivPanelBill: 1, bill }, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `bill-${bill.number || 'new'}-${bill.date}.json`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+  /** A copy downloaded earlier, back on the screen to be saved again. */
+  async function openCopy(file: File) {
+    try {
+      const parsed = JSON.parse(await file.text())
+      const bill = (parsed?.bill ?? parsed) as Bill
+      if (!bill || typeof bill !== 'object' || !Array.isArray(bill.items)) throw new Error('Not a bill copy.')
+      const { postError: _ignored, ...clean } = bill
+      setDraft(clean as Bill)
+      setView('form')
+    } catch (err) {
+      toast(`Could not open that file\n${err instanceof Error ? err.message : String(err)}`, 'error')
+    }
+  }
   /** Set when a save was refused because another counter saved first. */
   const [stale, setStale] = useState<{ newer: Bill | null } | null>(null)
 
@@ -3168,8 +3193,21 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       }
       const message = typeof data === 'string' ? data : err instanceof Error ? err.message : String(err)
       console.error('[ledger] posting failed', err)
-      if (keepAsBill) saveBill({ ...bill, postError: message })
-      toast(`Not saved to the books\n${message}\nKept on this PC as unposted.`, 'error')
+      // A voucher borrowed from the ledger is not one of this PC's bills, so
+      // there is nothing to keep it in — only the books, which refused it.
+      if (!keepAsBill) {
+        toast(`Not saved to the books\n${message}`, 'error')
+        return null
+      }
+      saveBill({ ...bill, postError: message })
+      // Said only once it is true. The PC's storage can be full or switched
+      // off, and then the bill is on this screen and nowhere else.
+      if (await flushLocal()) {
+        toast(`Not saved to the books\n${message}\nKept on this PC as unposted.`, 'error')
+      } else {
+        setUnkept({ ...bill, postError: message })
+        toast(`Not saved to the books, and not kept on this PC\n${message}\nDownload a copy before leaving this bill.`, 'error')
+      }
       return null
     }
   }
@@ -3625,7 +3663,40 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           </Button>
           {/* historyTick only exists to re-render these when the stacks move */}
           <span className="hidden">{historyTick}</span>
+          <Button
+            variant="ghost"
+            className="px-2 py-1"
+            title="Open a downloaded copy"
+            aria-label="Open a downloaded copy"
+            onClick={() => openCopyInput.current?.click()}
+          >
+            <FolderOpen size={16} />
+          </Button>
+          <input
+            ref={openCopyInput}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file) void openCopy(file)
+            }}
+          />
         </div>
+
+        {unkept && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-400/60 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span className="flex-1">Not saved anywhere: not in the books, not on this PC.</span>
+            <button
+              className="flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700"
+              onClick={() => { downloadCopy(unkept); setUnkept(null) }}
+            >
+              <Download size={13} /> Download a copy
+            </button>
+          </div>
+        )}
 
         {readOnly && (
           <div className="flex items-center gap-2 rounded-lg border border-amber-400/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">

@@ -25,7 +25,7 @@ import { BillFlow } from './features/flow/BillFlow'
 import { AppError, NotFound, VoucherRedirect, MovedToCounter } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
 import { startProperInputs } from './lib/properInputs'
-import { useStore } from './lib/store'
+import { hydrateStore, useStore } from './lib/store'
 import { convexEnabled, pushBillsToConvex } from './lib/convexSync'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
@@ -51,7 +51,6 @@ startOfflineSync()
 // Proper case in every text box, codes in capitals — see lib/properInputs.
 startProperInputs()
 // This device's quotation customers and units, brought to the same rule once.
-useStore.getState().normalizeCustomerNames()
 
 // ── Startup ────────────────────────────────────────────────────────────────
 // The panel used to open by asking a print server on the shop's Wi-Fi for the
@@ -68,12 +67,12 @@ useStore.getState().normalizeCustomerNames()
 // The price list is not pushed here: a device sends only what it changed, and
 // only after the server has told it which version it is working from.
 if (convexEnabled()) {
-  setTimeout(() => {
+  void hydrateStore().then(() => setTimeout(() => {
     const s = useStore.getState()
     // Never a bill the books refused — the same rule as every other push.
     const bills = s.bills.filter((b) => !b.postError)
     if (bills.length) void pushBillsToConvex(bills, s.billSeq)
-  }, 3000)
+  }, 3000))
 }
 
 // ── Convex ─────────────────────────────────────────────────────────────────
@@ -205,8 +204,13 @@ const app = convex
   )
   : <RouterProvider router={router} future={{ v7_startTransition: true }} />
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    {app}
-  </React.StrictMode>,
-)
+// Drawn once this device's copy is read from IndexedDB, so nothing on screen
+// (or synced) starts from the empty defaults. A failed read draws anyway.
+void hydrateStore().catch(() => undefined).then(() => {
+  useStore.getState().normalizeCustomerNames()
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      {app}
+    </React.StrictMode>,
+  )
+})
