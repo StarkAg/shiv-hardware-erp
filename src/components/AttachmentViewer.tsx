@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Download, FileText, Minus, Plus, RotateCw, Scan, X } from 'lucide-react'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
-import { pdfjs } from '../lib/pdfjs'
 import { attachmentName, isPdfAttachment, type Attachment } from '../lib/attachments'
 import './AttachmentViewer.css'
 
@@ -15,15 +14,20 @@ function usePdfImage(url: string | null | undefined, enabled: boolean, page: num
     setResult({ source: url ?? '', url: '', error: '', loading: enabled, pages: 1 })
     if (!enabled || !url) return
     let disposed = false
-    const task = pdfjs.getDocument(url)
-    task.promise.then(pdf => {
+    // The PDF reader is loaded the first time a PDF is shown, not with the panel.
+    let task: { promise: Promise<PDFDocumentProxy>; destroy: () => Promise<void> } | null = null
+    import('../lib/pdfjs').then(({ pdfjs }) => {
       if (disposed) return
-      setDoc(pdf)
-      setResult(current => ({ ...current, pages: pdf.numPages }))
+      task = pdfjs.getDocument(url)
+      return task.promise.then(pdf => {
+        if (disposed) return
+        setDoc(pdf)
+        setResult(current => ({ ...current, pages: pdf.numPages }))
+      })
     }).catch(() => {
       if (!disposed) setResult(current => ({ ...current, loading: false, error: 'Could not open this PDF. It may be unavailable or password protected.' }))
     })
-    return () => { disposed = true; void task.destroy().catch(() => {}) }
+    return () => { disposed = true; void task?.destroy().catch(() => {}) }
   }, [url, enabled, attempt])
 
   useEffect(() => {

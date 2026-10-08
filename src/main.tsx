@@ -5,28 +5,39 @@ import { ConvexProvider, ConvexReactClient } from 'convex/react'
 import './index.css'
 import { AppLayout } from './components/AppLayout'
 import { ConvexSync } from './components/ConvexSync'
-import { PrintDemo } from './features/print/PrintDemo'
-import { GuaranteeClaims } from './features/guarantee/GuaranteeClaims'
-import { Ledger } from './features/ledger/Ledger'
-import { Profit } from './features/profit/Profit'
-import { LedgersPage } from './features/ledger/LedgersPage'
 import { BillBuilder } from './features/bills/BillBuilder'
-import { BillTrash } from './features/bills/BillTrash'
-import { QuotationList } from './features/bills/QuotationList'
-import { PrinterQueue } from './features/print/PrinterQueue'
-import { CashReview } from './features/cash/CashReview'
 import { Home } from './features/home/Home'
-import { PdfViewer } from './features/pdf/PdfViewer'
-import { MobileView } from './features/mobile/MobileView'
-import { QuickEntry } from './features/mobile/QuickEntry'
-import { DayPaper } from './features/paper/DayPaper'
-import { Receive } from './features/receive/Receive'
-import { BillFlow } from './features/flow/BillFlow'
 import { AppError, NotFound, VoucherRedirect, MovedToCounter } from './components/RouteFallbacks'
 import { startOfflineSync } from './lib/offlineSync'
 import { startProperInputs } from './lib/properInputs'
 import { hydrateStore, useStore } from './lib/store'
 import { convexEnabled, pushBillsToConvex } from './lib/convexSync'
+
+/**
+ * Each screen is fetched when it is first opened, not with the panel. The
+ * panel used to arrive as one 717 kB file holding every screen and the PDF
+ * reader, all of it parsed before the first one could draw. Home and the bill
+ * editor, opened all day, come with the panel.
+ */
+function page<K extends string>(load: () => Promise<{ [k in K]: unknown }>, name: K) {
+  const Lazy = React.lazy(async () => ({ default: (await load())[name] as React.ComponentType }))
+  return () => <React.Suspense fallback={null}><Lazy /></React.Suspense>
+}
+const PrintDemo = page(() => import('./features/print/PrintDemo'), 'PrintDemo')
+const GuaranteeClaims = page(() => import('./features/guarantee/GuaranteeClaims'), 'GuaranteeClaims')
+const Ledger = page(() => import('./features/ledger/Ledger'), 'Ledger')
+const Profit = page(() => import('./features/profit/Profit'), 'Profit')
+const LedgersPage = page(() => import('./features/ledger/LedgersPage'), 'LedgersPage')
+const BillTrash = page(() => import('./features/bills/BillTrash'), 'BillTrash')
+const QuotationList = page(() => import('./features/bills/QuotationList'), 'QuotationList')
+const PrinterQueue = page(() => import('./features/print/PrinterQueue'), 'PrinterQueue')
+const CashReview = page(() => import('./features/cash/CashReview'), 'CashReview')
+const PdfViewer = page(() => import('./features/pdf/PdfViewer'), 'PdfViewer')
+const MobileView = page(() => import('./features/mobile/MobileView'), 'MobileView')
+const QuickEntry = page(() => import('./features/mobile/QuickEntry'), 'QuickEntry')
+const DayPaper = page(() => import('./features/paper/DayPaper'), 'DayPaper')
+const Receive = page(() => import('./features/receive/Receive'), 'Receive')
+const BillFlow = page(() => import('./features/flow/BillFlow'), 'BillFlow')
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
