@@ -209,11 +209,14 @@ export function readSquare(canvas, box) {
   tctx.putImageData(timg, 0, 0)
 
   // Shine off a glossy sheet is the lamp, not the laminate: the brightest few
-  // samples go, when they stand well clear of the rest.
-  const Ls = lab.map((c) => c.L).sort((a, b) => a - b)
-  const mid = Ls[Ls.length >> 1]
-  const top = Ls[Math.floor(Ls.length * 0.97)]
-  const kept = lab.filter((c) => !(c.L >= top && c.L > mid + 8))
+  // samples go — never more than 3% of them, and only near-white ones well
+  // clear of the rest, so a light shade that is really there is never taken
+  // for a reflection.
+  const order = lab.map((c, i) => i).sort((i, j) => lab[i].L - lab[j].L)
+  const mid = lab[order[order.length >> 1]].L
+  const shine = new Set(order.slice(Math.ceil(order.length * 0.97))
+    .filter((i) => lab[i].L > mid + 8 && Math.hypot(lab[i].a, lab[i].b) < 12))
+  const kept = lab.filter((c, i) => !shine.has(i))
 
   // How busy the pattern is: the average step in lightness from one sample to
   // the next. A plain sheet reads near the camera's own grain, about 1; a wood
