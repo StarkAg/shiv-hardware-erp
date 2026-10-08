@@ -10,7 +10,16 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Shiv Quotation" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Pinch zoom stays on: small ledger tables have to be readable to everyone.
+         On an iPhone maximum-scale only stops the jump into a small text box when
+         it is tapped; Safari still lets the user pinch. Elsewhere it would block
+         pinching, so it is set for iOS alone. -->
+    <script>
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        document.querySelector('meta[name=viewport]').content += ', maximum-scale=1.0'
+      }
+    </script>
     <title>Shiv Hardware Counter</title>
     <!-- Apply theme BEFORE CSS loads so there is never a flash or override fight. -->
     <script>

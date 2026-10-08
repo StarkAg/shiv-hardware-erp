@@ -133,6 +133,12 @@ a, button, [role="button"], select, input, label,
   touch-action: manipulation;   /* eliminates 300ms tap delay */
 }
 
+/* Pinch zoom on, double-tap zoom off, for the whole page. touch-action
+   applies through the ancestors, so set here it covers plain text too. */
+html {
+  touch-action: manipulation;
+}
+
 /*
  * Everything on screen can be selected and copied.
  *
