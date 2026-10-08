@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 // @ts-expect-error plain JS module from the Mica Match site
-import { deltaE2000, distance, labToHex, linearToLab, nearest, readSquare } from '../mica-web/src/color.js'
+import { deltaE2000, difference, distance, labToHex, linearToLab, nearest, readSquare, similarity } from '../mica-web/src/color.js'
 
 describe('Mica Match colour maths', () => {
   test('ΔE2000 agrees with the published test pairs', () => {
@@ -49,5 +49,27 @@ describe('reading a square', () => {
     expect(r.shades).toHaveLength(2)
     expect(r.shades[0].w).toBeGreaterThan(r.shades[1].w)
     expect(r.shades[1].w).toBeGreaterThan(0.2)
+  })
+})
+
+describe('comparing two', () => {
+  test('a likeness out of 100 that falls as they differ', () => {
+    expect(similarity(0)).toBe(100)
+    expect(similarity(1)).toBeGreaterThan(95)
+    expect(similarity(2)).toBeGreaterThan(84)
+    expect(similarity(7)).toBeLessThan(40)
+  })
+
+  test('says how B differs, in plain words', () => {
+    const a = { shades: [{ L: 50, a: 10, b: 20, w: 1 }], texture: 1 }
+    expect(difference(a, a)).toEqual([])
+    const b = { shades: [{ L: 46, a: 10, b: 27, w: 1 }], texture: 5 }
+    expect(difference(a, b)).toEqual(['darker', 'much warmer (more yellow)', 'much brighter in colour', 'a busier pattern'])
+  })
+
+  test('a green that loses some green is less green, not redder', () => {
+    const bright = { shades: [{ L: 80, a: -60, b: 70, w: 1 }], texture: 1 }
+    const dark = { shades: [{ L: 40, a: -40, b: 45, w: 1 }], texture: 1 }
+    expect(difference(bright, dark)).toEqual(['much darker', 'much less yellow', 'much less green', 'much duller'])
   })
 })

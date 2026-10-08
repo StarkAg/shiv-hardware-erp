@@ -74,11 +74,10 @@ input, select { width: 100%; min-width: 0; min-height: 40px; padding: 6px 10px; 
 .verdict.fair { color: var(--fair); }
 .verdict.poor { color: var(--poor); }
 
-/* Add: what the chip is, the camera, the code and Save. */
-.add { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Add: under the camera, what the chip is, its code and Save; a note after saving floats over the camera. */
+.add { flex: none; display: grid; gap: 8px; position: relative; }
 .fields { flex: none; display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 6px; }
-.add-capture { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.toast { position: absolute; left: 50%; top: 44px; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 8px 14px; border-radius: 12px; background: rgba(12, 11, 9, .9); font-size: 13px; text-align: center; box-shadow: 0 6px 20px rgba(0, 0, 0, .4); pointer-events: none; }
+.toast { position: absolute; left: 50%; bottom: calc(100% + 60px); transform: translateX(-50%); max-width: calc(100% - 24px); padding: 8px 14px; border-radius: 12px; background: rgba(12, 11, 9, .9); font-size: 13px; text-align: center; box-shadow: 0 6px 20px rgba(0, 0, 0, .4); pointer-events: none; }
 .save-row { flex: none; display: flex; gap: 8px; }
 .save-row button { min-width: 88px; }
 
@@ -97,3 +96,23 @@ input, select { width: 100%; min-width: 0; min-height: 40px; padding: 6px 10px; 
   .results { height: 132px; }
   .pair img, .pair .nophoto { height: 44px; }
 }
+
+/* Find's matches open Compare. */
+button.result { text-align: left; font-weight: inherit; color: inherit; min-height: 0; }
+
+/* Compare: the two sides, then how alike they are. */
+.sides { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.side { display: grid; gap: 6px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.side-head { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.side-head img, .side-head .nophoto { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex: none; display: grid; place-items: center; color: var(--muted); font-weight: 800; }
+.side-text { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.side-actions { display: grid; grid-template-columns: auto 1fr; gap: 6px; }
+.side-actions button { min-height: 36px; padding: 4px 10px; }
+.side-actions select { min-height: 36px; padding: 4px 6px; font-size: 14px; }
+.compare-result { flex: none; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.score { font-size: 30px; font-weight: 850; line-height: 1; flex: none; }
+.score.good { color: var(--good); }
+.score.fair { color: var(--fair); }
+.score.poor { color: var(--poor); }
+.compare-text { display: grid; gap: 2px; min-width: 0; }
+.tabs button { font-size: 14px; }

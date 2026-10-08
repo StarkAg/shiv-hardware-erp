@@ -280,3 +280,49 @@ export function nearest(reading, chips, limit = 8) {
     .sort((x, y) => x.d - y.d)
     .slice(0, limit)
 }
+
+/**
+ * A distance as a likeness out of 100, the way the counter thinks of it: a
+ * difference nobody sees (ΔE under 1) is about 96%, a close match (2) about
+ * 86%, plainly different (7 and up) a third or less.
+ */
+export const similarity = (d) => Math.round(100 / (1 + (d / 5) ** 2))
+
+/** The shade covering most of the square. */
+const main = (r) => r.shades.reduce((m, s) => (s.w > m.w ? s : m), r.shades[0])
+
+/**
+ * What is different about B, in the words a customer would use: lighter or
+ * darker, warmer or cooler, redder or greener, brighter or duller, and
+ * whether the pattern is busier. Only differences big enough to see are said.
+ */
+export function difference(a, b) {
+  if (!a?.shades.length || !b?.shades.length) return []
+  const p = main(a), q = main(b)
+  const said = []
+  const amount = (n) => (n > 6 ? 'much ' : n > 3 ? '' : 'a little ')
+  const dL = q.L - p.L
+  if (Math.abs(dL) > 1.5) said.push(`${amount(Math.abs(dL))}${dL > 0 ? 'lighter' : 'darker'}`)
+  // Each axis is said from where the colours sit on it: a green that loses
+  // some of its green is "less green", not "redder".
+  const db = q.b - p.b
+  if (Math.abs(db) > 1.5) {
+    const word = db > 0
+      ? (p.b < 0 && q.b <= 0 ? 'less blue' : 'warmer (more yellow)')
+      : (p.b > 0 && q.b >= 0 ? 'less yellow' : 'cooler (more blue)')
+    said.push(`${amount(Math.abs(db))}${word}`)
+  }
+  const da = q.a - p.a
+  if (Math.abs(da) > 1.5) {
+    const word = da > 0
+      ? (p.a < 0 && q.a <= 0 ? 'less green' : 'redder')
+      : (p.a > 0 && q.a >= 0 ? 'less red' : 'greener')
+    said.push(`${amount(Math.abs(da))}${word}`)
+  }
+  const dC = Math.hypot(q.a, q.b) - Math.hypot(p.a, p.b)
+  if (Math.abs(dC) > 2) said.push(`${amount(Math.abs(dC))}${dC > 0 ? 'brighter in colour' : 'duller'}`)
+  const dT = (b.texture ?? 0) - (a.texture ?? 0)
+  if (Math.abs(dT) > 1.5) said.push(dT > 0 ? 'a busier pattern' : 'a plainer pattern')
+  if (Math.abs(a.shades.length - b.shades.length) >= 2) said.push(b.shades.length > a.shades.length ? 'more shades in it' : 'fewer shades in it')
+  return said
+}

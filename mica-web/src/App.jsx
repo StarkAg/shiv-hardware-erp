@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import { Capture, ReadingStrip, Shades } from './Capture'
-import { nearest, verdict } from './color'
+import { difference, distance, nearest, similarity, verdict } from './color'
 
 const api = anyApi
 
@@ -14,28 +14,48 @@ const remember = (key, value) => { try { localStorage.setItem(`mica:${key}`, val
 
 const label = (c) => [c.brand, c.catalog, c.code].filter(Boolean).join(' · ')
 
+/** A reading or a saved chip, as one side of a comparison. */
+const fromReading = (r) => r && ({ shades: r.shades, texture: r.texture, corrected: r.corrected, img: r.thumb.toDataURL('image/jpeg', 0.8), title: 'From camera' })
+const fromChip = (c) => c && ({ shades: c.shades, texture: c.texture, corrected: c.corrected, img: c.photoUrl, title: c.code, sub: [c.brand, c.catalog].filter(Boolean).join(' · '), id: c._id })
+
+const HINTS = {
+  find: 'Piece on white paper · paper inside the dashed frame',
+  compare: 'Aim at a piece, then Set A or Set B',
+  add: 'One chip in the square · white board in the dashed frame',
+}
+
 /**
  * One screen, never scrolled: the tabs on top, the camera filling the middle,
- * and what was read — with the matches or the save box — along the bottom.
- * Only the chip list scrolls, inside its own space.
+ * and the tab's own work — matches, the two sides, or the save box — along
+ * the bottom. Only the chip list scrolls, inside its own space.
+ *
+ * The camera is one and the same on Find, Compare and Add: it stays where it
+ * is in the page while the tabs change what is under it, so switching tabs
+ * never closes the camera and waits for it to open again.
  */
 export default function App() {
   const [tab, setTab] = useState('find')
   const chips = useQuery(api.mica.list, {})
+  const [reading, setReading] = useState(null)
+  // The two sides on Compare, kept when moving between tabs.
+  const [sides, setSides] = useState({ a: null, b: null })
+  const compare = (a, b) => { setSides({ a, b }); setTab('compare') }
 
   return (
     <div className="app">
       <header className="top">
         <img className="logo" src="/icon.svg" alt="" />
         <nav className="tabs">
-          {[['find', 'Find'], ['add', 'Add'], ['chips', `Chips${chips ? ` ${chips.length}` : ''}`]].map(([key, text]) => (
+          {[['find', 'Find'], ['compare', 'Compare'], ['add', 'Add'], ['chips', `Chips${chips ? ` ${chips.length}` : ''}`]].map(([key, text]) => (
             <button key={key} type="button" className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{text}</button>
           ))}
         </nav>
       </header>
       <main className="page">
-        {tab === 'find' && <Find chips={chips} />}
-        {tab === 'add' && <Add chips={chips} />}
+        {tab !== 'chips' && <Capture onRead={setReading} hint={HINTS[tab]} />}
+        {tab === 'find' && <Find chips={chips} reading={reading} onCompare={compare} />}
+        {tab === 'compare' && <Compare chips={chips} reading={reading} sides={sides} setSides={setSides} />}
+        {tab === 'add' && <Add chips={chips} reading={reading} />}
         {tab === 'chips' && <Chips chips={chips} />}
       </main>
     </div>
@@ -44,8 +64,7 @@ export default function App() {
 
 /* ── Find ─────────────────────────────────────────────────────────────── */
 
-function Find({ chips }) {
-  const [reading, setReading] = useState(null)
+function Find({ chips, reading, onCompare }) {
   const [finish, setFinish] = useState('')
   const [brand, setBrand] = useState('')
   const finishes = useMemo(() => [...new Set((chips ?? []).map((c) => c.finish).filter(Boolean))].sort(), [chips])
@@ -57,7 +76,6 @@ function Find({ chips }) {
 
   return (
     <>
-      <Capture onRead={setReading} hint="Piece on white paper · paper inside the dashed frame" />
       <ReadingStrip reading={reading} />
       <div className="filters">
         <select value={finish} onChange={(e) => setFinish(e.target.value)} aria-label="Finish">
@@ -76,7 +94,13 @@ function Find({ chips }) {
         {results.map(({ chip, d }) => {
           const v = verdict(d)
           return (
-            <div key={chip._id} className="result">
+            <button
+              key={chip._id}
+              type="button"
+              className="result"
+              onClick={() => onCompare(fromReading(reading), fromChip(chip))}
+              aria-label={`Compare with ${chip.code}`}
+            >
               <div className="pair">
                 {sample && <img src={sample} alt="Customer's piece" />}
                 {chip.photoUrl ? <img src={chip.photoUrl} alt={chip.code} /> : <div className="nophoto" />}
@@ -84,8 +108,8 @@ function Find({ chips }) {
               <div className="code">{chip.code}</div>
               <div className="muted one">{[chip.brand, chip.catalog].filter(Boolean).join(' · ')}</div>
               {chip.finish && <div className="muted one">{chip.finish}</div>}
-              <div className={`verdict ${v.tone}`}>{v.word} <span className="muted">{d.toFixed(1)}</span></div>
-            </div>
+              <div className={`verdict ${v.tone}`}>{similarity(d)}% <span className="muted">{v.word}</span></div>
+            </button>
           )
         })}
       </div>
@@ -93,14 +117,77 @@ function Find({ chips }) {
   )
 }
 
+/* ── Compare ──────────────────────────────────────────────────────────── */
+
+/**
+ * Any two against each other: two pieces at the counter, a piece and a saved
+ * chip, or two saved chips from different catalogs. Each side is set from the
+ * camera (aim, then Set) or picked from the saved chips.
+ */
+function Compare({ chips, reading, sides, setSides }) {
+  const set = (key, value) => setSides((s) => ({ ...s, [key]: value }))
+  const { a, b } = sides
+  const d = a && b ? distance(a, b) : null
+  const v = d !== null ? verdict(d) : null
+  const said = a && b ? difference(a, b) : []
+
+  return (
+    <>
+      <div className="sides">
+        {[['a', 'A'], ['b', 'B']].map(([key, name]) => {
+          const side = sides[key]
+          return (
+            <div key={key} className="side">
+              <div className="side-head">
+                {side?.img ? <img src={side.img} alt="" /> : <div className="nophoto">{name}</div>}
+                <div className="side-text">
+                  <div className="code one">{side ? `${name} · ${side.title}` : `${name} — not set`}</div>
+                  {side?.sub && <div className="muted one">{side.sub}</div>}
+                  {side && <Shades shades={side.shades} height={8} />}
+                </div>
+              </div>
+              <div className="side-actions">
+                <button type="button" className="primary" disabled={!reading?.shades.length} onClick={() => set(key, fromReading(reading))}>
+                  Set {name}
+                </button>
+                <select
+                  value={side?.id ?? ''}
+                  onChange={(e) => set(key, fromChip(chips?.find((c) => c._id === e.target.value)) ?? null)}
+                  aria-label={`Saved chip as ${name}`}
+                >
+                  <option value="">Saved…</option>
+                  {(chips ?? []).map((c) => <option key={c._id} value={c._id}>{label(c)}</option>)}
+                </select>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="compare-result">
+        {d === null ? (
+          <span className="muted">Set both A and B to see how alike they are</span>
+        ) : (
+          <>
+            <div className={`score ${v.tone}`}>{similarity(d)}%</div>
+            <div className="compare-text">
+              <div className={`verdict ${v.tone}`}>{v.word} <span className="muted">· colour difference {d.toFixed(1)}</span></div>
+              <div className="muted">{said.length ? `B is ${said.join(', ')}` : 'No difference you would see'}</div>
+              {(!a.corrected || !b.corrected) && <div className="warn">One side had no white paper beside it — less certain</div>}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
 /* ── Add ──────────────────────────────────────────────────────────────── */
 
-function Add({ chips }) {
+function Add({ chips, reading }) {
   const [brand, setBrand] = useState(() => remembered('brand'))
   const [catalog, setCatalog] = useState(() => remembered('catalog'))
   const [finish, setFinish] = useState(() => remembered('finish'))
   const [code, setCode] = useState('')
-  const [reading, setReading] = useState(null)
   const [saving, setSaving] = useState(false)
   const [said, setSaid] = useState(null)
   const uploadUrl = useMutation(api.mica.uploadUrl)
@@ -149,6 +236,7 @@ function Add({ chips }) {
 
   return (
     <form onSubmit={submit} className="add">
+      <ReadingStrip reading={reading} />
       <div className="fields">
         <input value={brand} onChange={(e) => setBrand(e.target.value)} list="brands" placeholder="Brand" aria-label="Brand" required />
         <input value={catalog} onChange={(e) => setCatalog(e.target.value)} list="catalogs" placeholder="Catalog" aria-label="Catalog" />
@@ -157,13 +245,6 @@ function Add({ chips }) {
         <datalist id="catalogs">{catalogs.map((c) => <option key={c} value={c} />)}</datalist>
         <datalist id="finishes">{FINISHES.map((f) => <option key={f} value={f} />)}</datalist>
       </div>
-
-      <div className="add-capture">
-        <Capture onRead={setReading} hint="One chip in the square · white board in the dashed frame" />
-        {said && <div className={`toast ${said.ok ? 'ok' : 'warn'}`} role="status">{said.text}</div>}
-      </div>
-      <ReadingStrip reading={reading} />
-
       <div className="save-row">
         <input
           value={code} onChange={(e) => setCode(e.target.value)}
@@ -173,6 +254,7 @@ function Add({ chips }) {
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
+      {said && <div className={`toast ${said.ok ? 'ok' : 'warn'}`} role="status">{said.text}</div>}
     </form>
   )
 }

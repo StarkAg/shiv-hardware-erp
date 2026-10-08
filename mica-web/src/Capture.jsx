@@ -125,6 +125,9 @@ function LiveCapture({ onRead, onFail, hint, extra }) {
         const stream = await camera()
         if (stopped || !video.current) return
         if (video.current.srcObject !== stream) video.current.srcObject = stream
+        // A camera that stops by itself — taken by another app, or the phone
+        // being clever — is taken again rather than leaving a frozen picture.
+        for (const t of stream.getVideoTracks()) t.onended = () => { if (!stopped) { setReady(false); void attach() } }
         await video.current.play().catch(() => undefined)
         setReady(true)
       } catch (err) {
