@@ -271,6 +271,45 @@ export function GuaranteeHistory() {
       (x.customer?.mobile ?? '').includes(q),
   )
 
+  /** A card's buttons; `big` gives each a thumb-sized target on a phone. */
+  const actionsFor = (x: GuaranteeDocument, big: boolean) => (
+    <>
+      <Button
+        variant="ghost"
+        className={big ? 'h-11 min-w-11 flex-1 justify-center' : 'px-2 py-1'}
+        title="Show card"
+        onClick={() => setShowing(x)}
+      >
+        <Eye size={16} />
+      </Button>
+      <Button
+        variant="ghost"
+        className={big ? 'h-11 min-w-11 flex-1 justify-center' : 'px-2 py-1'}
+        title="Edit card (keeps its number and QR)"
+        onClick={() => navigate('/guarantee/card', { state: { editGuarantee: x } })}
+      >
+        <Pencil size={16} />
+      </Button>
+      {convexReady && <SendWhatsAppButton doc={x} />}
+      <Button
+        variant="ghost"
+        className={big ? 'h-11 min-w-11 flex-1 justify-center' : 'px-2 py-1'}
+        title="Print guarantee card"
+        onClick={() => navigate(`/guarantee/history/${x.id}`)}
+      >
+        <Printer size={16} />
+      </Button>
+      <Button
+        variant="ghost"
+        className={`${big ? 'h-11 min-w-11 flex-1 justify-center' : 'px-2 py-1'} text-danger`}
+        title="Delete"
+        onClick={() => setDeleting({ id: x.id, number: x.number })}
+      >
+        <Trash2 size={16} />
+      </Button>
+    </>
+  )
+
   return (
     <div>
       {deleting && (
@@ -291,7 +330,27 @@ export function GuaranteeHistory() {
           </div>
           {convexReady && <CloudGuaranteeSync />}
         </div>
-        <Card className="overflow-x-auto">
+        {/* A phone gets each card as a block, with buttons big enough for a
+            thumb; the table, with its five columns, is for wider screens. */}
+        <div className="space-y-2 md:hidden">
+          {filtered.map((x) => (
+            <Card key={x.id} className="p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-semibold">{x.number}</span>
+                <span className="text-xs text-muted">{new Date(x.date).toLocaleDateString('en-GB')}</span>
+              </div>
+              <div className="mt-1 text-sm">
+                {x.customer?.name || '—'}
+                {x.customer?.mobile && <span className="text-muted"> · {x.customer.mobile}</span>}
+              </div>
+              <div className="mt-0.5 text-xs text-muted">{itemSummary(x)}</div>
+              <div className="mt-2 flex flex-wrap gap-1 border-t border-line pt-2 dark:border-white/10">{actionsFor(x, true)}</div>
+            </Card>
+          ))}
+          {!filtered.length && <Card className="p-6 text-center text-sm text-muted">No guarantee cards yet.</Card>}
+        </div>
+
+        <Card className="hidden overflow-x-auto md:block">
           <table className="min-w-[760px] w-full text-sm">
             <thead className="bg-card2 text-left text-xs uppercase text-muted dark:bg-white/5 dark:text-muted">
               <tr>
@@ -313,41 +372,7 @@ export function GuaranteeHistory() {
                   </td>
                   <td className="px-4 py-2">{itemSummary(x)}</td>
                   <td className="px-4 py-2">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        className="px-2 py-1"
-                        title="Show card"
-                        onClick={() => setShowing(x)}
-                      >
-                        <Eye size={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="px-2 py-1"
-                        title="Edit card (keeps its number and QR)"
-                        onClick={() => navigate('/guarantee/card', { state: { editGuarantee: x } })}
-                      >
-                        <Pencil size={16} />
-                      </Button>
-                      {convexReady && <SendWhatsAppButton doc={x} />}
-                      <Button
-                        variant="ghost"
-                        className="px-2 py-1"
-                        title="Print guarantee card"
-                        onClick={() => navigate(`/guarantee/history/${x.id}`)}
-                      >
-                        <Printer size={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="px-2 py-1 text-danger"
-                        title="Delete"
-                        onClick={() => setDeleting({ id: x.id, number: x.number })}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
+                    <div className="flex justify-end gap-1">{actionsFor(x, false)}</div>
                   </td>
                 </tr>
               ))}

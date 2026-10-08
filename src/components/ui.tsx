@@ -133,7 +133,8 @@ export function Toggle({
   label?: ReactNode
 }) {
   return (
-    <label className="flex w-fit cursor-pointer items-center gap-3 text-sm font-medium text-stone-600 select-none dark:text-stone-300">
+    // The whole row is the target — a thumb-sized one on a phone — not just the switch.
+    <label className="flex min-h-11 w-fit cursor-pointer items-center gap-3 text-sm font-medium text-stone-600 select-none dark:text-stone-300 md:min-h-0">
       <button
         type="button"
         role="switch"

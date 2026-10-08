@@ -340,7 +340,11 @@ export function QuotationBuilder() {
         </div>
         )}
 
-        <InlineQuotationPreview quote={doc} />
+        {/* On a phone the prices come first, straight under the size; the
+            page as it prints follows below them. */}
+        <div className="order-last md:order-none">
+          <InlineQuotationPreview quote={doc} />
+        </div>
 
         {/* Live preview: all-brands rate card OR aluminium breakdown */}
         <div className="flex flex-col rounded-xl border border-stone-200/90 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
@@ -639,7 +643,7 @@ export function QuotationBuilder() {
                 <button
                   key={s.id}
                   onClick={() => setSetId(s.id)}
-                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                  className={`min-h-11 rounded-lg border px-3 py-1 text-xs font-medium transition md:min-h-0 ${
                     s.id === setId
                       ? 'border-shiv-green bg-shiv-green text-stone-950 shadow-sm'
                       : 'border-stone-300 bg-stone-100 text-stone-600 hover:border-shiv-green hover:bg-stone-50 dark:border-white/15 dark:bg-white/5 dark:text-stone-300 dark:hover:bg-white/10'
@@ -650,7 +654,7 @@ export function QuotationBuilder() {
               ))}
               <button
                 onClick={() => setSetId(addSet(setId))}
-                className="flex items-center gap-1 rounded-lg border border-dashed border-stone-400 px-2.5 py-1 text-xs font-medium text-muted hover:border-shiv-green hover:bg-white dark:border-white/20 dark:hover:bg-white/10"
+                className="flex min-h-11 items-center gap-1 rounded-lg border border-dashed border-stone-400 px-3 py-1 text-xs font-medium text-muted hover:border-shiv-green hover:bg-white dark:border-white/20 dark:hover:bg-white/10 md:min-h-0"
               >
                 <Plus size={15} /> Add Set
               </button>

@@ -196,7 +196,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                       <col className="w-[18%]" />
                       <col className="w-[8%]" />
                     </colgroup>
-                    <thead className="text-left text-[9px] uppercase text-muted md:text-xs">
+                    <thead className="text-left text-[11px] uppercase text-muted md:text-xs">
                       <tr>
                         <th className="px-1 py-0.5 md:px-2 md:py-1">Brand</th>
                         <th className="px-0.5 py-0.5 text-right md:px-2 md:py-1">
@@ -215,7 +215,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                         <tr key={b.id} className="border-t border-line dark:border-white/10" style={tintedRowStyle(b)}>
                           <td className="px-1 py-0.5 md:px-2 md:py-1">
                             <input
-                              className="h-7 w-full min-w-0 rounded border border-line px-1 text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
+                              className="h-11 w-full min-w-0 rounded border border-line px-1 text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
                               value={b.name}
                               onChange={(e) => updateBrand(b.id, { name: e.target.value })}
                             />
@@ -225,7 +225,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                               type="text"
                               inputMode="numeric"
                               pattern="[0-9]*"
-                              className="h-7 w-full min-w-0 rounded border border-line px-0.5 text-right text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
+                              className="h-11 w-full min-w-0 rounded border border-line px-0.5 text-right text-[10px] leading-none dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
                               value={b.rate}
                               onChange={(e) => updateBrand(b.id, { rate: Number(e.target.value.replace(/\D/g, '')) })}
                             />
@@ -233,7 +233,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                           <td className="px-0.5 py-0.5 md:px-2 md:py-1">
                             <div className="grid grid-cols-2 gap-1">
                               <div className="relative">
-                                <div className="flex h-7 w-full min-w-0 items-center justify-center rounded border border-stone-300 bg-stone-50 px-0.5 text-center text-[9px] font-medium leading-none text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
+                                <div className="flex h-11 w-full min-w-0 items-center justify-center rounded border border-stone-300 bg-stone-50 px-0.5 text-center text-xs font-medium leading-none text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
                                   {coverageLabel(b.coverage)}
                                 </div>
                                 <select
@@ -250,7 +250,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                                 </select>
                               </div>
                               <div className="relative">
-                                <div className="flex h-7 w-full min-w-0 items-center justify-center rounded border border-stone-300 bg-stone-50 px-0.5 text-center text-[9px] font-medium leading-none text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
+                                <div className="flex h-11 w-full min-w-0 items-center justify-center rounded border border-stone-300 bg-stone-50 px-0.5 text-center text-xs font-medium leading-none text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
                                   {b.guaranteeYears === 0 ? '-' : `${b.guaranteeYears}y`}
                                 </div>
                                 <select
@@ -272,7 +272,7 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
                           </td>
                           <td className="px-0.5 py-0.5 text-right md:py-1">
                             <button
-                              className="rounded p-0.5 text-danger hover:bg-red-50 dark:hover:bg-red-950/30 md:p-1"
+                              className="inline-flex h-11 w-9 items-center justify-center rounded text-danger hover:bg-red-50 dark:hover:bg-red-950/30 md:h-auto md:w-auto md:p-1"
                               onClick={() => removeBrand(b.id)}
                               title="Remove brand"
                             >

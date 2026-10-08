@@ -579,7 +579,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                   aria-label="Card date"
                   value={cardDate}
                   onChange={(e) => e.target.value && setCardDate(e.target.value)}
-                  className="rounded border border-stone-300 bg-white px-1.5 py-0.5 font-mono text-sm normal-case text-stone-700 dark:border-white/15 dark:bg-white/10 dark:text-stone-200"
+                  className="min-h-11 rounded border border-stone-300 bg-white px-2 py-1 font-mono text-sm normal-case text-stone-700 dark:border-white/15 dark:bg-white/10 dark:text-stone-200 md:min-h-0 md:px-1.5 md:py-0.5"
                 />
               </label>
               {secondCardOn && (
