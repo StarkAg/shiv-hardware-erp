@@ -203,3 +203,41 @@ describe('#4 a save from an old copy is refused', () => {
     expect(await t.run((ctx) => ctx.db.get(first.voucherId))).toBeNull()
   })
 })
+
+describe('#5 an old copy of the price list cannot undo a newer one', () => {
+  const snap = (rate: number, extra: any[] = []) =>
+    ({ hardwareCatalog: {}, customCatalog: [{ id: 'hinge', name: 'Hinge', rate, sizes: [], brands: [] }, ...extra], sets: [] })
+
+  test('a save from version 1 after version 2 is refused', async () => {
+    const t = await shop()
+    expect(await t.mutation(api.catalog.save, { ...snap(100), baseVersion: 0 } as any)).toMatchObject({ version: 1 })
+    expect(await t.mutation(api.catalog.save, { ...snap(200), baseVersion: 1 } as any)).toMatchObject({ version: 2 })
+    expect(await t.mutation(api.catalog.save, { ...snap(100), baseVersion: 1 } as any)).toMatchObject({ conflict: true })
+    expect((await t.query(api.catalog.get, {}))?.customCatalog[0].rate).toBe(200)
+  })
+
+  test('a save that does not say its version is refused', async () => {
+    const t = await shop()
+    await t.mutation(api.catalog.save, { ...snap(200), baseVersion: 0 } as any)
+    expect(await t.mutation(api.catalog.save, snap(100) as any)).toMatchObject({ ignored: true })
+  })
+
+  test("only the device's own change is replayed onto the newer list", async () => {
+    const { catalogDiff, applyCatalogDiff } = await import('../src/lib/catalogMerge')
+    const base = snap(100)
+    // This counter added a screw; meanwhile the other raised the hinge to 200.
+    const mine = snap(100, [{ id: 'screw', name: 'Screw', rate: 5, sizes: [], brands: [] }])
+    const theirs = snap(200)
+    const merged = applyCatalogDiff(theirs as any, catalogDiff(base as any, mine as any))
+    expect(merged.customCatalog.map((e: any) => `${e.id}:${e.rate}`)).toEqual(['hinge:200', 'screw:5'])
+  })
+
+  test('a removal travels, and does not take back what the other added', async () => {
+    const { catalogDiff, applyCatalogDiff } = await import('../src/lib/catalogMerge')
+    const base = snap(100, [{ id: 'screw', name: 'Screw', rate: 5 }])
+    const mine = snap(100) // removed the screw
+    const theirs = snap(100, [{ id: 'screw', name: 'Screw', rate: 5 }, { id: 'nail', name: 'Nail', rate: 2 }])
+    const merged = applyCatalogDiff(theirs as any, catalogDiff(base as any, mine as any))
+    expect(merged.customCatalog.map((e: any) => e.id)).toEqual(['hinge', 'nail'])
+  })
+})

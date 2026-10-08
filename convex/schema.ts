@@ -126,6 +126,9 @@ export default defineSchema({
     customCatalog:   v.array(v.any()),
     sets:            v.array(v.any()),
     savedAt:         v.number(),
+    // Counted up on every save. A device saves against the version it last
+    // had, so an old copy cannot replace a newer list (see catalog.save).
+    version:         v.optional(v.number()),
   }),
 
   customers: defineTable({

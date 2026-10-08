@@ -81,16 +81,45 @@ export async function pushTotoToConvex(drivers: TotoDriver[]): Promise<void> {
   }
 }
 
+type CatalogPush =
+  | { ok: true; conflict: false; version: number }
+  | { ok: true; conflict: true }
+  | { ok: false; error: string }
+
+/**
+ * Save the price list against the version it was edited from. Says what
+ * happened — saved, refused because another device saved first, or failed —
+ * instead of swallowing it: a rate change that never reached the server used
+ * to look exactly like one that did.
+ */
 export async function pushCatalogToConvex(catalog: {
   hardwareCatalog: HardwareCatalog
   customCatalog: CustomCatalogEntry[]
   sets: BrandSet[]
-}): Promise<void> {
+}, baseVersion: number): Promise<CatalogPush> {
   const c = client()
-  if (!c) return
+  if (!c) return { ok: false, error: 'No connection to the cloud is set up.' }
   try {
-    await c.mutation(api.catalog.save, catalog)
+    const res = await c.mutation(api.catalog.save, { ...catalog, baseVersion }) as
+      { ignored: boolean; conflict?: boolean; version?: number; reason?: string }
+    if (res.conflict) return { ok: true, conflict: true }
+    if (res.ignored) return { ok: false, error: res.reason ?? 'The cloud did not take it.' }
+    return { ok: true, conflict: false, version: res.version ?? baseVersion + 1 }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** The price list as the server has it now, with its version. */
+export async function fetchCatalogFromConvex() {
+  const c = client()
+  if (!c) return null
+  try {
+    const row = await c.query(api.catalog.get, {})
+    return row
+      ? { hardwareCatalog: row.hardwareCatalog, customCatalog: row.customCatalog, sets: row.sets, version: row.version ?? 0 }
+      : null
   } catch {
-    // Offline — silently ignore
+    return null
   }
 }

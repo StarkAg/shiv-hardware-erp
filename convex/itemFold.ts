@@ -116,7 +116,7 @@ export const merge = internalMutation({
       const customCatalog = [...byId.values()].sort(
         (a, b) => (order.get(String(a.id)) ?? 0) - (order.get(String(b.id)) ?? 0),
       )
-      await ctx.db.patch(store._id, { customCatalog, savedAt: Date.now() })
+      await ctx.db.patch(store._id, { customCatalog, savedAt: Date.now(), version: (store.version ?? 0) + 1 })
       if (touched.length) await writeBills(ctx, touched)
       await record(
         ctx,

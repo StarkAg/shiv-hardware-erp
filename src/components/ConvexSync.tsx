@@ -57,11 +57,13 @@ export function ConvexSync() {
 
   // Sync catalog: apply whenever Convex has a catalog snapshot
   useEffect(() => {
-    if (!serverCatalog) return
-    syncCatalogFromRemote({
+    // Undefined is still loading; null is a server with no list yet.
+    if (serverCatalog === undefined) return
+    syncCatalogFromRemote(serverCatalog && {
       hardwareCatalog: serverCatalog.hardwareCatalog as HardwareCatalog,
       customCatalog:   serverCatalog.customCatalog   as CustomCatalogEntry[],
       sets:            serverCatalog.sets            as BrandSet[],
+      version:         serverCatalog.version ?? 0,
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverCatalog])

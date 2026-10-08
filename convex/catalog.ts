@@ -85,9 +85,21 @@ export const save = mutation({
     hardwareCatalog: v.any(),
     customCatalog:   v.array(v.any()),
     sets:            v.array(v.any()),
+    /**
+     * The version this list was edited from. If the server has moved on, the
+     * save is refused and the device replays its own change onto the newer
+     * list (src/lib/catalogMerge.ts) — rather than an old copy putting old
+     * rates back and dropping items added on another counter. A device that
+     * does not say which version it had is refused too.
+     */
+    baseVersion: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, { baseVersion, ...args }) => {
     const existing = await ctx.db.query('catalogStore').first()
+    const version = existing?.version ?? 0
+    if (existing && baseVersion !== version) {
+      return { ignored: true as const, conflict: true as const, version, reason: 'The price list changed on another device.' }
+    }
     const size = (c: {
       hardwareCatalog?: unknown
       customCatalog?: unknown[]
@@ -106,10 +118,11 @@ export const save = mutation({
       customCatalog: tidy.customCatalog,
       sets: tidy.sets,
       savedAt: Date.now(),
+      version: version + 1,
     }
     if (existing) await ctx.db.patch(existing._id, data)
     else          await ctx.db.insert('catalogStore', data)
-    return { ignored: false as const }
+    return { ignored: false as const, version: version + 1 }
   },
 })
 

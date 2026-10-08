@@ -27,7 +27,7 @@ import { AppError, NotFound, VoucherRedirect, MovedToCounter } from './component
 import { startOfflineSync } from './lib/offlineSync'
 import { startProperInputs } from './lib/properInputs'
 import { useStore } from './lib/store'
-import { convexEnabled, pushBillsToConvex, pushCatalogToConvex } from './lib/convexSync'
+import { convexEnabled, pushBillsToConvex } from './lib/convexSync'
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
@@ -66,12 +66,11 @@ useStore.getState().normalizeCustomerNames()
 // thermal printer, but nothing reaches for it on its own any more.
 
 // First run on a device that has bills locally but has never pushed them up.
+// The price list is not pushed here: a device sends only what it changed, and
+// only after the server has told it which version it is working from.
 if (convexEnabled()) {
   setTimeout(() => {
     const s = useStore.getState()
-    if (s.hardwareCatalog || s.customCatalog?.length || s.sets?.length) {
-      void pushCatalogToConvex({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
-    }
     // Never a bill the books refused — the same rule as every other push.
     const bills = s.bills.filter((b) => !b.postError)
     if (bills.length) void pushBillsToConvex(bills, s.billSeq)

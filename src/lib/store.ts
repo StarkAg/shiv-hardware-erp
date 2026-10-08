@@ -5,7 +5,9 @@ import { DEFAULT_HARDWARE_CATALOG, TOTO_SEED } from './types'
 import { SEED_SETS } from './data/brands'
 import { db } from './db/adapter'
 import { enqueueCustomerSync, enqueueQuotationSync } from './offlineSync'
-import { pushBillsToConvex, pushCatalogToConvex, pushTotoToConvex, removeBillFromConvex } from './convexSync'
+import { fetchCatalogFromConvex, pushBillsToConvex, pushCatalogToConvex, pushTotoToConvex, removeBillFromConvex } from './convexSync'
+import { applyCatalogDiff, catalogDiff, isEmptyDiff, type CatalogSnap } from './catalogMerge'
+import { toast } from '../components/Toast'
 import { indiaYear } from './businessDate'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -46,13 +48,62 @@ function scheduleConvexTotoPush(get: () => AppState) {
   }, 5000)
 }
 
+/**
+ * The price list as the server last gave it, and its version. What this
+ * device has changed is the difference between this and its own copy, and
+ * that difference is all it ever sends. Null until the server has answered,
+ * so a device that has not heard from it yet sends nothing at all.
+ */
+let catalogBase: (CatalogSnap & { version: number }) | null = null
+
+const catalogOf = (s: AppState): CatalogSnap =>
+  ({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
+
+/**
+ * Only an actual change to the price list goes up. This used to run on every
+ * save of anything — a bill, a toto driver — and send the whole list each
+ * time, which is how an old copy kept reaching the server.
+ */
 let _convexCatalogTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleConvexCatalogPush(get: () => AppState) {
+  if (!catalogBase || isEmptyDiff(catalogDiff(catalogBase, catalogOf(get())))) return
   if (_convexCatalogTimer) clearTimeout(_convexCatalogTimer)
-  _convexCatalogTimer = setTimeout(() => {
-    const s = get()
-    void pushCatalogToConvex({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
-  }, 5000)
+  _convexCatalogTimer = setTimeout(() => { void pushCatalogChange(get) }, 5000)
+}
+
+let _catalogPushing = false
+async function pushCatalogChange(get: () => AppState) {
+  if (_catalogPushing) return
+  _catalogPushing = true
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const base = catalogBase
+      if (!base) return
+      const change = catalogDiff(base, catalogOf(get()))
+      if (isEmptyDiff(change)) return
+      const next = applyCatalogDiff(base, change)
+      const res = await pushCatalogToConvex(next, base.version)
+      if (!res.ok) {
+        toast(`Price list not saved to the cloud\n${res.error}`, 'error')
+        return
+      }
+      if (!res.conflict) {
+        catalogBase = { ...next, version: res.version }
+        return
+      }
+      // Another device saved first. Take its list, put this device's own
+      // change back on top, and try again against the new version.
+      const fresh = await fetchCatalogFromConvex()
+      if (!fresh) {
+        toast('Price list not saved to the cloud\nIt changed on another device and could not be re-read.', 'error')
+        return
+      }
+      get().syncCatalogFromRemote(fresh, { quiet: true })
+    }
+    toast('Price list not saved to the cloud\nIt kept changing on another device. Try again.', 'error')
+  } finally {
+    _catalogPushing = false
+  }
 }
 
 interface AppState {
@@ -104,7 +155,10 @@ interface AppState {
    * Apply a catalog update that arrived from a remote (Convex real-time).
    * Saves to localStorage only.
    */
-  syncCatalogFromRemote: (snap: { hardwareCatalog: HardwareCatalog; customCatalog: CustomCatalogEntry[]; sets: BrandSet[] }) => void
+  syncCatalogFromRemote: (
+    snap: { hardwareCatalog: HardwareCatalog; customCatalog: CustomCatalogEntry[]; sets: BrandSet[]; version?: number } | null,
+    opts?: { quiet?: boolean },
+  ) => void
 
   // guarantee cards (history)
   /** The next card number; `offset` 1 = the one after it (a slot-2 card in the same print). */
@@ -476,9 +530,26 @@ export const useStore = create<AppState>((set, get) => ({
     db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })
   },
 
-  syncCatalogFromRemote: (snap) => {
-    const newSets = snap.sets?.length ? codeSets(snap.sets) : get().sets
-    set({ hardwareCatalog: snap.hardwareCatalog, customCatalog: snap.customCatalog ?? [], sets: newSets })
+  syncCatalogFromRemote: (snap, opts) => {
+    const local = catalogOf(get())
+    // What this device changed and has not saved yet rides on top of the
+    // server's list rather than being thrown away by it.
+    const pending = catalogBase ? catalogDiff(catalogBase, local) : null
+    if (!snap) {
+      // No list on the server yet: everything here is this device's to send.
+      catalogBase = { hardwareCatalog: {} as HardwareCatalog, customCatalog: [], sets: [], version: 0 }
+      if (!opts?.quiet) scheduleConvexCatalogPush(get)
+      return
+    }
+    const applied: CatalogSnap = {
+      hardwareCatalog: snap.hardwareCatalog,
+      customCatalog: snap.customCatalog ?? [],
+      sets: snap.sets?.length ? codeSets(snap.sets) : get().sets,
+    }
+    catalogBase = { ...applied, version: snap.version ?? 0 }
+    const next = pending && !isEmptyDiff(pending) ? applyCatalogDiff(applied, pending) : applied
+    set({ hardwareCatalog: next.hardwareCatalog, customCatalog: next.customCatalog, sets: codeSets(next.sets) })
+    if (pending && !isEmptyDiff(pending) && !opts?.quiet) scheduleConvexCatalogPush(get)
     // Save to localStorage only
     const s = get()
     db.save({ sets: s.sets, customers: s.customers, quotations: s.quotations, quoteSeq: s.quoteSeq, bills: s.bills, billSeq: s.billSeq, guarantees: s.guarantees, guaranteeSeq: s.guaranteeSeq, hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog })

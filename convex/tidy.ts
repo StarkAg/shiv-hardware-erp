@@ -90,6 +90,8 @@ export const everything = internalMutation({
           customCatalog: tidy.customCatalog,
           hardwareCatalog: tidy.hardwareCatalog,
           savedAt: now,
+          // A device editing from before this tidy must not save over it.
+          version: (catalog.version ?? 0) + 1,
         })
       }
     }

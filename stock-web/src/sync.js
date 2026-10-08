@@ -30,15 +30,23 @@ function convex() {
 
 export async function fetchSnapshot() {
   const row = await convex().query(anyApi.catalog.get, {})
-  return normalize(row)
+  return { ...normalize(row), version: row?.version ?? 0 }
 }
 
-async function saveSnapshot(snap) {
-  await convex().mutation(anyApi.catalog.save, {
+/**
+ * Saved against the version it was read at. The server refuses it if the
+ * panel saved in between; `commit` then reads again and replays the change.
+ */
+async function saveSnapshot(snap, baseVersion) {
+  const res = await convex().mutation(anyApi.catalog.save, {
     hardwareCatalog: snap.hardwareCatalog,
     customCatalog: snap.customCatalog,
     sets: snap.sets,
+    baseVersion,
   })
+  if (res?.conflict) return false
+  if (res?.ignored) throw new Error(res.reason || 'The cloud did not take the change.')
+  return true
 }
 
 // Writes are queued one behind the other. Two quick edits must not race each
@@ -52,10 +60,12 @@ let chain = Promise.resolve()
  */
 export function commit(mutate) {
   const run = chain.then(async () => {
-    const fresh = await fetchSnapshot()
-    const next = mutate(fresh)
-    await saveSnapshot(next)
-    return next
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { version, ...fresh } = await fetchSnapshot()
+      const next = mutate(fresh)
+      if (await saveSnapshot(next, version)) return next
+    }
+    throw new Error('The price list kept changing on another device. Try again.')
   })
   // The queue must survive a failed write, otherwise one error stops every
   // later edit from ever being attempted.
