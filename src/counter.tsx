@@ -42,6 +42,14 @@ startEnterFlow()
 startOfflineSync()
 useStore.getState().normalizeCustomerNames()
 
+// Installed on a phone (Add to Home Screen) it opens at once and survives a
+// bad signal. Only on the website: the desktop app loads from disk.
+if (import.meta.env.PROD && 'serviceWorker' in navigator && location.protocol === 'https:') {
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('/counter-sw.js', { updateViaCache: 'none' }).catch(() => undefined)
+  })
+}
+
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
 const convex = CONVEX_URL ? new ConvexReactClient(CONVEX_URL) : null
 

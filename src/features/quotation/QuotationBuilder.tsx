@@ -24,7 +24,7 @@ import { calcAllUpvcBrands, isUpvc } from '../../lib/upvc'
 import { FIXED_CARDS, FIXED_CARD_META, isFixedCard } from '../../lib/data/fixedCards'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Button, Input, Toggle } from '../../components/ui'
-import { QuotationPrint } from '../print/QuotationPrint'
+import { QuotationPrint, firstSectionRows, hasSections } from '../print/QuotationPrint'
 import { printViaShop } from '../../lib/printViaShop'
 import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
 import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
@@ -99,7 +99,16 @@ export function QuotationBuilder() {
       ? calcAllUpvcBrands(cat, h, w, addons)
       : []
 
-  const rows = !aluLike && !fixed ? buildBrandRows(brands, h, w, Math.max(1, qty)) : []
+  // Block board can leave out the semi water proof and commercial grades.
+  const [waterProofOnly, setWaterProofOnly] = useState(() => {
+    try { return localStorage.getItem('shiv-quote:water-proof-only') === '1' } catch { return false }
+  })
+  const toggleWaterProofOnly = () => setWaterProofOnly((on) => {
+    try { localStorage.setItem('shiv-quote:water-proof-only', on ? '0' : '1') } catch { /* private window */ }
+    return !on
+  })
+  const allRows = !aluLike && !fixed ? buildBrandRows(brands, h, w, Math.max(1, qty)) : []
+  const rows = waterProofOnly && hasSections(cat) ? firstSectionRows(cat, allRows) : allRows
 
   function buildQuote(): Quotation {
     const base = {
@@ -365,6 +374,20 @@ export function QuotationBuilder() {
                 </tbody>
               </table>
             ) : !aluLike ? (
+            <>
+            {hasSections(cat) && (
+              <button
+                type="button"
+                onClick={toggleWaterProofOnly}
+                aria-pressed={waterProofOnly}
+                className="flex w-full items-center justify-between gap-3 border-b border-stone-100 px-3 py-2 text-left text-sm font-semibold dark:border-white/10"
+              >
+                <span>Water proof only <span className="font-normal text-muted">— leave out semi water proof &amp; commercial</span></span>
+                <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition ${waterProofOnly ? 'bg-shiv-green' : 'bg-stone-300 dark:bg-stone-700'}`}>
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${waterProofOnly ? 'left-[18px]' : 'left-0.5'}`} />
+                </span>
+              </button>
+            )}
             <table className="w-full table-fixed text-[11px] leading-tight md:text-sm">
               <thead className="bg-stone-50 text-left text-[11px] uppercase text-muted dark:bg-white/5 dark:text-muted md:text-xs">
                 <tr>
@@ -472,6 +495,7 @@ export function QuotationBuilder() {
                 </tfoot>
               )}
             </table>
+            </>
             ) : (
             // Aluminium — all 3 thicknesses side by side
             <table className="w-full table-fixed text-[11px] leading-tight md:text-sm">

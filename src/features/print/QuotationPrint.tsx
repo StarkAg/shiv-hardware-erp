@@ -67,6 +67,20 @@ const SECTION_CONFIG: Partial<Record<ProductCategory, {
   },
 }
 
+/** Whether this kind of quotation is split into sections (water proof, semi, commercial). */
+export const hasSections = (category: ProductCategory) => Boolean(SECTION_CONFIG[category])
+
+/**
+ * The first section only — the water proof brands — for a customer who has no
+ * use for the cheaper grades: every row before the first section break.
+ */
+export function firstSectionRows<T extends { brandName: string }>(category: ProductCategory, rows: T[]): T[] {
+  const cfg = SECTION_CONFIG[category]
+  if (!cfg) return rows
+  const cut = rows.findIndex((r) => cfg.breaks[r.brandName])
+  return cut === -1 ? rows : rows.slice(0, cut)
+}
+
 const ROW_H = 6.39
 const BRAND_START = 126.75
 const SECTION_GAP = 3 // mm gap before 2nd/3rd section headers

@@ -69,11 +69,14 @@ export function CounterLayout() {
   return (
     <div className="flex min-h-screen bg-stone-100 dark:bg-stone-950">
       <aside className="no-print hidden w-60 shrink-0 flex-col border-r border-stone-200/80 bg-stone-50 dark:border-white/10 dark:bg-stone-900 md:flex">
-        <div className="border-b border-stone-200/80 px-5 py-5 dark:border-white/10">
-          <p className="text-sm font-bold leading-tight text-stone-950 dark:text-stone-50">
-            Shiv Hardware
-          </p>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Counter</p>
+        <div className="flex items-center gap-3 border-b border-stone-200/80 px-5 py-5 dark:border-white/10">
+          <img src="./counter/icon.svg" alt="" className="h-10 w-10 shrink-0 rounded-xl shadow-sm" />
+          <div>
+            <p className="text-sm font-bold leading-tight text-stone-950 dark:text-stone-50">
+              Shiv Hardware
+            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Counter</p>
+          </div>
         </div>
 
         <nav className="flex-1 space-y-4 overflow-y-auto p-3">
