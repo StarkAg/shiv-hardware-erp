@@ -2582,12 +2582,13 @@ export function BillBuilder() {
       items: voucher.amount && !MONEY_KINDS.includes(kindOf[voucher.kind] ?? 'sale')
         ? [{ ...emptyItem(), description: voucher.narration || 'On account', amountOnly: true, qty: 1, unit: 'Pc', amount: voucher.amount }]
         : [emptyItem()],
-      // The split between money and discount is not recorded on the voucher's
-      // head, so it reopens as all money — which is what it was unless someone
-      // says otherwise.
+      // The money and the discount as they were posted, and where the money
+      // went. Left to the new-voucher defaults, an unchanged save moved a cash
+      // receipt to Bank and folded its discount into the money.
       ...(MONEY_KINDS.includes(kindOf[voucher.kind] ?? 'sale')
-        ? { moneyAmount: voucher.amount ?? 0 }
+        ? { moneyAmount: voucher.moneyAmount ?? voucher.amount ?? 0, discount: voucher.discount ?? 0 }
         : {}),
+      ...(voucher.paymentMode ? { paymentMode: voucher.paymentMode } : {}),
       total: voucher.amount ?? 0,
       // Zero is deliberate here: an older ledger-only credit sale must stay
       // credit when opened in the bill editor and saved without changes.

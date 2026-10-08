@@ -294,11 +294,15 @@ describe('deletions between devices', () => {
     await t.mutation(api.billLedger.postBill, { bill: aBill() })
     const [current] = await stored(t)
 
-    await t.mutation(api.bills.save, { bills: [{ ...current, customerName: 'Stale PC', updatedAt: 1 }], billSeq: 1 })
-    expect((await stored(t))[0].customerName).toBe(TYPED)
+    await t.mutation(api.bills.save, { bills: [{ ...current, notes: 'Stale PC', updatedAt: 1 }], billSeq: 1 })
+    expect((await stored(t))[0].notes).not.toBe('Stale PC')
 
-    await t.mutation(api.bills.save, { bills: [{ ...current, customerName: 'Newer PC', updatedAt: Date.now() + 1000 }], billSeq: 1 })
-    expect((await stored(t))[0].customerName).toBe('Newer PC')
+    await t.mutation(api.bills.save, { bills: [{ ...current, notes: 'Newer PC', updatedAt: Date.now() + 1000 }], billSeq: 1 })
+    expect((await stored(t))[0].notes).toBe('Newer PC')
+    // The party, like the money, changes only by posting: an upload cannot
+    // move the bill off the account its voucher is on.
+    await t.mutation(api.bills.save, { bills: [{ ...current, customerName: 'Newer PC', updatedAt: Date.now() + 2000 }], billSeq: 1 })
+    expect((await stored(t))[0].customerName).toBe(TYPED)
   })
 })
 

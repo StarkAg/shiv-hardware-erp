@@ -423,9 +423,29 @@ export const detail = query({
           .reduce((sum, { line }) => sum + line.amount, 0)
       : 0;
 
+    /**
+     * Where the money went and what was let off, so saving it unchanged
+     * writes it back unchanged. Without these the editor fell back to its own
+     * defaults: a cash receipt went back in as Bank (new vouchers default to
+     * UPI), and 900 received with 100 off went back in as 1,000 received.
+     */
+    const named = await Promise.all(lines.map(async (l) => ({ line: l, name: (await ctx.db.get(l.ledgerId))?.name ?? "" })));
+    const moneyLines = named.filter(({ line, name }) => line.ledgerId !== voucher.partyLedgerId && (name === "Cash" || name === "Bank"));
+    const paymentMode = moneyLines.length
+      ? (moneyLines.some(({ name }) => name === "Cash") ? "cash" : "upi")
+      : undefined;
+    const settles = type?.name === "Receipt" || type?.name === "Payment" || type?.name === "Refund";
+    const discount = settles
+      ? named.filter(({ line, name }) => line.ledgerId !== voucher.partyLedgerId && /^Discount (Allowed|Received)$/.test(name))
+          .reduce((sum, { line }) => sum + line.amount, 0)
+      : 0;
+    const moneyAmount = settles ? Math.round(((voucher.amount ?? 0) - discount) * 100) / 100 : undefined;
+
     return {
       _id: voucher._id,
       kind: (type?.name ?? "Purchase").toLowerCase(),
+      ...(paymentMode ? { paymentMode } : {}),
+      ...(settles ? { moneyAmount, discount } : {}),
       vchLabel: `${type?.abbr ?? "VCH"}-${String(voucher.voucherNo).padStart(4, "0")}`,
       date: voucher.date,
       partyLedgerId: voucher.partyLedgerId,
@@ -518,8 +538,11 @@ export const edit = mutation({
       ]);
     }
 
+    // Into another series, or into the same series in another financial year
+    // when the date moved across 1 April: either way it takes that series' next number.
+    const reseries = toGrn || voucher.fy !== fyOf(args.date);
     await ctx.db.patch(args.id, {
-      ...(toGrn ? { typeId: targetType._id, voucherNo: await nextVoucherNo(ctx, targetType, fyOf(args.date)), fy: fyOf(args.date) } : {}),
+      ...(reseries ? { typeId: targetType._id, voucherNo: await nextVoucherNo(ctx, targetType, fyOf(args.date)), fy: fyOf(args.date) } : {}),
       date: args.date,
       partyLedgerId: args.partyLedgerId,
       refNo: args.refNo,

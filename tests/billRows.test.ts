@@ -39,12 +39,14 @@ describe('bills in rows', () => {
   })
 
   it('keeps the newer copy whichever side it is on', async () => {
-    const t = await legacy([aBill('a', '1', 5, 'Old')])
-    await t.mutation(api.bills.save, { bills: [aBill('a', '1', 9, 'New')], billSeq: 1 })
+    // Quotations: a posted bill's party changes only by posting it again.
+    const quote = (...a: Parameters<typeof aBill>) => ({ ...aBill(...a), kind: 'quotation' })
+    const t = await legacy([quote('a', '1', 5, 'Old')])
+    await t.mutation(api.bills.save, { bills: [quote('a', '1', 9, 'New')], billSeq: 1 })
     await t.mutation(internal.bills.moveToRows, {})
     expect(await listed(t)).toEqual(['a:New'])
     // A device with a stale copy cannot put it back.
-    await t.mutation(api.bills.save, { bills: [aBill('a', '1', 3, 'Stale')], billSeq: 1 })
+    await t.mutation(api.bills.save, { bills: [quote('a', '1', 3, 'Stale')], billSeq: 1 })
     expect(await listed(t)).toEqual(['a:New'])
   })
 

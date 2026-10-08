@@ -109,7 +109,11 @@ async function billNumberFor(ctx: MutationCtx, bill: any): Promise<string> {
   // a new BILL-n reference and make a second voucher.
   if (bill?.id) {
     const same = (await readBills(ctx)).find((b: any) => b?.id === bill.id)
-    if (same?.number) return String(same.number)
+    // Except a quotation becoming a sale: Q-1 is the quotation series, and
+    // reusing it posted the sale as BILL-Q-1. The sale takes a bill number;
+    // the quotation it came from stays on it as `fromQuote`.
+    const wasQuotation = same?.kind === 'quotation' && bill.kind !== 'quotation'
+    if (same?.number && !wasQuotation) return String(same.number)
   }
   if (wanted) {
     const clash = (await readBills(ctx)).some((b: any) => b?.id !== bill.id && String(b?.number) === wanted)
@@ -159,8 +163,11 @@ async function syncBillReceipt(
   const narration = `${drawer.name === 'Bank' ? 'Paid online' : 'Cash'} with bill ${number}`
   let id: Id<'vouchers'>
   if (keep) {
+    // The receipt follows its sale into the new year when the date crosses 1 April.
+    const fy = fyOf(date)
     await ctx.db.patch(keep._id, {
       typeId: type._id, date, partyLedgerId: ledgerId, amount, status: 'final', narration, updatedAt: now,
+      ...(keep.fy !== fy || keep.typeId !== type._id ? { voucherNo: await nextVoucherNo(ctx, type, fy), fy } : {}),
     })
     id = keep._id
     await clearLines(ctx, id)
@@ -455,7 +462,11 @@ export const postBill = mutation({
       // Keeping the old number made a sale re-saved as a refund read REF-0144
       // — a number the Refund series never issued, and one it would issue
       // again later.
-      const retyped = existing.typeId !== type._id
+      //
+      // So does one whose date moved across 1 April: 31 March to 1 April is
+      // next year's voucher, and keeping last year's fy and number left it
+      // counted in the wrong year's series.
+      const retyped = existing.typeId !== type._id || existing.fy !== fy
       await ctx.db.patch(existing._id, {
         typeId: type._id,
         ...(retyped ? { voucherNo: await nextVoucherNo(ctx, type, fy), fy } : {}),

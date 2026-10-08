@@ -72,7 +72,9 @@ if (convexEnabled()) {
     if (s.hardwareCatalog || s.customCatalog?.length || s.sets?.length) {
       void pushCatalogToConvex({ hardwareCatalog: s.hardwareCatalog, customCatalog: s.customCatalog, sets: s.sets })
     }
-    if (s.bills.length) void pushBillsToConvex(s.bills, s.billSeq)
+    // Never a bill the books refused — the same rule as every other push.
+    const bills = s.bills.filter((b) => !b.postError)
+    if (bills.length) void pushBillsToConvex(bills, s.billSeq)
   }, 3000)
 }
 

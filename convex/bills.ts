@@ -9,6 +9,22 @@ import { dropBill, readBill, readBills, storeMeta, writeBills } from './lib/bill
 import { attachmentIds, deleteUnreferencedFiles } from './lib/attachmentFiles'
 
 /**
+ * What the books were written from. On a bill already in the books these
+ * change only through posting (`billLedger.postBill`), which rewrites the
+ * voucher in the same transaction. A plain upload changing them would leave
+ * the bill saying 2,000 while its voucher still says 1,000.
+ */
+const BOOKED = [
+  'items', 'total', 'customerName', 'ledgerId', 'kind', 'date', 'number', 'voucherId', 'postedAt',
+  'paid', 'paidAmount', 'paidDate', 'moneyAmount', 'discount', 'paymentMode',
+  'gst', 'gstRate', 'offValue', 'offIsPercent', 'round', 'roundValue',
+] as const
+const booked = (bill: any) => JSON.stringify(BOOKED.map((k) => bill?.[k] ?? null))
+
+/** A bill that is in the books: everything but a quotation, which never posts. */
+const inTheBooks = (bill: any) => bill?.kind !== 'quotation'
+
+/**
  * Saves what a device has, without ever deleting what it hasn't.
  *
  * This used to replace the snapshot outright, and that cost the shop every
@@ -42,6 +58,7 @@ export const save = mutation({
     // would be thousands of reads for a handful of changes.
     const held = new Map((await readBills(ctx)).map((b: any) => [String(b.id), b]))
     const changed: any[] = []
+    let refused = 0
     for (const bill of args.bills) {
       if (!bill?.id || deleted.has(bill.id)) continue
       // Newer wins. This took whatever it was handed, so a PC that had been
@@ -49,6 +66,22 @@ export const save = mutation({
       // the moment it reconnected.
       const mine = held.get(String(bill.id))
       if (mine && (mine.updatedAt ?? 0) >= (bill.updatedAt ?? 0)) continue
+      // A bill the books refused stays on the device that wrote it. Uploaded,
+      // it was a bill the accounts had never heard of.
+      if (bill.postError) { refused += 1; continue }
+      // Money on a posted bill changes only by posting it. Anything else the
+      // device changed (a photo, a print mark) is still taken; what the books
+      // were written from stays as the server has it.
+      if (mine && inTheBooks(mine) && booked(mine) !== booked(bill)) {
+        refused += 1
+        const kept = { ...bill }
+        for (const k of BOOKED) {
+          if (k in mine) kept[k] = mine[k]
+          else delete kept[k]
+        }
+        changed.push(kept)
+        continue
+      }
       changed.push(bill)
     }
     // A device that has nothing new to say changes nothing — and does not
@@ -58,7 +91,7 @@ export const save = mutation({
       const meta = await storeMeta(ctx)
       if (meta && args.billSeq > (meta.billSeq ?? 0)) await ctx.db.patch(meta._id, { billSeq: args.billSeq })
     }
-    return { kept: args.bills.length - changed.length, written: changed.length }
+    return { kept: args.bills.length - changed.length, written: changed.length, refused }
   },
 })
 
