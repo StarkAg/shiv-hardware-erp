@@ -1,0 +1,42 @@
+# Builds the Windows desktop installer on a real Windows machine.
+#
+# Run by hand (Actions > Build Windows app > Run workflow). It only builds:
+# the installer, its blockmap and latest.yml come back as an artifact, and
+# whoever ran it publishes them to StarkAg/shiv-panel-releases, e.g.
+#   gh run download <run-id> -n windows-release -D release-ci
+#   gh release upload v<version> release-ci/* -R StarkAg/shiv-panel-releases
+# Nothing here holds a token that can write anywhere.
+#
+# A Mac cannot do this step: stamping the icon into the .exe (electron/
+# after-pack.cjs) needs Windows or wine, and Homebrew's wine is disabled.
+name: Build Windows app
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The VITE_ values the panel is built with (already public in every
+      # bundle), kept as the PANEL_ENV secret so the URLs live in one place.
+      - shell: bash
+        run: printf '%s\n' "$PANEL_ENV" > .env.local
+        env:
+          PANEL_ENV: ${{ secrets.PANEL_ENV }}
+      - run: npm run build
+      - run: npx electron-builder --win nsis --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
+          if-no-files-found: error
