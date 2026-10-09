@@ -147,6 +147,10 @@ def main():
     model.train()
     t0, seen, total = time.time(), 0, 0.0
     for x, y in loader:
+        # The photo stream holds a few more batches than whole rounds; stop
+        # with the last round, where the learning-rate schedule ends.
+        if step == rounds * steps_per_round:
+            break
         x, y = x.to(DEVICE), y.to(DEVICE)
         loss = loss_fn(model(x), y)
         opt.zero_grad()
