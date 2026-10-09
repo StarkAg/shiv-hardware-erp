@@ -2,7 +2,8 @@
 
 The short address printed in guarantee-card QR codes: `<host>/<card number>/<card secret>`.
 
-- **A card's first 20 days** (from its own date): a temporary (307) redirect to
+- **A card's first 20 days** (from when it was generated, i.e. first saved to the cloud, not
+  the date printed on it): a temporary (307) redirect to
   `https://www.shivhardware.store/Gaurantee/<number>?k=<secret>`, the branded page.
 - **After that:** the card is shown by this project's own page (`src/`, a small Vite +
   React app). It is fully separate from the shop's site: it loads the card and its

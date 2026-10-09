@@ -1,6 +1,7 @@
 // The QR short link: <this host>/<card number>/<card secret>.
 //
-// For a card's first 20 days (from its own date) it redirects to the guarantee page
+// For a card's first 20 days (from when it was generated, not the date printed on
+// it) it redirects to the guarantee page
 // on shivhardware.store, which shows the shop's name and logo. After that the card is
 // served by this project's own page (src/), which is fully separate from the shop's
 // site: nothing proxied from it, nothing linked to it, no name, logo or footer.
@@ -13,7 +14,11 @@ const BRANDED_DAYS = 20
 
 export const config = { matcher: '/:number/:token' }
 
-/** When the card was issued, or 0 if it cannot be found (then it is served here). */
+/**
+ * When the card was generated (first saved to the cloud), or 0 if it cannot be
+ * found (then it is served here). Not the date printed on it: a card made today
+ * for an older sale still gets its 20 branded days. Edits never move it.
+ */
 async function issuedAt(number, token) {
   try {
     const res = await fetch(`${CONVEX}/api/query`, {
@@ -23,7 +28,7 @@ async function issuedAt(number, token) {
     })
     const value = (await res.json())?.value
     const doc = value?.document ?? value
-    return Date.parse(doc?.date ?? '') || Number(value?.createdAt) || 0
+    return Number(value?.createdAt) || Date.parse(doc?.date ?? '') || 0
   } catch {
     return 0
   }
