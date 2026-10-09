@@ -150,7 +150,7 @@ export default function App() {
         void showLocal('Sent to the shop', `${label} — ${how.toLowerCase()}`, 'sent')
         // Back to wherever the share came from. A window the phone will not
         // let close shows the "Sent" screen instead.
-        setTimeout(() => window.close(), 1400)
+        setTimeout(() => window.close(), 800)
       } catch (err) {
         failed(err)
       } finally {

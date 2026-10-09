@@ -130,13 +130,20 @@ async function sendInBackground(files, convexUrl, token) {
   }
 }
 
-// The page the share opens: gone again at once, while the worker sends.
+// The page the share opens: a moment's "Sending ✓" so it is seen to have
+// worked, then gone, while the worker sends.
+const SHOWN_MS = 700
 const CLOSE_PAGE = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#b98f4b"><title>Shiv Print</title>
-<style>html,body{height:100%;margin:0;background:#f4f1ea;color:#1c1917;font:600 16px system-ui,sans-serif;display:grid;place-items:center;text-align:center}
-@media (prefers-color-scheme:dark){html,body{background:#15140f;color:#f5f5f4}}small{display:block;margin-top:6px;font-weight:400;opacity:.7}</style></head>
-<body><div>Sending to the shop…<small>You can go back — your phone will say when it has printed.</small></div>
-<script>window.close();setTimeout(function(){history.length>1&&history.back()},400)</script></body></html>`
+<style>html,body{height:100%;margin:0;background:#f4f1ea;color:#1c1917;font:700 18px system-ui,sans-serif;display:grid;place-items:center;text-align:center}
+@media (prefers-color-scheme:dark){html,body{background:#15140f;color:#f5f5f4}}
+.mark{position:relative;width:84px;height:84px;margin:0 auto 14px}.mark img{width:84px;height:84px;border-radius:20px}
+.tick{position:absolute;right:-8px;bottom:-8px;width:36px;height:36px;border-radius:50%;background:#15803d;display:grid;place-items:center;box-shadow:0 0 0 4px #f4f1ea;animation:pop .28s ease-out}
+.tick svg{width:20px;height:20px}small{display:block;margin-top:6px;font-weight:500;font-size:13px;opacity:.65}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}</style></head>
+<body><div><div class="mark"><img src="/icon-192.png" alt=""><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></div>
+Sending to the shop<small>Your phone will say when it has printed</small></div>
+<script>setTimeout(function(){window.close();setTimeout(function(){history.length>1&&history.back()},300)},${SHOWN_MS})</script></body></html>`
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
