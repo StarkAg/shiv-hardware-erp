@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Page finder training</title>
+<style>
+:root{--bg:#15130f;--card:#1f1c17;--ink:#eee9e0;--muted:#a8a29e;--brass:#c9a45c;--good:#6cc48f}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,sans-serif}
+main{max-width:1100px;margin:auto;padding:16px}
+h1{font-size:20px;margin:0 0 4px}.muted{color:var(--muted);font-size:13px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.stat{background:var(--card);border-radius:12px;padding:10px 12px}.stat b{display:block;font-size:22px;color:var(--brass)}
+.bar{height:10px;background:#333;border-radius:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--brass);width:0}
+canvas{width:100%;height:220px;background:var(--card);border-radius:12px;display:block;margin:12px 0}
+img{width:100%;border-radius:12px;background:var(--card)}
+</style></head><body><main>
+<h1>Bill Shoot · page finder learning</h1>
+<div class="muted">Green = what it thinks is the page, on 8 of your hardest real photos (it never trains on these). Refreshes by itself.</div>
+<div class="row">
+<div class="stat">Round<b id="round">–</b></div>
+<div class="stat">Practice photos seen<b id="seen">–</b></div>
+<div class="stat">Accuracy (IoU)<b id="iou">–</b></div>
+<div class="stat">Time<b id="time">–</b></div>
+</div>
+<div class="bar"><i id="bar"></i></div>
+<canvas id="chart" width="1100" height="220"></canvas>
+<img id="pv" alt="The finder's current guess on real photos">
+</main><script>
+const $ = (id) => document.getElementById(id)
+const mins = (s) => `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, '0')}s`
+async function tick() {
+  try {
+    const p = await (await fetch('/progress.json?' + Date.now())).json()
+    const perRound = p.per_round / 24, total = p.rounds * perRound
+    const step = p.steps.length ? p.steps[p.steps.length - 1][0] : 0
+    const last = p.checks[p.checks.length - 1]
+    $('round').textContent = `${Math.min(p.rounds, Math.floor(step / perRound) + 1)} / ${p.rounds}`
+    $('seen').textContent = (step * 24).toLocaleString()
+    $('iou').textContent = last ? (last[1] * 100).toFixed(1) + '%' : '–'
+    const el = (Date.now() / 1000 - p.started)
+    $('time').textContent = step ? `${mins(el)} · ~${mins(el / step * (total - step))} left` : mins(el)
+    $('bar').style.width = (100 * step / total) + '%'
+    const c = $('chart'), x = c.getContext('2d'), w = c.width, h = c.height
+    x.clearRect(0, 0, w, h)
+    const L = p.steps.map((s) => s[1]), maxL = Math.max(0.2, ...L)
+    x.strokeStyle = '#c9a45c'; x.lineWidth = 2; x.beginPath()
+    p.steps.forEach((s, i) => { const px = 40 + (w - 60) * s[0] / total, py = h - 20 - (h - 40) * s[1] / maxL; i ? x.lineTo(px, py) : x.moveTo(px, py) }); x.stroke()
+    x.strokeStyle = '#6cc48f'; x.beginPath()
+    p.checks.forEach((c2, i) => { const px = 40 + (w - 60) * c2[0] * perRound / total, py = h - 20 - (h - 40) * c2[1]; i ? x.lineTo(px, py) : x.moveTo(px, py) }); x.stroke()
+    x.fillStyle = '#a8a29e'; x.font = '13px system-ui'; x.fillText('mistakes (gold, lower is better)', 44, 16); x.fillText('accuracy (green, higher is better)', 290, 16)
+    $('pv').src = '/preview.jpg?' + Date.now()
+  } catch { /* the trainer is between writes */ }
+}
+tick(); setInterval(tick, 3000)
+</script></body></html>

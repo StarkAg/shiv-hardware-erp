@@ -1,0 +1,4 @@
+# Bill photos and what is made from them stay on the machine: not in git.
+work/
+__pycache__/
+*.pt
