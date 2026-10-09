@@ -14,18 +14,27 @@ by storage id with the corners two plain detectors found.
 ## On a new machine (Mac M1–M4 trains on its graphics, ~4–8× this PC)
 
 ```sh
-cd billshoot-web/train
+git pull
+npm install                                             # in shiv-panel/: fetch.cjs uses its convex package
+cd billshoot-web && npm install && cd train
 python3 -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-# a device key for the shop's Convex, once per machine (from shiv-panel/):
+# A device key for the shop's Convex, once per machine. Either make one
+# (from shiv-panel/, logged in to Convex):
 #   npx convex run --prod devices:issueServerKey '{"name":"Training Mac"}'
-export SHIV_DEVICE_TOKEN=...                            # or put it in print-server/.env.local
-node fetch.cjs work/photos                              # the bill photos, from the books
+# or copy the shop PC's from print-server/.env.local (SSH over Tailscale).
+export SHIV_DEVICE_TOKEN=...
+node fetch.cjs work/photos                              # the 250 bill photos, from the books
 python prep.py work/photos work/data                    # pages, backgrounds
 node dashboard/serve.cjs work/model &                   # watch it learn: http://localhost:5198
-python train.py work/data work/model 20                 # 20 rounds of 3,200 practice photos
+python train.py work/data work/model 40                 # 40 rounds of 3,200 practice photos
 python export.py work/model ../public                   # → ../public/page-finder.onnx
 ```
+
+The first line `train.py` prints says what it trains on — `mps` on a Mac.
+On the shop PC (processor only) a round took ~4 minutes; after 2 rounds the
+practice check was at 90% and climbing, but real photos were not yet right —
+it needs the full run.
 
 Then build and deploy the app (`npm run deploy` in billshoot-web).
 
