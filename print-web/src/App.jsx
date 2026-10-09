@@ -31,6 +31,36 @@ async function takeShared() {
 }
 
 const isImage = (f) => f.type.startsWith('image/')
+
+// A4 at about 250 dots per inch along its long side: sharper than the printers
+// show, a tenth of a camera photo's size.
+const PRINT_LONG_SIDE = 3000
+
+/**
+ * A photo as big as a printed page needs and no bigger, as a JPEG. A photo
+ * already that small, a PDF or a GIF goes as it is; so does anything the
+ * browser cannot redraw — better a slow upload than none.
+ */
+async function forPrint(file) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 1_200_000) return file
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    const scale = Math.min(1, PRINT_LONG_SIDE / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#fff' // a transparent PNG prints on white paper
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close?.()
+    const blob = await new Promise((done) => canvas.toBlob(done, 'image/jpeg', 0.88))
+    if (!blob || blob.size >= file.size) return file
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
+  } catch {
+    return file
+  }
+}
 let nextId = 0
 
 export default function App() {
@@ -72,14 +102,16 @@ export default function App() {
     setBusy(true)
     setError('')
     try {
-      const files = []
-      for (const { file } of items) {
+      // All at once, each photo first brought down to print size: a phone
+      // photo is 4–12 MB, and the upload over mobile data was most of the wait.
+      const files = await Promise.all(items.map(async ({ file: original }) => {
+        const file = await forPrint(original)
         const url = await convex.mutation(anyApi.files.generateUploadUrl, {})
         const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
-        if (!res.ok) throw new Error(`${file.name} did not upload.`)
+        if (!res.ok) throw new Error(`${original.name} did not upload.`)
         const { storageId } = await res.json()
-        files.push({ storageId, name: file.name, mediaType: file.type })
-      }
+        return { storageId, name: file.name, mediaType: file.type }
+      }))
       const id = await sendFiles({ files, mode, copies })
       setSent((cur) => [{ id, label: items.length === 1 ? items[0].file.name : `${items.length} files`, mode, copies }, ...cur].slice(0, 8))
       items.forEach((i) => i.preview && URL.revokeObjectURL(i.preview))

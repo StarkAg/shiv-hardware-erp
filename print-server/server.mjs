@@ -6,12 +6,15 @@
 // DROP_PRINT_DIR ("~/Print Drop")                   -> dropped PDFs/images -> printer
 
 import { existsSync, readFileSync } from 'fs'
-try {
-  readFileSync(new URL('.env', import.meta.url), 'utf8').split('\n').forEach(line => {
-    const [k, ...v] = line.split('=')
-    if (k?.trim() && !k.startsWith('#')) process.env[k.trim()] = v.join('=').trim()
-  })
-} catch {}
+// .env, then .env.local — kept out of git, for keys such as SHIV_DEVICE_TOKEN.
+for (const file of ['.env', '.env.local']) {
+  try {
+    readFileSync(new URL(file, import.meta.url), 'utf8').split('\n').forEach(line => {
+      const [k, ...v] = line.split('=')
+      if (k?.trim() && !k.startsWith('#')) process.env[k.trim()] = v.join('=').trim()
+    })
+  } catch {}
+}
 
 import express from 'express'
 import cors from 'cors'
@@ -2845,9 +2848,43 @@ async function printCloudJob(job) {
 }
 
 let cloudPollRunning = false
+let cloudPollAgain = false
+
+/**
+ * The queue, watched live.
+ *
+ * Asking every few seconds meant a print sent from a phone waited up to that
+ * long before this PC even looked. With its own key (SHIV_DEVICE_TOKEN, in
+ * .env.local) the print server holds a live link to the database instead,
+ * and is told the moment a job arrives; the regular check stays as the
+ * safety net for a dropped link. Without a key it simply keeps checking.
+ */
+async function watchCloudPrintQueue() {
+  const url = process.env.CONVEX_URL
+  const token = process.env.SHIV_DEVICE_TOKEN
+  if (!url || !token) {
+    console.log('   Live print queue: off (no SHIV_DEVICE_TOKEN) — checking every', CLOUD_POLL_INTERVAL_MS / 1000, 's')
+    return
+  }
+  try {
+    const { ConvexClient } = await import('convex/browser')
+    const { anyApi } = await import('convex/server')
+    const client = new ConvexClient(url)
+    client.setAuth(async () => token)
+    client.onUpdate(anyApi.printJobs.listPending, { limit: 5 }, (jobs) => {
+      if (Array.isArray(jobs) && jobs.length) void pollCloudPrintJobs()
+    }, (err) => console.warn('[cloud-print] live queue:', err?.message ?? err))
+    console.log('   Live print queue: on — new jobs print as they arrive')
+  } catch (err) {
+    console.warn('[cloud-print] live queue could not start, checking every', CLOUD_POLL_INTERVAL_MS / 1000, 's:', err?.message ?? err)
+  }
+}
 
 async function pollCloudPrintJobs() {
-  if (!CLOUD_API_URL || cloudPollRunning) return
+  if (!CLOUD_API_URL) return
+  // A job that arrives while one pickup is running is fetched straight after
+  // it, not left for the next regular check.
+  if (cloudPollRunning) { cloudPollAgain = true; return }
   cloudPollRunning = true
   try {
     const response = await cloudRequest('/api/print-jobs/claim', {
@@ -2875,6 +2912,10 @@ async function pollCloudPrintJobs() {
     console.warn(`[cloud-print] poll failed: ${err.message ?? err}${cause}`)
   } finally {
     cloudPollRunning = false
+    if (cloudPollAgain) {
+      cloudPollAgain = false
+      void pollCloudPrintJobs()
+    }
   }
 }
 
@@ -3976,6 +4017,7 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`   Cloud printer agent: ${PRINTER_AGENT_ID}`)
     setInterval(pollCloudPrintJobs, CLOUD_POLL_INTERVAL_MS)
     pollCloudPrintJobs()
+    watchCloudPrintQueue()
     setInterval(sendCloudHeartbeat, CLOUD_HEARTBEAT_INTERVAL_MS)
     sendCloudHeartbeat()
   } else {
