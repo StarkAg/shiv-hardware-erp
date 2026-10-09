@@ -232,7 +232,7 @@ export default function App() {
             <button type="button" className="primary" onClick={() => gallery.current?.click()}>Take photos instead</button>
           </div>
         )}
-        {camera === 'on' && pages.length === 0 && <div className="hint">Tap anywhere to shoot each page</div>}
+        {camera === 'on' && pages.length === 0 && !toast && <div className="hint">Tap anywhere to shoot each page</div>}
       </div>
 
       {pages.length > 0 && (
