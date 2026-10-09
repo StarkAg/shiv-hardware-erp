@@ -1,0 +1,11 @@
+{
+  "name": "billshoot-finder-bench",
+  "private": true,
+  "description": "Compares page finders on the shop's bill photos (README.md in ..). Not part of the app.",
+  "type": "module",
+  "dependencies": {
+    "onnxruntime-node": "^1.24.3",
+    "scanic-ml": "0.2.0",
+    "sharp": "^0.34.4"
+  }
+}

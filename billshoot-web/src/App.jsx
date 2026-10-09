@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { canvasOf, cutPage, findIn, sheetOf, toBlob, turnRight } from './pipeline.js'
+import { canvasOf, cutPage, findIn, sheetOf, shotPage, toBlob, turnRight } from './pipeline.js'
 import Fix from './Fix.jsx'
 
 /**
@@ -130,8 +130,7 @@ export default function App() {
     const id = newId()
     setPages((ps) => [...ps, { id, v: 0, busy: true, url: photo.toDataURL('image/jpeg', 0.5) }])
     try {
-      const { corners } = await findIn(photo, photo.width, photo.height)
-      const page = await cutPage(photo, corners)
+      const { corners, page } = await shotPage(photo)
       const blob = await toBlob(page)
       setPages((ps) => ps.map((p) => (p.id === id ? { id, v: 1, photo, corners, page, blob, url: URL.createObjectURL(blob) } : p)))
     } catch (err) {

@@ -14,8 +14,8 @@ function billShootOfflineShell() {
     apply: 'build',
     configResolved(value) { config = value },
     writeBundle(_options, bundle) {
-      // The trained page finder too, once exported (train/export.py), so it works offline.
-      const publicFiles = ['manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'page-finder.onnx']
+      // The page finders too (src/finders.js), so they work offline.
+      const publicFiles = ['manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'scanic-corners.ort', 'docaligner-lcnet100.onnx', 'finder-licenses.txt']
         .filter((name) => existsSync(resolve(config.publicDir, name)))
       const template = readFileSync(resolve(config.publicDir, 'sw.js'), 'utf8')
       const hash = createHash('sha256').update(template)

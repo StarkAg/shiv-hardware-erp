@@ -1,0 +1,10 @@
+Bill Shoot finds the page with two ready-made networks, shipped unchanged:
+
+scanic-corners.ort
+  DocCornerNet LEAN from scanic-ml 0.2.0 (https://github.com/marquaye/scanic),
+  MIT License.
+
+docaligner-lcnet100.onnx
+  DocAligner heatmap model lcnet100_h_e_bifpn_256 from docaligner-docsaid 1.1.1
+  (https://github.com/DocsaidLab/DocAligner), Apache License 2.0
+  (https://www.apache.org/licenses/LICENSE-2.0).

@@ -4,8 +4,7 @@
  * out, and the cut-out pages are laid one under another (crop.js layout).
  */
 import { SHEET, WHOLE, layout } from './crop.js'
-
-export const IN_W = 192, IN_H = 256 // the finder's frame, as in finder.worker.js
+import { SCANIC_SIDE } from './finders.js'
 
 const worker = new Worker(new URL('./finder.worker.js', import.meta.url), { type: 'module' })
 let nextId = 0
@@ -25,24 +24,30 @@ function ask(msg, transfer = []) {
   })
 }
 
+/** A picture (video, image or canvas) stretched to w×h, as RGBA, turned a quarter clockwise if asked. */
+function imageOf(source, sw, sh, w, h, turn = false) {
+  const c = new OffscreenCanvasOr(w, h)
+  const x = c.getContext('2d', { willReadFrequently: true })
+  x.imageSmoothingEnabled = true
+  x.imageSmoothingQuality = 'medium' // as scanic draws its own input
+  if (turn) {
+    x.translate(w, 0); x.rotate(Math.PI / 2)
+    x.drawImage(source, 0, 0, sw, sh, 0, 0, h, w)
+  } else {
+    x.drawImage(source, 0, 0, sw, sh, 0, 0, w, h)
+  }
+  return x.getImageData(0, 0, w, h)
+}
+
 /**
- * Where the page is in a picture (a video, image or canvas of size w×h), as
- * fractions of it. The finder looks at a portrait frame, so a landscape one
- * is turned a quarter first and the corners turned back.
+ * Where the page is in the live picture (a video of size w×h), as fractions
+ * of it — for the outline only. The finder was judged on upright pictures, so
+ * a landscape one is turned a quarter first and the corners turned back.
  */
 export async function findIn(source, w, h) {
   const turned = w > h
-  const c = new OffscreenCanvasOr(IN_W, IN_H)
-  const x = c.getContext('2d', { willReadFrequently: true })
-  if (turned) {
-    x.save(); x.translate(IN_W, 0); x.rotate(Math.PI / 2)
-    x.drawImage(source, 0, 0, IN_H, IN_W)
-    x.restore()
-  } else {
-    x.drawImage(source, 0, 0, IN_W, IN_H)
-  }
-  const small = x.getImageData(0, 0, IN_W, IN_H)
-  const { corners, ms } = await ask({ type: 'find', small }, [small.data.buffer])
+  const input = imageOf(source, w, h, SCANIC_SIDE, SCANIC_SIDE, turned)
+  const { corners, ms } = await ask({ type: 'find', input }, [input.data.buffer])
   if (!corners) return { corners: null, ms }
   // Turned clockwise, a point (u, v) of the frame was (v, 1 − u) of the picture.
   return { corners: turned ? reorder(corners.map((p) => ({ x: p.y, y: 1 - p.x }))) : corners, ms }
@@ -70,6 +75,22 @@ export const canvasOf = (w, h) => {
 
 export function toBlob(canvas, quality = 0.9) {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No picture'))), 'image/jpeg', quality))
+}
+
+/**
+ * A photo taken (canvas): its page found by both finders and cut out flat in
+ * one trip to the worker. The corners are null when the whole photo is used.
+ */
+export async function shotPage(photo) {
+  const { width: w, height: h } = photo
+  const input = imageOf(photo, w, h, SCANIC_SIDE, SCANIC_SIDE)
+  // What edgeSupport reads to choose between the finders' answers.
+  const frame = w > h ? imageOf(photo, w, h, 480, 360) : imageOf(photo, w, h, 360, 480)
+  const full = photo.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h)
+  const { corners, page } = await ask({ type: 'shot', input, frame, photo: full }, [input.data.buffer, frame.data.buffer, full.data.buffer])
+  const c = canvasOf(page.width, page.height)
+  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(page.data.buffer), page.width, page.height), 0, 0)
+  return { corners, page: c }
 }
 
 /** A photo (canvas) cut along `corners` (or whole) into a flat, cleaned page canvas. */
