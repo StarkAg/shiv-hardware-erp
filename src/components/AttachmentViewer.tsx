@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, Download, FileText, Minus, Plus, RotateCw, Scan, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, FileText, Maximize2, Minus, Plus, RotateCw, Scan, X } from 'lucide-react'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import { attachmentName, isPdfAttachment, type Attachment } from '../lib/attachments'
 import './AttachmentViewer.css'
@@ -84,9 +84,16 @@ type Props = {
   onClose: () => void
   onDownloadPdf?: () => Promise<void>
   loading?: boolean
+  /**
+   * Shown beside the form rather than over it: no backdrop, the page keeps
+   * scrolling and the cursor stays in the box being typed into.
+   */
+  docked?: boolean
+  /** Docked only: open the same file full screen. */
+  onExpand?: () => void
 }
 
-export default function AttachmentViewer({ attachments, title = 'Attachments', subtitle, initialIndex = 0, onClose, onDownloadPdf, loading = false }: Props) {
+export default function AttachmentViewer({ attachments, title = 'Attachments', subtitle, initialIndex = 0, onClose, onDownloadPdf, loading = false, docked = false, onExpand }: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const stage = useRef<HTMLDivElement>(null)
@@ -109,6 +116,7 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
   const shown = pdf ? rendered.url : file?.url || file?.previewUrl
 
   useEffect(() => {
+    if (docked) return
     const el = dialog.current!
     const previous = document.activeElement as HTMLElement | null
     const overflow = document.body.style.overflow
@@ -175,13 +183,31 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
   const rotated = rotation % 180 !== 0
   const width = rotated ? natural.height : natural.width
   const height = rotated ? natural.width : natural.height
-  const scale = Math.max(.01, Math.min((area.width - 32) / width, (area.height - 32) / height)) * zoom
+  // Docked, the bill fills the width and scrolls down: a short strip under
+  // the form is read line by line, not shrunk to a thumbnail.
+  const fit = docked ? (area.width - 16) / width : Math.min((area.width - 32) / width, (area.height - 32) / height)
+  const scale = Math.max(.01, fit) * zoom
   const error = !file ? 'No attachments to show.' : !file.url && !file.previewUrl ? 'This attachment is no longer available.' : pdf ? rendered.error : imageError ? 'Could not load this photo. Please try again.' : ''
 
-  return createPortal(
-    <dialog ref={dialog} className="attachment-dialog" aria-label={title} aria-modal="true"
-      onCancel={event => { event.preventDefault(); onClose() }}
-      onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}
+  const tools = (
+        <div className="attachment-tools" aria-label="Preview controls">
+          <button type="button" onClick={() => changeZoom(-.5)} disabled={zoom <= 1 || !shown} aria-label="Zoom out"><Minus size={18} /></button>
+          <output aria-label="Zoom level">{Math.round(zoom * 100)}%</output>
+          <button type="button" onClick={() => changeZoom(.5)} disabled={zoom >= 5 || !shown} aria-label="Zoom in"><Plus size={18} /></button>
+          <button type="button" onClick={() => { setZoom(1); stage.current?.scrollTo(0, 0) }} disabled={!shown} aria-label="Fit to window"><Scan size={18} /><span className="attachment-action-label">Fit</span></button>
+          <button type="button" onClick={() => setRotation(current => (current + 90) % 360)} disabled={!shown} aria-label="Rotate clockwise"><RotateCw size={18} /></button>
+          {!docked && <button type="button" onClick={() => void action('file', download)} disabled={!!busy || !file?.url} aria-label="Download original file"><Download size={18} /><span className="attachment-action-label">{busy === 'file' ? 'Downloading…' : 'Download'}</span></button>}
+          {onDownloadPdf && !docked && <button type="button" onClick={() => void action('pdf', onDownloadPdf)} disabled={!!busy}>{busy === 'pdf' ? 'Making PDF…' : 'Photos as PDF'}</button>}
+        </div>
+  )
+  const Shell = docked ? 'div' : 'dialog'
+  const shell = (
+    <Shell ref={dialog as never} className={docked ? 'attachment-dialog attachment-docked' : 'attachment-dialog'} aria-label={title}
+      {...(docked ? { role: 'region' } : {
+        'aria-modal': 'true',
+        onCancel: (event: SyntheticEvent) => { event.preventDefault(); onClose() },
+        onMouseDown: (event: MouseEvent) => { if (event.target === event.currentTarget) onClose() },
+      })}
       onKeyDown={event => {
         // A preview owns its keys; closing it must not close the voucher too.
         event.stopPropagation()
@@ -193,18 +219,12 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
       }}>
       <section className="attachment-panel">
         <header className="attachment-header">
-          <div className="attachment-heading"><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
+          {/* Docked there is no room to spare: the controls share the title's row. */}
+          {docked ? tools : <div className="attachment-heading"><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>}
+          {onExpand && <button type="button" onClick={onExpand} aria-label="Full screen" title="Full screen"><Maximize2 size={18} /></button>}
           <button ref={closeButton} type="button" onClick={onClose} aria-label="Close preview"><X size={20} /></button>
         </header>
-        <div className="attachment-tools" aria-label="Preview controls">
-          <button type="button" onClick={() => changeZoom(-.5)} disabled={zoom <= 1 || !shown} aria-label="Zoom out"><Minus size={18} /></button>
-          <output aria-label="Zoom level">{Math.round(zoom * 100)}%</output>
-          <button type="button" onClick={() => changeZoom(.5)} disabled={zoom >= 5 || !shown} aria-label="Zoom in"><Plus size={18} /></button>
-          <button type="button" onClick={() => { setZoom(1); stage.current?.scrollTo(0, 0) }} disabled={!shown} aria-label="Fit to window"><Scan size={18} /><span className="attachment-action-label">Fit</span></button>
-          <button type="button" onClick={() => setRotation(current => (current + 90) % 360)} disabled={!shown} aria-label="Rotate clockwise"><RotateCw size={18} /></button>
-          <button type="button" onClick={() => void action('file', download)} disabled={!!busy || !file?.url} aria-label="Download original file"><Download size={18} /><span className="attachment-action-label">{busy === 'file' ? 'Downloading…' : 'Download'}</span></button>
-          {onDownloadPdf && <button type="button" onClick={() => void action('pdf', onDownloadPdf)} disabled={!!busy}>{busy === 'pdf' ? 'Making PDF…' : 'Photos as PDF'}</button>}
-        </div>
+        {!docked && tools}
         {actionError && <div className="attachment-error" role="alert">{actionError}</div>}
         <div ref={stage} className={'attachment-canvas' + (zoom > 1 ? ' is-zoomed' : '') + (dragging ? ' is-dragging' : '')}
           onPointerDown={event => {
@@ -237,6 +257,7 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
           <button type="button" onClick={() => turn(1)} disabled={at >= attachments.length - 1 && (!pdf || page >= rendered.pages)} aria-label="Next page"><ChevronRight size={18} /></button>
         </footer>
       </section>
-    </dialog>, document.body,
+    </Shell>
   )
+  return docked ? shell : createPortal(shell, document.body)
 }

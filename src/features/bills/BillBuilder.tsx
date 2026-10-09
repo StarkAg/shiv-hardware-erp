@@ -25,8 +25,8 @@ const plain = (bill: unknown) => JSON.parse(JSON.stringify(bill))
 const BillDrop = BillDropUntyped as unknown as (props: {
   files: File[]
   onChange: (files: File[]) => void
-  picked: { _id: string; storageId: string }[]
-  onPick: (picked: { _id: string; storageId: string }[]) => void
+  picked: PickedPhoto[]
+  onPick: (picked: PickedPhoto[]) => void
   onViewBill?: (shown: unknown) => void
   attached?: { storageId: string }[]
 }) => JSX.Element
@@ -35,7 +35,12 @@ const BillDrop = BillDropUntyped as unknown as (props: {
 const BillViewer = BillViewerUntyped as unknown as (props: {
   voucher: unknown
   onClose: () => void
+  docked?: boolean
+  onExpand?: () => void
 }) => JSX.Element
+
+/** A phone photo as the picker hands it over: the queue row, url and all. */
+type PickedPhoto = { _id: string; storageId: string; source?: 'voucher' | 'legacy'; url?: string; at?: number; queueNo?: number }
 
 /** The bill drawn from its figures, as the ledger opens it; plain JSX too. */
 const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
@@ -1871,6 +1876,84 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   )
 }
 
+/** How big the docked bill is, kept on this PC between bills. */
+type DockSize = { w: number; h: number }
+const DOCK_KEY = 'shiv.billDock'
+function readDockSize(): DockSize {
+  const fallback = { w: Math.round(Math.min(640, Math.max(360, window.innerWidth * 0.34))), h: Math.round(window.innerHeight * 0.42) }
+  try {
+    const kept = JSON.parse(localStorage.getItem(DOCK_KEY) ?? 'null')
+    return kept && kept.w > 0 && kept.h > 0 ? kept : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/**
+ * The bill photo kept open while the bill is typed from it: down the right of
+ * the screen on a computer (beside the item list), across the bottom on a
+ * phone. Its edge drags to make it wider or taller. The form makes room for
+ * it rather than going under it, and typing carries on in the form.
+ */
+function BillDock({ size, onResize, children }: {
+  size: DockSize
+  onResize: (size: DockSize) => void
+  children: React.ReactNode
+}) {
+  const drag = (event: React.PointerEvent, side: 'w' | 'h') => {
+    event.preventDefault()
+    const start = { x: event.clientX, y: event.clientY, ...size }
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    let next = size
+    const move = (e: Event) => {
+      const { clientX, clientY } = e as PointerEvent
+      next = side === 'w'
+        ? { ...size, w: Math.round(Math.min(window.innerWidth * 0.7, Math.max(280, start.w + start.x - clientX))) }
+        : { ...size, h: Math.round(Math.min(window.innerHeight * 0.75, Math.max(160, start.h + start.y - clientY))) }
+      onResize(next)
+    }
+    const up = () => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', up)
+      handle.removeEventListener('pointercancel', up)
+      try { localStorage.setItem(DOCK_KEY, JSON.stringify(next)) } catch { /* the size just isn't kept */ }
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', up)
+    handle.addEventListener('pointercancel', up)
+  }
+  return (
+    <aside
+      className="no-print fixed inset-x-0 bottom-[var(--mobile-bottom-nav-space)] z-30 h-[var(--dock-h)] px-1.5 pt-3 md:inset-x-auto md:bottom-auto md:right-0 md:top-0 md:h-screen md:w-[var(--dock-w)] md:pb-2 md:pl-3 md:pr-2 md:pt-2 xl:right-80 2xl:right-96"
+      style={{ '--dock-w': size.w + 'px', '--dock-h': size.h + 'px' } as React.CSSProperties}
+      aria-label="Bill photo"
+    >
+      {/* Phone: the top edge drags up and down. */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Drag to resize the bill photo"
+        onPointerDown={(e) => drag(e, 'h')}
+        className="absolute inset-x-0 top-0 flex h-4 cursor-row-resize touch-none items-center justify-center md:hidden"
+      >
+        <span className="h-1 w-12 rounded-full bg-stone-400 dark:bg-stone-500" />
+      </div>
+      {/* Computer: the left edge drags left and right. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Drag to resize the bill photo"
+        onPointerDown={(e) => drag(e, 'w')}
+        className="absolute inset-y-0 left-0 hidden w-3 cursor-col-resize touch-none items-center justify-center hover:bg-shiv-green/20 md:flex"
+      >
+        <span className="h-12 w-1 rounded-full bg-stone-400 dark:bg-stone-500" />
+      </div>
+      <div className="h-full">{children}</div>
+    </aside>
+  )
+}
+
 /**
  * Tally shows the options for the active field in the right-hand panel — "List
  * of Stock Items", "List of Units" — rather than in a dropdown under the box.
@@ -2736,9 +2819,32 @@ export function BillBuilder() {
   const upload = useUploader()
   // Chosen here, not yet uploaded — uploading happens once, on save.
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
-  const [photoPicked, setPhotoPicked] = useState<{ _id: string; storageId: string; source?: 'voucher' | 'legacy' }[]>([])
+  const [photoPicked, setPhotoPicked] = useState<PickedPhoto[]>([])
   const ledgerDark = useLedgerTheme()
+  // The bill being typed from, docked beside the form (BillDock) until closed;
+  // full screen when asked. A new bill starts with nothing open.
   const [photoShown, setPhotoShown] = useState<unknown>(null)
+  const [photoFull, setPhotoFull] = useState(false)
+  const [dockSize, setDockSize] = useState<DockSize>(readDockSize)
+  const [dockKey, setDockKey] = useState(0)
+  const showPhoto = (shown: unknown) => { setPhotoShown(shown); setPhotoFull(false); setDockKey((k) => k + 1) }
+  useEffect(() => { setPhotoShown(null); setPhotoFull(false) }, [draft.id])
+  /** Picking a phone photo for the bill opens it, to type the bill from. */
+  const pickPhotos = (next: PickedPhoto[]) => {
+    const added = next.filter((p) => p.url && !photoPicked.some((o) => o._id === p._id))
+    setPhotoPicked(next)
+    if (added.length) {
+      showPhoto({
+        party: added.length > 1 ? `From the phone · ${added.length} pages` : 'From the phone',
+        date: added[0].at,
+        vchLabel: '',
+        attachmentUrls: added.map((p) => ({
+          storageId: p.storageId, url: p.url, previewUrl: p.url, kind: 'photo', contentType: 'image/jpeg',
+          label: p.queueNo == null ? 'photo' : `#${String(p.queueNo).padStart(4, '0')}`,
+        })),
+      })
+    }
+  }
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   // What the paperwork on this kind of voucher is called, and how much of it
@@ -3638,7 +3744,22 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
         />
       )}
 
-      <div className="mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-1 md:pt-2 xl:max-w-none xl:pl-8 xl:pr-[21rem] 2xl:pr-[25rem]">
+      {photoShown != null && !photoFull && (
+        <BillDock size={dockSize} onResize={setDockSize}>
+          <BillViewer key={dockKey} voucher={photoShown} docked onExpand={() => setPhotoFull(true)} onClose={() => setPhotoShown(null)} />
+        </BillDock>
+      )}
+      {photoShown != null && photoFull && (
+        <BillViewer voucher={photoShown} onClose={() => setPhotoFull(false)} />
+      )}
+
+      <div
+        className={photoShown != null && !photoFull
+          // Room made for the docked bill, so nothing of the form is under it.
+          ? 'max-w-2xl space-y-5 px-4 pb-[calc(var(--dock-h)+1.5rem)] pt-1 md:max-w-none md:pb-24 md:pl-6 md:pr-[calc(var(--dock-w)+1rem)] md:pt-2 xl:pl-8 xl:pr-[calc(var(--dock-w)+21rem)] 2xl:pr-[calc(var(--dock-w)+25rem)]'
+          : 'mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-1 md:pt-2 xl:max-w-none xl:pl-8 xl:pr-[21rem] 2xl:pr-[25rem]'}
+        style={{ '--dock-w': dockSize.w + 'px', '--dock-h': dockSize.h + 'px' } as React.CSSProperties}
+      >
 
         <div className="flex items-center gap-1">
           <Button
@@ -4328,15 +4449,11 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               attached={draft.attachments ?? []}
               onChange={setPhotoFiles}
               picked={photoPicked}
-              onPick={setPhotoPicked}
-              onViewBill={setPhotoShown}
+              onPick={pickPhotos}
+              onViewBill={showPhoto}
             />
           </div>
         </div>
-
-        {photoShown != null && (
-          <BillViewer voucher={photoShown} onClose={() => setPhotoShown(null)} />
-        )}
 
         {/* Live print preview — scaled to fit phone width */}
         <BillPreview bill={{ ...priced, total }} />

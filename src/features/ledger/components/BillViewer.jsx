@@ -7,7 +7,7 @@ import { useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 
 /** One attachment preview, shared by the books, vouchers, and phone view. */
-export default function BillViewer({ voucher, onClose, initialIndex = 0 }) {
+export default function BillViewer({ voucher, onClose, initialIndex = 0, docked = false, onExpand }) {
   const attached = voucher.attachmentUrls ?? voucher.attachments ?? [];
   const unresolved = attached.filter((shot) => !shot.url && shot.storageId);
   const resolved = useQuery(api.files.describe, unresolved.length ? { storageIds: unresolved.map((shot) => shot.storageId) } : 'skip');
@@ -27,6 +27,8 @@ export default function BillViewer({ voucher, onClose, initialIndex = 0 }) {
       subtitle={subtitle}
       initialIndex={voucher.initialIndex ?? initialIndex}
       onClose={onClose}
+      docked={docked}
+      onExpand={onExpand}
       onDownloadPdf={images.length ? () => saveBillPdf({ ...voucher, date: voucher.date ?? Date.now(), attachmentUrls: images }) : undefined}
     />
   );

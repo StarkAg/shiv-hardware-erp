@@ -37,3 +37,15 @@
   .attachment-tools{gap:4px;padding:6px;}
   .attachment-tools .attachment-action-label{display:none;}
 }
+/* Docked beside the bill builder: fills the box it is put in. */
+.attachment-docked{position:relative;inset:auto;width:100%;height:100%;padding:0;}
+.attachment-docked .attachment-panel{width:100%;border-radius:12px;box-shadow:0 8px 30px #0003;}
+.attachment-docked .attachment-header{padding:6px 8px 6px 12px;gap:8px;}
+.attachment-docked .attachment-heading h2{font-size:14px;}
+.attachment-docked button{min-width:34px;min-height:34px;padding:5px 8px;}
+.attachment-docked .attachment-tools{padding:4px 8px;gap:4px;}
+.attachment-docked .attachment-tools .attachment-action-label{display:none;}
+.attachment-docked .attachment-footer{padding:4px 8px;font-size:12px;}
+.attachment-docked .attachment-center{padding:8px;}
+.attachment-docked .attachment-header .attachment-tools{flex:1;justify-content:flex-start;padding:0;border:0;}
+.attachment-docked .attachment-header .attachment-tools{flex:1;justify-content:flex-start;padding:0;border:0;}
