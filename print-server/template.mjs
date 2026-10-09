@@ -22,6 +22,12 @@ export const CARD_PRINT_H_MM = CARD_H_MM - CARD_SAFE_MM * 2  // 80mm
 export const CARD_QR_MM = 12
 export const CARD_QR_LABEL_MM = 1.45
 export const CARD_QR_GAP_MM = 0.5
+// The Hindi note gets its own full-width strip along the bottom of the print
+// area; the QR and the total sit above it. Arial has no Devanagari, so the
+// Windows/Mac Hindi fonts come next.
+export const CARD_NOTE = 'दीमक की कोई गारंटी नहीं है'
+export const CARD_NOTE_MM = 6.5
+export const CARD_NOTE_FONT = "'Nirmala UI', Mangal, 'Kohinoor Devanagari', 'Devanagari Sangam MN', Arial, sans-serif"
 
 // Inline SVG QR for the guarantee card's online view. Returns '' if there's no
 // URL to encode (so the layout simply omits the QR rather than breaking).
@@ -99,6 +105,9 @@ const cardThickness = category => ({
   'block-board-19': '19MM',
   'film-face-ply': '12MM',
 })[category] ?? ''
+// Every comma on the card's name line is followed by exactly one space.
+const commaSpace = text => String(text).replace(/\s*,\s*/g, ', ').trim()
+
 // Size without inch marks, as on the old card: 79 4/8 X 44
 const cardDimension = dim => dim?.soot ? `${dim.inches} ${dim.soot}/8` : dim?.inches ? String(dim.inches) : ''
 const cardSize = (height, width) => [cardDimension(height), cardDimension(width)].filter(Boolean).join(' X ')
@@ -397,24 +406,27 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
         </div>`
     }).join('')
 
-    // The QR with "SCAN TO VERIFY" under it; the pair ends on the print-area edge
-    // (CARD_SAFE_MM above the card's bottom), so the QR keeps its full 12mm.
-    const qrLabelTop = CARD_H_MM - CARD_SAFE_MM - CARD_QR_LABEL_MM
+    // The QR with "SCAN TO VERIFY" under it; the pair ends on top of the note
+    // strip, which ends on the print-area edge, so the QR keeps its full 12mm.
+    const qrLabelTop = CARD_H_MM - CARD_SAFE_MM - CARD_NOTE_MM - CARD_QR_LABEL_MM
     const qrTop = qrLabelTop - CARD_QR_GAP_MM - CARD_QR_MM
     const cardQr = await qrSvg(document.qrUrl, CARD_QR_MM)
     return cardPage(`
         <div style="position:relative;width:${CARD_W_MM}mm;height:${CARD_H_MM}mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
           <div style="position:absolute;left:${CARD_SAFE_MM}mm;top:4mm;right:${CARD_SAFE_MM}mm;font-size:7pt;font-weight:600;line-height:1.18">
-            <div data-fit style="white-space:nowrap;overflow:hidden">${fitInner(`M/s ${esc(customer.name || '')}${customer.address ? `,${esc(customer.address)}` : ''}`)}</div>
+            <div data-fit style="white-space:nowrap;overflow:hidden">${fitInner(`M/s ${esc(commaSpace(`${customer.name || ''}${customer.address ? `,${customer.address}` : ''}`))}`)}</div>
             <div data-fit style="white-space:nowrap;overflow:hidden">${fitInner(`Mob - ${esc(customer.mobile || '')}`)}</div>
             <div data-fit style="white-space:nowrap;overflow:hidden">${fitInner(`UID - ${esc(customer.uid || 'N/A')}`)}</div>
           </div>
           <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:13.9mm;font-size:7pt;font-weight:500">${cardDate}</div>
           ${itemRows}
           ${totalAmount ? `
-          <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:76.8mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
+          <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:${76.8 - CARD_NOTE_MM}mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
           ${cardQr ? `<div style="position:absolute;left:${CARD_SAFE_MM}mm;top:${qrTop.toFixed(2)}mm">${cardQr}</div>
           <div data-fit style="position:absolute;left:${CARD_SAFE_MM}mm;top:${qrLabelTop.toFixed(2)}mm;width:${CARD_QR_MM}mm;white-space:nowrap;overflow:hidden;text-align:center;font-size:4pt;font-weight:700;letter-spacing:0.2pt;line-height:1">${fitInner('SCAN TO VERIFY')}</div>` : ''}
+          <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;bottom:${CARD_SAFE_MM}mm;height:${CARD_NOTE_MM}mm;display:flex;align-items:flex-end;justify-content:center">
+            <span style="display:inline-block;border:0.6pt solid ${RED};border-radius:2.2mm;padding:0.5mm 3.6mm 0.3mm;color:${RED};font-family:${CARD_NOTE_FONT};font-size:7pt;font-weight:600;letter-spacing:0.2pt;line-height:1.4;white-space:nowrap">${CARD_NOTE}</span>
+          </div>
         </div>
       `)
   }

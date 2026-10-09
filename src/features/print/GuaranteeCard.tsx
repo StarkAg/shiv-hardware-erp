@@ -136,6 +136,9 @@ const CARD_THICKNESS: Partial<Record<GuaranteeDocument['category'], string>> = {
   'film-face-ply': '12MM',
 }
 
+// Every comma on the card's name line is followed by exactly one space.
+const commaSpace = (text: string) => text.replace(/\s*,\s*/g, ', ').trim()
+
 // Size without inch marks, as on the old card: 79 4/8 X 44
 const cardDimension = (dim: GuaranteeDocument['height'] | null | undefined) =>
   dim?.soot ? `${dim.inches} ${dim.soot}/8` : dim?.inches ? String(dim.inches) : ''
@@ -177,7 +180,7 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
   return (
     <>
       <div className="absolute left-[3mm] right-[3mm] top-[4mm] text-[6pt] font-semibold leading-[1.18]">
-        <FitText>M/s {customer.name || ''}{customer.address ? `,${customer.address}` : ''}</FitText>
+        <FitText>M/s {commaSpace(`${customer.name || ''}${customer.address ? `,${customer.address}` : ''}`)}</FitText>
         <FitText>Mob - {customer.mobile || ''}</FitText>
         <FitText>UID - {customer.uid || 'N/A'}</FitText>
       </div>
@@ -209,17 +212,32 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
       })}
 
       {totalAmount > 0 && (
-        <div className="absolute right-[3mm] top-[76.8mm] inline-block border-y border-black py-[0.8mm] text-[5pt] font-semibold leading-none">
+        <div className="absolute right-[3mm] top-[70.3mm] inline-block border-y border-black py-[0.8mm] text-[5pt] font-semibold leading-none">
           {Math.round(totalAmount)}
         </div>
       )}
 
-      {/* Same place as print-server/template.mjs: QR, then SCAN TO VERIFY ending at 83mm. */}
-      <div className="absolute left-[3mm] top-[69.05mm]">
+      {/* Same place as print-server/template.mjs: QR, then SCAN TO VERIFY ending at 76.5mm,
+          on top of the 6.5mm note strip (CARD_NOTE_MM) that ends at 83mm. */}
+      <div className="absolute left-[3mm] top-[62.55mm]">
         <GuaranteeQr value={guaranteeOnlineUrl(document.number, document.token)} size="12mm" />
       </div>
-      <div className="absolute left-[3mm] top-[81.55mm] w-[12mm] text-center text-[4pt] font-bold leading-none tracking-[0.2pt]">
+      <div className="absolute left-[3mm] top-[75.05mm] w-[12mm] text-center text-[4pt] font-bold leading-none tracking-[0.2pt]">
         <FitText>SCAN TO VERIFY</FitText>
+      </div>
+
+      {/* Same as print-server/template.mjs CARD_NOTE: a red outlined badge in its own strip along the bottom of the print area. */}
+      <div className="absolute bottom-[3mm] left-[3mm] right-[3mm] flex h-[6.5mm] items-end justify-center">
+        <span
+          className="inline-block whitespace-nowrap rounded-[2.2mm] px-[3.6mm] pb-[0.3mm] pt-[0.5mm] text-[7pt] font-semibold leading-[1.4] tracking-[0.2pt]"
+          style={{
+            border: '0.6pt solid var(--shiv-red)',
+            color: 'var(--shiv-red)',
+            fontFamily: "'Nirmala UI', Mangal, 'Kohinoor Devanagari', 'Devanagari Sangam MN', Arial, sans-serif",
+          }}
+        >
+          दीमक की कोई गारंटी नहीं है
+        </span>
       </div>
     </>
   )
