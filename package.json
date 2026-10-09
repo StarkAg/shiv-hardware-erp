@@ -34,7 +34,8 @@
     "sync": "node scripts/autosave.mjs start",
     "save": "node scripts/autosave.mjs save",
     "deploy:convex": "node scripts/autosave.mjs check && npx convex deploy --yes --typecheck enable",
-    "deploy:counter": "bash scripts/deploy-counter.sh"
+    "deploy:counter": "bash scripts/deploy-counter.sh",
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",

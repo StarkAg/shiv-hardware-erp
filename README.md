@@ -129,17 +129,25 @@ npm run android:apk            # debug APK through Capacitor
 
 ## Deploying
 
-The panel is built locally and pushed as a prebuilt directory, so a deploy is exactly
-the bundle that was tested:
+One command for every part — Convex, the Railway services, each Vercel site and its
+shop domain, the QR link, the Quotation app on the shop PC and the desktop release
+for the counters:
 
 ```bash
-npm run build
-npx vercel deploy dist --project shiv-panel --prod --yes
-npm run deploy:convex
+npm run deploy               # shows what changed since each part last went out, asks, deploys those
+npm run deploy -- --dry-run  # the plan only
+npm run deploy -- --only cash,qr
+npm run deploy -- --list     # every part and where it lives
 ```
 
-The other web apps each carry their own `npm run deploy`. Convex must go out with the
-panel when a function's arguments change, and open tabs need a reload.
+It reads "last deployed" from where each part actually lives (Vercel, Railway, the
+GitHub releases, the installed app), so it is right from any machine. It deploys
+what is committed on `main`, pushing first if needed. Sites are always deployed with
+their Vercel project named outright and their `shivhardware-*` domain moved onto the
+new build. The per-app `npm run deploy` scripts still work for one-offs.
+
+Convex must go out with the panel when a function's arguments change, and open tabs
+need a reload.
 
 The voucher shooter is a separate project at `https://shivhardware-voucher.vercel.app`.
 Deploy the `voucherInbox` functions before its first use, then run

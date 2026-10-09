@@ -33,4 +33,6 @@ certs/dev-key.pem
 # One-off scripts written to read production while chasing a bug.
 .probe/
 .counter-dist/
+# What this machine last deployed of the parts with no record of their own (scripts/deploy.mjs).
+.deploy-state.json
 .intake/
