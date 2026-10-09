@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useConvex, useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
+import { detectMode } from './colour'
+import { notificationsState, pushAddress, showLocal, turnOnNotifications } from './notify'
+
+const remembered = (key, fallback) => { try { return localStorage.getItem(`shiv-print:${key}`) ?? fallback } catch { return fallback } }
+const remember = (key, value) => { try { localStorage.setItem(`shiv-print:${key}`, value) } catch { /* private window */ } }
 
 /**
  * Shiv Print: any paper, from anywhere, printed at the shop.
@@ -73,6 +78,11 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [sent, setSent] = useState([])
+  const [detecting, setDetecting] = useState(false)
+  // Shared files print the moment they arrive, unless switched off here.
+  const [autoPrint, setAutoPrint] = useState(() => remembered('auto', '1') === '1')
+  const [notifications, setNotifications] = useState(notificationsState)
+  const [justSent, setJustSent] = useState(null)
   const picker = useRef(null)
 
   const add = (files) => {
@@ -81,18 +91,71 @@ export default function App() {
     setItems((cur) => [...cur, ...ok.map((file) => ({
       id: ++nextId, file, preview: isImage(file) ? URL.createObjectURL(file) : null,
     }))])
+    return ok
   }
 
-  // Shared in from another app.
+  /**
+   * Sends files to the shop's print queue; returns the job's id. Photos are
+   * brought down to print size first and all go up together: a phone photo is
+   * 4–12 MB, and its upload over mobile data was most of the wait.
+   */
+  const send = async (list, chosenMode, chosenCopies) => {
+    const [files, notify] = await Promise.all([
+      Promise.all(list.map(async (original) => {
+        const file = await forPrint(original)
+        const url = await convex.mutation(anyApi.files.generateUploadUrl, {})
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
+        if (!res.ok) throw new Error(`${original.name} did not upload.`)
+        const { storageId } = await res.json()
+        return { storageId, name: file.name, mediaType: file.type }
+      })),
+      pushAddress(),
+    ])
+    const id = await sendFiles({ files, mode: chosenMode, copies: chosenCopies, ...(notify ? { notify } : {}) })
+    const label = list.length === 1 ? list[0].name : `${list.length} files`
+    setSent((cur) => [{ id, label, mode: chosenMode, copies: chosenCopies }, ...cur].slice(0, 8))
+    return { id, label }
+  }
+
+  const failed = (err) => {
+    const data = err?.data
+    setError(typeof data === 'string' ? data : data?.message || (err instanceof Error ? err.message : String(err)))
+  }
+
+  // Shared in from another app: straight to the printer, colour decided from
+  // what is on it, then out of the way — the phone says when it has printed.
   useEffect(() => {
     if (!new URLSearchParams(location.search).has('shared')) return
     history.replaceState(null, '', '/')
-    void takeShared().then((files) => { if (files.length) add(files) })
+    void takeShared().then(async (shared) => {
+      const files = add(shared)
+      if (!files.length || remembered('auto', '1') !== '1') return
+      setBusy(true)
+      try {
+        const chosen = await detectMode(files)
+        const { label } = await send(files, chosen, 1)
+        setItems([])
+        const how = chosen === 'color' ? 'Colour' : 'Black & white'
+        setJustSent({ label, how })
+        void showLocal('Sent to the shop', `${label} — ${how.toLowerCase()}`, 'sent')
+        // Back to wherever the share came from. A window the phone will not
+        // let close shows the "Sent" screen instead.
+        setTimeout(() => window.close(), 1400)
+      } catch (err) {
+        failed(err)
+      } finally {
+        setBusy(false)
+      }
+    })
   }, [])
 
-  // Photos print in colour and papers in black and white, until chosen.
+  // Colour or black and white, from what is on the files — until chosen by hand.
   useEffect(() => {
-    if (!modeChosen && items.length) setMode(items.every((i) => isImage(i.file)) ? 'color' : 'bw')
+    if (modeChosen || !items.length) return
+    let current = true
+    setDetecting(true)
+    void detectMode(items.map((i) => i.file)).then((chosen) => { if (current) setMode(chosen) }).finally(() => { if (current) setDetecting(false) })
+    return () => { current = false }
   }, [items, modeChosen])
 
   const remove = (id) => setItems((cur) => cur.filter((i) => i.id !== id))
@@ -102,28 +165,28 @@ export default function App() {
     setBusy(true)
     setError('')
     try {
-      // All at once, each photo first brought down to print size: a phone
-      // photo is 4–12 MB, and the upload over mobile data was most of the wait.
-      const files = await Promise.all(items.map(async ({ file: original }) => {
-        const file = await forPrint(original)
-        const url = await convex.mutation(anyApi.files.generateUploadUrl, {})
-        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
-        if (!res.ok) throw new Error(`${original.name} did not upload.`)
-        const { storageId } = await res.json()
-        return { storageId, name: file.name, mediaType: file.type }
-      }))
-      const id = await sendFiles({ files, mode, copies })
-      setSent((cur) => [{ id, label: items.length === 1 ? items[0].file.name : `${items.length} files`, mode, copies }, ...cur].slice(0, 8))
+      await send(items.map((i) => i.file), mode, copies)
       items.forEach((i) => i.preview && URL.revokeObjectURL(i.preview))
       setItems([])
       setCopies(1)
       setModeChosen(false)
     } catch (err) {
-      const data = err?.data
-      setError(typeof data === 'string' ? data : data?.message || (err instanceof Error ? err.message : String(err)))
+      failed(err)
     } finally {
       setBusy(false)
     }
+  }
+
+  if (justSent) {
+    return (
+      <main className="page sent-screen">
+        <div className="sent-mark"><CheckIcon /></div>
+        <h1>Sent to the shop</h1>
+        <p>{justSent.label} · {justSent.how}</p>
+        <p className="muted">{notifications === 'granted' ? 'Your phone will say when it has printed.' : 'Turn on notifications to hear when it has printed.'}</p>
+        <button className="print" onClick={() => setJustSent(null)}>Done</button>
+      </main>
+    )
   }
 
   return (
@@ -178,6 +241,30 @@ export default function App() {
       <button className="print" disabled={!items.length || busy} onClick={print}>
         {busy ? 'Sending' : 'Print'}
       </button>
+      {detecting && <p className="muted center">Checking for colour…</p>}
+
+      <section className="settings">
+        <label className="setting">
+          <span>Print as soon as shared</span>
+          <input
+            type="checkbox"
+            checked={autoPrint}
+            onChange={(e) => { setAutoPrint(e.target.checked); remember('auto', e.target.checked ? '1' : '0') }}
+          />
+        </label>
+        {notifications === 'install-first' && (
+          <p className="muted center">On iPhone: tap Share → Add to Home Screen, open Shiv Print from there, then turn on notifications.</p>
+        )}
+        {notifications !== 'granted' && notifications !== 'unsupported' && notifications !== 'install-first' && (
+          <button
+            className="setting-button"
+            disabled={notifications === 'denied'}
+            onClick={async () => { await turnOnNotifications(); setNotifications(notificationsState()) }}
+          >
+            {notifications === 'denied' ? 'Notifications are blocked in phone settings' : 'Notify me when it has printed'}
+          </button>
+        )}
+      </section>
 
       {sent.length > 0 && (
         <section className="sent">

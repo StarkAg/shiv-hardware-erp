@@ -85,8 +85,14 @@ export const sendFiles = mutation({
     files: v.array(v.object({ storageId: v.id('_storage'), name: v.string(), mediaType: v.string() })),
     mode: v.union(v.literal('bw'), v.literal('color')),
     copies: v.optional(v.number()),
+    // The phone's web-push address, so the shop PC can tell it "printed" (or
+    // why not) once it is done, with Shiv Print closed.
+    notify: v.optional(v.object({
+      endpoint: v.string(),
+      keys: v.object({ p256dh: v.string(), auth: v.string() }),
+    })),
   },
-  handler: async (ctx, { files, mode, copies }) => {
+  handler: async (ctx, { files, mode, copies, notify }) => {
     if (!files.length || files.length > 20) throw new ConvexError('Choose 1 to 20 files.')
     for (const file of files) {
       if (!PRINTABLE.has(file.mediaType)) throw new ConvexError(`${file.name}: only PDFs and photos print.`)
@@ -98,7 +104,7 @@ export const sendFiles = mutation({
       status: 'pending',
       kind: 'raw-file',
       source: 'android',
-      payload: { files, mode },
+      payload: { files, mode, ...(notify ? { notify } : {}) },
       copies: Math.min(20, Math.max(1, Math.trunc(copies ?? 1))),
       requestedBy: device?.name,
       createdAt: now,

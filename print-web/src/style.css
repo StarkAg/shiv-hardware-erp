@@ -35,3 +35,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .job .meta { grid-column: 1; color: var(--muted); font-size: 12px; }
 .job .state { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; text-align: right; }
 .job.ok .state { color: var(--ok); } .job.bad .state { color: var(--bad); } .job.wait .state { color: var(--wait); } .job.busy .state { color: var(--brass); }
+.muted { color: var(--muted); font-size: 13px; margin: 0; }
+.center { text-align: center; }
+.settings { display: flex; flex-direction: column; gap: 8px; }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 4px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; font-weight: 600; font-size: 14px; }
+.setting input { width: 22px; height: 22px; accent-color: var(--brass); }
+.setting-button { min-height: 48px; border: 1px solid var(--brass); border-radius: 12px; background: transparent; color: var(--brass); font-weight: 700; font-size: 14px; }
+.setting-button:disabled { border-color: var(--line); color: var(--muted); }
+.sent-screen { justify-content: center; align-items: center; text-align: center; gap: 10px; }
+.sent-screen h1 { margin: 0; font-size: 24px; }
+.sent-screen p { margin: 0; }
+.sent-screen .print { margin-top: 24px; width: 100%; }
+.sent-mark { width: 72px; height: 72px; border-radius: 999px; background: var(--ok); color: #fff; display: grid; place-items: center; }
+.sent-mark svg { width: 36px; height: 36px; }

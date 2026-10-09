@@ -2850,6 +2850,40 @@ async function printCloudJob(job) {
 let cloudPollRunning = false
 let cloudPollAgain = false
 
+/** The printer's everyday name for a phone notification. */
+const shortPrinterName = (name) => /hp|laserjet|npi/i.test(String(name)) ? 'the HP' : /epson|l8050/i.test(String(name)) ? 'the Epson' : 'the shop printer'
+
+let webPush = null
+/**
+ * Tells the phone that shared a print how it went, as a notification it gets
+ * with Shiv Print closed (web push; keys in .env.local). Best-effort: a phone
+ * that has turned notifications off simply hears nothing.
+ */
+async function tellPhone(job, outcome) {
+  const notify = job?.payload?.notify
+  if (!notify?.endpoint || !process.env.VAPID_PRIVATE_KEY || !process.env.VAPID_PUBLIC_KEY) return
+  try {
+    if (!webPush) {
+      webPush = (await import('web-push')).default
+      webPush.setVapidDetails(process.env.VAPID_SUBJECT || 'https://www.shivhardware.store', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY)
+    }
+    const files = Array.isArray(job.payload?.files) ? job.payload.files : []
+    const what = files.length === 1 ? files[0].name : `${files.length} files`
+    const printers = [...new Set((outcome.result?.files ?? []).map((f) => shortPrinterName(f.printer)))]
+    const how = job.payload?.mode === 'color' ? 'colour' : 'black & white'
+    // One notification per job: "Printing…" when the shop PC starts, replaced
+    // by "Printed ✓" (or why not) when it is done.
+    const [title, body] = outcome.printing
+      ? ['Printing…', `${what} — ${how}, at the shop now`]
+      : outcome.ok
+        ? ['Printed ✓', `${what} — ${how} on ${printers.join(' and ') || 'the shop printer'}`]
+        : ['Not printed', `${what}: ${outcome.error}`.slice(0, 180)]
+    await webPush.sendNotification(notify, JSON.stringify({ title, body, tag: String(job._id) }), { TTL: 3600 })
+  } catch (err) {
+    console.warn('[cloud-print] could not notify the phone:', err?.statusCode ?? '', err?.message ?? err)
+  }
+}
+
 /**
  * The queue, watched live.
  *
@@ -2896,15 +2930,18 @@ async function pollCloudPrintJobs() {
     for (const job of jobs) {
       try {
         await markCloudJob(`/api/print-jobs/${job._id}/printing`, { printerId: PRINTER_AGENT_ID })
-        await printCloudJob(job)
+        void tellPhone(job, { printing: true })
+        const result = await printCloudJob(job)
         await markCloudJob(`/api/print-jobs/${job._id}/complete`, { printerId: PRINTER_AGENT_ID })
         console.log(`[cloud-print] completed ${job._id}`)
+        void tellPhone(job, { ok: true, result })
       } catch (err) {
         console.error(`[cloud-print] failed ${job._id}`, err)
         await markCloudJob(`/api/print-jobs/${job._id}/fail`, {
           printerId: PRINTER_AGENT_ID,
           error: String(err.message ?? err),
         }).catch(markErr => console.error('[cloud-print] failed to mark failure', markErr))
+        void tellPhone(job, { ok: false, error: String(err.message ?? err) })
       }
     }
   } catch (err) {

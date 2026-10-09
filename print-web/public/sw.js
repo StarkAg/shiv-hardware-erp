@@ -27,3 +27,27 @@ self.addEventListener('fetch', (event) => {
     return Response.redirect('/?shared=1', 303)
   })())
 })
+
+// "Printed ✓" (or why not), pushed by the print server on the shop PC once a
+// shared print is done — shown with Shiv Print closed.
+self.addEventListener('push', (event) => {
+  let data = {}
+  try { data = event.data ? event.data.json() : {} } catch { data = { title: 'Shiv Print', body: event.data?.text() ?? '' } }
+  event.waitUntil(self.registration.showNotification(data.title || 'Shiv Print', {
+    body: data.body || '',
+    tag: data.tag,
+    renotify: true,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+  }))
+})
+
+// A tap on it opens Shiv Print, where the job's line says the same.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil((async () => {
+    const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    if (open[0]) return open[0].focus()
+    return self.clients.openWindow('/')
+  })())
+})
