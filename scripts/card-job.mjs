@@ -22,6 +22,10 @@
 //       "items": [ { "thickness": "19MM", "brand": "Milton Super Solid",
 //                    "size": "7 X 4", "qty": 25, "amount": 68600 } ] }
 //
+// Reprint a saved card as it is (History → the card, after an edit): same number,
+// same QR secret, nothing saved, no new number, no WhatsApp:
+// { "reprint": [ <the saved card document>, <optional slot-2 card> ] }
+//
 // Size: write it the way the bill does. Feet on the bill ("7x4") → "size": "7 X 4",
 // printed as-is. Inches on the bill → "length": "82 4/8", "height": "35 4/8".
 //   ]
@@ -84,9 +88,15 @@ const fail = (msg) => {
   if (JSON_OUT) console.log(`@@RESULT ${JSON.stringify({ ok: false, error: msg })}`)
   process.exit(1)
 }
-if (!job.customer?.name) fail('customer.name is required')
-if (!Array.isArray(job.cards) || !job.cards.length) fail('cards: give 1 or 2 cards')
-if (job.cards.length > 2) fail('the tray holds 2 cards — split the job into passes of 2')
+const REPRINT = Array.isArray(job.reprint) && job.reprint.length ? job.reprint : null
+if (REPRINT) {
+  if (REPRINT.length > 2) fail('the tray holds 2 cards — split the job into passes of 2')
+  for (const d of REPRINT) if (!d?.number || !d?.token || !d?.items?.length) fail('reprint: every card needs its number, token and items')
+} else {
+  if (!job.customer?.name) fail('customer.name is required')
+  if (!Array.isArray(job.cards) || !job.cards.length) fail('cards: give 1 or 2 cards')
+  if (job.cards.length > 2) fail('the tray holds 2 cards — split the job into passes of 2')
+}
 
 const brandYears = (() => {
   const years = new Map()
@@ -114,12 +124,12 @@ function dim(v) {
   return { inches: Math.floor(n), soot: Math.round((n - Math.floor(n)) * 8) }
 }
 
-const day = job.date || new Date().toISOString().slice(0, 10)
+const day = REPRINT ? new Date(REPRINT[0].date).toLocaleDateString('en-CA') : job.date || new Date().toISOString().slice(0, 10)
 if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) fail(`date "${day}" — use YYYY-MM-DD`)
 const dateIso = new Date(`${day}T12:00:00`).toISOString()
-const customer = { id: `job-${Date.now().toString(36)}`, name: job.customer.name.trim(), mobile: String(job.customer.mobile ?? '').trim(), uid: String(job.customer.uid ?? '').replace(/\s+/g, ''), address: String(job.customer.address ?? '').trim() }
+const customer = REPRINT ? REPRINT[0].customer : { id: `job-${Date.now().toString(36)}`, name: job.customer.name.trim(), mobile: String(job.customer.mobile ?? '').trim(), uid: String(job.customer.uid ?? '').replace(/\s+/g, ''), address: String(job.customer.address ?? '').trim() }
 
-const cards = job.cards.map((card, i) => {
+const cards = REPRINT ? REPRINT.map((d) => ({ years: d.items[0]?.guaranteeYears ?? 0 })) : job.cards.map((card, i) => {
   if (!card.items?.length) fail(`card ${i + 1} has no items`)
   const years = card.years ?? brandYears.get(String(card.items[0].brand ?? '').trim().toLowerCase())
   if (!years) fail(`card ${i + 1}: give "years" (brand "${card.items[0].brand}" has no years in Rates)`)
@@ -155,7 +165,9 @@ async function convexQuery(path, a) {
 }
 const year = new Date().getFullYear()
 let refs
-if (PRINT) {
+if (REPRINT) {
+  refs = REPRINT.map((d) => ({ number: d.number, token: d.token }))
+} else if (PRINT) {
   if (!CFG.convex || !CFG.cloudApi) fail('VITE_CONVEX_URL / VITE_CLOUD_API_URL missing in .env.local')
   const latest = await convexQuery('documents:latestGuaranteeSeq', { year })
   refs = cards.map((_, i) => {
@@ -165,7 +177,7 @@ if (PRINT) {
 } else {
   refs = cards.map((_, i) => ({ number: `DRAFT-${i + 1}`, token: 'DRAFT' }))
 }
-const docs = cards.map((c, i) => ({
+const docs = REPRINT ? REPRINT.map((d) => ({ ...d })) : cards.map((c, i) => ({
   id: refs[i].number,
   number: refs[i].number,
   token: refs[i].token,
@@ -214,8 +226,8 @@ if (!PRINT) {
   process.exit(0)
 }
 
-// ── save to the cloud (same route the apps use) ────────────────────────────
-for (const doc of docs) {
+// ── save to the cloud (same route the apps use); a reprint is saved already ─
+for (const doc of REPRINT ? [] : docs) {
   const res = await fetch(`${CFG.cloudApi}/api/guarantees`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': CFG.cloudKey },
@@ -224,7 +236,7 @@ for (const doc of docs) {
   const json = await res.json().catch(() => null)
   if (!res.ok || !json?.ok) fail(`cloud save of ${doc.number} failed: ${JSON.stringify(json)}`)
 }
-console.log('saved to cloud')
+console.log(REPRINT ? 'reprint: same number and QR, nothing saved' : 'saved to cloud')
 
 // ── print (text side) ──────────────────────────────────────────────────────
 const psArgs = [

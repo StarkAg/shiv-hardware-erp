@@ -171,7 +171,12 @@ function CompactGuaranteeCard({ document }: { document: GuaranteeDocument }) {
 export function GuaranteeCardFace({ document }: { document: GuaranteeDocument }) {
   const dateStr = new Date(document.date).toLocaleDateString('en-GB').replace(/\//g, '-')
   const guaranteedRows = document.items.filter((r) => r.guaranteeYears > 0)
-  const rows = (guaranteedRows.length ? guaranteedRows : document.items).slice(0, 5)
+  const rows = guaranteedRows.length ? guaranteedRows : document.items
+  // Same as print-server/template.mjs cardRowStep: a line every 2.5mm from
+  // 20.5mm, closer together when that would run into the QR (at 65.55mm),
+  // rounded down to whole CSS pixels so every gap is the same.
+  const pxPerMm = 96 / 25.4
+  const rowStep = Math.floor((rows.length > 1 ? Math.min(2.5, (65.55 - 1 - 1.5 - 20.5) / (rows.length - 1)) : 2.5) * pxPerMm) / pxPerMm
   const docThickness = CARD_THICKNESS[document.category] ?? ''
   const docSizeStr = [cardDimension(document.height), cardDimension(document.width)].filter(Boolean).join(' X ')
   const totalAmount = rows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
@@ -200,7 +205,7 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
         <div
           key={i}
           className="absolute left-[3mm] right-[3mm] items-baseline text-[5pt] leading-none"
-          style={{ top: `${20.5 + i * 3.2}mm`, display: 'grid', gridTemplateColumns: '5.5mm 1fr 11mm 5mm 4.5mm', columnGap: '1.3mm' }}
+          style={{ top: `${20.5 + i * rowStep}mm`, display: 'grid', gridTemplateColumns: '5.5mm 1fr 11mm 5mm 4.5mm', columnGap: '1.3mm' }}
         >
           <FitText>{rowThickness}</FitText>
           <FitText>{item.brandName}</FitText>
@@ -212,26 +217,26 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
       })}
 
       {totalAmount > 0 && (
-        <div className="absolute right-[3mm] top-[70.3mm] inline-block border-y border-black py-[0.8mm] text-[5pt] font-semibold leading-none">
+        <div className="absolute right-[3mm] top-[73.3mm] inline-block border-y border-black py-[0.8mm] text-[5pt] font-semibold leading-none">
           {Math.round(totalAmount)}
         </div>
       )}
 
-      {/* Same place as print-server/template.mjs: QR, then SCAN TO VERIFY ending at 76.5mm,
-          on top of the 6.5mm note strip (CARD_NOTE_MM) that ends at 83mm. */}
-      <div className="absolute left-[3mm] top-[62.55mm]">
+      {/* Same place as print-server/template.mjs: QR, then SCAN TO VERIFY ending at 79.5mm,
+          on top of the 6.5mm note band (CARD_NOTE_MM) that runs to the card's edge. */}
+      <div className="absolute left-[3mm] top-[65.55mm]">
         <GuaranteeQr value={guaranteeOnlineUrl(document.number, document.token)} size="12mm" />
       </div>
-      <div className="absolute left-[3mm] top-[75.05mm] w-[12mm] text-center text-[4pt] font-bold leading-none tracking-[0.2pt]">
+      <div className="absolute left-[3mm] top-[78.05mm] w-[12mm] text-center text-[4pt] font-bold leading-none tracking-[0.2pt]">
         <FitText>SCAN TO VERIFY</FitText>
       </div>
 
-      {/* Same as print-server/template.mjs CARD_NOTE: a red outlined badge in its own strip along the bottom of the print area. */}
-      <div className="absolute bottom-[3mm] left-[3mm] right-[3mm] flex h-[6.5mm] items-end justify-center">
+      {/* Same as print-server/template.mjs CARD_NOTE: red text centred in its band, nudged
+          0.23mm (CARD_NOTE_NUDGE_MM) so the letters have the same gap above and below. */}
+      <div className="absolute bottom-0 left-[3mm] right-[3mm] flex h-[6.5mm] items-center justify-center">
         <span
-          className="inline-block whitespace-nowrap rounded-[2.2mm] px-[3.6mm] pb-[0.3mm] pt-[0.5mm] text-[7pt] font-semibold leading-[1.4] tracking-[0.2pt]"
+          className="relative top-[0.23mm] inline-block whitespace-nowrap text-[7pt] font-semibold leading-none tracking-[0.2pt]"
           style={{
-            border: '0.6pt solid var(--shiv-red)',
             color: 'var(--shiv-red)',
             fontFamily: "'Nirmala UI', Mangal, 'Kohinoor Devanagari', 'Devanagari Sangam MN', Arial, sans-serif",
           }}

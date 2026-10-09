@@ -99,6 +99,8 @@ export interface GuaranteeCardItem {
   guaranteeYears: GuaranteeYears
   sizeLabel?: string | null
   amount?: number | null
+  /** ₹ per sq ft the amount was worked out from (not printed on the card). */
+  sqftRate?: number | null
   /**
    * Per-row overlay fields for the compact PVC card table (Thickness/Length/
    * Height/Pcs columns) — each billed row can be its own size, unlike the A4

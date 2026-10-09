@@ -39,10 +39,10 @@ const DEFAULT_CATEGORY: ProductCategory = 'readymade-door'
 const DEFAULT_YEARS: GuaranteeYears = 10
 const DEFAULT_BRAND_LABEL = CATEGORY_LABELS[DEFAULT_CATEGORY]
 
-// One spreadsheet row — Thickness / Type / Length / Height / Pcs / Rate — the
-// same shape the shop is used to from Excel. Length/Height are whole inches
-// plus an explicit soot (1/8") box, matching how the counter measures doors
-// and boards. Each row maps 1:1 onto a GuaranteeCardItem, so the PVC card can
+// One spreadsheet row — Thickness / Type / Length / Height / Pcs / Rate /
+// Amount — the same shape the shop is used to from Excel. Length/Height are a
+// whole number plus an explicit soot (1/8") box: inches for doors (82 4/8),
+// feet for boards (7 × 4), as the bill writes them. Each row maps 1:1 onto a GuaranteeCardItem, so the PVC card can
 // print several different sizes/brands on one card instead of sharing a
 // single document-level size.
 type SizeRow = {
@@ -54,7 +54,9 @@ type SizeRow = {
   height: number | ''
   heightSoot: number | ''
   qty: number | ''
-  rate: number | ''
+  /** ₹ per sq ft; while set, the amount is worked out from it. */
+  sqftRate: number | ''
+  amount: number | ''
 }
 
 // The periods offered for a card: every period the shop's PVC
@@ -71,7 +73,8 @@ const blankRow = (): SizeRow => ({
   height: '',
   heightSoot: '',
   qty: '',
-  rate: '',
+  sqftRate: '',
+  amount: '',
 })
 const isRowFilled = (r: SizeRow) =>
   r.type.trim() !== '' ||
@@ -81,16 +84,146 @@ const isRowFilled = (r: SizeRow) =>
   r.height !== '' ||
   r.heightSoot !== '' ||
   r.qty !== '' ||
-  r.rate !== ''
+  r.sqftRate !== '' ||
+  r.amount !== ''
 
 const rowDim = (inches: number | '', soot: number | ''): Dimension | null =>
   inches !== '' || soot !== '' ? { inches: inches === '' ? 0 : Number(inches), soot: soot === '' ? 0 : Number(soot) } : null
 
+/**
+ * Sq ft of one piece. Both sides 12 or under are feet (a 7 × 4 board = 28),
+ * anything bigger is inches (an 82 4/8 × 35 4/8 door, ÷ 144) — the same rule
+ * the bill uses (lib/boardSize.ts).
+ */
+function rowSqft(r: SizeRow): number {
+  const l = Number(r.length || 0) + Number(r.lengthSoot || 0) / 8
+  const h = Number(r.height || 0) + Number(r.heightSoot || 0) / 8
+  if (!(l > 0) || !(h > 0)) return 0
+  return l <= 12 && h <= 12 ? l * h : (l * h) / 144
+}
+
+const rowQty = (r: SizeRow) => (r.qty === '' ? 1 : Number(r.qty))
+const fmtSqft = (n: number) => String(Math.round(n * 100) / 100)
+
+/** ₹/sq ft for a brand at a thickness, or '' when nothing says. */
+type RateLookup = (type: string, thickness: string) => number | ''
+
+const brandKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ')
+/** "19MM", "19 mm", "18mm" → 19 (18mm is sold and written as 19MM); 0 when there is none. */
+const thicknessMm = (t: string | number | null | undefined) => {
+  const mm = Number(String(t ?? '').match(/\d+(\.\d+)?/)?.[0] ?? 0)
+  return mm === 18 ? 19 : mm
+}
+const rateKey = (type: string, thickness: string) => `${brandKey(type)}|${thicknessMm(thickness)}`
+
+/** The price list's (Rates / quotation) ₹/sq ft for a brand at a thickness, when it names one rate. */
+function priceListRate(brands: Brand[], type: string, thickness: string): number | '' {
+  const name = brandKey(type)
+  if (!name) return ''
+  const named = brands.filter((b) => b.rate > 0 && brandKey(b.name) === name)
+  const mm = thicknessMm(thickness)
+  const fits = mm ? named.filter((b) => thicknessMm(b.thicknessMm) === mm) : named
+  const rates = new Set(fits.map((b) => b.rate))
+  return rates.size === 1 ? [...rates][0] : ''
+}
+
+/**
+ * The rate a row starts with: the one last used on a saved card for that brand
+ * and thickness (what the shop actually charges, and it travels with the cards
+ * to every counter), else the price list's.
+ */
+function useRateLookup(guarantees: GuaranteeDocument[], brands: Brand[]): RateLookup {
+  return useMemo(() => {
+    const saved = new Map<string, number>()
+    const when = (g: GuaranteeDocument) => g.updatedAt ?? (Date.parse(g.date) || 0)
+    for (const g of [...guarantees].sort((a, b) => when(b) - when(a))) {
+      for (const it of g.items ?? []) {
+        const rate = Number(it.sqftRate)
+        const key = rateKey(String(it.brandName ?? ''), String(it.thickness ?? ''))
+        if (rate > 0 && !saved.has(key)) saved.set(key, rate)
+      }
+    }
+    return (type, thickness) => saved.get(rateKey(type, thickness)) ?? priceListRate(brands, type, thickness)
+  }, [guarantees, brands])
+}
+
+/** What the Type and Thickness boxes offer, each value once, most used first. */
+type ComboOptions = { types: { name: string; years: number }[]; thicknesses: string[] }
+
+/**
+ * Types: the price list's brands plus any new name typed on a saved card
+ * ("Signature Gold Solid"). Thicknesses: the price list's, the usual ones and
+ * any typed on a saved card. So a new one is offered from its first saved card on.
+ */
+function useComboOptions(guarantees: GuaranteeDocument[], brands: Brand[]): ComboOptions {
+  return useMemo(() => {
+    const types = new Map<string, { name: string; years: number; n: number }>()
+    for (const b of brands) {
+      const k = brandKey(b.name)
+      if (!k) continue
+      const was = types.get(k)
+      if (!was) types.set(k, { name: b.name.trim(), years: b.guaranteeYears, n: 0 })
+      else if (!was.years && b.guaranteeYears) was.years = b.guaranteeYears
+    }
+    const thick = new Map<string, { label: string; n: number }>()
+    // Only real thicknesses, each once as "19MM": a bare "19" is 19MM, 18 is
+    // written as 19MM, and old cards' slips ("1MM", a size typed here) are left out.
+    const addThick = (label: string, n: number) => {
+      const m = label.trim().toUpperCase().replace(/\s+/g, '').match(/^(\d+(?:\.\d+)?)(MM)?$/)
+      const mm = m ? thicknessMm(m[1]) : 0
+      if (mm < 3 || mm > 60) return
+      const t = `${mm}MM`
+      const was = thick.get(t)
+      if (was) was.n += n
+      else thick.set(t, { label: t, n })
+    }
+    for (const t of ['19MM', '12MM', '6MM', '30MM', '32MM']) addThick(t, 0)
+    for (const b of brands) if (b.thicknessMm) addThick(`${thicknessMm(b.thicknessMm)}MM`, 0)
+    for (const g of guarantees) {
+      for (const it of g.items ?? []) {
+        const name = String(it.brandName ?? '').trim()
+        const k = brandKey(name)
+        if (k) {
+          const was = types.get(k)
+          if (was) was.n += 1
+          else types.set(k, { name, years: Number(it.guaranteeYears) || 0, n: 1 })
+        }
+        addThick(String(it.thickness ?? ''), 1)
+      }
+    }
+    return {
+      types: [...types.values()]
+        .sort((a, b) => b.n - a.n || b.years - a.years || a.name.localeCompare(b.name))
+        .map(({ name, years }) => ({ name, years })),
+      thicknesses: [...thick.values()]
+        .sort((a, b) => b.n - a.n || thicknessMm(b.label) - thicknessMm(a.label))
+        .map((t) => t.label),
+    }
+  }, [guarantees, brands])
+}
+
+/**
+ * A row after an edit. A new brand or thickness brings its rate (saved, else price list)
+ * (unless a rate of the counter's own is in); with a rate, the amount is
+ * sq ft × rate × pcs. An amount typed by hand clears the rate, so it stays.
+ */
+function applyRowEdit(row: SizeRow, patch: Partial<SizeRow>, rateFor: RateLookup): SizeRow {
+  const next = { ...row, ...patch }
+  if ('amount' in patch) return { ...next, sqftRate: '' }
+  if (('type' in patch || 'thickness' in patch) && !('sqftRate' in patch)) {
+    const was = rateFor(row.type, row.thickness)
+    if (row.sqftRate === '' || row.sqftRate === was) next.sqftRate = rateFor(next.type, next.thickness)
+  }
+  const sqft = rowSqft(next)
+  if (next.sqftRate !== '' && sqft > 0) next.amount = Math.round(sqft * Number(next.sqftRate) * rowQty(next))
+  return next
+}
+
 // Editing the last row auto-appends a fresh blank one, so the table always
 // has a trailing entry point (like continuing to type in Excel).
-function updateSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void, id: string, patch: Partial<SizeRow>) {
+function updateSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void, id: string, rateFor: RateLookup, patch: Partial<SizeRow>) {
   setRows((prev) => {
-    const next = prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
+    const next = prev.map((r) => (r.id === id ? applyRowEdit(r, patch, rateFor) : r))
     const last = next[next.length - 1]
     if (last.id === id && isRowFilled(last)) next.push(blankRow())
     return next
@@ -125,7 +258,8 @@ function rowsToItems(rows: SizeRow[], fallbackBrand: string, years: GuaranteeYea
       height: rowDim(row.length, row.lengthSoot),
       width: rowDim(row.height, row.heightSoot),
       qty: row.qty !== '' ? Number(row.qty) : null,
-      amount: row.rate !== '' ? Number(row.rate) : null,
+      amount: row.amount !== '' ? Number(row.amount) : null,
+      sqftRate: row.sqftRate !== '' ? Number(row.sqftRate) : null,
     }
   })
 }
@@ -198,6 +332,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // brand regardless of category, since there's no Product picker anymore.
   const brandOptions = sets[0]?.brands ?? []
   const picks = usePicks(guarantees, brandOptions)
+  const rateFor = useRateLookup(guarantees, brandOptions)
+  const comboOptions = useComboOptions(guarantees, brandOptions)
   const hasRows = rows.some(isRowFilled)
 
   const years1 = cardYears(rows, brandOptions, period1)
@@ -305,7 +441,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       height: it.width?.inches ?? '',
       heightSoot: it.width?.soot ?? '',
       qty: it.qty ?? '',
-      rate: it.amount ?? '',
+      sqftRate: it.sqftRate ?? '',
+      amount: it.amount ?? '',
     }))
     setRows(imported.length ? [...imported, blankRow()] : [blankRow()])
     setPeriod1(g.items[0]?.guaranteeYears ?? '')
@@ -340,7 +477,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           height: height.inches,
           heightSoot: height.soot,
           qty: it.qty,
-          rate: it.amount || '',
+          sqftRate: it.rateSqft || '',
+          amount: it.amount || '',
         }
       })
 
@@ -523,6 +661,22 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     if (sent) navigate('/guarantee/history')
   }
 
+  // Save = save the card(s) only: a number, History and the cloud. No print, no WhatsApp.
+  async function saveCard() {
+    if (generating) return
+    setGenerating(true)
+    await catchUpGuaranteeSeq()
+    setGenerating(false)
+    const minted = mintFreshRef()
+    const label = mintedLabel(minted)
+    if (isSaved(minted) && (!minted.second || isSaved(minted.second))) {
+      toast(`Already saved as ${label}`, 'info')
+      return
+    }
+    persistCards(minted)
+    toast(`Saved ${label}`)
+  }
+
   // Generate = save the card(s) + WhatsApp the customer (no print).
   async function generateCard() {
     if (generating) return
@@ -559,7 +713,10 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
               </div>
             ) : (
               <div className="no-print flex flex-wrap items-center justify-center gap-3">
-                {/* On a phone these two live in the bar at the bottom, next to where the card is filled in. */}
+                {/* On a phone these live in the bar at the bottom, next to where the card is filled in. */}
+                <Button variant="outline" onClick={saveCard} disabled={!hasRows || generating} className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
+                  <Save size={20} /> Save
+                </Button>
                 <Button onClick={generateCard} disabled={!hasRows || generating} className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
                   <Send size={20} /> {generating ? 'Generating…' : 'Generate'}
                 </Button>
@@ -623,7 +780,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 : <CustomerFields key="c1" value={customer} onChange={setCustomer} />}
             </Card>
 
-            <Card className="min-h-0 shrink-0 overflow-hidden text-stone-800 dark:text-stone-100">
+            {/* Not overflow-hidden: a Type/Thickness list opens below its row and may pass the card's edge. */}
+            <Card className="min-h-0 shrink-0 text-stone-800 dark:text-stone-100">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-3 dark:border-white/10">
                 <div>
                   <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Items</h2>
@@ -638,8 +796,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 </label>
               </div>
               {onCard2
-                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brandOptions={brandOptions} datalistId="type-options-2" picks={picks} />
-                : <SizeTable key="t1" rows={rows} setRows={setRows} brandOptions={brandOptions} datalistId="type-options-1" picks={picks} />}
+                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} options={comboOptions} rateFor={rateFor} picks={picks} />
+                : <SizeTable key="t1" rows={rows} setRows={setRows} options={comboOptions} rateFor={rateFor} picks={picks} />}
             </Card>
           </div>
 
@@ -722,6 +880,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
         {!editing && (
           <div className="no-print sticky -bottom-3 z-10 -mx-3 -mb-3 mt-3 flex gap-2 border-t border-stone-200/90 bg-stone-100/95 px-3 py-2 backdrop-blur dark:border-white/10 dark:bg-stone-950/95 md:hidden">
+            <Button variant="outline" onClick={saveCard} disabled={!hasRows || generating} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl text-base font-semibold">
+              <Save size={18} /> Save
+            </Button>
             <Button variant="outline" onClick={generateCard} disabled={!hasRows || generating} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl text-base font-semibold">
               <Send size={18} /> {generating ? 'Saving…' : 'Generate'}
             </Button>
@@ -978,23 +1139,139 @@ function QuickPicks({ row, picks, onPick }: { row: SizeRow; picks: Picks; onPick
   )
 }
 
+/** "Auto" highlight: the first suggestion when it starts with what is typed, else none. */
+const AUTO = -2
+
+/**
+ * A box that takes anything typed (a new value is kept as typed, and offered
+ * from its first saved card on) and offers a list under it, filtered as you
+ * type, each value once, with a note on the right (a rate, the years). Opens as
+ * you type or click; Up/Down move in it, Enter or a click picks, Esc closes.
+ */
+function ComboBox({ value, options, note, placeholder, onChange, className }: {
+  value: string
+  options: string[]
+  note?: (option: string) => string
+  placeholder: string
+  onChange: (value: string) => void
+  className: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [hi, setHi] = useState(AUTO)
+  const listRef = useRef<HTMLUListElement>(null)
+  const q = brandKey(value)
+  const shown = useMemo(() => {
+    if (!q) return options.slice(0, 50)
+    const starts: string[] = []
+    const has: string[] = []
+    for (const o of options) {
+      const n = brandKey(o)
+      if (n.startsWith(q)) starts.push(o)
+      else if (n.includes(q)) has.push(o)
+    }
+    return [...starts, ...has].slice(0, 50)
+  }, [options, q])
+  const active = hi === AUTO ? (q && shown[0] && brandKey(shown[0]).startsWith(q) ? 0 : -1) : Math.min(hi, shown.length - 1)
+  const expanded = open && shown.length > 0
+
+  useEffect(() => {
+    if (expanded && active >= 0) listRef.current?.children[active]?.scrollIntoView({ block: 'nearest' })
+  }, [expanded, active])
+
+  function pick(option: string) {
+    onChange(option)
+    setOpen(false)
+    setHi(AUTO)
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (!expanded) {
+      if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); setOpen(true) }
+      return
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      e.stopPropagation()
+      const step = e.key === 'ArrowDown' ? 1 : -1
+      setHi((Math.max(active, step > 0 ? -1 : 0) + step + shown.length) % shown.length)
+    } else if (e.key === 'Enter') {
+      if (active < 0) { setOpen(false); return }
+      e.preventDefault()
+      e.stopPropagation()
+      pick(shown[active])
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      setOpen(false)
+    } else if (e.key === 'Tab') {
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        placeholder={placeholder}
+        role="combobox"
+        aria-expanded={expanded}
+        aria-autocomplete="list"
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setHi(AUTO) }}
+        onMouseDown={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={onKeyDown}
+        className={className}
+      />
+      {expanded && (
+        <ul
+          ref={listRef}
+          role="listbox"
+          className="absolute left-0 top-full z-30 mt-1 max-h-64 w-full min-w-44 overflow-y-auto rounded-lg border border-stone-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-stone-900"
+        >
+          {shown.map((o, i) => {
+            const side = note?.(o) ?? ''
+            return (
+              <li
+                key={o}
+                role="option"
+                aria-selected={i === active}
+                onMouseDown={(e) => { e.preventDefault(); pick(o) }}
+                onMouseEnter={() => setHi(i)}
+                className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 text-sm ${
+                  i === active ? 'bg-shiv-green/15 text-stone-900 dark:text-stone-50' : 'text-stone-700 dark:text-stone-200'
+                }`}
+              >
+                <span className="truncate">{o}</span>
+                {side && <span className="shrink-0 text-xs tabular-nums text-muted">{side}</span>}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function SizeTable({
   rows,
   setRows,
-  brandOptions,
-  datalistId,
+  options,
+  rateFor,
   picks,
 }: {
   rows: SizeRow[]
   setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void
-  brandOptions: Brand[]
-  datalistId: string
+  options: ComboOptions
+  rateFor: RateLookup
   picks: Picks
 }) {
   // The row the tap buttons fill: the one last touched, else the first still empty.
   const [activeId, setActiveId] = useState<string | null>(null)
   const active = rows.find((r) => r.id === activeId)?.id
     ?? (rows.find((r) => !isRowFilled(r)) ?? rows[rows.length - 1]).id
+  const typeNames = useMemo(() => options.types.map((t) => t.name), [options.types])
+  const typeYears = useMemo(() => new Map(options.types.map((t) => [t.name, t.years])), [options.types])
   const cellClass =
     'w-full min-w-0 rounded border border-stone-200 bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:text-stone-100 dark:focus:bg-stone-950 md:dark:border-transparent'
   const sootClass =
@@ -1019,15 +1296,15 @@ function SizeTable({
   // it lines up as columns under one header; on a phone each row stacks into a
   // small labelled block instead of scrolling sideways.
   const gridCols =
-    'md:grid-cols-[5.75rem_minmax(0,1.5fr)_minmax(0,1.25fr)_minmax(0,1.25fr)_3.25rem_minmax(0,0.9fr)_2rem]'
+    'md:grid-cols-[5.25rem_minmax(0,1fr)_6.25rem_6.25rem_3.25rem_3.75rem_4.25rem_5.25rem_2rem]'
   const labelClass = 'mb-0.5 block px-0.5 text-[10px] font-bold uppercase tracking-wide text-muted md:hidden'
 
   // Arrow keys move between cells like Excel. The cell under the caret is found from
   // the DOM (row = child of the grid, column = its nth input or select), so this keeps
   // working when columns change. Up/Down in a number box move rows instead of nudging
   // the number; Left/Right in a text box only leave it from its start or end (or when
-  // all of it is selected, as it is on arrival); and while a brand is half typed,
-  // Up/Down are left to the Type column's suggestion list.
+  // all of it is selected, as it is on arrival); and while a Type or Thickness
+  // list is open, Up/Down are left to it.
   const grid = useRef<HTMLDivElement>(null)
   function moveWithArrows(e: KeyboardEvent<HTMLDivElement>) {
     const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown'
@@ -1043,10 +1320,7 @@ function SizeTable({
 
     let target: HTMLInputElement | HTMLSelectElement | undefined
     if (vertical) {
-      if (el instanceof HTMLInputElement && el.list) {
-        const typed = el.value.trim().toLowerCase()
-        if (typed && !brandOptions.some((b) => b.name.toLowerCase() === typed)) return
-      }
+      if (el.getAttribute('aria-expanded') === 'true') return
       target = cellsOf(rowEls[r + (e.key === 'ArrowDown' ? 1 : -1)])[c]
     } else {
       const left = e.key === 'ArrowLeft'
@@ -1074,7 +1348,9 @@ function SizeTable({
         <span className="px-2 text-right">Length</span>
         <span className="px-2 text-right">Height</span>
         <span className="px-2 text-right">Pcs</span>
-        <span className="px-2 text-right">Rate</span>
+        <span className="px-1 text-right">Sq ft</span>
+        <span className="px-2 text-right" title="Rupees per sq ft">Rate</span>
+        <span className="px-2 text-right">Amount</span>
         <span />
       </div>
       <div ref={grid} onKeyDown={moveWithArrows} className="flex flex-col gap-2 md:gap-0">
@@ -1090,25 +1366,32 @@ function SizeTable({
                 row={row}
                 picks={picks}
                 // Filling the last row adds a blank one under it; the buttons stay on this row.
-                onPick={(patch) => { setActiveId(row.id); updateSizeRow(setRows, row.id, patch) }}
+                onPick={(patch) => { setActiveId(row.id); updateSizeRow(setRows, row.id, rateFor, patch) }}
               />
             )}
             <label className="col-span-2 min-w-0 md:col-span-1">
               <span className={labelClass}>Thickness</span>
-              <input
+              <ComboBox
                 value={row.thickness}
                 placeholder="—"
-                onChange={(e) => updateSizeRow(setRows, row.id, { thickness: e.target.value })}
+                options={options.thicknesses}
+                note={(t) => { const rate = rateFor(row.type, t); return rate !== '' ? `₹${rate}` : '' }}
+                onChange={(thickness) => updateSizeRow(setRows, row.id, rateFor, { thickness })}
                 className={cellClass}
               />
             </label>
             <label className="col-span-4 min-w-0 md:col-span-1">
               <span className={labelClass}>Type</span>
-              <input
-                list={datalistId}
+              <ComboBox
                 value={row.type}
                 placeholder="Brand"
-                onChange={(e) => updateSizeRow(setRows, row.id, { type: e.target.value })}
+                options={typeNames}
+                note={(name) => {
+                  const rate = rateFor(name, row.thickness)
+                  const years = typeYears.get(name) ?? 0
+                  return [rate !== '' ? `₹${rate}` : '', years ? `${years}y` : ''].filter(Boolean).join(' · ')
+                }}
+                onChange={(type) => updateSizeRow(setRows, row.id, rateFor, { type })}
                 className={cellClass}
               />
             </label>
@@ -1121,7 +1404,7 @@ function SizeTable({
                   placeholder="0"
                   aria-label="Length"
                   onFocus={(e) => e.currentTarget.select()}
-                  onChange={(e) => updateSizeRow(setRows, row.id, { length: e.target.value === '' ? '' : Number(e.target.value) })}
+                  onChange={(e) => updateSizeRow(setRows, row.id, rateFor, { length: e.target.value === '' ? '' : Number(e.target.value) })}
                   className={`${cellClass} text-right`}
                 />
                 <input
@@ -1134,7 +1417,7 @@ function SizeTable({
                   aria-label="Length soot"
                   onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) =>
-                    updateSizeRow(setRows, row.id, {
+                    updateSizeRow(setRows, row.id, rateFor, {
                       lengthSoot: e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))),
                     })
                   }
@@ -1152,7 +1435,7 @@ function SizeTable({
                   placeholder="0"
                   aria-label="Height"
                   onFocus={(e) => e.currentTarget.select()}
-                  onChange={(e) => updateSizeRow(setRows, row.id, { height: e.target.value === '' ? '' : Number(e.target.value) })}
+                  onChange={(e) => updateSizeRow(setRows, row.id, rateFor, { height: e.target.value === '' ? '' : Number(e.target.value) })}
                   className={`${cellClass} text-right`}
                 />
                 <input
@@ -1165,7 +1448,7 @@ function SizeTable({
                   aria-label="Height soot"
                   onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) =>
-                    updateSizeRow(setRows, row.id, {
+                    updateSizeRow(setRows, row.id, rateFor, {
                       heightSoot: e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))),
                     })
                   }
@@ -1180,7 +1463,7 @@ function SizeTable({
                 <button
                   type="button"
                   aria-label="One piece less"
-                  onClick={() => updateSizeRow(setRows, row.id, { qty: Math.max(1, (Number(row.qty) || 1) - 1) })}
+                  onClick={() => updateSizeRow(setRows, row.id, rateFor, { qty: Math.max(1, (Number(row.qty) || 1) - 1) })}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-lg font-bold text-stone-700 dark:border-white/10 dark:text-stone-200 md:hidden"
                 >
                   −
@@ -1191,27 +1474,45 @@ function SizeTable({
                   value={row.qty}
                   placeholder="1"
                   onFocus={(e) => e.currentTarget.select()}
-                  onChange={(e) => updateSizeRow(setRows, row.id, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
+                  onChange={(e) => updateSizeRow(setRows, row.id, rateFor, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
                   className={`${cellClass} text-center md:text-right`}
                 />
                 <button
                   type="button"
                   aria-label="One piece more"
-                  onClick={() => updateSizeRow(setRows, row.id, { qty: (Number(row.qty) || 1) + 1 })}
+                  onClick={() => updateSizeRow(setRows, row.id, rateFor, { qty: (Number(row.qty) || 1) + 1 })}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-lg font-bold text-stone-700 dark:border-white/10 dark:text-stone-200 md:hidden"
                 >
                   +
                 </button>
               </div>
             </label>
+            <div className="col-span-3 min-w-0 md:col-span-1">
+              <span className={labelClass}>Sq ft</span>
+              <div className="px-1 py-1.5 text-right text-sm tabular-nums text-muted" title={rowSqft(row) ? `${fmtSqft(rowSqft(row))} sq ft a piece` : undefined}>
+                {rowSqft(row) ? fmtSqft(rowSqft(row) * rowQty(row)) : '—'}
+              </div>
+            </div>
             <label className="col-span-3 min-w-0 md:col-span-1">
-              <span className={labelClass}>Rate</span>
+              <span className={labelClass}>Rate / sq ft</span>
               <input
                 type="number"
-                value={row.rate}
+                value={row.sqftRate}
+                placeholder="₹"
+                title="Rupees per sq ft — the amount works itself out"
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => updateSizeRow(setRows, row.id, rateFor, { sqftRate: e.target.value === '' ? '' : Number(e.target.value) })}
+                className={`${cellClass} text-right`}
+              />
+            </label>
+            <label className="col-span-3 min-w-0 md:col-span-1">
+              <span className={labelClass}>Amount</span>
+              <input
+                type="number"
+                value={row.amount}
                 placeholder="0"
                 onFocus={(e) => e.currentTarget.select()}
-                onChange={(e) => updateSizeRow(setRows, row.id, { rate: e.target.value === '' ? '' : Number(e.target.value) })}
+                onChange={(e) => updateSizeRow(setRows, row.id, rateFor, { amount: e.target.value === '' ? '' : Number(e.target.value) })}
                 className={`${cellClass} text-right`}
               />
             </label>
@@ -1230,11 +1531,6 @@ function SizeTable({
           </div>
         ))}
       </div>
-      <datalist id={datalistId}>
-        {brandOptions.map((b) => (
-          <option key={b.id} value={b.name} />
-        ))}
-      </datalist>
       <button type="button" onClick={duplicateRow} className={rowActionClass}>
         <Copy size={15} /> Duplicate last row
       </button>

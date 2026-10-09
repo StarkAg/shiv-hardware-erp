@@ -22,11 +22,27 @@ export const CARD_PRINT_H_MM = CARD_H_MM - CARD_SAFE_MM * 2  // 80mm
 export const CARD_QR_MM = 12
 export const CARD_QR_LABEL_MM = 1.45
 export const CARD_QR_GAP_MM = 0.5
-// The Hindi note gets its own full-width strip along the bottom of the print
-// area; the QR and the total sit above it. Arial has no Devanagari, so the
+// The Hindi note gets its own full-width band from under SCAN TO VERIFY to the
+// card's bottom edge, its letters centred in it with the same gap above and
+// below; the QR and the total sit above it. Arial has no Devanagari, so the
 // Windows/Mac Hindi fonts come next.
 export const CARD_NOTE = 'दीमक की कोई गारंटी नहीं है'
 export const CARD_NOTE_MM = 6.5
+// Devanagari ink hangs from its top line, so centring the line box leaves the
+// letters high; this drops them to the middle of the band.
+export const CARD_NOTE_NUDGE_MM = 0.23
+// Item lines: the first at 20.5mm, one every CARD_ROW_STEP_MM. Every line is
+// printed; when there are too many to reach the QR at that step, the step
+// shrinks so the last one still ends above it. The step is rounded down to
+// whole CSS pixels (96 a inch) so every gap is the same, not 9px then 10px.
+export const CARD_ROWS_TOP_MM = 20.5
+export const CARD_ROW_STEP_MM = 2.5
+export const CARD_ROW_H_MM = 1.5
+const PX_PER_MM = 96 / 25.4
+export const cardRowStep = (count, rowsEndMm) => {
+  const step = count > 1 ? Math.min(CARD_ROW_STEP_MM, (rowsEndMm - CARD_ROW_H_MM - CARD_ROWS_TOP_MM) / (count - 1)) : CARD_ROW_STEP_MM
+  return Math.floor(step * PX_PER_MM) / PX_PER_MM
+}
 export const CARD_NOTE_FONT = "'Nirmala UI', Mangal, 'Kohinoor Devanagari', 'Devanagari Sangam MN', Arial, sans-serif"
 
 // Inline SVG QR for the guarantee card's online view. Returns '' if there's no
@@ -377,7 +393,12 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
     // Overlay format for PRE-PRINTED PVC guarantee cards: the card already
     // carries the shop design; we only print the variable details, matching
     // the legacy Excel "Gaurantee Card Name Print" layout positions.
-    const rows = (guaranteedRows.length ? guaranteedRows : (document.items ?? [])).slice(0, 5)
+    const rows = guaranteedRows.length ? guaranteedRows : (document.items ?? [])
+    // The QR with "SCAN TO VERIFY" under it; the pair ends on top of the note
+    // band, which runs to the card's edge, so the QR keeps its full 12mm.
+    const qrLabelTop = CARD_H_MM - CARD_NOTE_MM - CARD_QR_LABEL_MM
+    const qrTop = qrLabelTop - CARD_QR_GAP_MM - CARD_QR_MM
+    const rowStep = cardRowStep(rows.length, qrTop - 1)
     const cardDate = new Date(document.date).toLocaleDateString('en-GB').replaceAll('/', '-')
     const docThickness = cardThickness(document.category)
     const docSizeStr = cardSize(document.height, document.width)
@@ -397,7 +418,7 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
         || ((item.height || item.width) ? cardSize(item.height, item.width) : docSizeStr)
       const rowQty = item.qty ?? document.qty
       return `
-        <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;top:${(20.5 + i * 3.2).toFixed(1)}mm;display:grid;grid-template-columns:5.5mm 1fr 11mm 5mm 4.5mm;column-gap:1.3mm;align-items:baseline;font-size:4pt;line-height:1">
+        <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;top:${(CARD_ROWS_TOP_MM + i * rowStep).toFixed(3)}mm;display:grid;grid-template-columns:5.5mm 1fr 11mm 5mm 4.5mm;column-gap:1.3mm;align-items:baseline;font-size:4pt;line-height:1">
           <span data-fit style="white-space:nowrap;overflow:hidden">${fitInner(esc(rowThickness))}</span>
           <span data-fit style="white-space:nowrap;overflow:hidden">${fitInner(esc(item.brandName))}</span>
           <span data-fit style="white-space:nowrap;overflow:hidden">${fitInner(esc(rowSize))}</span>
@@ -406,10 +427,6 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
         </div>`
     }).join('')
 
-    // The QR with "SCAN TO VERIFY" under it; the pair ends on top of the note
-    // strip, which ends on the print-area edge, so the QR keeps its full 12mm.
-    const qrLabelTop = CARD_H_MM - CARD_SAFE_MM - CARD_NOTE_MM - CARD_QR_LABEL_MM
-    const qrTop = qrLabelTop - CARD_QR_GAP_MM - CARD_QR_MM
     const cardQr = await qrSvg(document.qrUrl, CARD_QR_MM)
     return cardPage(`
         <div style="position:relative;width:${CARD_W_MM}mm;height:${CARD_H_MM}mm;overflow:hidden;font-family:Arial,sans-serif;color:#000">
@@ -421,11 +438,11 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
           <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:13.9mm;font-size:7pt;font-weight:500">${cardDate}</div>
           ${itemRows}
           ${totalAmount ? `
-          <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:${76.8 - CARD_NOTE_MM}mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
+          <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:${(qrLabelTop - 4.75).toFixed(2)}mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
           ${cardQr ? `<div style="position:absolute;left:${CARD_SAFE_MM}mm;top:${qrTop.toFixed(2)}mm">${cardQr}</div>
           <div data-fit style="position:absolute;left:${CARD_SAFE_MM}mm;top:${qrLabelTop.toFixed(2)}mm;width:${CARD_QR_MM}mm;white-space:nowrap;overflow:hidden;text-align:center;font-size:4pt;font-weight:700;letter-spacing:0.2pt;line-height:1">${fitInner('SCAN TO VERIFY')}</div>` : ''}
-          <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;bottom:${CARD_SAFE_MM}mm;height:${CARD_NOTE_MM}mm;display:flex;align-items:flex-end;justify-content:center">
-            <span style="display:inline-block;border:0.6pt solid ${RED};border-radius:2.2mm;padding:0.5mm 3.6mm 0.3mm;color:${RED};font-family:${CARD_NOTE_FONT};font-size:7pt;font-weight:600;letter-spacing:0.2pt;line-height:1.4;white-space:nowrap">${CARD_NOTE}</span>
+          <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;bottom:0;height:${CARD_NOTE_MM}mm;display:flex;align-items:center;justify-content:center">
+            <span style="display:inline-block;position:relative;top:${CARD_NOTE_NUDGE_MM}mm;color:${RED};font-family:${CARD_NOTE_FONT};font-size:7pt;font-weight:600;letter-spacing:0.2pt;line-height:1;white-space:nowrap">${CARD_NOTE}</span>
           </div>
         </div>
       `)
