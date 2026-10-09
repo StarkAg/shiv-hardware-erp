@@ -192,21 +192,25 @@ async function checkUp(domain) {
   return res.status
 }
 
+/** Removes a folder, retrying while Windows still holds it; never fails a deploy over it. */
+function tidy(dir) {
+  try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }) } catch { /* left for next time */ }
+}
+
 async function deployVercel(t, sha) {
-  let dir = t.dir ? join(ROOT, t.dir) : ROOT
+  const deployArgs = ['vercel', 'deploy', '--prod', '--yes', '--project', t.project, '--meta', `gitSha=${sha}`]
   if (t.build === 'counter') {
-    // The counter is the panel's own build with counter.html as its index.
+    // The counter is the panel's own build with counter.html as its index. It
+    // is deployed from the repo with the folder named, not from inside it:
+    // run from inside, Windows keeps the folder in use and it cannot be removed.
     await run('npm', ['run', 'build'])
     const out = join(ROOT, '.counter-dist')
-    rmSync(out, { recursive: true, force: true })
+    tidy(out)
     cpSync(join(ROOT, 'dist'), out, { recursive: true })
     cpSync(join(out, 'counter.html'), join(out, 'index.html'))
-    dir = out
-  }
-  try {
-    await run('npx', ['vercel', 'deploy', '--prod', '--yes', '--project', t.project, '--meta', `gitSha=${sha}`], { cwd: dir })
-  } finally {
-    if (t.build === 'counter') rmSync(join(ROOT, '.counter-dist'), { recursive: true, force: true })
+    try { await run('npx', [...deployArgs.slice(0, 2), '.counter-dist', ...deployArgs.slice(2)]) } finally { tidy(out) }
+  } else {
+    await run('npx', deployArgs, { cwd: t.dir ? join(ROOT, t.dir) : ROOT })
   }
   const d = await waitForDeployment(t.project, sha)
   // A production deploy takes the project's own domains; a shop domain set by
@@ -259,8 +263,10 @@ async function deployQuotation() {
   const version = readJson(join(ROOT, 'package.json')).version
   const setup = join(ROOT, 'release-quotation', `Shiv-Quotation-Setup-${version}.exe`)
   const ps = (script) => run('powershell.exe', ['-NoProfile', '-Command', script])
-  // Closed gracefully first, so a card being typed is not lost to a kill.
-  await ps(`Get-Process 'Shiv Quotation' -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }; Start-Sleep 3; Get-Process 'Shiv Quotation' -ErrorAction SilentlyContinue | Stop-Process -Force`)
+  // Closed gracefully first, so a card being typed is not lost to a kill. The
+  // `exit 0`: finding no app left to stop sets PowerShell's error flag, which
+  // read as a failure and left the app closed and not reinstalled (2026-10-09).
+  await ps(`Get-Process 'Shiv Quotation' -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }; Start-Sleep 3; Get-Process 'Shiv Quotation' -ErrorAction SilentlyContinue | Stop-Process -Force; exit 0`)
   await ps(`Start-Process -Wait '${setup}' -ArgumentList '/S'`)
   // ELECTRON_RUN_AS_NODE (set in some shells) makes the app exit at once.
   await ps(`Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; Start-Process '${join(QUOTATION_DIR, 'Shiv Quotation.exe')}'`)
@@ -283,7 +289,11 @@ async function releaseApp() {
   writeFileSync(pkgFile, readFileSync(pkgFile, 'utf8').replace(`"version": "${pkg.version}"`, `"version": "${version}"`))
   git('add', 'package.json')
   git('commit', '-m', `Release v${version}`)
-  git('push', 'origin', 'main')
+  // Another machine may have pushed while the earlier parts deployed.
+  try { git('push', 'origin', 'main') } catch {
+    git('pull', '--rebase', '-q', 'origin', 'main')
+    git('push', 'origin', 'main')
+  }
   const token = spawnSync('gh', ['auth', 'token'], { encoding: 'utf8' }).stdout.trim()
   await run('npm', ['run', 'release:win'], { env: { GH_TOKEN: token, ELECTRON_RUN_AS_NODE: '' }, timeout: 40 * 60_000 })
   // electron-builder publishes a draft; the counters' updater never sees a draft.
