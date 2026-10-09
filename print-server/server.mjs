@@ -29,6 +29,7 @@ import {
   CARD_W_MM, CARD_H_MM, CARD_SAFE_MM, CARD_PRINT_W_MM, CARD_PRINT_H_MM,
 } from './template.mjs'
 import { registerCardScan } from './card-scan.mjs'
+import { detectColourMode, registerColourCheck } from './colour-check.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
@@ -2830,10 +2831,22 @@ async function printCloudJob(job) {
     const files = Array.isArray(job.payload?.files) ? job.payload.files : [job.payload]
     // Shared from a phone (print-web): B/W to the HP, colour to the Epson,
     // each falling back to the other as a WhatsApp print does.
-    const mode = job.payload?.mode === 'color' || job.payload?.mode === 'bw' ? job.payload.mode : null
+    let mode = job.payload?.mode === 'color' || job.payload?.mode === 'bw' ? job.payload.mode : null
+    const decoded = []
+    for (let i = 0; i < files.length; i += 1) decoded.push(decodeUploadedFile(await withFileData(files[i]), i))
+    // Shared silently from a phone ("auto"): colour or black and white is read
+    // from the files here, before a printer is chosen.
+    if (job.payload?.mode === 'auto') {
+      mode = await detectColourMode(decoded, getSharedPage, PORT).catch((err) => {
+        console.warn('[cloud-print] colour check failed, by file type instead:', err?.message ?? err)
+        return decoded.every((f) => f.mediaType.startsWith('image/')) ? 'color' : 'bw'
+      })
+      job.payload.mode = mode
+      console.log(`[cloud-print] ${job._id}: ${mode === 'color' ? 'colour' : 'black & white'} (read from the files)`)
+    }
     const results = []
-    for (let i = 0; i < files.length; i += 1) {
-      const file = decodeUploadedFile(await withFileData(files[i]), i)
+    for (let i = 0; i < decoded.length; i += 1) {
+      const file = decoded[i]
       if (mode) {
         const route = await routeWhatsAppPrintJob(mode, file)
         results.push(await printUploadedFile(file, copies, route.printer, route.printSettings))
@@ -2870,13 +2883,14 @@ async function tellPhone(job, outcome) {
     const files = Array.isArray(job.payload?.files) ? job.payload.files : []
     const what = files.length === 1 ? files[0].name : `${files.length} files`
     const printers = [...new Set((outcome.result?.files ?? []).map((f) => shortPrinterName(f.printer)))]
-    const how = job.payload?.mode === 'color' ? 'colour' : 'black & white'
+    const mode = job.payload?.mode
+    const how = mode === 'color' ? 'colour' : mode === 'bw' ? 'black & white' : null
     // One notification per job: "Printing…" when the shop PC starts, replaced
     // by "Printed ✓" (or why not) when it is done.
     const [title, body] = outcome.printing
-      ? ['Printing…', `${what} — ${how}, at the shop now`]
+      ? ['Printing…', `${what}${how ? ` — ${how}` : ''}, at the shop now`]
       : outcome.ok
-        ? ['Printed ✓', `${what} — ${how} on ${printers.join(' and ') || 'the shop printer'}`]
+        ? ['Printed ✓', `${what}${how ? ` — ${how}` : ''} on ${printers.join(' and ') || 'the shop printer'}`]
         : ['Not printed', `${what}: ${outcome.error}`.slice(0, 180)]
     await webPush.sendNotification(notify, JSON.stringify({ title, body, tag: String(job._id) }), { TTL: 3600 })
   } catch (err) {
@@ -4037,6 +4051,7 @@ app.get('/track/:id', (req, res) => {
 
 // Bill photo → guarantee cards, from a phone on the shop Wi-Fi (/cards).
 registerCardScan(app)
+registerColourCheck(app)
 
 app.listen(PORT, '0.0.0.0', () => {
   const networkUrls = localNetworkUrls(PORT)

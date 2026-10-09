@@ -3,6 +3,10 @@ import { useConvex, useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import { detectMode } from './colour'
 import { notificationsState, pushAddress, showLocal, turnOnNotifications } from './notify'
+import { putForWorker } from './workerStore'
+import { deviceToken } from './deviceTrust/deviceTrust'
+
+const CONVEX_URL = import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
 
 const remembered = (key, fallback) => { try { return localStorage.getItem(`shiv-print:${key}`) ?? fallback } catch { return fallback } }
 const remember = (key, value) => { try { localStorage.setItem(`shiv-print:${key}`, value) } catch { /* private window */ } }
@@ -84,6 +88,12 @@ export default function App() {
   const [notifications, setNotifications] = useState(notificationsState)
   const [justSent, setJustSent] = useState(null)
   const picker = useRef(null)
+
+  // The background worker sends shared files by itself, without this screen;
+  // it is handed what it needs each time the app is opened (src/workerStore.js).
+  useEffect(() => {
+    void putForWorker({ token: deviceToken(), convexUrl: CONVEX_URL, auto: autoPrint })
+  }, [autoPrint])
 
   const add = (files) => {
     const ok = files.filter((f) => PRINTABLE.includes(f.type))

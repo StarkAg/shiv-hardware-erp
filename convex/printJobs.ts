@@ -83,7 +83,9 @@ const PRINTABLE = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/
 export const sendFiles = mutation({
   args: {
     files: v.array(v.object({ storageId: v.id('_storage'), name: v.string(), mediaType: v.string() })),
-    mode: v.union(v.literal('bw'), v.literal('color')),
+    // 'auto': shared silently from a phone; the print server reads colour or
+    // black and white from the files themselves (print-server/colour-check.mjs).
+    mode: v.union(v.literal('bw'), v.literal('color'), v.literal('auto')),
     copies: v.optional(v.number()),
     // The phone's web-push address, so the shop PC can tell it "printed" (or
     // why not) once it is done, with Shiv Print closed.
