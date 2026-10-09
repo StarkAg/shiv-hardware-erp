@@ -41,7 +41,12 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },
-  server: { port: 5180, host: '0.0.0.0', open: false, hmr: { clientPort: 5180 } },
+  server: {
+    port: 5180, host: '0.0.0.0', open: false, hmr: { clientPort: 5180 },
+    // Desktop app builds write and lock temp files in these folders; watching
+    // them crashed the dev server (EBUSY on release-quotation/win-unpacked).
+    watch: { ignored: ['**/release/**', '**/release-quotation/**', '**/build/**', '**/backups/**'] },
+  },
   build: {
     target: 'esnext',
     minify: 'esbuild',
