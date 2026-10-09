@@ -6,6 +6,10 @@ import StaffPayments from './StaffPayments.jsx'
 import CashSearch from './CashSearch.jsx'
 import { enqueuePhotos, flushPhotos, pendingPhotos } from './photoQueue.js'
 
+// The Bill photo button under the note. Off for now (2026-10-09) so the entry
+// screen fits with no scrolling; pages already queued on a phone still upload.
+const BILL_PHOTO = false
+
 // Shiv Hardware cash book.
 //
 // One line per movement, written the way the paper register writes it: amount,
@@ -1318,7 +1322,7 @@ function CashEntry({
         )}
       </div>
 
-      <div className="billphoto-row">
+      {BILL_PHOTO && <div className="billphoto-row">
         <input ref={photoInput} type="file" accept="image/*" capture="environment" multiple hidden
           onChange={(event) => {
             const picked = [...(event.target.files || [])]
@@ -1337,7 +1341,7 @@ function CashEntry({
           </div>
         ))}
         {photoError && <div className="billphoto-error" role="alert">Cash saved. {photoError}</div>}
-      </div>
+      </div>}
 
       <button
         className="tickbar" onClick={commit} disabled={!ready || savingPhoto}

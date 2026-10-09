@@ -963,7 +963,9 @@ body {
   .wrap.fit.totals .paidline { margin-top: 8px; }
 }
 
-@media (max-height: 700px) {
+/* 820px, not 700: a 360x740 Android with its name keys showing scrolled at
+   full spacing, and the entry screen must never scroll. */
+@media (max-height: 820px) {
   /* The pill shrinks too, which takes height off both it and the clearance
      every screen leaves for it. */
   :root { --navh: clamp(48px, 13vw, 52px); }
@@ -985,6 +987,12 @@ body {
   .wrap.fit .datenav { margin-bottom: 7px; }
   .wrap.fit .pad { gap: 6px; }
   .wrap.fit .padkeys { gap: 6px; }
+}
+/* On a short phone the keys may go down to about 34px rather than the screen
+   scrolling while an entry is being edited (its banner takes a row). */
+@media (max-height: 700px) {
+  .wrap.fit .padkeys { min-height: 150px; }
+  .wrap.fit .editbanner { padding: 5px 10px; margin-bottom: 6px; font-size: 12px; }
 }
 @media (max-height: 580px) {
   .wrap.fit .amtshow { padding: 4px 10px; margin-bottom: 6px; }
