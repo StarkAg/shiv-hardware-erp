@@ -17,7 +17,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body><script type="module">
 import * as pdfjs from '/_colour/pdfjs/pdf.min.mjs'
 pdfjs.GlobalWorkerOptions.workerSrc = '/_colour/pdfjs/pdf.worker.min.mjs'
-const SIDE = 96, CHROMA = 48, SHARE = 0.03, PDF_PAGES = 3
+const SIDE = 400, CHROMA = 48, SHARE = 0.005, PDF_PAGES = 3 // same as print-web/src/colour.js
 function colourShare(canvas) {
   const { width, height } = canvas
   const { data } = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, width, height)

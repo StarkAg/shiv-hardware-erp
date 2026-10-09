@@ -9,9 +9,12 @@
  * page, even photographed, goes to black and white.
  */
 
-const SIDE = 96 // pixels across the small copy that is looked at
+const SIDE = 400 // pixels across the copy that is looked at — enough that a small logo or stamp is still there
 const CHROMA = 48 // 0–255: how far apart the channels must be to count as colour
-const SHARE = 0.03 // the share of coloured pixels that makes a page a colour page
+// Half a percent of the page truly coloured makes it a colour page: a small logo
+// or letterhead (about 0.8%) does; a pen signature (0.1%) or a small stamp (0.25%)
+// does not, so colour ink is not spent on those.
+const SHARE = 0.005
 const PDF_PAGES = 3
 
 /** The share of truly coloured pixels in a drawn canvas. */
