@@ -130,9 +130,9 @@ async function sendInBackground(files, convexUrl, token) {
   }
 }
 
-// The page the share opens: a moment's "Sending ✓" so it is seen to have
-// worked, then gone, while the worker sends.
-const SHOWN_MS = 700
+// The page the share opens: gone the instant it opens, while the worker sends.
+// Its "Sending ✓" only shows if the phone will not let it close.
+const SHOWN_MS = 0
 const CLOSE_PAGE = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#b98f4b"><title>Shiv Print</title>
 <style>html,body{height:100%;margin:0;background:#f4f1ea;color:#1c1917;font:700 18px system-ui,sans-serif;display:grid;place-items:center;text-align:center}
