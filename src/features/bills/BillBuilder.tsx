@@ -4506,6 +4506,15 @@ const billLabel = (b: Bill) =>
  * customer, a purchase or a payment against a supplier — so the voucher's own
  * series says where its party is filed, and the day book need not ask.
  */
+/** A voucher's series: "PUR" of "PUR-0153". It is what its type is filtered by. */
+const seriesOf = (label: string) => label.split('-')[0]
+
+/** Names for the series a bill can carry before the books have named it. */
+const SERIES_NAME: Record<string, string> = {
+  SAL: 'Sales', PUR: 'Purchase', RCT: 'Receipt', PAY: 'Payment', GR: 'Goods return',
+  REF: 'Refund', GRN: 'Goods received', QTN: 'Quotation',
+}
+
 const sideOf = (label: string): 'customers' | 'suppliers' =>
   label.startsWith('PUR') || label.startsWith('PAY') ? 'suppliers' : 'customers'
 
@@ -4562,14 +4571,17 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   const from = params.get('from') ?? ''
   const to = params.get('to') ?? ''
   const byDate = params.get('order') === 'date'
-  const setView = (f: string, t: string, dated: boolean) => {
+  const series = params.get('type') ?? ''
+  const setView = (f: string, t: string, dated: boolean, type = series) => {
     const next: Record<string, string> = {}
     if (f) next.from = f
     if (t) next.to = t
     if (dated) next.order = 'date'
+    if (type) next.type = type
     setParams(next, { replace: true })
   }
   const setPeriod = (f: string, t: string) => setView(f, t, byDate)
+  const setSeries = (type: string) => setView(from, to, byDate, type)
 
   // The server already knows how to answer for a window — the ledger's day
   // book has taken from/to since it was written; nothing ever passed them.
@@ -4596,7 +4608,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     return group === 'Sundry Creditors' ? 'suppliers' : 'customers'
   }
 
-  const rows = useMemo<DayRow[]>(() => {
+  const allRows = useMemo<DayRow[]>(() => {
     // Notes written in the cash drawer are posted to the books (ref CASH-c-…)
     // so the ledgers balance, but they belong to the Cash page, not here.
     const list: DayRow[] = (vouchers ?? []).filter((v: any) => !String(v.refNo ?? '').startsWith('CASH-c-')).map((v: any) => ({
@@ -4670,6 +4682,28 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vouchers, finished, from, to, bills, onRetry, byDate, masters])
 
+  // One type of voucher at a time when asked — the purchases of a month, the
+  // goods received today. The count, the total and each day's line follow it.
+  const rows = useMemo(
+    () => (series ? allRows.filter((r) => seriesOf(r.label) === series) : allRows),
+    [allRows, series],
+  )
+  // The types this period has, in the books' own order, each with how many;
+  // the chosen one stays listed even when the period has none of it.
+  const seriesOptions = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of allRows) counts.set(seriesOf(r.label), (counts.get(seriesOf(r.label)) ?? 0) + 1)
+    if (series && !counts.has(series)) counts.set(series, 0)
+    const types = (masters?.voucherTypes ?? []) as { abbr: string; name: string }[]
+    const rank = (abbr: string) => {
+      const i = types.findIndex((t) => t.abbr === abbr)
+      return i < 0 ? types.length : i
+    }
+    return [...counts.entries()]
+      .map(([abbr, count]) => ({ abbr, count, name: types.find((t) => t.abbr === abbr)?.name ?? SERIES_NAME[abbr] ?? abbr }))
+      .sort((a, b) => rank(a.abbr) - rank(b.abbr) || a.name.localeCompare(b.name))
+  }, [allRows, series, masters])
+
   const total = rows.reduce((s, r) => s + (r.quote ? 0 : r.amount ?? 0), 0)
 
   // A day book is read a day at a time: each date opens with its own line and
@@ -4734,6 +4768,12 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
             {loading ? 'Loading…' : `${rows.length} vouchers · ${rupees(total)}`}
           </div>
           <div className="actions">
+            <select value={series} onChange={(e) => setSeries(e.target.value)} aria-label="Voucher type">
+              <option value="">All types</option>
+              {seriesOptions.map((o) => (
+                <option key={o.abbr} value={o.abbr}>{o.name} ({o.abbr}) · {o.count}</option>
+              ))}
+            </select>
             <input type="date" value={from} onChange={(e) => setPeriod(e.target.value, to)} />
             <input type="date" value={to} onChange={(e) => setPeriod(from, e.target.value)} />
             {chips.map((c) => (
