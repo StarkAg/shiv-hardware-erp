@@ -12,13 +12,13 @@ import type { Bill, BrandSet, CustomCatalogEntry, HardwareCatalog, TotoDriver } 
 
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
 
-let _client: ConvexHttpClient | null = null
+// A new client for each call, never a shared one: a ConvexHttpClient runs its
+// calls one at a time, and one that never answered held every later push and
+// delete behind it until a reload. They are plain HTTP requests. Carries this
+// device's trust token (see lib/deviceTrust), read fresh each time.
 function client(): ConvexHttpClient | null {
   if (!CONVEX_URL) return null
-  _client ??= new ConvexHttpClient(CONVEX_URL)
-  // Carries this device's trust token (see lib/deviceTrust), read fresh each
-  // time so a device trusted a moment ago is not still calling without it.
-  return authorizeHttp(_client)
+  return authorizeHttp(new ConvexHttpClient(CONVEX_URL))
 }
 
 export const convexEnabled = () => Boolean(CONVEX_URL)
@@ -66,7 +66,7 @@ export async function pushBillsToConvex(bills: Bill[], billSeq: number): Promise
   const c = client()
   if (!c) return
   try {
-    await c.mutation(api.bills.save, { bills, billSeq })
+    await withTimeout(c.mutation(api.bills.save, { bills, billSeq }), 60_000)
   } catch {
     // Offline or Convex unavailable — silently ignore
   }
@@ -88,7 +88,7 @@ export async function removeBillFromConvex(id: string): Promise<BillRemoval> {
   const c = client()
   if (!c) return 'absent'
   try {
-    const res = await c.mutation(api.bills.remove, { id })
+    const res = await withTimeout(c.mutation(api.bills.remove, { id }))
     return (res as { removed?: boolean } | null)?.removed ? 'removed' : 'absent'
   } catch {
     return 'unreachable'

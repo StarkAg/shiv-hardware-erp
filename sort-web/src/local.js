@@ -68,6 +68,9 @@ let running = false
 async function pump() {
   if (running || !client) return
   running = true
+  // Reset in `finally`: anything thrown on the way (storage full on save, a
+  // listener failing) used to leave the queue "running" until a reload.
+  try {
   while (items.length) {
     const item = items[0]
     try {
@@ -99,7 +102,9 @@ async function pump() {
       await new Promise((r) => setTimeout(r, Math.min(15000, 1500 * tries)))
     }
   }
-  running = false
+  } finally {
+    running = false
+  }
 }
 
 setInterval(() => {

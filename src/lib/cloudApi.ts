@@ -61,7 +61,10 @@ function cloudHeaders() {
 
 async function cloudFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (!CLOUD_API_URL) throw new Error('Cloud API URL is not configured')
+  // Time-limited: card and quotation syncing waits on this one call at a
+  // time, and a request that never answered held it until a reload.
   const response = await fetch(`${CLOUD_API_URL.replace(/\/+$/, '')}${path}`, {
+    signal: AbortSignal.timeout(25_000),
     ...init,
     headers: {
       ...cloudHeaders(),

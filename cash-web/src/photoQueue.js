@@ -1,4 +1,4 @@
-import { convex } from './sync.js'
+import { convex, withTimeout } from './sync.js'
 import { anyApi } from 'convex/server'
 
 const DB_NAME = 'shiv-cash-bill-photos'
@@ -68,15 +68,15 @@ export async function flushPhotos() {
       try {
         let storageId = page.storageId
         if (!storageId) {
-          const url = await client.mutation(anyApi.files.generateUploadUrl, {})
-          const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: page.blob })
+          const url = await withTimeout(client.mutation(anyApi.files.generateUploadUrl, {}))
+          const response = await withTimeout(fetch(url, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: page.blob }), 60000)
           if (!response.ok) throw new Error(`Upload failed (${response.status})`)
           storageId = (await response.json()).storageId
           await put({ ...page, storageId })
         }
-        const result = await client.mutation(anyApi.billFlow.attachCashPhoto, {
+        const result = await withTimeout(client.mutation(anyApi.billFlow.attachCashPhoto, {
           entryId: page.entryId, storageId, batchId: page.batchId, pageCount: page.pageCount,
-        })
+        }))
         await remove(page.id)
         if (result.ready) void client.action(anyApi.ai.readFlow, { id: result.id }).catch(() => {})
       } catch {

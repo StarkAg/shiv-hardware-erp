@@ -427,13 +427,19 @@ export default function App() {
     if (syncing.current) return
     syncing.current = true
     setSync((p) => ({ ...p, busy: true }))
-    const res = await flush(applyPulled)
-    if (res.ok) {
-      try { await flushPhotos() } catch { /* photo pages remain queued */ }
+    // Reset in `finally`: a sync that threw used to leave this set, and the
+    // cashier never synced again until the app was reloaded.
+    let res = { ok: false, reason: 'error' }
+    try {
+      res = await flush(applyPulled)
+      if (res.ok) {
+        try { await flushPhotos() } catch { /* photo pages remain queued */ }
+      }
+      try { setPhotoPending(await pendingPhotos()) } catch { /* storage unavailable */ }
+    } finally {
+      syncing.current = false
+      setSync({ pending: pendingCount(), busy: false, at: res.ok ? Date.now() : 0, error: res.ok ? '' : res.reason })
     }
-    try { setPhotoPending(await pendingPhotos()) } catch { /* storage unavailable */ }
-    syncing.current = false
-    setSync({ pending: pendingCount(), busy: false, at: res.ok ? Date.now() : 0, error: res.ok ? '' : res.reason })
   }
 
   // On open, whenever the network returns, when the app comes back to the

@@ -42,18 +42,27 @@ export function queue(op) {
   writeOutbox(ops)
 }
 
-let client = null
+/**
+ * A client for each sync. A ConvexHttpClient runs its calls one at a time, so
+ * one call that never answered held every later sync behind it until the app
+ * was reloaded; a fresh one per sync cannot be held. Carries this device's
+ * trust token, read each time.
+ */
 export function convex() {
-  if (client) return authorizeHttp(client)
   // The same fallback the attendance app carries: this URL is public and is
   // already baked into that bundle, so the deploy does not depend on an
   // environment variable being remembered in the hosting project.
   const url = import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
   if (!url) return null
-  client = new ConvexHttpClient(url)
-  // Carries this device's trust token; read each time, so a device trusted a
-  // moment ago is not still calling without it.
-  return authorizeHttp(client)
+  return authorizeHttp(new ConvexHttpClient(url))
+}
+
+/** A call that has not answered in `ms` is given up, so it never holds a sync. */
+export function withTimeout(work, ms = 25000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no answer from the cloud in ${Math.round(ms / 1000)} s`)), ms)
+    work.then((v) => { clearTimeout(timer); resolve(v) }, (e) => { clearTimeout(timer); reject(e) })
+  })
 }
 
 // Push, then pull. In that order, so a change made here is on the server before
@@ -72,7 +81,7 @@ export async function flush(applyPulled) {
       // one request that times out and can never make progress.
       for (let i = 0; i < ops.length; i += 200) {
         const slice = ops.slice(i, i + 200)
-        await c.mutation(anyApi.cash.push, { ops: slice.map(({ qid, ...op }) => op) })
+        await withTimeout(c.mutation(anyApi.cash.push, { ops: slice.map(({ qid, ...op }) => op) }))
         // Trimmed as each slice lands, so a failure halfway keeps the progress.
         const left = readOutbox().filter((o) => !slice.some((s) => s.qid === o.qid))
         writeOutbox(left)
@@ -80,7 +89,7 @@ export async function flush(applyPulled) {
     }
 
     const since = read(CURSOR_KEY, 0) || 0
-    const server = await c.query(anyApi.cash.pull, { since })
+    const server = await withTimeout(c.query(anyApi.cash.pull, { since }))
     if (applyPulled) applyPulled(server)
     write(CURSOR_KEY, server.serverTime)
     return { ok: true, pushed: ops.length, pulled: server.entries.length + server.closes.length + server.openings.length }
