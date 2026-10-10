@@ -48,8 +48,8 @@ try {
   page.on('dialog', (dialog) => dialog.accept())
   await page.evaluateOnNewDocument(() => localStorage.setItem('shiv-mechanic:name', JSON.stringify('Vijay')))
   await page.goto(origin + '/fixture.html')
-  assert.deepEqual(await page.$$eval('.name-label option', (nodes) => nodes.map((n) => n.textContent)), ['Gopal & Bandhu'])
-  assert.equal(await page.$eval('.name-label select', (node) => node.value), 'Gopal & Bandhu')
+  // One mechanic group, so no name to pick.
+  assert.equal(await page.$('.name-label'), null)
   assert.equal(await page.$$eval('.order-card', (nodes) => nodes.length), 1)
   // Server subscription changes reach the open list without a reload.
   await page.evaluate(() => { window.orders = window.orders.map((o) => ({ ...o, visitBy: 'Gopal & Bandhu' })); window.dispatchEvent(new Event('fixture')) })

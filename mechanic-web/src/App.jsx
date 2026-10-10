@@ -44,7 +44,6 @@ export default function App() {
   return <div className="app">
     <header className="top"><div className="brand"><span className="brand-icon"><Ruler /></span><div><h1>Shiv Mechanic</h1><small>Sizes from site</small></div></div><span className={`live ${live ? 'on' : ''}`} role="status"><i />{live ? 'Live' : 'Offline / connecting'}</span></header>
     {opened ? <Order key={opened.id} order={current ?? opened} closed={incoming !== undefined && !current} name={name} live={live} onBack={() => window.history.back()} /> : <main>
-      <label className="name-label">Your name<select defaultValue={name}><option value={name}>{name}</option></select></label>
       <nav className="tabs" aria-label="Order status"><button className={stage === 'pending' ? 'selected' : ''} onClick={() => setStage('pending')}>To measure <b>{mine.filter((o) => !o.measuredAt).length}</b></button><button className={stage === 'measured' ? 'selected' : ''} onClick={() => setStage('measured')}>Measured <b>{mine.filter((o) => !!o.measuredAt).length}</b></button></nav>
       <input className="search" type="search" aria-label="Search orders" placeholder="Customer, site or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
       {!live && <p className="notice">Showing the last available orders. Drafts stay on this phone until you send them.</p>}
