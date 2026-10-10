@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useConvex } from 'convex/react'
 import { anyApi } from 'convex/server'
+import { PinGate } from './deviceTrust/PinGate.jsx'
+import { deviceToken } from './deviceTrust/deviceTrust.js'
+
+const CONVEX_URL = import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
+
+/** Mounted once the PIN screen lets the Pay tab through: the money figures load then. */
+function OnTrusted({ onTrusted }) {
+  useEffect(() => { onTrusted() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return null
+}
 import { monthPay, ATTEND_THRESHOLD } from './pay.js'
 
 const api = anyApi
@@ -118,6 +128,9 @@ export default function App() {
   }
 
   const convex = useConvex()
+  // Rates, advances and staff pay move money: read only on a phone given the
+  // PIN, and read again the moment the Pay tab's PIN screen lets it through.
+  const [trustTick, setTrustTick] = useState(0)
 
   const [openingsOpen, setOpeningsOpen] = useState(false)
   const [openings, setOpenings] = useState(null)
@@ -198,13 +211,14 @@ export default function App() {
   // Per-staff daily rates — cache-first; one-shot refresh.
   const [rates, setRates] = useState(() => readCache(RATES_CACHE_KEY, {}) || {})
   useEffect(() => {
+    if (!deviceToken()) return
     let off = false
     convex.query(api.attendance.getRates, {}).then((r) => {
       if (off || !r) return
       setRates(r); writeCache(RATES_CACHE_KEY, r)
     }).catch(() => {})
     return () => { off = true }
-  }, [convex])
+  }, [convex, trustTick])
   const setRate = (name, rate) => {
     setRates((prev) => { const n = { ...prev, [name]: rate }; writeCache(RATES_CACHE_KEY, n); return n })
     convex.mutation(api.attendance.setRate, { staff: name, rate }).catch(() => {})
@@ -238,6 +252,7 @@ export default function App() {
    */
   const [owing, setOwing] = useState(() => readCache(OWING_CACHE_KEY, {}))
   useEffect(() => {
+    if (!deviceToken()) return
     convex.query(anyApi.staffPay.board, { date: new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10) })
       .then((board) => {
         if (!board?.rows) return
@@ -246,7 +261,7 @@ export default function App() {
         setOwing(next); writeCache(OWING_CACHE_KEY, next)
       })
       .catch(() => {})
-  }, [convex])
+  }, [convex, trustTick])
 
   // Advances for the month — cache-first (past months skip the read).
   const [advances, setAdvances] = useState(() => readCache(ADV_CACHE_KEY, {})[ym(cursor)])
@@ -260,10 +275,11 @@ export default function App() {
   useEffect(() => {
     const cache = readCache(ADV_CACHE_KEY, {})
     setAdvances(cache[month])
-    if (cache[month] && month !== currentMonth) return
+    if (!deviceToken()) return
+    if (cache[month] && month !== currentMonth && !trustTick) return
     refetchAdvances(month)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, currentMonth, convex])
+  }, [month, currentMonth, convex, trustTick])
   const addAdvance = (name, amount, note, date) => {
     if (!date) date = month === currentMonth ? dateKey(new Date()) : `${month}-01`
     const optimistic = { _id: `tmp-${Date.now()}`, staff: name, date, amount, note: note || '' }
@@ -430,11 +446,15 @@ export default function App() {
           onRemoveStaff={(name) => changeStaff(staff.filter((s) => s !== name))}
         />
       ) : (
-        <PayView
-          cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
-          rates={rates} advances={advances} owing={owing} unlockThen={unlockThen}
-          onSetRate={setRate} onAddAdvance={addAdvance} onRemoveAdvance={removeAdvance}
-        />
+        // Pay is money: the shop PIN, once on this phone, before it opens.
+        <PinGate convexUrl={CONVEX_URL} app="Attendance" client={convex}>
+          <OnTrusted onTrusted={() => setTrustTick((t) => t + 1)} />
+          <PayView
+            cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
+            rates={rates} advances={advances} owing={owing} unlockThen={unlockThen}
+            onSetRate={setRate} onAddAdvance={addAdvance} onRemoveAdvance={removeAdvance}
+          />
+        </PinGate>
       )}
 
       {pw.open && (

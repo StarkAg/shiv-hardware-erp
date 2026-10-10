@@ -1,5 +1,12 @@
 import { v } from 'convex/values'
 import { mutation, query } from './lib/guarded'
+/*
+ * Attendance itself is open: marking a day, the month, the log, the staff
+ * names and the shop's opening are used at the counter on a shared phone with
+ * no PIN (2026-10-10). What moves money — daily rates, advances, staff pay —
+ * stays on the guarded builders and asks the PIN once on that phone.
+ */
+import { query as openQuery, mutation as openMutation } from './_generated/server'
 import { amount, assertUnsettled, indiaToday } from './lib/staffPay'
 
 const DEFAULT_STAFF = ['Vijay', 'Anup', 'Sonu', 'Anand', 'Vicky', 'Dharmendra']
@@ -25,7 +32,7 @@ function diffMarks(before: Record<string, string>, after: Record<string, string>
 }
 
 // ── Staff list ──────────────────────────────────────────────────────────────
-export const getStaff = query({
+export const getStaff = openQuery({
   args: {},
   handler: async (ctx) => {
     const meta = await ctx.db.query('attendanceMeta').first()
@@ -33,7 +40,7 @@ export const getStaff = query({
   },
 })
 
-export const setStaff = mutation({
+export const setStaff = openMutation({
   args: { staff: v.array(v.string()) },
   handler: async (ctx, { staff }) => {
     const meta = await ctx.db.query('attendanceMeta').first()
@@ -117,7 +124,7 @@ export const removeAdvance = mutation({
 
 // ── Days ────────────────────────────────────────────────────────────────────
 // Returns all day docs for a month, e.g. month = '2026-07'
-export const getMonth = query({
+export const getMonth = openQuery({
   args: { month: v.string() },
   handler: async (ctx, { month }) => {
     const rows = await ctx.db
@@ -129,7 +136,7 @@ export const getMonth = query({
 })
 
 // Lock a day (the "Save" action). Once locked, the UI requires the password to edit.
-export const lockDay = mutation({
+export const lockDay = openMutation({
   args: { date: v.string(), marks: v.optional(v.any()) },
   handler: async (ctx, { date, marks }) => {
     const existing = await ctx.db
@@ -158,7 +165,7 @@ export const lockDay = mutation({
 })
 
 // Set (or clear) one person's status for one day.
-export const setMark = mutation({
+export const setMark = openMutation({
   args: {
     date: v.string(),
     staff: v.string(),
@@ -188,7 +195,7 @@ export const setMark = mutation({
 })
 
 // Mark every staff member for a day at once (e.g. "all present").
-export const setDay = mutation({
+export const setDay = openMutation({
   args: { date: v.string(), marks: v.any() },
   handler: async (ctx, { date, marks }) => {
     const existing = await ctx.db
@@ -212,7 +219,7 @@ export const setDay = mutation({
 })
 
 // ── Change history (audit log) ────────────────────────────────────────────────
-export const getLog = query({
+export const getLog = openQuery({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }) => {
     const rows = await ctx.db
@@ -234,7 +241,7 @@ export const getLog = query({
 // The browser asks the visitor before location is included. `openedAt` is
 // assigned here rather than accepted from the client so the audit time cannot
 // be changed by the device clock.
-export const recordOpening = mutation({
+export const recordOpening = openMutation({
   args: {
     deviceId: v.string(),
     deviceModel: v.optional(v.string()),
@@ -270,7 +277,7 @@ export const recordOpening = mutation({
   },
 })
 
-export const getOpenings = query({
+export const getOpenings = openQuery({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }) => {
     const count = Math.min(Math.max(limit ?? 100, 1), 200)

@@ -2,12 +2,14 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
 import App from './App.jsx'
-import { PinGate } from './deviceTrust/PinGate.jsx'
+import { authorizeClient } from './deviceTrust/deviceTrust.js'
 import './index.css'
 
 const CONVEX_URL =
   import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
 const convex = new ConvexReactClient(CONVEX_URL)
+// A phone already given the PIN carries its token, for the Pay tab's money.
+authorizeClient(convex)
 
 // A scroll over an amount box scrolls the page, never the amount: the box
 // lets go of focus before the wheel can nudge the figure it holds.
@@ -23,10 +25,9 @@ document.addEventListener(
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ConvexProvider client={convex}>
-      {/* The shop PIN once per device (Shiv_Panel convex/devices.ts). */}
-      <PinGate convexUrl={CONVEX_URL} app="Attendance" client={convex}>
-        <App />
-      </PinGate>
+      {/* No PIN to open: attendance is open (Shiv_Panel convex/attendance.ts).
+          The Pay tab asks for it once on this phone — see App.jsx. */}
+      <App />
     </ConvexProvider>
   </React.StrictMode>,
 )
