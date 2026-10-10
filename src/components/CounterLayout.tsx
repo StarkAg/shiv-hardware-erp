@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  CarTaxiFront, FileText, History, IndianRupee, Inbox, Moon, Package, ShieldCheck, Sun,
+  CarTaxiFront, ClipboardList, FileText, History, IndianRupee, Inbox, Moon, Package, ShieldCheck, Sun,
 } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { isDarkMode, toggleTheme } from '../lib/theme'
@@ -33,6 +33,7 @@ const NAV = [
     label: 'Guarantee',
     items: [
       { to: '/guarantee/card', label: 'Card', icon: ShieldCheck },
+      { to: '/guarantee/list', label: 'To make', icon: ClipboardList },
       { to: '/guarantee/history', label: 'History', icon: History },
       { to: '/guarantee/claims', label: 'Claims', icon: Inbox, badge: true },
     ],

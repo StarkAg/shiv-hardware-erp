@@ -284,7 +284,10 @@ function cardKey(d: GuaranteeDocument): string {
 }
 
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
-  const { sets, bills, guarantees, saveGuarantee, nextGuaranteeNumber, raiseGuaranteeSeq } = useStore()
+  const { sets, bills, guarantees, saveGuarantee, nextGuaranteeNumber, raiseGuaranteeSeq, saveBill } = useStore()
+  // The bill this card was started from, so saving the card ticks that sale
+  // off the Guarantee list.
+  const [fromBillId, setFromBillId] = useState<string | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
   // Each Save or Print mints a fresh GC-YYYY-NNNN ref number from the store sequence,
@@ -449,6 +452,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   }
 
   function importBill(bill: Bill) {
+    setFromBillId(bill.id)
     setCustomer((c) => ({
       ...c,
       name: bill.customerName || c.name,
@@ -531,6 +535,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // opens <site>/<number>?k=<token>, which only resolves once the card has
   // been pushed to Convex.
   function persistCards(minted: MintedRefs) {
+    const fromBill = fromBillId ? bills.find((b) => b.id === fromBillId) : undefined
+    if (fromBill?.guaranteeCard && !fromBill.guaranteeDoneAt) saveBill({ ...fromBill, guaranteeDoneAt: Date.now() })
     const freshDoc = buildGuaranteeDoc(minted)
     saveGuarantee(freshDoc)
     enqueueGuaranteeSync(freshDoc)

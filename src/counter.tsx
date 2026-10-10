@@ -1,3 +1,4 @@
+import { GuaranteeList } from './features/bills/MarkedSales'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
@@ -88,6 +89,7 @@ const router = createHashRouter([
       { path: 'guarantee/history', element: <GuaranteeHistory /> },
       { path: 'guarantee/history/:id', element: <GuaranteeHistory /> },
       { path: 'guarantee/claims', element: <GuaranteeClaims cardLinks /> },
+      { path: 'guarantee/list', element: <GuaranteeList /> },
       { path: 'guarantee/select-bill', element: <BillSelectPage /> },
       { path: 'guarantee/bill/:billId', element: <BillBrandCardsPage /> },
       // The catalogue and its rates are what a quotation is built out of, so

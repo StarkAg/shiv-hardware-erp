@@ -1,3 +1,4 @@
+import { DeliveryList, GuaranteeList, WorkList } from './features/bills/MarkedSales'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
@@ -169,6 +170,10 @@ const router = createHashRouter([
       { path: 'bills/:id',      element: <BillBuilder /> },
       // Every quotation given, open and sold.
       { path: 'quotations',     element: <QuotationList /> },
+      // Sales switched to "Order" / "Guarantee card" in the sale form.
+      { path: 'work-list',      element: <WorkList /> },
+      { path: 'delivery',       element: <DeliveryList /> },
+      { path: 'guarantee/list', element: <GuaranteeList /> },
       { path: 'cash-review',    element: <CashReview /> },
       { path: 'trash',          element: <BillTrash /> },
       { path: 'devices',        element: <TrustedDevices /> },

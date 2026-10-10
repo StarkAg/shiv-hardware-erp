@@ -20,7 +20,7 @@ import {
   NotebookPen,
   Scale,
   TrendingUp, HandCoins, CalendarClock, PackageCheck, PackageOpen,
-  ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, Inbox } from 'lucide-react'
+  ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, Inbox, ShieldCheck, ClipboardList, Truck } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { UpdateBanner } from './UpdateBanner'
 import { Toaster } from './Toast'
@@ -73,6 +73,9 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     items: [
       { to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck },
       { to: '/guarantee/claims', label: 'Guarantee Claims', icon: Inbox, badge: true },
+      { to: '/guarantee/list', label: 'Guarantee List', icon: ShieldCheck },
+      { to: '/work-list', label: 'Work List', icon: ClipboardList },
+      { to: '/delivery', label: 'Delivery', icon: Truck },
     ],
   },
   {

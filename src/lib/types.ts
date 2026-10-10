@@ -490,6 +490,22 @@ export interface Bill extends BillCharges {
    */
   stock?: StockLine[]
   notes?: string
+  /** A sale that is a work order: on the Work list until marked done. Off unless switched on. */
+  workOrder?: boolean
+  /** When its work was marked done (ms). */
+  workDoneAt?: number
+  /** A sale a guarantee card is to be made for: on the Guarantee list until done. Off unless switched on. */
+  guaranteeCard?: boolean
+  /** When its card was made or marked done (ms). */
+  guaranteeDoneAt?: number
+  /**
+   * A sale whose goods have not gone yet: on the Delivery list. Unset means
+   * delivered — every bill written before this existed, and the usual counter
+   * sale, where "Delivered" is ticked from the start.
+   */
+  undelivered?: boolean
+  /** When it was marked delivered from the Delivery list (ms). */
+  deliveredAt?: number
   /**
    * @deprecated There are no drafts. A bill is written and saved, or it is not
    * a bill — Tally has no half-written voucher either. Bills stored before
