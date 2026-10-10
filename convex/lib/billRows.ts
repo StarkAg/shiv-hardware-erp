@@ -50,6 +50,19 @@ async function touch(ctx: MutationCtx, billSeq?: number) {
   }
 }
 
+/**
+ * The mechanic's sizes are written from his phone (workOrders.saveSizes) while
+ * the same bill may be open at the counter. Bills are saved whole, so a
+ * counter copy that had not yet heard of the sizes would wipe them out. They
+ * go by their own clock instead: the newer sizes stay, whichever copy of the
+ * rest of the bill is being written.
+ */
+function withNewerSizes(bill: any, held: any) {
+  const mine = Number(held?.siteSizes?.at) || 0
+  if (!mine || mine <= (Number(bill?.siteSizes?.at) || 0)) return bill
+  return { ...bill, siteSizes: held.siteSizes, measuredAt: bill.measuredAt ?? held.measuredAt }
+}
+
 /** Writes each bill to its own row, replacing that bill's earlier copy. */
 export async function writeBills(ctx: MutationCtx, bills: any[], billSeq?: number) {
   // One read for many bills; one indexed lookup for a single one.
@@ -69,7 +82,7 @@ export async function writeBills(ctx: MutationCtx, bills: any[], billSeq?: numbe
       billId,
       number: String(bill.number ?? ''),
       updatedAt: Number(bill.updatedAt) || Date.now(),
-      bill,
+      bill: withNewerSizes(bill, row?.bill),
     }
     if (row) await ctx.db.replace(row._id, fields)
     else await ctx.db.insert('bills', fields)

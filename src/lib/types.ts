@@ -3,6 +3,7 @@
 
 import { assetPath } from './assets'
 import type { AutoKind, BillCharges } from './billCharges'
+import type { SiteSizes } from '../../convex/lib/workPieces'
 
 export type ProductCategory =
   | 'readymade-door'
@@ -499,6 +500,12 @@ export interface Bill extends BillCharges {
   measuredAt?: number
   /** Who is sent to the site for the sizes. */
   visitBy?: string
+  /**
+   * The sizes he brought back, piece by piece — written from his phone (the
+   * Shiv Mechanic app, convex/workOrders.ts). Never edited here: the server
+   * keeps the newer sizes whatever else is saved over the bill.
+   */
+  siteSizes?: SiteSizes
   /** When it was billed (ms) — set when the quotation is made a sale. */
   workDoneAt?: number
   /** A sale a guarantee card is to be made for: on the Guarantee list until done. Off unless switched on. */

@@ -55,7 +55,7 @@ export function ReadingStrip({ reading }) {
       <div className="reading-text">
         <Shades shades={reading.shades} />
         <div className={reading.corrected ? 'ok' : 'warn'}>
-          {reading.corrected ? '✓ White-corrected' : '⚠ No white paper in the dashed frame'}
+          {reading.corrected ? 'White-corrected' : 'No white paper in the dashed frame'}
           <span className="muted"> · {reading.shades.length} shade{reading.shades.length === 1 ? '' : 's'} · {reading.texture < 2 ? 'plain' : reading.texture < 4 ? 'light pattern' : 'busy pattern'}</span>
         </div>
       </div>
@@ -347,7 +347,7 @@ export function Capture({ onRead, hint }) {
       aria-label={mode === 'live' ? 'Use a photo instead' : 'Use the live camera'}
       title={mode === 'live' ? 'Use a photo instead' : 'Use the live camera'}
     >
-      {mode === 'live' ? '🖼' : '🎥'}
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">{mode === 'live' ? <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8" cy="8" r="1" /><path d="m3 17 5-5 4 4 3-3 6 6" /></> : <><rect x="3" y="6" width="12" height="12" rx="2" /><path d="m15 10 6-4v12l-6-4" /></>}</svg>
     </button>
   )
   return mode === 'live'

@@ -505,11 +505,24 @@ export function isWhatsAppNotConnectedError(err: unknown): boolean {
  */
 export async function sendGuaranteeWhatsApp(mobile: string, name = ''): Promise<{ ok: true; jid: string; message: string; skipped?: boolean }> {
   try {
-    const res = await fetchPrintServer('/whatsapp-notify-customer', {
+    const send = () => fetchPrintServer('/whatsapp-notify-customer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mobile, name }),
     }, 25_000)
+    // The print server restarts itself when its code is updated and refuses
+    // connections for those few seconds, so an unreachable server is tried
+    // twice more before the card is reported as not sent. Asking again is safe:
+    // the server will not message one number twice inside its cooldown.
+    let res: Response | undefined
+    for (let attempt = 0; !res; attempt++) {
+      try {
+        res = await send()
+      } catch (err) {
+        if (!(err instanceof TypeError) || attempt >= 2) throw err
+        await new Promise((resolve) => window.setTimeout(resolve, 4000))
+      }
+    }
     const json = await res.json().catch(() => null)
     if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Print server returned HTTP ${res.status}`)
     return json as { ok: true; jid: string; message: string; skipped?: boolean }

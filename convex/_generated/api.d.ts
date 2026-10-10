@@ -56,6 +56,7 @@ import type * as lib_spelling from "../lib/spelling.js";
 import type * as lib_staffPay from "../lib/staffPay.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_trashLinks from "../lib/trashLinks.js";
+import type * as lib_workPieces from "../lib/workPieces.js";
 import type * as masters from "../masters.js";
 import type * as merge from "../merge.js";
 import type * as mica from "../mica.js";
@@ -76,6 +77,7 @@ import type * as twilio from "../twilio.js";
 import type * as voucherInbox from "../voucherInbox.js";
 import type * as vouchers from "../vouchers.js";
 import type * as whatsapp from "../whatsapp.js";
+import type * as workOrders from "../workOrders.js";
 
 import type {
   ApiFromModules,
@@ -132,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   "lib/staffPay": typeof lib_staffPay;
   "lib/text": typeof lib_text;
   "lib/trashLinks": typeof lib_trashLinks;
+  "lib/workPieces": typeof lib_workPieces;
   masters: typeof masters;
   merge: typeof merge;
   mica: typeof mica;
@@ -152,6 +155,7 @@ declare const fullApi: ApiFromModules<{
   voucherInbox: typeof voucherInbox;
   vouchers: typeof vouchers;
   whatsapp: typeof whatsapp;
+  workOrders: typeof workOrders;
 }>;
 
 /**

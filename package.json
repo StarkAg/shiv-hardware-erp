@@ -31,6 +31,8 @@
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "test": "vitest run",
     "test:inventory-pwa": "npm --prefix inventory-web run build && node tests/inventoryPwa.browser.mjs",
+    "test:mechanic": "npm --prefix mechanic-web run build && node tests/mechanic.browser.mjs",
+    "test:print-runner": "node tests/printRunner.mjs",
     "sync": "node scripts/autosave.mjs start",
     "save": "node scripts/autosave.mjs save",
     "deploy:convex": "node scripts/autosave.mjs check && npx convex deploy --yes --typecheck enable",

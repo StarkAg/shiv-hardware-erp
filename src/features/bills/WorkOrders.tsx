@@ -4,8 +4,53 @@ import { useNavigate } from 'react-router-dom'
 import { Check, ClipboardList, FileText, Printer, ReceiptIndianRupee, RotateCcw, Ruler } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import { foldName } from '../../../convex/lib/text'
+import { UNIT_WORD, sizeText, workPieces, type PieceSize } from '../../../convex/lib/workPieces'
 import { useStore } from '../../lib/store'
 import { SHOP, billLines, type Bill } from '../../lib/types'
+
+/**
+ * Every piece of an order with the size the mechanic sent for it, in the
+ * order of the bill's lines; then anything he added on site that is not a
+ * line of the bill.
+ */
+function sizedPieces(b: Bill) {
+  const sent = new Map((b.siteSizes?.pieces ?? []).map((p) => [p.key, p]))
+  const rows: { key: string; what: string; of: string; qty: number; size?: PieceSize }[] =
+    workPieces(b.items).map((p) => ({ ...p, size: sent.get(p.key) }))
+  const onBill = new Set(rows.map((r) => r.key))
+  for (const p of b.siteSizes?.pieces ?? []) if (!onBill.has(p.key)) rows.push({ key: p.key, what: p.what, of: 'added on site', qty: 1, size: p })
+  return rows
+}
+
+/** The mechanic's sizes, read-only: on the Work list card and in the bill being made from them. */
+export function SiteSizesNote({ bill }: { bill: Bill }) {
+  const sizes = bill.siteSizes
+  if (!sizes || (!sizes.pieces.length && !sizes.notes)) return null
+  const rows = sizedPieces(bill)
+  const done = rows.filter((r) => sizeText(r.size)).length
+  const when = new Date(sizes.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })
+  return (
+    <div className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs dark:border-sky-400/20 dark:bg-sky-900/20">
+      <div className="mb-1 flex flex-wrap items-baseline gap-x-2 font-bold text-sky-900 dark:text-sky-200">
+        <span>Sizes from site ({UNIT_WORD[sizes.unit]})</span>
+        <span className="font-semibold text-muted">{done} of {rows.length} · {sizes.by || 'Mechanic'}, {when}</span>
+      </div>
+      <ol className="space-y-0.5">
+        {rows.map((r, n) => (
+          <li key={r.key} className="flex items-baseline gap-2">
+            <span className="w-4 flex-none text-right text-muted">{n + 1}</span>
+            <span className="min-w-0 flex-1 truncate text-stone-700 dark:text-stone-300">
+              {r.what}{r.of && <span className="text-muted"> — {r.of}</span>}
+              {r.size?.note && <span className="text-muted"> · {r.size.note}</span>}
+            </span>
+            <span className="flex-none font-mono font-bold text-stone-900 dark:text-stone-100">{sizeText(r.size) || <span className="font-normal text-muted">—</span>}</span>
+          </li>
+        ))}
+      </ol>
+      {sizes.notes && <p className="mt-1 text-stone-700 dark:text-stone-300"><span className="font-semibold text-muted">Note: </span>{sizes.notes}</p>}
+    </div>
+  )
+}
 
 /**
  * Work orders: a job made to measure.
@@ -16,6 +61,10 @@ import { SHOP, billLines, type Bill } from '../../lib/types'
  * this list walks it through To measure → Measured → Billed. "Make sale bill"
  * opens the quotation converted to a sale with its lines, and saving that bill
  * is what marks the order billed.
+ *
+ * The mechanic has the same orders on his phone (the Shiv Mechanic app,
+ * mechanic-web): the ones in his name, live. The sizes he sends from the site
+ * show on the card here within a second or two and move it to Measured.
  */
 type Stage = 'measure' | 'measured' | 'billed'
 
@@ -33,14 +82,10 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&
 export function visitSlipHtml(b: Bill, advance: string): string {
   // Made to measure, every piece can be its own size: a line of 9 pieces
   // gives the mechanic 9 rows ("1 of 9" … "9 of 9"), each with its own boxes.
-  const pieces = billLines(b.items).filter((i) => i.description.trim()).flatMap((i) => {
-    const qty = Math.round(Number(i.qty) || 1)
-    return qty > 1 && qty <= 30
-      ? Array.from({ length: qty }, (_, n) => ({ what: `${esc(i.description)} <span class="muted">— ${n + 1} of ${qty}</span>`, qty: '1' }))
-      : [{ what: esc(i.description), qty: String(Number(i.qty) || '') }]
-  })
+  // Sizes already sent from his phone are printed in them.
+  const pieces = sizedPieces(b)
   const rows = [
-    ...pieces.map((p, n) => `<tr><td>${n + 1}</td><td>${p.what}</td><td class="c">${p.qty}</td><td></td><td></td><td></td></tr>`),
+    ...pieces.map((p, n) => `<tr><td>${n + 1}</td><td>${esc(p.what)}${p.of ? ` <span class="muted">— ${esc(p.of)}</span>` : ''}</td><td class="c">${p.qty}</td><td>${esc(p.size?.w)}</td><td>${esc(p.size?.h)}</td><td>${esc(p.size?.note)}</td></tr>`),
     ...Array.from({ length: Math.max(2, 8 - pieces.length) }, (_, n) => `<tr><td>${pieces.length + n + 1}</td><td></td><td></td><td></td><td></td><td></td></tr>`),
   ].join('')
   return `<!doctype html><html><head><meta charset="utf-8"><title>Visit slip ${esc(b.number)}</title><style>
@@ -70,7 +115,7 @@ export function visitSlipHtml(b: Bill, advance: string): string {
     </div>
     <table><thead><tr><th style="width:7mm">#</th><th>What to make</th><th style="width:12mm">Qty</th><th style="width:20mm">Width</th><th style="width:20mm">Height</th><th style="width:24mm">Remarks</th></tr></thead>
       <tbody>${rows}</tbody></table>
-    <div class="notes">Notes:${b.notes ? ` ${esc(b.notes)}` : ''}</div>
+    <div class="notes">Notes:${b.notes ? ` ${esc(b.notes)}` : ''}${b.siteSizes ? ` Sizes in ${UNIT_WORD[b.siteSizes.unit]}.${b.siteSizes.notes ? ` ${esc(b.siteSizes.notes)}` : ''}` : ''}</div>
     <div class="sign"><div>Measured by</div><div>Date</div><div>Customer</div></div>
   </body></html>`
 }
@@ -139,6 +184,7 @@ export function WorkOrders() {
           )}
         </div>
         <div className="mt-1 text-sm text-stone-700 dark:text-stone-300">{what || <span className="text-muted">No items written yet</span>}</div>
+        {b.siteSizes && <div className="mt-1.5"><SiteSizesNote bill={b} /></div>}
         {stage !== 'billed' && (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5 text-xs text-muted">

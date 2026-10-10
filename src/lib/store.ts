@@ -533,7 +533,16 @@ export const useStore = create<AppState>((set, get) => ({
       const byId = new Map(st.bills.map((b) => [b.id, b]))
       for (const r of remoteBills) {
         const mine = byId.get(r.id)
-        if (!mine || (r.updatedAt ?? 0) > (mine.updatedAt ?? 0)) byId.set(r.id, r)
+        if (!mine || (r.updatedAt ?? 0) > (mine.updatedAt ?? 0)) {
+          byId.set(r.id, mine && (mine.siteSizes?.at ?? 0) > (r.siteSizes?.at ?? 0)
+            ? { ...r, siteSizes: mine.siteSizes, measuredAt: r.measuredAt ?? mine.measuredAt }
+            : r)
+        }
+        // The mechanic's sizes go by their own clock (convex/lib/billRows):
+        // they arrive even on a bill this device's copy of is the newer one.
+        else if ((r.siteSizes?.at ?? 0) > (mine.siteSizes?.at ?? 0)) {
+          byId.set(r.id, { ...mine, siteSizes: r.siteSizes, measuredAt: mine.measuredAt ?? r.measuredAt })
+        }
       }
       const bills = Array.from(byId.values())
         .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))

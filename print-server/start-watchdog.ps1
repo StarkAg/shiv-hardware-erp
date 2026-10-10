@@ -13,12 +13,15 @@ if ($existing) {
 
 while ($true) {
     Add-Content $log "[$(Get-Date -f 'dd-MM-yyyy HH:mm:ss')] Shiv Print Server starting"
-    # --watch: Node auto-restarts itself whenever server.mjs/template.mjs (or
-    # anything else it imports) changes on disk, so edits take effect live
-    # without this script (or a person) having to kill/relaunch it. If the
-    # process dies outright (crash, not a file-change restart), this loop's
-    # own 5s-retry still kicks in as the crash-safety net.
-    $cmdArgs = "/c `"$node`" --watch server.mjs 1>>`"$log`" 2>>`"$err`""
+    # run.mjs starts server.mjs, restarts it whenever server.mjs/template.mjs
+    # (any .mjs here) is really changed on disk, so edits take effect live, and
+    # restarts it if it crashes. Not `node --watch`: on Windows that restarted
+    # the server every time a file was merely read (see run.mjs). This loop is
+    # only the safety net for run.mjs itself dying.
+    # The outer pair of quotes is for cmd: /c strips the first and last quote of
+    # its line, which without them left `C:\Program Files\...` unquoted, so this
+    # script exited with code 1 at once and never ran the server (2026-10-10).
+    $cmdArgs = "/c `"`"$node`" run.mjs 1>>`"$log`" 2>>`"$err`"`""
     $p = Start-Process 'cmd.exe' -ArgumentList $cmdArgs -WorkingDirectory $dir -WindowStyle Hidden -PassThru -Wait
     Add-Content $log "[$(Get-Date -f 'dd-MM-yyyy HH:mm:ss')] Shiv Print Server exited (code $($p.ExitCode)), restarting in 5s"
     Start-Sleep 5

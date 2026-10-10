@@ -60,6 +60,7 @@ const TARGETS = [
   site('voucher', 'voucher-web', 'shivhardware-voucher', 'shivhardware-voucher.vercel.app', 'Voucher'),
   site('qr', 'qr-redirect', 'gcvf', 'gcvf.vercel.app', 'Guarantee QR link'),
   site('khata', 'khata-web', 'shivhardware-khata', 'shivhardware-khata.vercel.app', 'Shiv Khata (accounts to read)'),
+  site('mechanic', 'mechanic-web', 'shivhardware-mechanic', 'shivhardware-mechanic.vercel.app', 'Shiv Mechanic (site sizes)'),
   { ...site('billshoot', 'billshoot-web', 'billshoot-web', 'shivhardware-billshoot.vercel.app', 'Bill Shoot'), optional: 'not live yet: its page model is still training' },
   { id: 'print-server', kind: 'print-server', label: 'Print server (shop PC)', paths: ['print-server'] },
   { id: 'quotation', kind: 'quotation', label: 'Shiv Counter app (shop PC)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs', 'electron-builder.quotation.cjs'] },
@@ -462,7 +463,7 @@ async function main() {
     if (answer !== 'y' && answer !== 'yes') { log('Nothing deployed.'); return }
   }
 
-  if (ahead) { git('push', 'origin', 'main'); log(green(`✓ pushed ${ahead} commit(s)`)) }
+  if (ahead) { git('push', 'origin', 'main'); log(green(`OK pushed ${ahead} commit(s)`)) }
 
   // Backends first (a site may need a new function), then the sites, then the
   // apps — the desktop release last, as it adds a commit of its own.
@@ -481,10 +482,10 @@ async function main() {
       else if (t.kind === 'print-server') where = await checkPrintServer()
       if (['convex', 'print-server', 'quotation'].includes(t.kind)) { state[t.id] = { sha, at: new Date().toISOString() }; saveState() }
       results.push({ t, ok: true, where, secs: Math.round((Date.now() - started) / 1000) })
-      log(`${green('✓')} ${t.id.padEnd(13)} ${where} ${dim(`${Math.round((Date.now() - started) / 1000)}s`)}`)
+      log(`${green('OK')} ${t.id.padEnd(13)} ${where} ${dim(`${Math.round((Date.now() - started) / 1000)}s`)}`)
     } catch (err) {
       results.push({ t, ok: false, where: err.message, secs: Math.round((Date.now() - started) / 1000) })
-      log(`${red('✗')} ${t.id.padEnd(13)} ${err.message.split('\n')[0]}`)
+      log(`${red('ERROR')} ${t.id.padEnd(13)} ${err.message.split('\n')[0]}`)
     }
   }
   for (const kind of order) {
@@ -502,4 +503,4 @@ async function main() {
   process.exitCode = 1
 }
 
-main().catch((err) => { console.error(red(`✗ ${err.message}`)); process.exitCode = 1 })
+main().catch((err) => { console.error(red(`ERROR ${err.message}`)); process.exitCode = 1 })

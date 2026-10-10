@@ -2434,9 +2434,18 @@ async function startWhatsAppWebAutoPrint() {
       })
       whatsappConnectingSock = sock
 
-      sock.ev.on('creds.update', saveCreds)
+      // Only the current socket saves: one that a relogin replaced would write
+      // the old account's login back into the folder just cleared for the new one.
+      sock.ev.on('creds.update', () => { if (myGen === connectGen) saveCreds() })
 
       sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+        // Replaced by a newer connect() (a relogin, the watchdog): this socket
+        // no longer speaks for the link and must not come up beside the new one.
+        if (myGen !== connectGen) {
+          if (whatsappSock === sock) whatsappSock = null
+          if (connection === 'open') { try { sock.end(new Error('superseded')) } catch { /* ignore */ } }
+          return
+        }
         if (qr) {
           whatsappWebState.status = 'qr'
           whatsappWebState.qrDataUrl = await qrcode.toDataURL(qr).catch(() => null)
@@ -2509,7 +2518,13 @@ async function startWhatsAppWebAutoPrint() {
     // Clear the saved session and reconnect from scratch → a fresh QR to scan.
     whatsappRelogin = async () => {
       console.log('[whatsapp-web] manual relogin requested — clearing session')
-      try { whatsappSock?.end?.(new Error('manual relogin')) } catch { /* ignore */ }
+      // Retire the running sockets BEFORE clearing: the folder takes seconds to
+      // empty (34,000 files, 2026-10-10), and in that time the old socket's own
+      // 10s retry logged the old account back in and saved it again.
+      connectGen++
+      for (const old of new Set([whatsappSock, whatsappConnectingSock])) {
+        try { old?.end?.(new Error('manual relogin')) } catch { /* ignore */ }
+      }
       whatsappSock = null
       whatsappWebState.status = 'starting'
       whatsappWebState.qrDataUrl = null
@@ -2521,6 +2536,7 @@ async function startWhatsAppWebAutoPrint() {
 
     // Reconnect but KEEP the saved session — recovers a stalled link with no re-scan.
     whatsappReconnect = async () => {
+      connectGen++
       try { whatsappSock?.end?.(new Error('reconnect')) } catch { /* ignore */ }
       whatsappSock = null
       connect()
@@ -2606,6 +2622,13 @@ async function notifyCustomerGuaranteeReady(document) {
 async function sendGuaranteeWhatsAppTo(rawMobile, name = '') {
   const jid = customerMobileToWhatsAppJid(rawMobile)
   if (!jid) throw new Error(`Enter a valid mobile number (got "${rawMobile ?? ''}").`)
+  // A send that lands while the link is coming up — this server just restarted,
+  // or WhatsApp dropped the socket and it is redialling — waits for it instead
+  // of failing: the link is back in seconds, and failing showed the counter a
+  // "WhatsApp needs login" box for an account that was logged in all along.
+  for (let waited = 0; waited < 15_000 && ['starting', 'reconnecting'].includes(whatsappWebState.status); waited += 250) {
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
   if (!whatsappSock || whatsappWebState.status !== 'ready') {
     throw new Error(`WhatsApp is not connected on the shop computer (status: ${whatsappWebState.status}).`)
   }
@@ -2886,11 +2909,11 @@ async function tellPhone(job, outcome) {
     const mode = job.payload?.mode
     const how = mode === 'color' ? 'colour' : mode === 'bw' ? 'black & white' : null
     // One notification per job: "Printing…" when the shop PC starts, replaced
-    // by "Printed ✓" (or why not) when it is done.
+    // by "Printed" (or why not) when it is done.
     const [title, body] = outcome.printing
       ? ['Printing…', `${what}${how ? ` — ${how}` : ''}, at the shop now`]
       : outcome.ok
-        ? ['Printed ✓', `${what}${how ? ` — ${how}` : ''} on ${printers.join(' and ') || 'the shop printer'}`]
+        ? ['Printed', `${what}${how ? ` — ${how}` : ''} on ${printers.join(' and ') || 'the shop printer'}`]
         : ['Not printed', `${what}: ${outcome.error}`.slice(0, 180)]
     await webPush.sendNotification(notify, JSON.stringify({ title, body, tag: String(job._id) }), { TTL: 3600 })
   } catch (err) {

@@ -7,7 +7,7 @@
 // src/workerStore.js), it answers with a page that closes at once and goes on
 // sending the files in the background: shrunk to print size, uploaded, put in
 // the print queue with colour left to the shop PC ("auto"). The phone hears
-// how it went as notifications: "Sent", then "Printing…" and "Printed ✓" from
+// how it went as notifications: "Sent", then "Printing…" and "Printed" from
 // the print server.
 //
 // Without the key, with "Print as soon as shared" off, or when sending fails,
@@ -131,7 +131,7 @@ async function sendInBackground(files, convexUrl, token) {
 }
 
 // The page the share opens: gone the instant it opens, while the worker sends.
-// Its "Sending ✓" only shows if the phone will not let it close.
+// Its "Sending" only shows if the phone will not let it close.
 const SHOWN_MS = 0
 const CLOSE_PAGE = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#b98f4b"><title>Shiv Print</title>
@@ -164,7 +164,7 @@ self.addEventListener('fetch', (event) => {
 
 /* ── notifications ─────────────────────────────────────────────────────── */
 
-// "Printing…" and "Printed ✓" (or why not), pushed by the print server on the
+// "Printing…" and "Printed" (or why not), pushed by the print server on the
 // shop PC — shown with Shiv Print closed.
 self.addEventListener('push', (event) => {
   let data = {}

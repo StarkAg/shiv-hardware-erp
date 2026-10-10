@@ -195,7 +195,7 @@ export default function App() {
     }
     // Sent: ready for the next bill, with a moment to bring these back.
     setPages([])
-    setToast({ text: 'Shared ✓', undo: () => setPages(kept) })
+    setToast({ text: 'Shared', undo: () => setPages(kept) })
   }
 
   useEffect(() => {
@@ -222,7 +222,7 @@ export default function App() {
           <img className="logo" src="/icon.svg" alt="" />
           <span className="title">Bill Shoot</span>
           {torch !== null && (
-            <button type="button" className={`glass icon${torch ? ' on' : ''}`} aria-label="Light" onClick={(e) => { e.stopPropagation(); void switchTorch() }}>⚡</button>
+            <button type="button" className={`glass icon${torch ? ' on' : ''}`} aria-label="Light" onClick={(e) => { e.stopPropagation(); void switchTorch() }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-12h-7z" /></svg></button>
           )}
         </header>
         {camera === 'off' && (

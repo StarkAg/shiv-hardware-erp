@@ -56,6 +56,7 @@ const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
 import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS, isQuotation, isBuyingBill, nextQuoteNumber, DEFAULT_PAYMENT_MODE } from '../../lib/types'
 import type { BillKind } from '../../lib/types'
+import { SiteSizesNote } from './WorkOrders'
 import { DEFAULT_GST_RATE, GST_RATES, handLines, withCharges, type BillCharges } from '../../lib/billCharges'
 import { MONEY_KINDS, buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
 import { deviceId, deviceName } from '../../lib/device'
@@ -4599,6 +4600,14 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             })}
           </div>
         )}
+
+        {/* A work order's sizes from the site (the mechanic's phone), to type
+            the lines from. Read from the saved bill: they can arrive while
+            this one is open. */}
+        {draft.workOrder && (() => {
+          const sizes = bills.find((b) => b.id === draft.id)?.siteSizes ?? draft.siteSizes
+          return sizes ? <SiteSizesNote bill={{ ...draft, siteSizes: sizes }} /> : null
+        })()}
 
         {/* Narration — Tally's last field before the voucher is accepted. It is
             the voucher's own wording, so it posts as the narration rather than

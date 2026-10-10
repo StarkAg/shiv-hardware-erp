@@ -1,5 +1,5 @@
 /**
- * "Printed ✓" on the phone, with Shiv Print closed.
+ * "Printed" on the phone, with Shiv Print closed.
  *
  * The phone signs up for web-push messages with the shop PC's public key and
  * sends its address along with each print (convex/printJobs.ts sendFiles,
