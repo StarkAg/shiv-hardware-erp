@@ -8,6 +8,7 @@ import { linkTrashRows } from './lib/trashLinks'
 import { record } from './lib/history'
 import { dropBill, readBill, readBills, storeMeta, writeBills } from './lib/billRows'
 import { attachmentIds, deleteUnreferencedFiles } from './lib/attachmentFiles'
+import { trashVoucher } from './vouchers'
 
 /**
  * What the books were written from. On a bill already in the books these
@@ -213,9 +214,20 @@ export const remove = mutation({
      * reference be deleted on its own, leaving an amount in the books with
      * nothing to open.
      */
-    const voucher = bill.voucherId
-      ? await ctx.db.get(bill.voucherId as Id<'vouchers'>)
-      : (await ctx.db.query('vouchers').filter((q) => q.eq(q.field('refNo'), ref)).first()) ?? null
+    const byId = bill.voucherId ? await ctx.db.get(bill.voucherId as Id<'vouchers'>) : null
+    /*
+     * A voucher posted again under a new id leaves the bill naming the old,
+     * gone one (bill 387, moved to a quotation, left SAL-0547 in the books).
+     * Then the reference finds it — but only the same customer's, so last
+     * year's BILL-387 is never the one taken.
+     */
+    const voucher = byId ?? (bill.ledgerId
+      ? await ctx.db.query('vouchers')
+          .withIndex('by_party', (q) => q.eq('partyLedgerId', bill.ledgerId as Id<'ledgers'>))
+          .filter((q) => q.eq(q.field('refNo'), ref)).first()
+      : bill.voucherId
+        ? null
+        : await ctx.db.query('vouchers').filter((q) => q.eq(q.field('refNo'), ref)).first()) ?? null
     const voucherTrashId = voucher
       ? await ctx.runMutation(api.vouchers.remove, { id: voucher._id })
       : null
@@ -345,5 +357,31 @@ export const dropBlankLines = internalMutation({
     // device pulls the cleaned bills.
     if (changed.length) await writeBills(ctx, changed)
     return { cleaned: changed.map((b) => String(b.number)), isDone: page.isDone, cursor: page.continueCursor }
+  },
+})
+
+/**
+ * One-off (2026-10-10): a bill already in the bin whose voucher stayed in the
+ * books — deleted while it named a voucher id that no longer existed. Its
+ * voucher is found by reference and the same customer, sent to Trash, and
+ * linked to the binned bill so restoring brings both back together.
+ *   npx convex run --prod bills:trashLeftVoucher '{"number": "387"}'
+ */
+export const trashLeftVoucher = internalMutation({
+  args: { number: v.string() },
+  handler: async (ctx, { number }) => {
+    const binned = (await ctx.db.query('billsTrash').collect())
+      .filter((t: any) => String(t.bill?.number) === number && !t.voucherTrashId)
+      .sort((a: any, b: any) => b.deletedAt - a.deletedAt)[0] as any
+    if (!binned) return { done: false, why: `no binned bill ${number} without its voucher` }
+    const ref = `BILL-${number}`
+    if (!binned.bill?.ledgerId) return { done: false, why: `binned bill ${number} names no customer account` }
+    const voucher = await ctx.db.query('vouchers')
+      .withIndex('by_party', (q) => q.eq('partyLedgerId', binned.bill.ledgerId as Id<'ledgers'>))
+      .filter((q) => q.eq(q.field('refNo'), ref)).first()
+    if (!voucher) return { done: false, why: `no ${ref} voucher for that customer in the books` }
+    const voucherTrashId = await trashVoucher(ctx, voucher._id)
+    await ctx.db.patch(binned._id, { voucherRef: voucher.refNo ?? ref, ...(voucherTrashId ? { voucherTrashId } : {}) })
+    return { done: true, voucherNo: voucher.voucherNo, fy: voucher.fy }
   },
 })
