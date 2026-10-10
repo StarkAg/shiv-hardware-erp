@@ -1,4 +1,5 @@
-import { DeliveryList, GuaranteeList, WorkList } from './features/bills/MarkedSales'
+import { DeliveryList, GuaranteeList } from './features/bills/MarkedSales'
+import { WorkOrders } from './features/bills/WorkOrders'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
@@ -171,7 +172,7 @@ const router = createHashRouter([
       // Every quotation given, open and sold.
       { path: 'quotations',     element: <QuotationList /> },
       // Sales switched to "Order" / "Guarantee card" in the sale form.
-      { path: 'work-list',      element: <WorkList /> },
+      { path: 'work-list',      element: <WorkOrders /> },
       { path: 'delivery',       element: <DeliveryList /> },
       { path: 'guarantee/list', element: <GuaranteeList /> },
       { path: 'cash-review',    element: <CashReview /> },

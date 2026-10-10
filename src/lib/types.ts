@@ -490,9 +490,16 @@ export interface Bill extends BillCharges {
    */
   stock?: StockLine[]
   notes?: string
-  /** A sale that is a work order: on the Work list until marked done. Off unless switched on. */
+  /**
+   * A work order — a job made to measure: on the Work list until billed. Set on
+   * a quotation (what to make, before the sizes) or a sale. Off unless switched on.
+   */
   workOrder?: boolean
-  /** When its work was marked done (ms). */
+  /** When the mechanic's sizes were in (ms): To measure → Measured. */
+  measuredAt?: number
+  /** Who is sent to the site for the sizes. */
+  visitBy?: string
+  /** When it was billed (ms) — set when the quotation is made a sale. */
   workDoneAt?: number
   /** A sale a guarantee card is to be made for: on the Guarantee list until done. Off unless switched on. */
   guaranteeCard?: boolean

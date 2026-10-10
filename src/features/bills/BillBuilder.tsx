@@ -2788,6 +2788,8 @@ export function BillBuilder() {
             : {}),
       }
     })
+    // "New order" on the Work list: the quotation starts with Order on.
+    if (pageParams.get('order') === '1') setDraft((d) => ({ ...d, workOrder: true }))
     setView('form')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newKind])
@@ -3535,7 +3537,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   async function saveQuote(): Promise<(Bill & { total: number }) | null> {
     const attachments = await prepareAttachments()
     if (!attachments) return null
-    let quote: Bill & { total: number } = { ...priced, items: priced.items.map(withSqft), total, attachments }
+    let quote: Bill & { total: number } = { ...priced, items: withoutBlankLines(priced.items).map(withSqft), total, attachments }
     saveBill(quote)
     const name = quote.customerName.trim()
     if (name) try {
@@ -3661,6 +3663,14 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
     setDraft((d) => {
       const sale: Bill = { ...d, number: nextBillNumber(), date: today(), fromQuote: d.number }
       delete sale.kind
+      // A work order made a sale is billed — off the Work list once saved — and
+      // a made-to-measure job is not handed over at the counter, so it waits on
+      // the Delivery list until it goes (untick nothing if it has).
+      if (d.workOrder && !d.workDoneAt) {
+        sale.workDoneAt = Date.now()
+        sale.measuredAt = d.measuredAt ?? Date.now()
+        if (d.undelivered === undefined) sale.undelivered = true
+      }
       return sale
     })
     toast('Now a sale with all its lines — check it and press Save Bill.', 'ok')
@@ -4433,7 +4443,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             waits on the Delivery list. Order and Guarantee card are off on
             every new sale and put it on the Work list / Guarantee list. A
             list's own button takes it off again. */}
-        {(draft.kind ?? 'sale') === 'sale' && (
+        {((draft.kind ?? 'sale') === 'sale' || isQuotation(draft)) && (
           <div className="flex flex-wrap items-center gap-2">
             {[
               {
@@ -4453,7 +4463,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 on: (d: Bill) => !!d.guaranteeCard,
                 flip: (d: Bill): Bill => ({ ...d, guaranteeCard: !d.guaranteeCard }),
               },
-            ].map(({ key, label, hint, on: isOn, flip }) => {
+            // A quotation is what to make before the sizes: only Order applies.
+            ].filter(({ key }) => !isQuotation(draft) || key === 'order').map(({ key, label, hint, on: isOn, flip }) => {
               const on = isOn(draft)
               return (
                 <button

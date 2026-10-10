@@ -10,7 +10,7 @@ import type { Bill } from '../../lib/types'
  * sale form and comes off when it is marked done (a card made from the bill
  * marks itself). Done ones stay below, so a slip can be undone.
  */
-type ListKind = 'guarantee' | 'work' | 'delivery'
+type ListKind = 'guarantee' | 'delivery'
 
 const LISTS: Record<ListKind, {
   title: string
@@ -28,14 +28,6 @@ const LISTS: Record<ListKind, {
     doneAt: (b) => b.guaranteeDoneAt,
     setDone: (b, at) => ({ ...b, guaranteeDoneAt: at }),
   },
-  work: {
-    title: 'Work list',
-    empty: 'No sale is waiting as an order. Switch on "Order" in a sale to list it here.',
-    doneLabel: 'Done',
-    flag: (b) => !!b.workOrder,
-    doneAt: (b) => b.workDoneAt,
-    setDone: (b, at) => ({ ...b, workDoneAt: at }),
-  },
   delivery: {
     title: 'Delivery',
     empty: 'Every sale has been delivered. Untick "Delivered" in a sale whose goods go later to list it here.',
@@ -50,7 +42,6 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day
 const money = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 
 export function GuaranteeList() { return <MarkedSales kind="guarantee" /> }
-export function WorkList() { return <MarkedSales kind="work" /> }
 export function DeliveryList() { return <MarkedSales kind="delivery" /> }
 
 function MarkedSales({ kind }: { kind: ListKind }) {
