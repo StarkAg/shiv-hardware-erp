@@ -27,7 +27,7 @@ export default function App() {
   const [opened, setOpened] = useState(null)
   const [stage, setStage] = useState('pending')
   const [search, setSearch] = useState('')
-  const live = useConnection()
+  const live = useConnection() && incoming !== undefined
   useEffect(() => { if (incoming !== undefined) { setCached(incoming); write('orders', incoming) } }, [incoming])
   useEffect(() => {
     const back = () => setOpened(null)

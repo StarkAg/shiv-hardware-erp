@@ -1,5 +1,7 @@
 # Shiv Mechanic
 
+Production: https://shivhardware-mechanic.vercel.app
+
 A phone app for measurements on the panel's Work list. Sign in with the shop
 PIN, choose the mechanic's name, and open an assigned order. Enter a width,
 height and optional remark for each piece; extra pieces can be added on site.
@@ -25,7 +27,6 @@ creates `dist`. Run `npm run icons` to rebuild the ruler icons.
 
 From the repository root, commit and push, then use `npm run deploy:convex` for
 the backend and `npm run deploy -- --yes --only mechanic,panel,counter` for the
-sites. The mechanic Vercel project is `shivhardware-mechanic`; provision/link it
-before the first release. The deployment script's normal synchronization
+sites. The mechanic Vercel project is `shivhardware-mechanic`. The deployment script's normal synchronization
 checks must pass. Copy future PIN-screen changes with
 `node scripts/copy-device-trust.mjs`.

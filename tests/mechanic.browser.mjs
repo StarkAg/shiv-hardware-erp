@@ -49,6 +49,11 @@ try {
   await page.goto(origin + '/fixture.html')
   await page.select('.name-label select', 'Vijay')
   assert.equal(await page.$$eval('.order-card', (nodes) => nodes.length), 1)
+  // Server subscription changes reach the open list without a reload.
+  await page.evaluate(() => { window.orders = window.orders.map((o) => ({ ...o, visitBy: 'Vijay' })); window.dispatchEvent(new Event('fixture')) })
+  await page.waitForFunction(() => document.querySelectorAll('.order-card').length === 2)
+  await page.evaluate(() => { window.orders = window.orders.map((o) => o.id === 'other' ? { ...o, visitBy: 'Anup' } : o); window.dispatchEvent(new Event('fixture')) })
+  await page.waitForFunction(() => document.querySelectorAll('.order-card').length === 1)
   mkdirSync('.probe/mechanic-screens', { recursive: true })
   await page.screenshot({ path: '.probe/mechanic-screens/list.png', fullPage: true })
   await page.click('.order-card')
