@@ -24,6 +24,26 @@ const GROUPS: { key: string; label: string }[] = [
   { key: 'other', label: 'Other' },
 ]
 
+/**
+ * "12mm Signature Gold 7 x 4" is grouped under "12mm Signature Gold": the list
+ * splits by thickness and brand, so a sheet is found without reading every
+ * size of every brand. A name not written that way stays under its category.
+ */
+const SIZED = /^(\d+(?:\.\d+)?)\s*mm\s+(.*?)\s+\d+(?:\.\d+)?\s*[x×]\s*\d/i
+function groupedRows(rows: StockRow[]) {
+  const groups = new Map<string, { mm: number; brand: string; rows: StockRow[] }>()
+  for (const r of rows) {
+    const m = r.name.match(SIZED)
+    const key = m ? `${m[1]}mm ${m[2]}` : ''
+    const g = groups.get(key) ?? { mm: m ? Number(m[1]) : Infinity, brand: m ? m[2] : '', rows: [] }
+    g.rows.push(r)
+    groups.set(key, g)
+  }
+  return [...groups.entries()]
+    .sort(([, a], [, b]) => a.mm - b.mm || a.brand.localeCompare(b.brand))
+    .map(([key, g]) => ({ key, rows: g.rows.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) }))
+}
+
 const isBillLine = (i: BillItem) => !!i.amountOnly && /^bill$/i.test(i.description.trim())
 
 /** Goods typed line by line — then the lines are the total, not a typed figure. */
@@ -116,15 +136,17 @@ export function StockMoves({ bill, out, onChange }: {
                   className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-900 dark:text-white"
                 >
                   {!row && <option value={l.ref}>{l.name || 'Pick an item'}</option>}
-                  {GROUPS.map((g) => {
+                  {GROUPS.flatMap((g) => {
                     const rows = (list ?? []).filter((r) => (r.category ?? 'other') === g.key)
-                    return rows.length ? (
-                      <optgroup key={g.key} label={g.label}>
-                        {rows.map((r) => (
+                    // Plywood and doors split by thickness and brand; the rest stays one group.
+                    const parts = g.key === 'other' ? [{ key: '', rows }] : groupedRows(rows)
+                    return parts.filter((part) => part.rows.length).map((part) => (
+                      <optgroup key={`${g.key}:${part.key}`} label={part.key ? `${g.label} · ${part.key}` : g.label}>
+                        {part.rows.map((r) => (
                           <option key={r.ref} value={r.ref}>{r.name} · {r.stock} in stock</option>
                         ))}
                       </optgroup>
-                    ) : null
+                    ))
                   })}
                 </select>
                 <input
