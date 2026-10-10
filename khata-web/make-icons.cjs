@@ -1,4 +1,4 @@
-// Draws the Shiv Khata icons and writes them as PNGs (no image library).
+// Draws the Shiv Accounts icons and writes them as PNGs (no image library).
 // An open account book on the shop's brass, with parchment pages: the same
 // colours as the attendance app, so the shop's apps read as one family.
 const fs = require('fs')

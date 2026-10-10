@@ -12,7 +12,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ConvexProvider client={convex}>
       {/* The shop's accounts: the shop PIN, once on this phone. */}
-      <PinGate convexUrl={CONVEX_URL} app="Khata" client={convex}>
+      <PinGate convexUrl={CONVEX_URL} app="Accounts" client={convex}>
         <App />
       </PinGate>
     </ConvexProvider>

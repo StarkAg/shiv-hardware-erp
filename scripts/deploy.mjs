@@ -59,7 +59,7 @@ const TARGETS = [
   site('stock', 'stock-web', 'stock-web', 'shivhardware-stock.vercel.app', 'Stock'),
   site('voucher', 'voucher-web', 'shivhardware-voucher', 'shivhardware-voucher.vercel.app', 'Voucher'),
   site('qr', 'qr-redirect', 'gcvf', 'gcvf.vercel.app', 'Guarantee QR link'),
-  site('khata', 'khata-web', 'shivhardware-khata', 'shivhardware-khata.vercel.app', 'Shiv Khata (accounts to read)'),
+  site('khata', 'khata-web', 'shivhardware-khata', 'shivhardware-khata.vercel.app', 'Shiv Accounts (accounts to read)'),
   site('mechanic', 'mechanic-web', 'shivhardware-mechanic', 'shivhardware-mechanic.vercel.app', 'Shiv Mechanic (site sizes)'),
   { ...site('billshoot', 'billshoot-web', 'billshoot-web', 'shivhardware-billshoot.vercel.app', 'Bill Shoot'), optional: 'not live yet: its page model is still training' },
   { id: 'print-server', kind: 'print-server', label: 'Print server (shop PC)', paths: ['print-server'] },

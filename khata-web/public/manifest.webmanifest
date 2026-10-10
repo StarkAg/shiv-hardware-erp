@@ -1,6 +1,6 @@
 {
-  "name": "Shiv Khata",
-  "short_name": "Khata",
+  "name": "Shiv Accounts",
+  "short_name": "Accounts",
   "description": "Shiv Hardware's accounts to read: what each customer owes, what is owed to each supplier, and their bills.",
   "id": "/",
   "start_url": "/",

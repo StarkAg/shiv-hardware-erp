@@ -3,13 +3,15 @@ import { useConvex, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 
 /**
- * Shiv Khata — the shop's accounts to read, and nothing to change.
+ * Shiv Accounts — the shop's accounts to read, and nothing to change.
  *
  * Made to be used like a chat app by someone who has never opened the panel:
  * two tabs (Customers, Suppliers), each a list like chats — a name, what is
  * owed either way, green for money to come and red for money to pay. Opening
  * one reads the account like a chat: every bill and payment a bubble, newest
- * at the bottom, with the bill's photos to tap open. No buttons that write.
+ * at the bottom, with the bill's photos to tap open. What the shop sent sits
+ * on the right, what the party sent on the left, and the account's lena hai /
+ * dena hai stays in a box at the foot. No buttons that write.
  *
  * Live: every figure is a Convex subscription, so a bill saved at the counter
  * shows here within a second or two with the app left open — the light in the
@@ -49,6 +51,13 @@ const sideWord = (side, tab) => (tab === 'customers'
   ? (side === 'Dr' ? 'to come' : 'advance')
   : (side === 'Cr' ? 'to pay' : 'advance'))
 const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
+/** A line's voucher in the words of who sent what. */
+const SENT = { Sale: 'Bill sent', Purchase: 'Bill received', Receipt: 'Payment received', Payment: 'Payment sent' }
+const kindOf = (r) => {
+  // The money taken with a sale or purchase is a payment, not the bill again.
+  if (r.settlement) return r.side === 'Cr' ? 'Payment received' : 'Payment sent'
+  return SENT[r.vchType] ?? r.vchType
+}
 
 export default function App() {
   const [tab, setTab] = useState(() => read('tab') ?? 'customers')
@@ -105,8 +114,7 @@ function Lists({ tab, setTab, onOpen }) {
         <div className="brandrow">
           <img src="/icon-192.png" alt="" />
           <div>
-            <div className="brand">Shiv Khata</div>
-            <div className="sub">Accounts</div>
+            <div className="brand">Shiv Accounts</div>
           </div>
           <LiveLight />
         </div>
@@ -165,9 +173,11 @@ function Party({ party, onBack }) {
   // Like a chat: opens at the newest.
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [data?.rows?.length])
 
-  // Their side: a customer takes goods (Dr), a supplier gives them (Cr). Those
-  // bubbles sit on the left; money the other way, on the right in green.
-  const theirs = party.tab === 'customers' ? 'Dr' : 'Cr'
+  // Our side on the right, as in a chat: a bill the shop sent a customer and a
+  // payment the shop made a supplier are both Dr on the party's account. Their
+  // payments to us and their bills to us (Cr) sit on the left.
+  const ours = 'Dr'
+  const pendingOurs = party.tab === 'customers'
   const items = useMemo(() => {
     const list = [
       ...(data?.rows ?? []).map((r) => ({ key: `${r.voucherId}-${r.side}-${r.date}`, date: r.date, r })),
@@ -211,18 +221,18 @@ function Party({ party, onBack }) {
           if (it.p) {
             const shots = (it.p.attachmentUrls ?? []).filter((a) => a.url)
             return (
-              <div key={it.key} className="bubble left pending">
-                <div className="kind">{it.p.vchLabel ?? 'Bill'} · amount not entered yet</div>
+              <div key={it.key} className={`bubble ${pendingOurs ? 'right' : 'left'} pending`}>
+                <div className="kind">{SENT[it.p.vchType] ?? 'Bill'} · {it.p.vchLabel ?? ''} · amount not entered yet</div>
                 <Photos shots={shots} onOpen={setPhoto} />
               </div>
             )
           }
           const r = it.r
-          const left = r.side === theirs
+          const right = r.side === ours
           const shots = (r.attachmentUrls ?? []).filter((a) => a.url)
           return (
-            <div key={it.key} className={`bubble ${left ? 'left' : 'right'}`}>
-              <div className="kind">{r.vchType} · {r.vchLabel}{r.refNo ? ` · ${r.refNo}` : ''}</div>
+            <div key={it.key} className={`bubble ${right ? 'right' : 'left'}`}>
+              <div className="kind">{kindOf(r)} · {r.vchLabel}{r.refNo ? ` · ${r.refNo}` : ''}</div>
               <div className="money">{rupees(r.amount)}</div>
               {r.narration && <div className="narr">{r.narration}</div>}
               <Photos shots={shots} onOpen={setPhoto} />
@@ -232,6 +242,13 @@ function Party({ party, onBack }) {
         })}
         <div ref={end} />
       </main>
+      {data && (
+        <footer className={`due ${data.closing < 0.5 ? '' : data.closingSide === 'Dr' ? 'in' : 'out'}`}>
+          <small>{data.closing < 0.5 ? 'Settled' : data.closingSide === 'Dr' ? 'Lena hai' : 'Dena hai'}</small>
+          <b>{data.closing < 0.5 ? rupees(0) : rupees(data.closing)}</b>
+          {data.pendingCount > 0 && <span>+ {data.pendingCount} bill{data.pendingCount === 1 ? '' : 's'} without amount</span>}
+        </footer>
+      )}
       {photo && (
         <div className="viewer" onClick={() => setPhoto(null)}>
           <button type="button" className="close" aria-label="Close">
