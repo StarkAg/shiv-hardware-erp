@@ -457,6 +457,8 @@ async function partyRows(ctx: QueryCtx, groupName: string) {
       signedClosing: closingSignedValue,
       pendingCount: pendingAll.filter((p) => p.partyLedgerId === account._id).length,
       voucherCount: new Set(lines.map((l) => l.voucherId)).size,
+      // The latest bill or payment, for a list sorted by recent activity.
+      lastDate: lines.reduce((t, l) => Math.max(t, l.date), 0) || null,
     };
   });
 }

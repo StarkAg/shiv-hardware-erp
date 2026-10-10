@@ -72,13 +72,52 @@ export default function App() {
     : <Lists tab={tab} setTab={setTab} onOpen={openParty} />
 }
 
+const SORTS = [
+  { id: 'amount', label: 'Amount' },
+  { id: 'recent', label: 'Recent' },
+  { id: 'name', label: 'Name A-Z' },
+]
+const FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'lena', label: 'Lena hai', test: (r) => r.closing >= 0.5 && r.closingSide === 'Dr' },
+  { id: 'dena', label: 'Dena hai', test: (r) => r.closing >= 0.5 && r.closingSide === 'Cr' },
+  { id: 'unpriced', label: 'Without amount', test: (r) => r.pendingCount > 0 },
+  { id: 'settled', label: 'Settled', test: (r) => r.closing < 0.5 && !r.pendingCount },
+]
+const SortIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4" /></svg>
+)
+const FilterIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z" /></svg>
+)
+
 function Lists({ tab, setTab, onOpen }) {
   const customers = useCached(api.reports.receivables, {}, 'receivables')
   const suppliers = useCached(api.reports.outstanding, {}, 'payables')
   const [q, setQ] = useState('')
+  const [sort, setSort] = useState(() => read('sort') ?? 'amount')
+  const [filter, setFilter] = useState(() => read('filter') ?? 'all')
+  const [panel, setPanel] = useState(null)
+  useEffect(() => { write('sort', sort) }, [sort])
+  useEffect(() => { write('filter', filter) }, [filter])
   const book = tab === 'customers' ? customers : suppliers
-  const rows = useMemo(() => (book?.rows ?? [])
-    .filter((r) => r.ledger && (!q || bare(r.ledger.name).toLowerCase().includes(q.trim().toLowerCase()))), [book, q])
+  const rows = useMemo(() => {
+    const test = FILTERS.find((f) => f.id === filter)?.test
+    const list = (book?.rows ?? [])
+      .filter((r) => r.ledger && (!q || bare(r.ledger.name).toLowerCase().includes(q.trim().toLowerCase())))
+      .filter((r) => !test || test(r))
+    // Amount is the order the books send: open accounts first, the largest at the top.
+    if (sort === 'recent') return [...list].sort((a, b) => (b.lastDate ?? 0) - (a.lastDate ?? 0))
+    if (sort === 'name') return [...list].sort((a, b) => bare(a.ledger.name).localeCompare(bare(b.ledger.name)))
+    return list
+  }, [book, q, sort, filter])
+  const pick = (options, value, set) => (
+    <div className="chips">
+      {options.map((o) => (
+        <button key={o.id} type="button" className={value === o.id ? 'on' : ''} onClick={() => { set(o.id); setPanel(null) }}>{o.label}</button>
+      ))}
+    </div>
+  )
 
   // Two plain figures, not one net: some owe, some have paid ahead, and the
   // net of the two hides both.
@@ -135,7 +174,11 @@ function Lists({ tab, setTab, onOpen }) {
       </div>
       <div className="searchbar">
         <input type="search" placeholder="Search a name" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button type="button" className={`tool ${panel === 'sort' ? 'open' : ''} ${sort !== 'amount' ? 'set' : ''}`} aria-label="Sort" onClick={() => setPanel(panel === 'sort' ? null : 'sort')}><SortIcon /></button>
+        <button type="button" className={`tool ${panel === 'filter' ? 'open' : ''} ${filter !== 'all' ? 'set' : ''}`} aria-label="Filter" onClick={() => setPanel(panel === 'filter' ? null : 'filter')}><FilterIcon /></button>
       </div>
+      {panel === 'sort' && pick(SORTS, sort, setSort)}
+      {panel === 'filter' && pick(FILTERS, filter, setFilter)}
       <ul className="chats">
         {rows.map((r) => {
           const name = bare(r.ledger.name)
@@ -157,7 +200,7 @@ function Lists({ tab, setTab, onOpen }) {
             </li>
           )
         })}
-        {book && !rows.length && <li className="empty">{q ? 'No name like that.' : 'Nobody here yet.'}</li>}
+        {book && !rows.length && <li className="empty">{q ? 'No name like that.' : filter !== 'all' ? 'Nobody in this filter.' : 'Nobody here yet.'}</li>}
       </ul>
     </div>
   )
