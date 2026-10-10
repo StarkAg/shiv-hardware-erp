@@ -33,6 +33,8 @@ certs/dev-key.pem
 # One-off scripts written to read production while chasing a bug.
 .probe/
 .counter-dist/
+# A clean copy of the commit the counter is built from (scripts/deploy.mjs).
+.deploy-tree/
 # What this machine last deployed of the parts with no record of their own (scripts/deploy.mjs).
 .deploy-state.json
 .intake/

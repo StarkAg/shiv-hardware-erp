@@ -22,7 +22,7 @@
 // and commits not yet on GitHub are pushed first (the panel site deploys from
 // GitHub, and every stamp below names a commit others can see).
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync, rmSync, cpSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, rmSync, rmdirSync, cpSync, statSync, symlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir, hostname, platform } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -204,18 +204,48 @@ function tidy(dir) {
   try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }) } catch { /* left for next time */ }
 }
 
+/**
+ * HEAD checked out beside the repo (a git worktree) and built there, so a
+ * build never picks up uncommitted edits. It borrows the repo's node_modules
+ * through a link, which is taken away first when the copy is removed — the
+ * link, never what it points at.
+ */
+const COMMITTED_TREE = join(ROOT, '.deploy-tree')
+function dropCommittedTree() {
+  try { rmdirSync(join(COMMITTED_TREE, 'node_modules')) } catch { /* no link there */ }
+  try { git('worktree', 'remove', '--force', COMMITTED_TREE) } catch { /* not a worktree any more */ }
+  if (existsSync(COMMITTED_TREE) && !existsSync(join(COMMITTED_TREE, 'node_modules'))) tidy(COMMITTED_TREE)
+  try { git('worktree', 'prune') } catch { /* nothing to prune */ }
+}
+async function buildCommitted() {
+  dropCommittedTree()
+  git('worktree', 'add', '--detach', COMMITTED_TREE, 'HEAD')
+  symlinkSync(join(ROOT, 'node_modules'), join(COMMITTED_TREE, 'node_modules'), 'junction')
+  await run('npm', ['run', 'build'], { cwd: COMMITTED_TREE })
+  return COMMITTED_TREE
+}
+
 async function deployVercel(t, sha) {
   const deployArgs = ['vercel', 'deploy', '--prod', '--yes', '--project', t.project, '--meta', `gitSha=${sha}`]
   if (t.build === 'counter') {
     // The counter is the panel's own build with counter.html as its index. It
     // is deployed from the repo with the folder named, not from inside it:
     // run from inside, Windows keeps the folder in use and it cannot be removed.
-    await run('npm', ['run', 'build'])
+    //
+    // Built from a clean copy of the commit (buildCommitted), not from the
+    // working folder: what goes live is what is on GitHub, whatever somebody
+    // has half-edited here.
     const out = join(ROOT, '.counter-dist')
-    tidy(out)
-    cpSync(join(ROOT, 'dist'), out, { recursive: true })
-    cpSync(join(out, 'counter.html'), join(out, 'index.html'))
-    try { await run('npx', [...deployArgs.slice(0, 2), '.counter-dist', ...deployArgs.slice(2)]) } finally { tidy(out) }
+    const tree = await buildCommitted()
+    try {
+      tidy(out)
+      cpSync(join(tree, 'dist'), out, { recursive: true })
+      cpSync(join(out, 'counter.html'), join(out, 'index.html'))
+      await run('npx', [...deployArgs.slice(0, 2), '.counter-dist', ...deployArgs.slice(2)])
+    } finally {
+      tidy(out)
+      dropCommittedTree()
+    }
   } else {
     await run('npx', deployArgs, { cwd: t.dir ? join(ROOT, t.dir) : ROOT })
   }
@@ -372,9 +402,15 @@ async function main() {
   // Committed, on main and on GitHub, so every stamp names a commit anyone can check out.
   const branch = git('rev-parse', '--abbrev-ref', 'HEAD')
   if (branch !== 'main') throw new Error(`on ${branch}; deploys go from main`)
-  const dirty = git('status', '--porcelain', '--untracked-files=no')
-  if (dirty && !DRY) throw new Error(`uncommitted changes — commit them first:\n${dirty}`)
-  if (dirty) log(yellow('(uncommitted changes; the plan below is for what is committed)'))
+  // Uncommitted edits hold back only the parts they would go into. A site
+  // uploads its own folder; the panel site and the counter are built from the
+  // commit itself (GitHub, or a clean copy), so nothing here reaches them.
+  const dirtyFiles = git('status', '--porcelain', '--untracked-files=no').split('\n')
+    .map((l) => l.slice(3).trim().replace(/^"|"$/g, '')).filter(Boolean)
+  const dirtyFor = (t) => (t.kind === 'vercel-git' || t.build === 'counter' || t.kind === 'print-server'
+    ? []
+    : dirtyFiles.filter((f) => t.paths.some((p) => f === p || f.startsWith(`${p}/`))))
+  if (dirtyFiles.length) log(yellow(`(uncommitted here: ${dirtyFiles.join(', ')} — parts they would go into are held back)`))
   git('fetch', '-q', 'origin', 'main')
   const behind = Number(git('rev-list', '--count', 'HEAD..origin/main'))
   if (behind) throw new Error(`GitHub has ${behind} commit(s) this copy lacks — pull first`)
@@ -394,6 +430,7 @@ async function main() {
     else if (ONLY && !named) action = 'skip'
     else if (b.skip) action = 'n/a'
     else if (b.error) action = 'error'
+    else if (dirtyFor(t).length) { action = 'held'; b.held = `uncommitted: ${dirtyFor(t).join(', ')}` }
     else if (t.optional && !named) action = files === null || files.length ? 'optional' : 'up to date'
     else if (named || ALL || files === null || files.length) action = 'deploy'
     else action = 'up to date'
@@ -407,8 +444,8 @@ async function main() {
   for (const { t, b, files, action } of plan) {
     const when = b.when ? new Date(b.when).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
     const changed = b.error || b.skip ? '—' : files === null ? 'unknown' : String(files.length)
-    const tint = action === 'deploy' ? green : action === 'error' ? red : action === 'optional' ? yellow : dim
-    const why = b.error ?? b.skip ?? (action === 'optional' ? t.optional : '') ?? ''
+    const tint = action === 'deploy' ? green : action === 'error' ? red : action === 'optional' || action === 'held' ? yellow : dim
+    const why = b.error ?? b.skip ?? b.held ?? (action === 'optional' ? t.optional : '') ?? ''
     log(`${t.id.padEnd(13)}${(when + (b.note ? ` ${b.note}` : '')).slice(0, 30).padEnd(31)}${changed.padEnd(10)}${tint(action)}${why ? dim(`  ${why}`) : ''}`)
   }
   const todo = plan.filter((p) => p.action === 'deploy')

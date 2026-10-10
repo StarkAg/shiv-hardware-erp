@@ -48,7 +48,7 @@ export default defineConfig({
     // print-server/data is the print server's own working files (WhatsApp
     // login, its backups, queues): written and locked while it runs, never
     // source. Watching it crashed the dev server with EBUSY (2026-10-10).
-    watch: { ignored: ['**/release/**', '**/release-quotation/**', '**/build/**', '**/backups/**', '**/print-server/data/**', '**/print-server/.wwebjs_cache/**', '**/.counter-dist/**'] },
+    watch: { ignored: ['**/release/**', '**/release-quotation/**', '**/build/**', '**/backups/**', '**/print-server/data/**', '**/print-server/.wwebjs_cache/**', '**/.counter-dist/**', '**/.deploy-tree/**'] },
   },
   build: {
     target: 'esnext',
