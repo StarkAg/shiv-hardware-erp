@@ -82,7 +82,14 @@ let running: Promise<void> | null = null
 
 /** Send what is due. One run at a time; safe to call whenever. */
 export function flushPosts(): Promise<void> {
-  running ??= (async () => {
+  // Set before the run starts and cleared only by that same run. Written as
+  // `running ??= (async () => { … finally { running = null } })()`, a run with
+  // nothing to do finished before the assignment, cleared nothing, and then
+  // stayed "running" for good — no bill was sent again until a reload
+  // (2026-10-10).
+  if (running) return running
+  const run = (async () => {
+    await Promise.resolve()
     try {
       for (const job of readJobs()) {
         if (job.nextAt > Date.now()) continue
@@ -133,11 +140,13 @@ export function flushPosts(): Promise<void> {
           toast(`Bill ${bill.number} was not posted to the books\n${message}`, 'error')
         }
       }
-    } finally {
-      running = null
+    } catch (err) {
+      console.warn('[posting] run failed', err)
     }
   })()
-  return running
+  running = run
+  void run.finally(() => { if (running === run) running = null })
+  return run
 }
 
 /** The books' answer is the bill now: their number, voucher and account. */

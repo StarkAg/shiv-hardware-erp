@@ -101,7 +101,14 @@ let running: Promise<void> | null = null
 
 /** Send whatever is waiting. Safe to call any time; one run at a time. */
 export function flushBillPhotos(): Promise<void> {
-  running ??= (async () => {
+  // Set before the run starts and cleared only by that same run. Written as
+  // `running ??= (async () => { … finally { running = null } })()`, a run with
+  // nothing to do finished before the assignment, cleared nothing, and then
+  // stayed "running" for good — no bill was sent again until a reload
+  // (2026-10-10).
+  if (running) return running
+  const run = (async () => {
+    await Promise.resolve()
     try {
       for (const job of await allJobs()) {
         const c = convexHttp()
@@ -137,11 +144,11 @@ export function flushBillPhotos(): Promise<void> {
       announce((await allJobs()).length)
     } catch {
       /* storage unavailable: nothing to send from here */
-    } finally {
-      running = null
     }
   })()
-  return running
+  running = run
+  void run.finally(() => { if (running === run) running = null })
+  return run
 }
 
 let started = false
