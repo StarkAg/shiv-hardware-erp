@@ -185,7 +185,7 @@ function CloudGuaranteeSync() {
   const [pin, setPin] = useState(readCloudPin)
   const [asking, setAsking] = useState(false)
   const [status, setStatus] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [, setBusy] = useState(false)
 
   const pull = useCallback(async (code: string, quiet = false) => {
     setBusy(true)
@@ -218,17 +218,17 @@ function CloudGuaranteeSync() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // No button: History fetches every counter's cards by itself each time it
+  // opens (above). Only a device that has never been given the shop code is
+  // offered the one-time link to enter it.
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button
-        variant="outline"
-        className="flex items-center gap-1.5"
-        disabled={busy}
-        onClick={() => (pin ? void pull(pin) : setAsking(true))}
-      >
-        <CloudDownload size={15} /> {busy ? 'Syncing…' : 'Sync from cloud'}
-      </Button>
-      {status && <span className="text-xs text-muted">{status}</span>}
+      {!pin && (
+        <button type="button" onClick={() => setAsking(true)} className="flex items-center gap-1 text-xs font-semibold text-muted underline hover:text-stone-700 dark:hover:text-stone-200">
+          <CloudDownload size={13} /> Enter shop code to see every counter's cards
+        </button>
+      )}
+      {!pin && status && <span className="text-xs text-muted">{status}</span>}
       {asking && (
         <Confirm
           title="Sync guarantee cards"

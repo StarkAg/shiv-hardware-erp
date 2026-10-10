@@ -505,6 +505,8 @@ export interface Bill extends BillCharges {
   guaranteeCard?: boolean
   /** When its card was made or marked done (ms). */
   guaranteeDoneAt?: number
+  /** Set aside on the Guarantee list ("Ignore for now"): off the to-do, not done (ms). */
+  guaranteeIgnoredAt?: number
   /**
    * A sale whose goods have not gone yet: on the Delivery list. Unset means
    * delivered — every bill written before this existed, and the usual counter

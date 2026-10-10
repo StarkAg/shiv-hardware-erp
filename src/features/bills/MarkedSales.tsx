@@ -49,12 +49,16 @@ function MarkedSales({ kind }: { kind: ListKind }) {
   const navigate = useNavigate()
   const { bills, saveBill } = useStore()
   const [showDone, setShowDone] = useState(false)
+  const [showIgnored, setShowIgnored] = useState(false)
+  // Only the Guarantee list can set a sale aside for now.
+  const ignoredAt = (b: Bill) => (kind === 'guarantee' ? b.guaranteeIgnoredAt : undefined)
 
-  const { pending, done } = useMemo(() => {
+  const { pending, ignored, done } = useMemo(() => {
     const marked = bills.filter((b) => (b.kind ?? 'sale') === 'sale' && list.flag(b))
     return {
       // Oldest first: the one that has waited longest is at the top.
-      pending: marked.filter((b) => !list.doneAt(b)).sort((a, b) => a.date.localeCompare(b.date)),
+      pending: marked.filter((b) => !list.doneAt(b) && !ignoredAt(b)).sort((a, b) => a.date.localeCompare(b.date)),
+      ignored: marked.filter((b) => !list.doneAt(b) && ignoredAt(b)).sort((a, b) => (ignoredAt(b) ?? 0) - (ignoredAt(a) ?? 0)),
       done: marked.filter((b) => list.doneAt(b)).sort((a, b) => (list.doneAt(b) ?? 0) - (list.doneAt(a) ?? 0)),
     }
   }, [bills, list])
@@ -91,6 +95,15 @@ function MarkedSales({ kind }: { kind: ListKind }) {
         >
           <FileText size={14} /> Bill
         </button>
+        {kind === 'guarantee' && !isDone && (
+          <button
+            type="button"
+            onClick={() => saveBill({ ...b, guaranteeIgnoredAt: b.guaranteeIgnoredAt ? undefined : Date.now() })}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-muted hover:bg-stone-50 hover:text-stone-700 dark:hover:bg-white/5 dark:hover:text-stone-200"
+          >
+            {b.guaranteeIgnoredAt ? 'Bring back' : 'Ignore for now'}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => saveBill(list.setDone(b, isDone ? undefined : Date.now()))}
@@ -119,6 +132,19 @@ function MarkedSales({ kind }: { kind: ListKind }) {
           <p className="px-4 py-10 text-center text-sm text-muted">{list.empty}</p>
         )}
       </div>
+
+      {ignored.length > 0 && (
+        <div className="mt-4">
+          <button type="button" onClick={() => setShowIgnored((v) => !v)} className="mb-2 text-xs font-semibold text-muted hover:text-stone-700 dark:hover:text-stone-200">
+            {showIgnored ? 'Hide' : 'Show'} ignored for now ({ignored.length})
+          </button>
+          {showIgnored && (
+            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-white/10 dark:bg-stone-900">
+              {ignored.map((b) => row(b, false))}
+            </div>
+          )}
+        </div>
+      )}
 
       {done.length > 0 && (
         <div className="mt-4">
