@@ -320,3 +320,30 @@ export const purge = mutation({
     await record(ctx, 'bill.purge', `Permanently deleted bill ${row.bill?.number ?? ''}`)
   },
 })
+
+/**
+ * One-off (2026-10-10): drop the blank line the bill form used to save at the
+ * foot of a bill (no name, no amount) from bills that also have real lines.
+ * Bills whose only line is blank (receipts, payments) are left as they are.
+ * The bill's time moves on so every device takes the cleaned copy.
+ *   npx convex run --prod bills:dropBlankLines '{}'   (then pass the cursor it returns)
+ */
+export const dropBlankLines = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, { cursor }) => {
+    const page = await ctx.db.query('bills').paginate({ numItems: 200, cursor: cursor ?? null })
+    const blank = (i: any) => !String(i?.description ?? '').trim() && !Number(i?.amount) && !i?.auto && !i?.isRoundup && !i?.isDiscount
+    const changed: any[] = []
+    for (const row of page.page) {
+      const bill: any = row.bill ?? {}
+      const items: any[] = Array.isArray(bill.items) ? bill.items : []
+      const kept = items.filter((i) => !blank(i))
+      if (!kept.length || kept.length === items.length) continue
+      changed.push({ ...bill, items: kept, updatedAt: Date.now() })
+    }
+    // Written the way a save writes them, so the bill sequence moves and every
+    // device pulls the cleaned bills.
+    if (changed.length) await writeBills(ctx, changed)
+    return { cleaned: changed.map((b) => String(b.number)), isDone: page.isDone, cursor: page.continueCursor }
+  },
+})

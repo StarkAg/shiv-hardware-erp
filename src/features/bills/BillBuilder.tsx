@@ -2153,6 +2153,17 @@ function UnitField({ value, options, onPick, onNavKey, onCommit }: {
   )
 }
 
+/**
+ * The empty row left at the foot of the form for the next item is not part of
+ * the bill: it saved as a line with no name and no amount (bill 366 printed a
+ * blank line 2). Charges and round-off lines are kept. A voucher whose only
+ * line is blank — a receipt or payment — keeps it as it always has.
+ */
+function withoutBlankLines(items: BillItem[]): BillItem[] {
+  const kept = items.filter((i) => i.description.trim() || Number(i.amount) || i.auto || i.isRoundup || i.isDiscount)
+  return kept.length ? kept : items
+}
+
 function emptyItem(): BillItem {
   return { id: uid(), description: '', qty: 1, unit: 'Pc', amount: 0 }
 }
@@ -3390,7 +3401,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       total,
       ...((draft.kind ?? 'sale') === 'purchase' ? { checks: checksRef.current } : {}),
       ...over,
-      items: (over?.items ?? priced.items).map(withSqft),
+      items: withoutBlankLines(over?.items ?? priced.items).map(withSqft),
       attachments,
     }, !borrowed)
     if (!result) return null
