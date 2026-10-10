@@ -24,7 +24,7 @@
  */
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./lib/guarded";
-import type { QueryCtx } from "./_generated/server";
+import { internalMutation, type QueryCtx } from "./_generated/server";
 import { readBills } from "./lib/billRows";
 import { canonicalUnit } from "./lib/text";
 import { INVENTORY_SEED, seedRefForName } from "./lib/inventorySeed";
@@ -505,3 +505,24 @@ export const adjustSeed = mutation({
     return { qty, duplicate: false };
   },
 });
+
+/**
+ * Removes every inventory item of one brand, with its shelf settings and
+ * counts. Added 2026-10-10 to take Fevicol out of the inventory app (a copy of
+ * what went is in backups/inventory-fevicol-deleted-2026-10-10.json). Bills
+ * that named these items keep their lines; only the shelf list forgets them.
+ *   npx convex run --prod inventory:removeBrand '{"brand": "Fevicol"}'
+ */
+export const removeBrand = internalMutation({
+  args: { brand: v.string() },
+  handler: async (ctx, { brand }) => {
+    const wanted = brand.trim().toLowerCase()
+    if (!wanted) throw new ConvexError("Name the brand to remove.")
+    const products = (await ctx.db.query("inventoryProducts").collect()).filter((p) => p.brand.trim().toLowerCase() === wanted)
+    const refs = new Set(products.map((p) => p.ref))
+    const items = (await ctx.db.query("stockItems").collect()).filter((r) => refs.has(r.ref))
+    const counts = (await ctx.db.query("stockCounts").collect()).filter((r) => refs.has(r.ref))
+    for (const row of [...products, ...items, ...counts]) await ctx.db.delete(row._id)
+    return { items: products.length, settings: items.length, counts: counts.length, names: products.map((p) => p.name) }
+  },
+})

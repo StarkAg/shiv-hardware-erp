@@ -1,0 +1,293 @@
+{
+  "deletedAt": "2026-10-10T10:39:30.100Z",
+  "reason": "Tony asked to delete all Fevicol items from the inventory app (2026-10-10)",
+  "products": [
+    {
+      "_creationTime": 1791354104464.5059,
+      "_id": "rx7bkk32eqpmjhvn60r0n1m1218ftcct",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "SH",
+      "name": "Fevicol SH 250g",
+      "ref": "custom:other:fevicol:sh:250g",
+      "size": "250g"
+    },
+    {
+      "_creationTime": 1791354017755.7769,
+      "_id": "rx7b53jpetehxejvaaw8t3qtfh8ftpcj",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "Marine",
+      "name": "Fevicol Marine 500g",
+      "ref": "custom:other:fevicol:marine:500g",
+      "size": "500g"
+    },
+    {
+      "_creationTime": 1791353968325.2673,
+      "_id": "rx7bv22bb3q84kjfs9qbpms8q18ftzef",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "Marine",
+      "name": "Fevicol Marine 2 Kg",
+      "ref": "custom:other:fevicol:marine:2kg",
+      "size": "2 Kg"
+    },
+    {
+      "_creationTime": 1791353919817.8467,
+      "_id": "rx7bhx0rr8sgzazy4tmej9pdd18fvsec",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "HeatX",
+      "name": "Fevicol HeatX 200Ml",
+      "ref": "custom:other:fevicol:heatx:200ml",
+      "size": "200Ml"
+    },
+    {
+      "_creationTime": 1791188363749.3843,
+      "_id": "rx77qe9rensq7naqmh5zha77qh8fq18t",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "HeatX",
+      "name": "Fevicol HeatX 250g",
+      "ref": "custom:other:fevicol:heatx:250g",
+      "size": "250g"
+    },
+    {
+      "_creationTime": 1791188338103.1868,
+      "_id": "rx732c9v95vfb4gp69zg3vhzv98fp4kd",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "HeatX",
+      "name": "Fevicol HeatX 500Ml",
+      "ref": "custom:other:fevicol:heatx:500ml",
+      "size": "500Ml"
+    },
+    {
+      "_creationTime": 1791188314126.4102,
+      "_id": "rx72pmhzrcjf6g47bnh08sh89s8fpq1m",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "Hyper",
+      "name": "Fevicol Hyper 1 Kg",
+      "ref": "custom:other:fevicol:hyper:1kg",
+      "size": "1 Kg"
+    },
+    {
+      "_creationTime": 1791188290198.365,
+      "_id": "rx7es5v1yhv597xgyw85cj3qqn8fpaj3",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "NailFree",
+      "name": "Fevicol NailFree 435g",
+      "ref": "custom:other:fevicol:nailfree:435g",
+      "size": "435g"
+    },
+    {
+      "_creationTime": 1791188270919.4482,
+      "_id": "rx71pg06nx372w2sgym6j1qx9x8fqpjq",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "ProBond",
+      "name": "Fevicol ProBond 1 Kg",
+      "ref": "custom:other:fevicol:probond:1kg",
+      "size": "1 Kg"
+    },
+    {
+      "_creationTime": 1791188230579.6504,
+      "_id": "rx78qgt5pz4b7dw527rbjsnzh58fqjew",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "Marine",
+      "name": "Fevicol Marine 1L",
+      "ref": "custom:other:fevicol:marine:1l",
+      "size": "1L"
+    },
+    {
+      "_creationTime": 1791188209992.5618,
+      "_id": "rx786tbkjdnsffrm8rh9ansn3x8fqkra",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "HeatX",
+      "name": "Fevicol HeatX 1L",
+      "ref": "custom:other:fevicol:heatx:1l",
+      "size": "1L"
+    },
+    {
+      "_creationTime": 1791188194683.5625,
+      "_id": "rx7er1pdn8wk4t742xah3fwkq18fp1sz",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "ProBond",
+      "name": "Fevicol ProBond 500g",
+      "ref": "custom:other:fevicol:probond:500g",
+      "size": "500g"
+    },
+    {
+      "_creationTime": 1791188162663.3945,
+      "_id": "rx7b32apwycxjkcww847nzpp8d8fqbc5",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "Polyfix Activator",
+      "name": "Fevicol Polyfix Activator 50Ml",
+      "ref": "custom:other:fevicol:polyfixactivator:50ml",
+      "size": "50Ml"
+    },
+    {
+      "_creationTime": 1791188117724.378,
+      "_id": "rx7fvb6rgjtsn089qbvn6epm818fq42s",
+      "brand": "Fevicol",
+      "category": "other",
+      "label": "Polyfix",
+      "name": "Fevicol Polyfix 250 g",
+      "ref": "custom:other:fevicol:polyfix:250g",
+      "size": "250 g"
+    }
+  ],
+  "stockItems": [],
+  "stockCounts": [
+    {
+      "_creationTime": 1791438715073.773,
+      "_id": "rh7cyw386290441tb8cw2bzsq58fwapb",
+      "at": 1791438715073,
+      "day": "2026-10-08",
+      "note": "Inventory Edit: -1",
+      "qty": 23,
+      "ref": "custom:other:fevicol:heatx:200ml"
+    },
+    {
+      "_creationTime": 1791354104464.506,
+      "_id": "rh73ab0yj93z0wmexsh9zhvc4x8fvw3v",
+      "at": 1791354104464,
+      "day": "2026-10-07",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 30,
+      "ref": "custom:other:fevicol:sh:250g"
+    },
+    {
+      "_creationTime": 1791354017755.777,
+      "_id": "rh7bg8c357sqapjxh77jp7me158fteth",
+      "at": 1791354017755,
+      "day": "2026-10-07",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 20,
+      "ref": "custom:other:fevicol:marine:500g"
+    },
+    {
+      "_creationTime": 1791353968325.2676,
+      "_id": "rh754gp8acxjbk57ddhjwkwheh8ftc9p",
+      "at": 1791353968325,
+      "day": "2026-10-07",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 12,
+      "ref": "custom:other:fevicol:marine:2kg"
+    },
+    {
+      "_creationTime": 1791353919817.847,
+      "_id": "rh7ckhn9erm2kz3anxr4jxee1x8ftzgt",
+      "at": 1791353919817,
+      "day": "2026-10-07",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 24,
+      "ref": "custom:other:fevicol:heatx:200ml"
+    },
+    {
+      "_creationTime": 1791200041088.245,
+      "_id": "rh7fcxnyec8sb52wzkm3f4yka98fprzg",
+      "at": 1791200041088,
+      "day": "2026-10-05",
+      "note": "Inventory Edit: -1",
+      "qty": 0,
+      "ref": "custom:other:fevicol:heatx:250g"
+    },
+    {
+      "_creationTime": 1791188363749.3845,
+      "_id": "rh78evsqspwn98h6pb2x3a3akd8fp8bs",
+      "at": 1791188363749,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 1,
+      "ref": "custom:other:fevicol:heatx:250g"
+    },
+    {
+      "_creationTime": 1791188338103.187,
+      "_id": "rh7263xg5h8ekyajfs6d74zrsd8fqrqk",
+      "at": 1791188338103,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 2,
+      "ref": "custom:other:fevicol:heatx:500ml"
+    },
+    {
+      "_creationTime": 1791188314126.4104,
+      "_id": "rh7ev8v66atkmpz7z9ggna9yfs8fq015",
+      "at": 1791188314126,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 5,
+      "ref": "custom:other:fevicol:hyper:1kg"
+    },
+    {
+      "_creationTime": 1791188290198.3652,
+      "_id": "rh74v6ycqbhg0r3958wafswg2h8fp2z6",
+      "at": 1791188290198,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 22,
+      "ref": "custom:other:fevicol:nailfree:435g"
+    },
+    {
+      "_creationTime": 1791188270919.4485,
+      "_id": "rh75ex2tdjvnhv73b5apg0pb7d8fqthp",
+      "at": 1791188270919,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 5,
+      "ref": "custom:other:fevicol:probond:1kg"
+    },
+    {
+      "_creationTime": 1791188230579.6506,
+      "_id": "rh704fnp8g3r5gmnvgkzsr04858fq6w2",
+      "at": 1791188230579,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 4,
+      "ref": "custom:other:fevicol:marine:1l"
+    },
+    {
+      "_creationTime": 1791188209992.562,
+      "_id": "rh76z1k5d5s8nc52q247yeqydh8fqmey",
+      "at": 1791188209992,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 2,
+      "ref": "custom:other:fevicol:heatx:1l"
+    },
+    {
+      "_creationTime": 1791188194683.5627,
+      "_id": "rh7akc4zxkfqhq2p8az601pf618fpby5",
+      "at": 1791188194683,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 2,
+      "ref": "custom:other:fevicol:probond:500g"
+    },
+    {
+      "_creationTime": 1791188162663.3948,
+      "_id": "rh7bfpwdpfw7dw4hv21rz007x58fpy6m",
+      "at": 1791188162663,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 5,
+      "ref": "custom:other:fevicol:polyfixactivator:50ml"
+    },
+    {
+      "_creationTime": 1791188117724.3782,
+      "_id": "rh7ffargrzmnfzchevfarbvq5x8fpye3",
+      "at": 1791188117724,
+      "day": "2026-10-05",
+      "note": "Opening quantity from Inventory Add",
+      "qty": 8,
+      "ref": "custom:other:fevicol:polyfix:250g"
+    }
+  ]
+}
