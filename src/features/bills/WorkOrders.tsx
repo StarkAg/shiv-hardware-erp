@@ -19,13 +19,12 @@ import { SHOP, billLines, type Bill } from '../../lib/types'
  */
 type Stage = 'measure' | 'measured' | 'billed'
 
-const STAGES: { key: Stage; title: string; hint: string }[] = [
-  { key: 'measure', title: 'To measure', hint: 'Send the mechanic with the visit slip' },
-  { key: 'measured', title: 'Measured', hint: 'Sizes are in — make the sale bill' },
-  { key: 'billed', title: 'Billed', hint: '' },
-]
-
 const stageOf = (b: Bill): Stage => (b.workDoneAt ? 'billed' : b.measuredAt ? 'measured' : 'measure')
+/** "Today", "3 days" — how long an order has waited, so the oldest stand out. */
+const waited = (b: Bill) => {
+  const days = Math.floor((Date.now() - (Date.parse(b.date) || Date.now())) / 86_400_000)
+  return days <= 0 ? 'Today' : days === 1 ? '1 day' : `${days} days`
+}
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 const money = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string)
@@ -121,7 +120,13 @@ export function WorkOrders() {
     const btn = 'flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 dark:border-white/10 dark:text-stone-200 dark:hover:bg-white/5'
     const primary = 'flex items-center gap-1.5 rounded-lg bg-shiv-green px-3 py-1.5 text-xs font-bold text-stone-950 hover:brightness-95'
     return (
-      <div key={b.id} className={`border-b border-stone-100 px-4 py-3 last:border-b-0 dark:border-white/5 ${stage === 'billed' ? 'opacity-60' : ''}`}>
+      <div key={b.id} className={`rounded-xl border border-stone-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-stone-900 ${stage === 'billed' ? 'opacity-60' : ''}`}>
+        <div className="mb-1 flex items-center gap-2 text-[11px] font-bold">
+          <span className={`rounded-full px-2 py-0.5 ${stage === 'measure' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' : stage === 'measured' ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' : 'bg-stone-100 text-stone-600 dark:bg-white/10 dark:text-stone-300'}`}>
+            {stage === 'measure' ? 'To measure' : stage === 'measured' ? 'Measured' : 'Billed'}
+          </span>
+          {stage !== 'billed' && <span className="font-semibold text-muted">{waited(b)}</span>}
+        </div>
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="font-mono text-xs text-muted">{quote ? b.number : `#${b.number}`}</span>
           <span className="font-semibold text-stone-900 dark:text-stone-100">{b.customerName || '—'}</span>
@@ -185,52 +190,74 @@ export function WorkOrders() {
 
   const byStage = (s: Stage) => orders.filter((b) => stageOf(b) === s)
   const billed = byStage('billed').sort((a, b) => (b.workDoneAt ?? 0) - (a.workDoneAt ?? 0))
+  const open = orders.filter((b) => stageOf(b) !== 'billed')
+  /*
+   * The board: one column per mechanic, and one for orders nobody has been
+   * sent on yet, so who has what is seen at a glance. In a column, what waits
+   * for measuring comes first, oldest first; measured ones (ready to bill)
+   * follow.
+   */
+  const columns = [
+    { key: '', title: 'Unassigned', hint: 'Pick a mechanic on the card' },
+    ...[...new Set([...staff, ...open.map((b) => b.visitBy).filter((n): n is string => !!n)])].map((n) => ({ key: n, title: n, hint: '' })),
+  ].map((c) => ({
+    ...c,
+    orders: open
+      .filter((b) => (b.visitBy ?? '') === c.key)
+      .sort((a, b) => (stageOf(a) === stageOf(b) ? a.date.localeCompare(b.date) : stageOf(a) === 'measure' ? -1 : 1)),
+  }))
+  // A column only for who has work (and Unassigned, always first); the rest
+  // are named once in the header as free, not drawn as empty boards.
+  const free = columns.filter((c) => c.key && !c.orders.length).map((c) => c.title)
+  const busy = columns.filter((c) => c.key === '' || c.orders.length)
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 p-3 md:p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <ClipboardList size={20} className="text-shiv-green" />
-        <h1 className="text-lg font-bold text-stone-900 dark:text-stone-100">Work list</h1>
-        <button
-          type="button"
-          onClick={() => navigate('/bills?new=quotation&order=1')}
-          className="ml-auto rounded-lg bg-shiv-green px-3 py-1.5 text-xs font-bold text-stone-950 hover:brightness-95"
-        >
-          New order
-        </button>
-      </div>
-      <p className="-mt-2 text-xs text-muted">
-        Take the advance as a Receipt. Write what to make as a Quotation with <b>Order</b> on (New order). Print the visit
-        slip for the mechanic, type in the sizes he brings, then Make sale bill.
-      </p>
-
-      {STAGES.filter((s) => s.key !== 'billed').map((s) => {
-        const list = byStage(s.key)
-        return (
-          <section key={s.key}>
-            <div className="mb-1.5 flex items-baseline gap-2">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{s.title}</h2>
-              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-bold text-stone-700 dark:bg-white/10 dark:text-stone-200">{list.length}</span>
-              <span className="text-xs text-muted">{s.hint}</span>
-            </div>
-            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-white/10 dark:bg-stone-900">
-              {list.length ? list.map(card) : <p className="px-4 py-6 text-center text-sm text-muted">Nothing here.</p>}
-            </div>
-          </section>
-        )
-      })}
-
-      {billed.length > 0 && (
-        <section>
-          <button type="button" onClick={() => setShowBilled((v) => !v)} className="mb-1.5 text-xs font-semibold text-muted hover:text-stone-700 dark:hover:text-stone-200">
-            {showBilled ? 'Hide' : 'Show'} billed ({billed.length})
-          </button>
-          {showBilled && (
-            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-white/10 dark:bg-stone-900">
-              {billed.map(card)}
-            </div>
+    <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:p-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex items-center gap-2">
+          <ClipboardList size={20} className="text-shiv-green" />
+          <h1 className="text-lg font-bold text-stone-900 dark:text-stone-100">Work list</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{byStage('measure').length} to measure</span>
+          <span className="rounded-full bg-sky-100 px-2.5 py-1 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300">{byStage('measured').length} measured · to bill</span>
+          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-stone-700 dark:bg-white/10 dark:text-stone-200">{columns.find((c) => c.key === '')?.orders.length ?? 0} unassigned</span>
+          {free.length > 0 && <span className="font-semibold text-muted">Free: {free.join(', ')}</span>}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {billed.length > 0 && (
+            <button type="button" onClick={() => setShowBilled((v) => !v)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-muted hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-white/10 dark:hover:text-stone-200">
+              {showBilled ? 'Hide' : 'Show'} billed ({billed.length})
+            </button>
           )}
-        </section>
+          <button
+            type="button"
+            onClick={() => navigate('/bills?new=quotation&order=1')}
+            className="rounded-lg bg-shiv-green px-3 py-1.5 text-xs font-bold text-stone-950 hover:brightness-95"
+          >
+            New order
+          </button>
+        </div>
+      </div>
+
+      {open.length === 0 && !showBilled ? (
+        <p className="rounded-xl border border-dashed border-stone-300 px-4 py-10 text-center text-sm text-muted dark:border-white/15">
+          No open orders. Take the advance as a Receipt, then <b>New order</b>: what to make, as a Quotation with Order on.
+          Pick a mechanic on its card, print the visit slip, enter the sizes he brings, then Make sale bill.
+        </p>
+      ) : (
+        <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(300px,1fr))] content-start gap-3 overflow-y-auto">
+          {(showBilled ? [{ key: 'billed', title: 'Billed', hint: 'Newest first', orders: billed }] : busy).map((c) => (
+            <section key={c.key || 'unassigned'} className="flex min-w-0 flex-col gap-2 rounded-2xl bg-stone-100/70 p-2.5 dark:bg-white/5">
+              <div className="flex items-baseline gap-2 px-1">
+                <h2 className="truncate text-sm font-bold text-stone-900 dark:text-stone-100">{c.title}</h2>
+                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-stone-700 dark:bg-stone-800 dark:text-stone-200">{c.orders.length}</span>
+                {c.hint && <span className="truncate text-xs text-muted">{c.hint}</span>}
+              </div>
+              {c.orders.length ? c.orders.map(card) : <p className="px-1 py-4 text-center text-xs text-muted">Nothing on.</p>}
+            </section>
+          ))}
+        </div>
       )}
     </div>
   )
