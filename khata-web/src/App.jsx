@@ -7,7 +7,7 @@ import { anyApi } from 'convex/server'
  *
  * Made to be used like a chat app by someone who has never opened the panel:
  * two tabs (Customers, Suppliers), each a list like chats — a name, what is
- * owed either way, green for money to come and red for money to pay. Opening
+ * owed either way (lena hai green, dena hai red, in the shop's words). Opening
  * one reads the account like a chat: every bill and payment a bubble, newest
  * at the bottom, with the bill's photos to tap open. What the shop sent sits
  * on the right, what the party sent on the left, and the account's lena hai /
@@ -46,10 +46,9 @@ function LiveLight() {
   return <span className={`live ${on ? 'on' : ''}`} role="status"><i />{on ? 'Live' : 'Connecting'}</span>
 }
 const dayOf = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-/** Dr / Cr in words a customer's or supplier's account is read in. */
-const sideWord = (side, tab) => (tab === 'customers'
-  ? (side === 'Dr' ? 'to come' : 'advance')
-  : (side === 'Cr' ? 'to pay' : 'advance'))
+/** Dr / Cr as the shop says it: Dr on a party is money to take, Cr to give. */
+const sideWord = (side) => (side === 'Dr' ? 'lena hai' : 'dena hai')
+const SETTLED = 'Hisaab barabar'
 const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
 /** A line's voucher in the words of who sent what; the bubble's side says who. */
 const SENT = { Sale: 'Bill sent', Purchase: 'Bill received', Receipt: 'Payment sent', Payment: 'Payment sent' }
@@ -82,7 +81,7 @@ const FILTERS = [
   { id: 'lena', label: 'Lena hai', test: (r) => r.closing >= 0.5 && r.closingSide === 'Dr' },
   { id: 'dena', label: 'Dena hai', test: (r) => r.closing >= 0.5 && r.closingSide === 'Cr' },
   { id: 'unpriced', label: 'Without amount', test: (r) => r.pendingCount > 0 },
-  { id: 'settled', label: 'Settled', test: (r) => r.closing < 0.5 && !r.pendingCount },
+  { id: 'settled', label: SETTLED, test: (r) => r.closing < 0.5 && !r.pendingCount },
 ]
 const SortIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4" /></svg>
@@ -164,13 +163,13 @@ function Lists({ tab, setTab, onOpen }) {
       <div className="summary">
         {!book ? 'Loading…' : tab === 'customers' ? (
           <>
-            <span className="in"><small>To come</small>{rupees(dr)}</span>
-            <span><small>Advances held</small>{rupees(cr)}</span>
+            <span className="in"><small>Lena hai</small>{rupees(dr)}</span>
+            <span><small>Advance, dena hai</small>{rupees(cr)}</span>
           </>
         ) : (
           <>
-            <span className="out"><small>To pay</small>{rupees(cr)}</span>
-            <span><small>Advances given</small>{rupees(dr)}</span>
+            <span className="out"><small>Dena hai</small>{rupees(cr)}</span>
+            <span><small>Advance, lena hai</small>{rupees(dr)}</span>
           </>
         )}
       </div>
@@ -186,9 +185,9 @@ function Lists({ tab, setTab, onOpen }) {
           const name = bare(r.ledger.name)
           const zero = r.closing < 0.5
           const toCome = r.closingSide === 'Dr'
-          const what = zero ? 'Settled'
-            : tab === 'customers' ? (toCome ? 'Owes us' : 'Advance with us')
-            : (toCome ? 'Advance given, owes us' : 'We owe')
+          const what = zero ? SETTLED
+            : tab === 'customers' ? (toCome ? 'Lena hai' : 'Advance, dena hai')
+            : (toCome ? 'Advance, lena hai' : 'Dena hai')
           return (
             <li key={r.ledger._id} className={changed.has(r.ledger._id) ? 'changed' : undefined}>
               <button type="button" onClick={() => onOpen({ id: r.ledger._id, name, phone: r.ledger.phone ?? '', tab })}>
@@ -235,9 +234,7 @@ function Party({ party, onBack }) {
     return out
   }, [data])
 
-  const closing = data ? (data.closing < 0.5 ? 'Settled' : `${rupees(data.closing)} ${party.tab === 'customers'
-    ? (data.closingSide === 'Dr' ? 'owes us' : 'advance with us')
-    : (data.closingSide === 'Cr' ? 'we owe' : 'owes us')}`) : 'Loading…'
+  const closing = data ? (data.closing < 0.5 ? SETTLED : `${rupees(data.closing)} ${sideWord(data.closingSide)}`) : 'Loading…'
 
   return (
     <div className="app chat">
@@ -278,7 +275,7 @@ function Party({ party, onBack }) {
               <div className="money">{rupees(r.amount)}</div>
               {r.narration && <div className="narr">{r.narration}</div>}
               <Photos shots={shots} onOpen={setPhoto} />
-              <div className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide, party.tab)}</div>
+              <div className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</div>
             </div>
           )
         })}
@@ -286,7 +283,7 @@ function Party({ party, onBack }) {
       </main>
       {data && (
         <footer className={`due ${data.closing < 0.5 ? '' : data.closingSide === 'Dr' ? 'in' : 'out'}`}>
-          <small>{data.closing < 0.5 ? 'Settled' : data.closingSide === 'Dr' ? 'Lena hai' : 'Dena hai'}</small>
+          <small>{data.closing < 0.5 ? SETTLED : data.closingSide === 'Dr' ? 'Lena hai' : 'Dena hai'}</small>
           <b>{data.closing < 0.5 ? rupees(0) : rupees(data.closing)}</b>
           {data.pendingCount > 0 && <span>+ {data.pendingCount} bill{data.pendingCount === 1 ? '' : 's'} without amount</span>}
         </footer>
