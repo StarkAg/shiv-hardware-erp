@@ -2235,6 +2235,10 @@ function hasMeaningfulContent(bill: Bill): boolean {
  * Discount, GST and round-off for the whole bill. Each is a setting, and the
  * lines it writes are listed underneath with what they came to.
  */
+/** Whether a bill uses a discount, GST or a round-off. */
+const chargesInUse = (b: Bill) =>
+  Number(b.offValue) > 0 || (b.gst ?? 'none') !== 'none' || (b.round ?? 'off') !== 'off'
+
 function ChargesPanel({ bill, charges, onChange }: {
   bill: Bill
   charges: BillItem[]
@@ -2791,6 +2795,10 @@ export function BillBuilder() {
             : {}),
       }
     })
+    // The bill photo open beside the form stays open across the switch. Only
+    // marked when the switch starts a fresh voucher (a new id); a type changed
+    // in place keeps the same id and closes nothing anyway.
+    keepPhoto.current = Boolean(freshBill)
     // "New order" on the Work list: the quotation starts with Order on.
     if (pageParams.get('order') === '1') setDraft((d) => ({ ...d, workOrder: true }))
     setView('form')
@@ -2849,7 +2857,14 @@ export function BillBuilder() {
   const [dockSize, setDockSize] = useState<DockSize>(readDockSize)
   const [dockKey, setDockKey] = useState(0)
   const showPhoto = (shown: unknown) => { setPhotoShown(shown); setPhotoFull(false); setDockKey((k) => k + 1) }
-  useEffect(() => { setPhotoShown(null); setPhotoFull(false) }, [draft.id])
+  // A different bill closes the photo — except a switch of voucher type
+  // (Sale to Receipt…), which starts a fresh voucher from the same paper: the
+  // photo being typed from stays open (keepPhoto, set by that switch).
+  const keepPhoto = useRef(false)
+  useEffect(() => {
+    if (keepPhoto.current) { keepPhoto.current = false; return }
+    setPhotoShown(null); setPhotoFull(false)
+  }, [draft.id])
   /** Picking a phone photo for the bill opens it, to type the bill from. */
   const pickPhotos = (next: PickedPhoto[]) => {
     const added = next.filter((p) => p.url && !photoPicked.some((o) => o._id === p._id))
@@ -2896,6 +2911,8 @@ export function BillBuilder() {
    * on every bill; a box is only asked for what the account lacks. "Change"
    * brings both boxes back for this bill.
    */
+  // The Discount · GST · Round off row, opened by its link (see chargesInUse).
+  const [chargesOpen, setChargesOpen] = useState(false)
   const contactOnFile = useMemo(() => {
     const name = foldName(draft.customerName ?? '')
     const account = name ? liveCustomers.find((c) => c.account && foldName(c.name) === name) : undefined
@@ -4393,13 +4410,24 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           )}
 
           {/* A delivery note is goods and counts; tax and discount belong to the bill. */}
-          {(draft.kind ?? 'sale') !== 'grn' && (
+          {/* Discount, GST and round-off are on a few bills, not most: one
+              small link until opened, and open by itself whenever this bill
+              uses any of them, so nothing set is ever out of sight. */}
+          {(draft.kind ?? 'sale') !== 'grn' && (chargesOpen || chargesInUse(draft) ? (
           <ChargesPanel
             bill={draft}
             charges={priced.items.filter((i) => i.auto)}
             onChange={setCharges}
           />
-          )}
+          ) : (
+            <button
+              type="button"
+              onClick={() => setChargesOpen(true)}
+              className="mt-2 flex items-center gap-1 text-xs font-semibold text-muted hover:text-stone-700 dark:hover:text-stone-200"
+            >
+              <Plus size={13} /> Discount · GST · Round off
+            </button>
+          ))}
           </>)}
 
           {/* Running total, and what was taken against it */}

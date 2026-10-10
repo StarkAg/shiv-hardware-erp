@@ -113,6 +113,9 @@ export function StockMoves({ bill, out, onChange }: {
         </label>
       )}
 
+      {/* Most bills move no counted stock: until one does, this is a single
+          small link, not a heading, a sentence and a button. */}
+      {lines.length > 0 && (
       <div className="flex items-center gap-2">
         <Boxes size={15} className="text-muted" aria-hidden="true" />
         <span className="text-xs font-bold uppercase tracking-wider text-muted">
@@ -122,6 +125,7 @@ export function StockMoves({ bill, out, onChange }: {
           {out ? '— taken off the shelf' : '— added to the shelf'}
         </span>
       </div>
+      )}
 
       {lines.length > 0 && (
         <div className="mt-2 space-y-1.5">
@@ -188,7 +192,7 @@ export function StockMoves({ bill, out, onChange }: {
         }}
         className="mt-2 flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-stone-100 hover:text-stone-700 disabled:opacity-40 dark:hover:bg-white/10"
       >
-        <Plus size={13} /> Add stock item
+        <Plus size={13} /> {lines.length ? 'Add stock item' : out ? 'Stock out' : 'Stock in'}
       </button>
     </div>
   )
