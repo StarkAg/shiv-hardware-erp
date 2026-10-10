@@ -1,5 +1,5 @@
+import { useLive } from '../ledger/lib/cache'
 import { useMemo, useState } from 'react'
-import { useQuery } from 'convex/react'
 import { Check, ChevronLeft, ChevronRight, Printer, TriangleAlert } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import { rupees } from '../ledger/lib/format'
@@ -75,7 +75,7 @@ export function CashReview() {
   const [date, setDate] = useState(today)
   const [find, setFind] = useState('')
 
-  const day = useQuery(api.cash.forDay, { date }) as Day | undefined
+  const day = useLive(api.cash.forDay, { date }, `cash:${date}`) as Day | undefined
 
   // The arrows stop where the register does, rather than paging into empty
   // dates for ever.

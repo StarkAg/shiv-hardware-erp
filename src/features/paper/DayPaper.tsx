@@ -1,5 +1,5 @@
+import { useLive } from '../ledger/lib/cache'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery } from 'convex/react'
 import { ChevronLeft, ChevronRight, CreditCard, IndianRupee, Package, ReceiptText, type LucideIcon } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import { convexEnabled } from '../../lib/convexSync'
@@ -214,7 +214,7 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
 /** One day's vouchers, sorted onto their quarters in the order they were entered. */
 function PaperFor({ day }: { day: string }) {
   const from = startOf(day)
-  const vouchers = useQuery(api.reports.dayBook, { from, to: from + 86_399_999 })
+  const vouchers = useLive(api.reports.dayBook, { from, to: from + 86_399_999 }, `daypaper:${from}`)
 
   const byType = new Map<string, Line[]>()
   for (const v of [...(vouchers ?? [])].sort((a, b) => (a.createdAt ?? a.date) - (b.createdAt ?? b.date))) {

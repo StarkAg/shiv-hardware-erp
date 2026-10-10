@@ -514,6 +514,11 @@ export interface Bill extends BillCharges {
   /** When it was marked delivered from the Delivery list (ms). */
   deliveredAt?: number
   /**
+   * Saved on this PC and waiting for the books (src/lib/postOutbox.ts): when
+   * it was handed over (ms). Gone once the books have it.
+   */
+  pendingPost?: number
+  /**
    * @deprecated There are no drafts. A bill is written and saved, or it is not
    * a bill — Tally has no half-written voucher either. Bills stored before
    * this still carry the flag; nothing reads it.

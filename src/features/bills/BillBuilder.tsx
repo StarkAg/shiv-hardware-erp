@@ -76,6 +76,7 @@ import { convexEnabled } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import { queueBillPhotos } from '../../lib/billPhotoOutbox'
+import { queuePost } from '../../lib/postOutbox'
 import Confirm from '../ledger/components/Confirm'
 import { indiaDate, indiaToday } from '../../lib/businessDate'
 import { clearFormDraft, draftKey, loadFormDraft, saveFormDraft } from '../../lib/formDrafts'
@@ -2496,7 +2497,7 @@ export function BillBuilder() {
     : kind === 'payment'
       ? [partyGroup, 'Staff', 'Rent Payable']
       : [partyGroup]
-  const masters = useQuery(api.masters.all, {})
+  const masters = useLive(api.masters.all, {}, 'masters')
   // The deliveries a purchase can be the bill for, and the ones this very
   // purchase already bills.
   const deliveries = useQuery(
@@ -2649,9 +2650,10 @@ export function BillBuilder() {
    * voucher screen shows it — the counter needs to know a customer is already
    * ninety thousand down before writing them another bill.
    */
-  const partyBook = useQuery(
+  const partyBook = useLive(
     sideGroup === 'Sundry Creditors' ? api.reports.outstanding : api.reports.receivables,
     {},
+    sideGroup === 'Sundry Creditors' ? 'payables' : 'receivables',
   )
   const partyBalance = useMemo(() => {
     // Past the courtesy on both sides: the box holds the bare name now, while
@@ -3414,7 +3416,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
    * background (src/lib/billPhotoOutbox.ts) — Save no longer waits for every
    * page to be cropped and uploaded first.
    */
-  async function postDraft(over?: Partial<Bill> & { total?: number }) {
+  async function postDraft(over?: Partial<Bill> & { total?: number }, opts: { wait?: boolean } = {}) {
     // A voucher opened from the books is edited here, but it is not one of the
     // shop's own bills and must not join their list — it would show twice in
     // the day book, once as the voucher and once as a bill of the same thing.
@@ -3427,7 +3429,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     if (!attachments) return null
     // Stamped once more on the way out, for lines of an older bill that were
     // saved before sheets carried a square-foot rate and not touched since.
-    const result = await postStored({
+    const outgoing = {
       ...priced,
       // A W/B sale goes in as paid in full — see src/lib/paidDefault.ts.
       // Anything in `over` still wins.
@@ -3437,18 +3439,37 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       ...over,
       items: withoutBlankLines(over?.items ?? priced.items).map(withSqft),
       attachments,
-    }, !borrowed)
+    } as Bill & { total: number }
+    const photoKind = MONEY_KINDS.includes(draft.kind ?? 'sale') ? ('receipt' as const) : ('bill' as const)
+
+    /*
+     * Instant save. The bill is kept on this PC and the screen moves on; the
+     * books get it in the background (src/lib/postOutbox.ts) and their answer
+     * — the number, the voucher, the account — replaces this copy a moment
+     * later. Until then it shows as "Posting…". A refusal marks it "Not
+     * posted" with a Retry, as before. Only a caller that needs the books'
+     * answer before it can go on (a delivery filed with its purchase) waits.
+     */
+    if (!borrowed && !opts.wait) {
+      const known = bills.find((b) => b.id === outgoing.id && !b.postError && !b.pendingPost)
+      const expectedRev = outgoing.voucherId ? outgoing.rev ?? 0 : known ? undefined : null
+      queuePost(outgoing, expectedRev)
+      if (later.length) {
+        void queueBillPhotos({ id: outgoing.id, number: outgoing.number }, photoKind, later)
+        setPhotoFiles([])
+      }
+      void claimPhotos()
+      return { bill: outgoing, ledgerId: outgoing.ledgerId }
+    }
+
+    const result = await postStored(outgoing, !borrowed)
     // Posted, or kept on this PC as unposted: either way the bill exists, and
     // its photos follow it — the outbox keeps trying until the books have it.
     // Refused outright (changed on another counter), nothing is saved, so the
     // photos stay on the form with the typing.
     const kept = result?.bill ?? useStore.getState().bills.find((b) => b.id === draft.id && b.postError)
     if (later.length && kept) {
-      void queueBillPhotos(
-        { id: kept.id, number: kept.number },
-        MONEY_KINDS.includes(draft.kind ?? 'sale') ? 'receipt' : 'bill',
-        later,
-      )
+      void queueBillPhotos({ id: kept.id, number: kept.number }, photoKind, later)
       setPhotoFiles([])
     }
     if (!result) return null
@@ -3657,7 +3678,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
     postingBills.add(draft.id)
     let filed: Awaited<ReturnType<typeof postDraft>> = null
     try {
-      filed = await postDraft(grn)
+      filed = await postDraft(grn, { wait: true })
     } finally {
       postingBills.delete(draft.id)
     }
@@ -4821,7 +4842,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         partyId: b.ledgerId,
         ref: b.ref || '',
         side: billSide(b),
-        account: quote ? 'Quotation — not in the books' : b.postError ? `Not posted — ${b.postError}` : 'Not posted',
+        account: quote ? 'Quotation — not in the books' : b.postError ? `Not posted — ${b.postError}` : b.pendingPost ? 'Posting…' : 'Not posted',
         quote,
         amount: b.total,
         photos: b.attachments ?? [],

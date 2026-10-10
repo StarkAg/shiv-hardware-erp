@@ -103,9 +103,9 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
   const clearHoverClose = () => { if (hoverClose.current) clearTimeout(hoverClose.current); hoverClose.current = null; };
   const hideMagnifier = () => {
     clearHoverClose();
-    // The pane sits across a small gap. Give the cursor time to reach it so
-    // the enlarged image can itself be clicked for the full photo modal.
-    hoverClose.current = setTimeout(() => setHovered(null), 180);
+    // The enlarged view takes no mouse, so there is nothing to travel to:
+    // it goes the moment the thumbnail is left, or switches to the next one.
+    setHovered(null);
   };
   useEffect(() => () => { if (hoverClose.current) clearTimeout(hoverClose.current); }, []);
   const viewBill = (shown) => {
@@ -286,9 +286,6 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
           label={queueSummary(hovered.unit) || 'Phone photo'}
           pane={hovered.pane}
           zoom={hovered.zoom}
-          onEnter={clearHoverClose}
-          onLeave={hideMagnifier}
-          onOpen={() => openViewer(hovered.unit)}
         />,
         document.body
       )}

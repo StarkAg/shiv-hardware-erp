@@ -800,8 +800,8 @@ to{opacity: 0}}
 .ledger-root .fromphone .shot-zoom:focus-visible{outline: 3px solid var(--brass); outline-offset: 2px;}
 .ledger-root .fromphone .shot-zoom{width: 36px; height: 36px; cursor: zoom-in;}
 @media (hover: none){.ledger-root .fromphone .shot-zoom{width: 44px; height: 44px;}}
-.photo-hover-portal{position: fixed; z-index: 65; box-sizing: border-box;
-  cursor: zoom-in; border: 1px solid #b9924b; border-radius: 10px;
+.photo-hover-portal{position: fixed; z-index: 65; box-sizing: border-box; pointer-events: none;
+  border: 1px solid #b9924b; border-radius: 10px;
   background-color: #f3f0ea; background-repeat: no-repeat;
   box-shadow: 0 18px 48px rgba(0,0,0,.35);}
 .photo-hover-label{position: absolute; top: 8px; left: 8px;
@@ -1252,6 +1252,10 @@ to{opacity: 0}}
 .ledger-root .ledger tbody tr.quote td:first-child{box-shadow: inset 3px 0 0 var(--line);}
 .ledger-root .ledger tbody tr.quote .vchtype{font-style: italic;}
 .ledger-root .ledger tr.quote .btn.small{margin-left: auto;}
+/* Saved on this PC, on its way to the books: real figures, in the balance, marked provisional. */
+.ledger-root .ledger tbody tr.posting td:first-child{box-shadow: inset 3px 0 0 var(--brass, #b8913f);}
+.ledger-root .ledger tbody tr.posting .vchtype,
+.ledger-root .ledger tbody tr.posting .ref{font-style: italic; color: var(--muted);}
 /* The chosen filter on the quotations list, and its main action. */
 .ledger-root .btn.on{background: var(--brass); border-color: var(--brass); color: var(--brass-ink);}
 .ledger-root .ledger tr.received .btn.small{margin-left: auto;}

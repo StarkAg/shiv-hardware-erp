@@ -1,4 +1,4 @@
-import { useQuery } from 'convex/react'
+import { useLive } from '../ledger/lib/cache'
 import { Boxes, Plus, X } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Bill, BillItem, StockLine } from '../../lib/types'
@@ -44,7 +44,7 @@ export function StockMoves({ bill, out, onChange }: {
   out: boolean
   onChange: (patch: Partial<Bill>) => void
 }) {
-  const list = useQuery(api.inventory.seedList, {}) as StockRow[] | undefined
+  const list = useLive(api.inventory.seedList, {}, 'inventory:seed') as StockRow[] | undefined
   const lines = bill.stock ?? []
   const billLine = bill.items.find(isBillLine)
   const showTotal = !hasGoodsLines(bill.items)

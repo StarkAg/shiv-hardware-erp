@@ -1,3 +1,4 @@
+import { useLive } from '../ledger/lib/cache'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import AttachmentViewer from '../../components/AttachmentViewer'
 import { Link } from 'react-router-dom'
@@ -33,7 +34,7 @@ const section = 'space-y-2'
 const heading = 'text-xs font-bold uppercase tracking-[0.12em] text-stone-500'
 
 export function Receive() {
-  const suppliers = useQuery(api.receipts.suppliers, {}) as Supplier[] | undefined
+  const suppliers = useLive(api.receipts.suppliers, {}, 'receipt-suppliers') as Supplier[] | undefined
   const [supplier, setSupplier] = useState<Supplier | null>(null)
   const [find, setFind] = useState('')
   const known = useQuery(api.receipts.forSupplier, supplier ? { ledgerId: supplier._id } : 'skip') as

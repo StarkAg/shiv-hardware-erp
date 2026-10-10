@@ -1,3 +1,4 @@
+import { useLive } from '../ledger/lib/cache'
 import { useState } from 'react'
 import { Pencil, X } from 'lucide-react'
 import { useMutation, useQuery } from 'convex/react'
@@ -19,7 +20,7 @@ const when = (ms: number) => new Date(ms).toLocaleString('en-GB', { day: '2-digi
  */
 export function TrustedDevices() {
   const dark = useLedgerTheme()
-  const rows = useQuery(api.devices.list, {})
+  const rows = useLive(api.devices.list, {}, 'devices')
   const rename = useMutation(api.devices.rename)
   const remove = useMutation(api.devices.remove)
   const [renaming, setRenaming] = useState<Row | null>(null)

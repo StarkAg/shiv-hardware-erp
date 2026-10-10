@@ -1,5 +1,5 @@
+import { useLive } from '../ledger/lib/cache'
 import { Link } from 'react-router-dom'
-import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { useStore } from '../../lib/store'
 import { convexEnabled } from '../../lib/convexSync'
@@ -78,9 +78,9 @@ function FromTheBooks() {
   const today = startOfToday()
   // One question, not six. Each of the old ones walked the whole ledger to
   // answer something the others had already read.
-  const data = useQuery(api.reports.dashboard, { from: today, to: today + 86_399_999 })
-  const review = useQuery(api.review.counts, {})
-  const backup = useQuery(api.backups.latest, {})
+  const data = useLive(api.reports.dashboard, { from: today, to: today + 86_399_999 }, `dashboard:${today}`)
+  const review = useLive(api.review.counts, {}, 'review:counts')
+  const backup = useLive(api.backups.latest, {}, 'backups:latest')
   // A night is missed if the last good copy is more than a day and a half old.
   const backupLate = backup !== undefined &&
     (!backup.lastGood || Date.now() - backup.lastGood.at > 36 * 3_600_000)

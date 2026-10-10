@@ -1,6 +1,6 @@
+import { useLive } from '../ledger/lib/cache'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from 'convex/react'
 import { Check, ClipboardList, FileText, Printer, ReceiptIndianRupee, RotateCcw, Ruler } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import { foldName } from '../../../convex/lib/text'
@@ -92,8 +92,8 @@ function printHtml(html: string) {
 export function WorkOrders() {
   const navigate = useNavigate()
   const { bills, saveBill } = useStore()
-  const staff = (useQuery(api.attendance.getStaff, {}) as string[] | undefined) ?? []
-  const book = useQuery(api.reports.receivables, {}) as { rows: any[] } | undefined
+  const staff = (useLive(api.attendance.getStaff, {}, 'staff') as string[] | undefined) ?? []
+  const book = useLive(api.reports.receivables, {}, 'receivables') as { rows: any[] } | undefined
   const [showBilled, setShowBilled] = useState(false)
 
   const orders = useMemo(() => bills

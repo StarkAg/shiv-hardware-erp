@@ -1,5 +1,6 @@
+import { useLive } from '../ledger/lib/cache'
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation } from 'convex/react'
 import { Link } from 'react-router-dom'
 import { ExternalLink, Mail, Phone } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
@@ -61,7 +62,7 @@ export function GuaranteeClaims({ cardLinks = false }: { cardLinks?: boolean }) 
 }
 
 function ClaimList({ cardLinks }: { cardLinks: boolean }) {
-  const claims = useQuery(api.guaranteeClaims.list, {}) as Claim[] | undefined
+  const claims = useLive(api.guaranteeClaims.list, {}, 'claims') as Claim[] | undefined
   const [filter, setFilter] = useState('waiting')
 
   const counts = useMemo(() => {
@@ -232,7 +233,7 @@ function ClaimCard({ claim, cardLink }: { claim: Claim; cardLink: boolean }) {
 
 /** The number of claims waiting on the shop, for the menu. Mount only with a cloud connection. */
 export function ClaimsBadge() {
-  const open = useQuery(api.guaranteeClaims.openCount, {})
+  const open = useLive(api.guaranteeClaims.openCount, {}, 'claims:open')
   if (!open) return null
   return (
     <span className="min-w-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-bold leading-5 text-white" aria-label={`${open} claims waiting`}>

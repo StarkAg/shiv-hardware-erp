@@ -1,5 +1,5 @@
+import { useLive } from '../ledger/lib/cache'
 import { useEffect } from 'react'
-import { useQuery } from 'convex/react'
 import { Check, PackageCheck, TriangleAlert } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Bill, BillItem, CustomCatalogEntry } from '../../lib/types'
@@ -35,7 +35,7 @@ const OWNER = 'Harsh'
 
 /** Who counted the goods in: the attendance list, and the owner. */
 export function CheckedBy({ value, onChange }: { value?: string; onChange: (v: string) => void }) {
-  const staff = (useQuery(api.attendance.getStaff, {}) as string[] | undefined) ?? []
+  const staff = (useLive(api.attendance.getStaff, {}, 'staff') as string[] | undefined) ?? []
   const names = [...staff, OWNER].filter((n, i, all) => all.indexOf(n) === i)
   return (
     <div>

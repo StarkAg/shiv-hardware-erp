@@ -58,11 +58,16 @@ export function zoomGeometry(tile, source, pane, pointer) {
   };
 }
 
-export default function PhotoHoverZoom({ url, label, pane, zoom, onEnter, onLeave, onOpen }) {
+/**
+ * The enlarged view floats over the page but never takes the mouse: it used to
+ * be a button you could click for the full photo, and lying over the next
+ * thumbnails it stopped them being hovered (or their X pressed) until it went.
+ * The thumbnail itself opens the full photo.
+ */
+export default function PhotoHoverZoom({ url, label, pane, zoom }) {
   return (
     <>
-      <button type="button" className="photo-hover-portal" aria-label="Open full photo preview"
-        onPointerEnter={onEnter} onPointerLeave={onLeave} onClick={onOpen} style={{
+      <div className="photo-hover-portal" aria-hidden="true" style={{
         left: pane.left,
         top: pane.top,
         width: pane.width,
@@ -72,7 +77,7 @@ export default function PhotoHoverZoom({ url, label, pane, zoom, onEnter, onLeav
         backgroundPosition: zoom.backgroundPosition,
       }}>
         {label && <span className="photo-hover-label">{label}</span>}
-      </button>
+      </div>
       {zoom.lens.width > 0 && zoom.lens.height > 0 && (
         <span className="photo-zoom-lens" aria-hidden="true" style={zoom.lens} />
       )}

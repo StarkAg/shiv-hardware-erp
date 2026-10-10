@@ -1,6 +1,6 @@
+import { useLive } from '../ledger/lib/cache'
 import { Fragment, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery } from 'convex/react'
 import { ChevronDown, ChevronRight, CircleAlert, Pencil, TrendingUp } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import { useStore } from '../../lib/store'
@@ -139,9 +139,9 @@ function Lines({ rows, show }: { rows: ProfitLine[]; show: 'item' | 'bill' }) {
 
 export function Profit() {
   const bills = useStore((s) => s.bills)
-  const saved = useQuery(api.itemCosts.all, {})
-  const paired = useQuery(api.itemSame.all, {})
-  const masters = useQuery(api.masters.all, {})
+  const saved = useLive(api.itemCosts.all, {}, 'item-costs')
+  const paired = useLive(api.itemSame.all, {}, 'item-same')
+  const masters = useLive(api.masters.all, {}, 'masters')
   const suppliers = useMemo(
     () => new Set((masters?.ledgers ?? []).filter((l: any) => l.groupName === 'Sundry Creditors').map((l: any) => String(l._id))),
     [masters],

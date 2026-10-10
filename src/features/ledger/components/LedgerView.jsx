@@ -69,6 +69,8 @@ import LedgerForm from './LedgerForm';
 import TagDots from './TagDots';
 
 /** One supplier's account, laid out the way their own statement is. */
+const groupNameOf = (masters, id) => (masters?.ledgers ?? []).find((l) => l._id === id)?.groupName;
+
 export default function LedgerView({ ledgerId, masters, onBack, backLabel, onViewBill, onPrint, onAddVoucher }) {
   /**
    * The shop's own bills, so a line in the ledger can show the bill it posted.
@@ -157,11 +159,43 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
     ? rows.filter((r) => r.vchType === 'Sale' && !r.commissionPaid).length
     : 0;
   const totals = data?.totals ?? { debit: 0, credit: 0 };
+  /**
+   * The books on this PC: bills saved here and still being sent
+   * (src/lib/postOutbox.ts) are shown at once, on their dates, and counted in
+   * the closing balance — Save no longer waits for the books, so neither does
+   * this page. Each one leaves as soon as the books' own row for it arrives.
+   */
+  // Posted or awaiting an amount, either way the books have it.
+  const booked = [...rows, ...(data?.pending ?? [])];
+  const inBooks = new Set(booked.map((r) => String(r.refNo ?? '')).filter(Boolean));
+  const inBooksIds = new Set(booked.map((r) => String(r.voucherId ?? r._id ?? '')));
+  const posting = bills
+    .filter((b) => b.pendingPost && b.ledgerId === ledgerId && b.kind !== 'quotation' && b.kind !== 'grn')
+    .filter((b) => !(b.voucherId && inBooksIds.has(String(b.voucherId))) && !inBooks.has(`BILL-${b.number}`))
+    .map((b) => {
+      const kind = b.kind ?? 'sale';
+      const amt = Number(b.total) || 0;
+      const paid = Number(b.paidAmount ?? (b.paid ? amt : 0)) || 0;
+      const supplierSide = groupNameOf(masters, ledgerId) === 'Sundry Creditors';
+      const [dr, cr] =
+        kind === 'sale' ? [amt, paid]
+        : kind === 'purchase' ? [paid, amt]
+        : kind === 'receipt' ? [0, amt]
+        : kind === 'payment' || kind === 'refund' ? [amt, 0]
+        : kind === 'return' ? (supplierSide ? [amt, 0] : [0, amt])
+        : [0, 0];
+      return { b, dr, cr, label: { sale: 'Sale', purchase: 'Purchase', receipt: 'Receipt', payment: 'Payment', refund: 'Refund', return: 'Goods Return' }[kind] ?? 'Bill' };
+    });
+  // The closing balance with them in: Dr counted up, Cr down.
+  const signedClosing = (data?.closingSide === 'Cr' ? -1 : 1) * (Number(data?.closing) || 0)
+    + posting.reduce((t, x) => t + x.dr - x.cr, 0);
+  const shownClosing = Math.abs(signedClosing);
+  const shownSide = signedClosing > 0.005 ? 'Dr' : signedClosing < -0.005 ? 'Cr' : (data?.closingSide ?? 'Cr');
   const pending = data?.pending ?? [];
   const received = data?.received ?? [];
   // Deliveries first, then what is posted, then what is still waiting for a
   // figure. Only ever compared against each other, so the numbers are ranks.
-  const SAME_DAY = { received: 0, entry: 1, pending: 2, quote: 3 };
+  const SAME_DAY = { received: 0, entry: 1, posting: 1, pending: 2, quote: 3 };
   // Unpriced bills belong on their own dates, among the entries, not heaped at
   // the top. They carry no amount and no balance, so interleaving them is
   // presentation only — the running balance is worked out on the server and is
@@ -173,6 +207,8 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
     ...received.map((g) => ({ kind: 'received', key: g._id, date: g.date, g })),
     // Quotations too: a price given, shown for the record, never a balance.
     ...quotes.map((q) => ({ kind: 'quote', key: q.id, date: Date.parse(q.date) || 0, q })),
+    // Saved on this PC a moment ago and still on its way to the books.
+    ...posting.map((pb) => ({ kind: 'posting', key: `posting-${pb.b.id}`, date: Date.parse(pb.b.date) || 0, pb })),
   ]
     /**
      * Same day: the goods move, then the bill for them.
@@ -257,7 +293,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
         <div className="partyhead-figure">
           <div className="card-name">Closing</div>
           <div className="card-amt">
-            {rupees(data?.closing ?? 0)} <span className="side">{data?.closingSide ?? 'Cr'}</span>
+            {rupees(shownClosing)} <span className="side">{shownSide}</span>
           </div>
         </div>
         <div className="partyhead-actions">
@@ -514,6 +550,27 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       </button>
                     </td>
                   </tr>
+                ) : item.kind === 'posting' ? (
+                  <tr className="posting" key={item.key}>
+                    <td className="mono" data-label="Date">{shortDate(item.date)}</td>
+                    <td className="mono entryno" data-label="Vch">BILL-{item.pb.b.number}</td>
+                    <td className="vchtype" data-label="Type">{item.pb.label}</td>
+                    <td className="ref mono" data-label="Ref">{item.pb.b.ref || '—'}</td>
+                    <td className="particulars" data-label="Particulars">
+                      <Goods bill={item.pb.b} all first />
+                      <div className="ref">Posting to the books…</div>
+                    </td>
+                    <td className="num" data-label="Debit">{item.pb.dr ? rupees(item.pb.dr) : ''}</td>
+                    <td className="num" data-label="Credit">{item.pb.cr ? rupees(item.pb.cr) : ''}</td>
+                    <td className="num" data-label="Balance" />
+                    {showComm && <td className="w-comm" />}
+                    <td className="w-clip" data-label="" />
+                    <td className="rowacts" data-label="">
+                      <button className="xbtn" onClick={() => navigate(`/bills/${item.pb.b.id}`)} aria-label="Edit">
+                        <Pencil size={14} aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
                 ) : item.kind === 'quote' ? (
                   <tr className="quote" key={item.key}>
                     <td className="mono" data-label="Date">{shortDate(item.date)}</td>
@@ -719,8 +776,8 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                 <td className="num" data-label="Debit">{rupees(totals.debit)}</td>
                 <td className="num" data-label="Credit">{rupees(totals.credit)}</td>
                 <td className="num bal" data-label="Balance">
-                  {rupees(data?.closing ?? 0)}{' '}
-                  <span className="side">{data?.closingSide ?? 'Cr'}</span>
+                  {rupees(shownClosing)}{' '}
+                  <span className="side">{shownSide}</span>
                 </td>
                 <td className="hide-sm" />
                 <td className="hide-sm" />

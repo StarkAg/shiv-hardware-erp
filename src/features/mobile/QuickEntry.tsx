@@ -1,3 +1,4 @@
+import { useLive } from '../ledger/lib/cache'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
@@ -76,7 +77,7 @@ export function QuickEntry() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const masters = useQuery(api.masters.all, {}) as { ledgers: Party[] } | undefined
+  const masters = useLive(api.masters.all, {}, 'masters') as { ledgers: Party[] } | undefined
   const billData = useQuery(api.bills.get, {}) as { bills: Bill[] } | null | undefined
   const from = dateMs(date)
   const day = useQuery(api.reports.dayBook, mode === 'payment' && Number.isFinite(from) ? { from, to: from + 86_399_999 } : 'skip') as DayRow[] | undefined

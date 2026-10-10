@@ -1,3 +1,4 @@
+import { useLive } from '../ledger/lib/cache'
 import { useMemo, useState } from 'react'
 import { Paperclip, X } from 'lucide-react'
 import { useMutation, useQuery } from 'convex/react'
@@ -14,7 +15,7 @@ type TrashRow = NonNullable<ReturnType<typeof useQuery<typeof api.trash.all>>>[n
 /** The panel and ledger share one bin; linked bills and vouchers appear once. */
 export function BillTrash() {
   const dark = useLedgerTheme()
-  const rows = useQuery(api.trash.all, {})
+  const rows = useLive(api.trash.all, {}, 'trash')
   const restoreBill = useMutation(api.bills.restore)
   const restoreVoucher = useMutation(api.trash.restore)
   const purgeBill = useMutation(api.bills.purge)

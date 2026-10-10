@@ -9,6 +9,7 @@ import './index.css'
 import { AppLayout } from './components/AppLayout'
 import { ConvexSync } from './components/ConvexSync'
 import { startBillPhotoOutbox } from './lib/billPhotoOutbox'
+import { startPostOutbox } from './lib/postOutbox'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { Home } from './features/home/Home'
 import { AppError, NotFound, VoucherRedirect, MovedToCounter } from './components/RouteFallbacks'
@@ -71,7 +72,7 @@ if (convexEnabled()) {
   void hydrateStore().then(() => setTimeout(() => {
     const s = useStore.getState()
     // Never a bill the books refused — the same rule as every other push.
-    const bills = s.bills.filter((b) => !b.postError)
+    const bills = s.bills.filter((b) => !b.postError && !b.pendingPost)
     if (bills.length) void pushBillsToConvex(bills, s.billSeq)
   }, 3000))
 }
@@ -220,6 +221,8 @@ const app = convex
 // (or synced) starts from the empty defaults. A failed read draws anyway.
 void hydrateStore().catch(() => undefined).then(() => {
   useStore.getState().normalizeCustomerNames()
+  // Bills saved on this PC and waiting for the books: send them, and keep at it.
+  startPostOutbox()
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       {app}

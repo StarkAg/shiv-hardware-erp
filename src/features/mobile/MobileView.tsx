@@ -1,3 +1,4 @@
+import { useLive } from '../ledger/lib/cache'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'convex/react'
@@ -120,7 +121,7 @@ export function MobileView() {
 
   const bills = useStore((s) => s.bills)
   const vouchers = useQuery(api.reports.dayBook, {}) as Voucher[] | undefined
-  const parties = useQuery(api.ledgerViews.parties, {}) as Party[] | undefined
+  const parties = useLive(api.ledgerViews.parties, {}, 'parties') as Party[] | undefined
 
   const openLedger = (id: string) => setParams({ ledger: id })
   const setTab = (t: string) => setParams(t === 'ledgers' ? { tab: t } : {}, { replace: true })
@@ -388,7 +389,7 @@ type StatementRow = {
 }
 
 function LedgerScreen({ id, bills, onBill }: { id: string; bills: Bill[]; onBill: (b: Bill) => void }) {
-  const data = useQuery(api.reports.ledger, { ledgerId: id as Id<'ledgers'> }) as
+  const data = useLive(api.reports.ledger, { ledgerId: id as Id<'ledgers'> }, `ledger:${id}`) as
     | {
         account: { name: string; phone?: string }
         opening: number

@@ -36,7 +36,9 @@ function scheduleConvexBillsPush(get: () => AppState) {
      * a retry. Bills written before any of this have no stamp and are pushed
      * as they always were.
      */
-    void pushBillsToConvex(s.bills.filter((b) => !b.postError), s.billSeq)
+    // Nor one still waiting for the books (src/lib/postOutbox.ts): the
+    // posting writes it to the server itself, with its voucher.
+    void pushBillsToConvex(s.bills.filter((b) => !b.postError && !b.pendingPost), s.billSeq)
   }, 5000)   // a watching screen is at most this far behind
 }
 
