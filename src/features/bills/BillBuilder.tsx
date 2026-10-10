@@ -518,11 +518,16 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   // Custom catalog entries filtered by search
   const customFiltered = useMemo(() => {
     if (item.customEntryId) return customCatalog   // already selected → show all for switching
+    // A catalogue item named like a built-in line (Bill, Fare, Cartage…) is a
+    // leftover from before those were kept out of the catalogue: offered here it
+    // sat above "Bill — total amount only" as a second Bill, priced at one old
+    // bill's total. The built-in option is the one to use.
+    const offered = customCatalog.filter((e) => !isAmountOnlyLine({ description: e.name }))
     const q = search.toLowerCase().trim()
-    if (!q) return customCatalog
+    if (!q) return offered
     // An item folded in from a supplier's own entry keeps that wording as a
     // spelling that finds it, so an SRT bill can be typed as it is printed.
-    return customCatalog.filter(
+    return offered.filter(
       e =>
         e.name.toLowerCase().includes(q) ||
         (e.alsoKnownAs ?? []).some(also => also.toLowerCase().includes(q)),
