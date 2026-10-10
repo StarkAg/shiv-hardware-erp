@@ -51,7 +51,7 @@ const sideWord = (side) => (side === 'Dr' ? 'to get' : 'to pay')
 const SETTLED = 'All clear'
 const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
 /** A line's voucher in the words of who sent what; the bubble's side says who. */
-const SENT = { Sale: 'Bill sent', Purchase: 'Bill received', Receipt: 'Payment sent', Payment: 'Payment sent' }
+const SENT = { Sale: 'Bill sent', Purchase: 'Bill sent', Receipt: 'Payment sent', Payment: 'Payment sent' }
 // The money taken with a sale or purchase is a payment, not the bill again.
 const kindOf = (r) => (r.settlement ? 'Payment sent' : SENT[r.vchType] ?? r.vchType)
 
