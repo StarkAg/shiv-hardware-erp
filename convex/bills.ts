@@ -112,8 +112,13 @@ export const get = query({
 
 /** Add phone photos to an existing bill and its voucher in one transaction. */
 export const addImages = mutation({
-  args: { billId: v.string(), storageIds: v.array(v.id('_storage')) },
-  handler: async (ctx, { billId, storageIds }) => {
+  args: {
+    billId: v.string(),
+    storageIds: v.array(v.id('_storage')),
+    /** A receipt's or payment's paper is filed as a receipt. */
+    kind: v.optional(v.union(v.literal('bill'), v.literal('receipt'))),
+  },
+  handler: async (ctx, { billId, storageIds, kind = 'bill' }) => {
     if (!storageIds.length || storageIds.length > 12) throw new Error('Choose 1 to 12 bill photos.')
     const bill = await readBill(ctx, billId)
     if (!bill?.voucherId) throw new Error('Choose a posted bill with an accounting voucher.')
@@ -133,7 +138,7 @@ export const addImages = mutation({
     const added = unique.filter(id => !onBill.has(id) || !onVoucher.has(id))
     if (!added.length) return { added: 0, total: onBill.size }
     const now = Date.now()
-    const documents = unique.map(storageId => ({ storageId, kind: 'bill' as const }))
+    const documents = unique.map(storageId => ({ storageId, kind }))
     await ctx.db.patch(voucher._id, {
       attachments: [...(voucher.attachments ?? []), ...documents.filter(doc => !onVoucher.has(doc.storageId))],
       updatedAt: now,

@@ -75,6 +75,7 @@ import { StockMoves, stockGoesOut } from './StockMoves'
 import { convexEnabled } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
+import { queueBillPhotos } from '../../lib/billPhotoOutbox'
 import Confirm from '../ledger/components/Confirm'
 import { indiaDate, indiaToday } from '../../lib/businessDate'
 import { clearFormDraft, draftKey, loadFormDraft, saveFormDraft } from '../../lib/formDrafts'
@@ -3398,15 +3399,32 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     return attachments
   }
 
-  /** The open bill: photographs up first, then the one posting call. */
+  /** What is already in storage: the bill's own photos and any picked from the phone queue. */
+  function attachedNow() {
+    const docKind = MONEY_KINDS.includes(draft.kind ?? 'sale') ? ('receipt' as const) : ('bill' as const)
+    const all = [
+      ...(draft.attachments ?? []),
+      ...photoPicked.map((p) => ({ storageId: p.storageId as string, kind: docKind })),
+    ]
+    return [...new Map(all.map((doc) => [doc.storageId, doc])).values()]
+  }
+
+  /**
+   * The open bill: one posting call, then its new photographs in the
+   * background (src/lib/billPhotoOutbox.ts) — Save no longer waits for every
+   * page to be cropped and uploaded first.
+   */
   async function postDraft(over?: Partial<Bill> & { total?: number }) {
-    const attachments = await prepareAttachments()
-    if (!attachments) return null
     // A voucher opened from the books is edited here, but it is not one of the
     // shop's own bills and must not join their list — it would show twice in
     // the day book, once as the voucher and once as a bill of the same thing.
     // The `vch-` id is the test, not the voucherId: every posted bill has one.
     const borrowed = Boolean(voucherId) || String(draft.id).startsWith('vch-')
+    // Such a voucher has no bill to add photos to afterwards, so its photos
+    // still go up first.
+    const later = borrowed ? [] : photoFiles
+    const attachments = borrowed ? await prepareAttachments() : attachedNow()
+    if (!attachments) return null
     // Stamped once more on the way out, for lines of an older bill that were
     // saved before sheets carried a square-foot rate and not touched since.
     const result = await postStored({
@@ -3420,8 +3438,21 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       items: withoutBlankLines(over?.items ?? priced.items).map(withSqft),
       attachments,
     }, !borrowed)
+    // Posted, or kept on this PC as unposted: either way the bill exists, and
+    // its photos follow it — the outbox keeps trying until the books have it.
+    // Refused outright (changed on another counter), nothing is saved, so the
+    // photos stay on the form with the typing.
+    const kept = result?.bill ?? useStore.getState().bills.find((b) => b.id === draft.id && b.postError)
+    if (later.length && kept) {
+      void queueBillPhotos(
+        { id: kept.id, number: kept.number },
+        MONEY_KINDS.includes(draft.kind ?? 'sale') ? 'receipt' : 'bill',
+        later,
+      )
+      setPhotoFiles([])
+    }
     if (!result) return null
-    await claimPhotos()
+    void claimPhotos()
     return result
   }
 

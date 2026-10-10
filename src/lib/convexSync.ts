@@ -23,6 +23,9 @@ function client(): ConvexHttpClient | null {
 
 export const convexEnabled = () => Boolean(CONVEX_URL)
 
+/** The same authorised client, for work that runs outside React (src/lib/billPhotoOutbox.ts). */
+export const convexHttp = () => client()
+
 /**
  * The shop's highest GC-<year>-NNNN already saved, so this device's counter
  * can't reissue a number another device (or a fresh install) already used.

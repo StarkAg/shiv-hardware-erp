@@ -8,6 +8,7 @@ import { PinGate } from './lib/deviceTrust/PinGate.jsx'
 import './index.css'
 import { AppLayout } from './components/AppLayout'
 import { ConvexSync } from './components/ConvexSync'
+import { startBillPhotoOutbox } from './lib/billPhotoOutbox'
 import { BillBuilder } from './features/bills/BillBuilder'
 import { Home } from './features/home/Home'
 import { AppError, NotFound, VoucherRedirect, MovedToCounter } from './components/RouteFallbacks'
@@ -199,6 +200,9 @@ const router = createHashRouter([
   // it prints on every start.
   future: { v7_relativeSplatPath: true },
 })
+
+// Bill photos saved after their bill: send what is waiting, and keep at it.
+startBillPhotoOutbox()
 
 const app = convex
   ? (
