@@ -3,6 +3,8 @@ import { useConvex, useMutation, useQuery } from 'convex/react'
 import { anyApi as api } from 'convex/server'
 import { makeDraft, read, write, remove } from './drafts'
 
+const MECHANIC_NAME = 'Gopal & Bandhu'
+
 function Ruler() {
   return <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 6v5m5-5v8m5-8v5" /></svg>
 }
@@ -21,9 +23,8 @@ function useConnection() {
 
 export default function App() {
   const incoming = useQuery(api.workOrders.open, {})
-  const staff = useQuery(api.attendance.getStaff, {})
   const [cached, setCached] = useState(() => read('orders', []))
-  const [name, setName] = useState(() => read('name', ''))
+  const name = MECHANIC_NAME
   const [opened, setOpened] = useState(null)
   const [stage, setStage] = useState('pending')
   const [search, setSearch] = useState('')
@@ -35,7 +36,6 @@ export default function App() {
     return () => window.removeEventListener('popstate', back)
   }, [])
   const orders = incoming ?? cached
-  const names = [...new Set([...(staff ?? []), ...orders.map((o) => o.visitBy), name].filter(Boolean))].sort()
   const mine = orders.filter((o) => name && o.visitBy.trim().toLowerCase() === name.trim().toLowerCase())
   const rows = mine.filter((o) => (stage === 'measured' ? !!o.measuredAt : !o.measuredAt)
     && `${o.customerName} ${o.number} ${o.site}`.toLowerCase().includes(search.trim().toLowerCase()))
@@ -44,11 +44,11 @@ export default function App() {
   return <div className="app">
     <header className="top"><div className="brand"><span className="brand-icon"><Ruler /></span><div><h1>Shiv Mechanic</h1><small>Sizes from site</small></div></div><span className={`live ${live ? 'on' : ''}`} role="status"><i />{live ? 'Live' : 'Offline / connecting'}</span></header>
     {opened ? <Order key={opened.id} order={current ?? opened} closed={incoming !== undefined && !current} name={name} live={live} onBack={() => window.history.back()} /> : <main>
-      <label className="name-label">Your name<select value={name} onChange={(e) => { setName(e.target.value); write('name', e.target.value) }}><option value="">Choose your name</option>{names.map((n) => <option key={n}>{n}</option>)}</select></label>
+      <label className="name-label">Your name<select defaultValue={name}><option value={name}>{name}</option></select></label>
       <nav className="tabs" aria-label="Order status"><button className={stage === 'pending' ? 'selected' : ''} onClick={() => setStage('pending')}>To measure <b>{mine.filter((o) => !o.measuredAt).length}</b></button><button className={stage === 'measured' ? 'selected' : ''} onClick={() => setStage('measured')}>Measured <b>{mine.filter((o) => !!o.measuredAt).length}</b></button></nav>
       <input className="search" type="search" aria-label="Search orders" placeholder="Customer, site or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
       {!live && <p className="notice">Showing the last available orders. Drafts stay on this phone until you send them.</p>}
-      {!name ? <div className="empty"><Ruler /><h2>Ready for your next visit</h2><p>Choose your name to see the orders assigned to you.</p></div> : !rows.length ? <div className="empty"><h2>{incoming === undefined && !cached.length ? 'Loading orders...' : 'No orders here'}</h2><p>{search ? 'Try another name or order number.' : 'Orders assigned to you on the shop Work list appear here.'}</p></div> : <div className="orders">{rows.map((o) => <button className="order-card" key={o.id} onClick={() => open(o)}><div className="card-meta"><span>{o.quotation ? 'Quotation' : 'Order'} {o.number}</span><span>{o.date}</span></div><h2>{o.customerName || 'Customer'}</h2><p>{o.site || 'No site address added'}</p><div className="card-foot"><span>{o.pieces.length} pieces</span><span>{read(`draft:${o.id}`) ? 'Draft on phone' : o.measuredAt ? 'Sizes sent' : 'Enter sizes'} <span aria-hidden="true">&rsaquo;</span></span></div></button>)}</div>}
+      {!rows.length ? <div className="empty"><h2>{incoming === undefined && !cached.length ? 'Loading orders...' : 'No orders here'}</h2><p>{search ? 'Try another name or order number.' : 'Orders assigned to you on the shop Work list appear here.'}</p></div> : <div className="orders">{rows.map((o) => <button className="order-card" key={o.id} onClick={() => open(o)}><div className="card-meta"><span>{o.quotation ? 'Quotation' : 'Order'} {o.number}</span><span>{o.date}</span></div><h2>{o.customerName || 'Customer'}</h2><p>{o.site || 'No site address added'}</p><div className="card-foot"><span>{o.pieces.length} pieces</span><span>{read(`draft:${o.id}`) ? 'Draft on phone' : o.measuredAt ? 'Sizes sent' : 'Enter sizes'} <span aria-hidden="true">&rsaquo;</span></span></div></button>)}</div>}
     </main>}
   </div>
 }

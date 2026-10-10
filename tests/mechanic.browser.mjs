@@ -21,7 +21,7 @@ const bundled = await build({
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: mock, loader: 'js', resolveDir: root }))
   } }],
 })
-const fixture = { id: 'test-order', number: 'Q-014', quotation: true, date: '2026-10-10', customerName: 'Sample Customer', customerPhone: '9999999999', site: 'Main Road, first floor', notes: 'Measure both door openings.', visitBy: 'Vijay', measuredAt: 0, sizes: null, pieces: [{ key: 'door#1', what: 'WPC door', of: '1 of 2', qty: 1 }, { key: 'door#2', what: 'WPC door', of: '2 of 2', qty: 1 }] }
+const fixture = { id: 'test-order', number: 'Q-014', quotation: true, date: '2026-10-10', customerName: 'Sample Customer', customerPhone: '9999999999', site: 'Main Road, first floor', notes: 'Measure both door openings.', visitBy: 'Gopal & Bandhu', measuredAt: 0, sizes: null, pieces: [{ key: 'door#1', what: 'WPC door', of: '1 of 2', qty: 1 }, { key: 'door#2', what: 'WPC door', of: '2 of 2', qty: 1 }] }
 const server = createServer((request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname
   response.setHeader('Cache-Control', 'no-store')
@@ -46,11 +46,13 @@ try {
   const errors = []
   page.on('pageerror', (err) => errors.push(err.message))
   page.on('dialog', (dialog) => dialog.accept())
+  await page.evaluateOnNewDocument(() => localStorage.setItem('shiv-mechanic:name', JSON.stringify('Vijay')))
   await page.goto(origin + '/fixture.html')
-  await page.select('.name-label select', 'Vijay')
+  assert.deepEqual(await page.$$eval('.name-label option', (nodes) => nodes.map((n) => n.textContent)), ['Gopal & Bandhu'])
+  assert.equal(await page.$eval('.name-label select', (node) => node.value), 'Gopal & Bandhu')
   assert.equal(await page.$$eval('.order-card', (nodes) => nodes.length), 1)
   // Server subscription changes reach the open list without a reload.
-  await page.evaluate(() => { window.orders = window.orders.map((o) => ({ ...o, visitBy: 'Vijay' })); window.dispatchEvent(new Event('fixture')) })
+  await page.evaluate(() => { window.orders = window.orders.map((o) => ({ ...o, visitBy: 'Gopal & Bandhu' })); window.dispatchEvent(new Event('fixture')) })
   await page.waitForFunction(() => document.querySelectorAll('.order-card').length === 2)
   await page.evaluate(() => { window.orders = window.orders.map((o) => o.id === 'other' ? { ...o, visitBy: 'Anup' } : o); window.dispatchEvent(new Event('fixture')) })
   await page.waitForFunction(() => document.querySelectorAll('.order-card').length === 1)
@@ -74,6 +76,7 @@ try {
   await page.click('.save-buttons button')
   await page.waitForFunction(() => window.sent.length === 1)
   assert.equal(await page.evaluate(() => window.sent[0].measured), false)
+  assert.equal(await page.evaluate(() => window.sent[0].by), 'Gopal & Bandhu')
   assert.equal(await page.evaluate(() => localStorage.getItem('shiv-mechanic:draft:test-order')), null)
   await page.type('[aria-label="Width of piece 2"]', '30')
   await page.evaluate(() => { window.failSend = true })

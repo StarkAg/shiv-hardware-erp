@@ -136,7 +136,8 @@ function printHtml(html: string) {
 export function WorkOrders() {
   const navigate = useNavigate()
   const { bills, saveBill } = useStore()
-  const staff = (useLive(api.attendance.getStaff, {}, 'staff') as string[] | undefined) ?? []
+  // Site mechanics are separate from the shop's attendance staff.
+  const staff = ['Gopal & Bandhu']
   const book = useLive(api.reports.receivables, {}, 'receivables') as { rows: any[] } | undefined
   const [showBilled, setShowBilled] = useState(false)
 
@@ -195,7 +196,8 @@ export function WorkOrders() {
                 className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs text-stone-800 dark:border-white/10 dark:bg-stone-900 dark:text-stone-100"
               >
                 <option value="">—</option>
-                {[...new Set([...staff, ...(b.visitBy ? [b.visitBy] : [])])].map((n) => <option key={n} value={n}>{n}</option>)}
+                {b.visitBy && !staff.includes(b.visitBy) && <option value={b.visitBy} disabled>{b.visitBy} (previous)</option>}
+                {staff.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
             <button type="button" className={btn} onClick={() => printHtml(visitSlipHtml(b, advance))}>

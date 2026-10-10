@@ -3,7 +3,7 @@
 Production: https://shivhardware-mechanic.vercel.app
 
 A phone app for measurements on the panel's Work list. Sign in with the shop
-PIN, choose the mechanic's name, and open an assigned order. Enter a width,
+PIN and open an order assigned to Gopal & Bandhu, the only mechanic option. Enter a width,
 height and optional remark for each piece; extra pieces can be added on site.
 The chosen unit applies to the entire visit. No bill prices or totals are shown.
 
@@ -15,7 +15,7 @@ Entries are retained as drafts on this phone until the server confirms a send.
 After the first online visit the app can reopen offline. Reconnect and tap Send
 to submit a draft. A newer measurement from another device blocks an old draft
 from overwriting it; review the draft and load the latest sizes before editing.
-Selecting a name filters the list; it is not separate staff authentication.
+The app shows orders assigned to Gopal & Bandhu; the shop PIN provides device authentication.
 
 ## Development
 
