@@ -7,11 +7,11 @@ import { anyApi } from 'convex/server'
  *
  * Made to be used like a chat app by someone who has never opened the panel:
  * two tabs (Customers, Suppliers), each a list like chats — a name, what is
- * owed either way (lena hai green, dena hai red, in the shop's words). Opening
+ * owed either way (to get in green, to pay in red). Opening
  * one reads the account like a chat: every bill and payment a bubble, newest
  * at the bottom, with the bill's photos to tap open. What the shop sent sits
- * on the right, what the party sent on the left, and the account's lena hai /
- * dena hai stays in a box at the foot. No buttons that write.
+ * on the right, what the party sent on the left, and what the account comes
+ * to (to get / to pay) stays in a box at the foot. No buttons that write.
  *
  * Live: every figure is a Convex subscription, so a bill saved at the counter
  * shows here within a second or two with the app left open — the light in the
@@ -43,17 +43,17 @@ function LiveLight() {
     const timer = setInterval(() => setOn(convex.connectionState().isWebSocketConnected), 1500)
     return () => clearInterval(timer)
   }, [convex])
-  return <span className={`live ${on ? 'on' : ''}`} role="status"><i />{on ? 'चालू' : 'जुड़ रहा है'}</span>
+  return <span className={`live ${on ? 'on' : ''}`} role="status"><i />{on ? 'Live' : 'Connecting'}</span>
 }
-const dayOf = (ms) => new Date(ms).toLocaleDateString('hi-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-/** Dr / Cr as the shop says it: Dr on a party is money to take, Cr to give. */
-const sideWord = (side) => (side === 'Dr' ? 'लेना है' : 'देना है')
-const SETTLED = 'हिसाब बराबर'
+const dayOf = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+/** Dr / Cr in plain words: Dr on a party is money we get, Cr money we pay. */
+const sideWord = (side) => (side === 'Dr' ? 'to get' : 'to pay')
+const SETTLED = 'All clear'
 const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
 /** A line's voucher in the words of who sent what; the bubble's side says who. */
-const SENT = { Sale: 'बिल भेजा', Purchase: 'बिल आया', Receipt: 'भुगतान किया', Payment: 'भुगतान किया' }
+const SENT = { Sale: 'Bill sent', Purchase: 'Bill received', Receipt: 'Payment sent', Payment: 'Payment sent' }
 // The money taken with a sale or purchase is a payment, not the bill again.
-const kindOf = (r) => (r.settlement ? 'भुगतान किया' : SENT[r.vchType] ?? r.vchType)
+const kindOf = (r) => (r.settlement ? 'Payment sent' : SENT[r.vchType] ?? r.vchType)
 
 export default function App() {
   const [tab, setTab] = useState(() => read('tab') ?? 'customers')
@@ -72,15 +72,15 @@ export default function App() {
 }
 
 const SORTS = [
-  { id: 'recent', label: 'नया पहले' },
-  { id: 'amount', label: 'रकम' },
-  { id: 'name', label: 'नाम से' },
+  { id: 'recent', label: 'Newest' },
+  { id: 'amount', label: 'Amount' },
+  { id: 'name', label: 'Name' },
 ]
 const FILTERS = [
-  { id: 'all', label: 'सब' },
-  { id: 'lena', label: 'लेना है', test: (r) => r.closing >= 0.5 && r.closingSide === 'Dr' },
-  { id: 'dena', label: 'देना है', test: (r) => r.closing >= 0.5 && r.closingSide === 'Cr' },
-  { id: 'unpriced', label: 'बिना रकम', test: (r) => r.pendingCount > 0 },
+  { id: 'all', label: 'All' },
+  { id: 'lena', label: 'To get', test: (r) => r.closing >= 0.5 && r.closingSide === 'Dr' },
+  { id: 'dena', label: 'To pay', test: (r) => r.closing >= 0.5 && r.closingSide === 'Cr' },
+  { id: 'unpriced', label: 'No amount', test: (r) => r.pendingCount > 0 },
   { id: 'settled', label: SETTLED, test: (r) => r.closing < 0.5 && !r.pendingCount },
 ]
 const SortIcon = () => (
@@ -156,27 +156,27 @@ function Lists({ tab, setTab, onOpen }) {
           <LiveLight />
         </div>
         <nav className="tabs">
-          <button className={tab === 'customers' ? 'on' : ''} onClick={() => setTab('customers')}>ग्राहक</button>
-          <button className={tab === 'suppliers' ? 'on' : ''} onClick={() => setTab('suppliers')}>विक्रेता</button>
+          <button className={tab === 'customers' ? 'on' : ''} onClick={() => setTab('customers')}>Customers</button>
+          <button className={tab === 'suppliers' ? 'on' : ''} onClick={() => setTab('suppliers')}>Suppliers</button>
         </nav>
       </header>
       <div className="summary">
-        {!book ? 'आ रहा है…' : tab === 'customers' ? (
+        {!book ? 'Loading…' : tab === 'customers' ? (
           <>
-            <span className="in"><small>लेना है</small>{rupees(dr)}</span>
-            <span><small>अग्रिम, देना है</small>{rupees(cr)}</span>
+            <span className="in"><small>To get</small>{rupees(dr)}</span>
+            <span><small>Advance, to pay</small>{rupees(cr)}</span>
           </>
         ) : (
           <>
-            <span className="out"><small>देना है</small>{rupees(cr)}</span>
-            <span><small>अग्रिम, लेना है</small>{rupees(dr)}</span>
+            <span className="out"><small>To pay</small>{rupees(cr)}</span>
+            <span><small>Advance, to get</small>{rupees(dr)}</span>
           </>
         )}
       </div>
       <div className="searchbar">
-        <input type="search" placeholder="नाम खोजें" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button type="button" className={`tool ${panel === 'sort' ? 'open' : ''} ${sort !== 'recent' ? 'set' : ''}`} aria-label="क्रम" onClick={() => setPanel(panel === 'sort' ? null : 'sort')}><SortIcon /></button>
-        <button type="button" className={`tool ${panel === 'filter' ? 'open' : ''} ${filter !== 'all' ? 'set' : ''}`} aria-label="छांटें" onClick={() => setPanel(panel === 'filter' ? null : 'filter')}><FilterIcon /></button>
+        <input type="search" placeholder="Search name" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button type="button" className={`tool ${panel === 'sort' ? 'open' : ''} ${sort !== 'recent' ? 'set' : ''}`} aria-label="Sort" onClick={() => setPanel(panel === 'sort' ? null : 'sort')}><SortIcon /></button>
+        <button type="button" className={`tool ${panel === 'filter' ? 'open' : ''} ${filter !== 'all' ? 'set' : ''}`} aria-label="Filter" onClick={() => setPanel(panel === 'filter' ? null : 'filter')}><FilterIcon /></button>
       </div>
       {panel === 'sort' && pick(SORTS, sort, setSort)}
       {panel === 'filter' && pick(FILTERS, filter, setFilter)}
@@ -186,22 +186,22 @@ function Lists({ tab, setTab, onOpen }) {
           const zero = r.closing < 0.5
           const toCome = r.closingSide === 'Dr'
           const what = zero ? SETTLED
-            : tab === 'customers' ? (toCome ? 'लेना है' : 'अग्रिम, देना है')
-            : (toCome ? 'अग्रिम, लेना है' : 'देना है')
+            : tab === 'customers' ? (toCome ? 'To get' : 'Advance, to pay')
+            : (toCome ? 'Advance, to get' : 'To pay')
           return (
             <li key={r.ledger._id} className={changed.has(r.ledger._id) ? 'changed' : undefined}>
               <button type="button" onClick={() => onOpen({ id: r.ledger._id, name, phone: r.ledger.phone ?? '', tab })}>
                 <span className="avatar">{name[0]?.toUpperCase() ?? '?'}</span>
                 <span className="who">
                   <b>{name}</b>
-                  <small>{what}{r.pendingCount ? ` · ${r.pendingCount} बिल बिना रकम` : ''}</small>
+                  <small>{what}{r.pendingCount ? ` · ${r.pendingCount} bill${r.pendingCount === 1 ? '' : 's'} with no amount` : ''}</small>
                 </span>
                 <span className={`amt ${zero ? '' : toCome ? 'in' : 'out'}`}>{zero ? '—' : rupees(r.closing)}</span>
               </button>
             </li>
           )
         })}
-        {book && !rows.length && <li className="empty">{q ? 'इस नाम का कोई नहीं।' : filter !== 'all' ? 'इसमें कोई नहीं।' : 'अभी कोई नहीं।'}</li>}
+        {book && !rows.length && <li className="empty">{q ? 'No one by that name.' : filter !== 'all' ? 'No one here.' : 'No one yet.'}</li>}
       </ul>
     </div>
   )
@@ -234,19 +234,19 @@ function Party({ party, onBack }) {
     return out
   }, [data])
 
-  const closing = data ? (data.closing < 0.5 ? SETTLED : `${rupees(data.closing)} ${sideWord(data.closingSide)}`) : 'आ रहा है…'
+  const closing = data ? (data.closing < 0.5 ? SETTLED : `${rupees(data.closing)} ${sideWord(data.closingSide)}`) : 'Loading…'
 
   return (
     <div className="app chat">
       <header className="top chathead">
-        <button type="button" className="back" onClick={onBack} aria-label="पीछे">‹</button>
+        <button type="button" className="back" onClick={onBack} aria-label="Back">‹</button>
         <span className="avatar small">{party.name[0]?.toUpperCase() ?? '?'}</span>
         <span className="who">
           <b>{party.name}</b>
           <small>{closing}</small>
         </span>
         {party.phone && (
-          <a className="call" href={`tel:${party.phone}`} aria-label={`${party.name} को फ़ोन करें`}>
+          <a className="call" href={`tel:${party.phone}`} aria-label={`Call ${party.name}`}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />
             </svg>
@@ -254,14 +254,14 @@ function Party({ party, onBack }) {
         )}
       </header>
       <main className="thread">
-        {data && !items.length && <p className="note">अभी कोई बिल या भुगतान नहीं।</p>}
+        {data && !items.length && <p className="note">No bills or payments yet.</p>}
         {items.map((it) => {
           if (it.day) return <div key={it.key} className="daytag"><span>{it.day}</span></div>
           if (it.p) {
             const shots = (it.p.attachmentUrls ?? []).filter((a) => a.url)
             return (
               <div key={it.key} className={`bubble ${pendingOurs ? 'right' : 'left'} pending`}>
-                <div className="kind">{SENT[it.p.vchType] ?? 'बिल'} · {it.p.vchLabel ?? ''} · रकम अभी नहीं डाली</div>
+                <div className="kind">{SENT[it.p.vchType] ?? 'Bill'} · {it.p.vchLabel ?? ''} · amount not added yet</div>
                 <Photos shots={shots} onOpen={setPhoto} />
               </div>
             )
@@ -275,7 +275,7 @@ function Party({ party, onBack }) {
               <div className="money">{rupees(r.amount)}</div>
               {r.narration && <div className="narr">{r.narration}</div>}
               <Photos shots={shots} onOpen={setPhoto} />
-              <div className="bal">बाकी {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</div>
+              <div className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</div>
             </div>
           )
         })}
@@ -283,17 +283,17 @@ function Party({ party, onBack }) {
       </main>
       {data && (
         <footer className={`due ${data.closing < 0.5 ? '' : data.closingSide === 'Dr' ? 'in' : 'out'}`}>
-          <small>{data.closing < 0.5 ? SETTLED : data.closingSide === 'Dr' ? 'लेना है' : 'देना है'}</small>
+          <small>{data.closing < 0.5 ? SETTLED : data.closingSide === 'Dr' ? 'To get' : 'To pay'}</small>
           <b>{data.closing < 0.5 ? rupees(0) : rupees(data.closing)}</b>
-          {data.pendingCount > 0 && <span>+ {data.pendingCount} बिल बिना रकम</span>}
+          {data.pendingCount > 0 && <span>+ {data.pendingCount} bill{data.pendingCount === 1 ? '' : 's'} with no amount</span>}
         </footer>
       )}
       {photo && (
         <div className="viewer" onClick={() => setPhoto(null)}>
-          <button type="button" className="close" aria-label="बंद करें">
+          <button type="button" className="close" aria-label="Close">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
-          <img src={photo} alt="बिल" onClick={(e) => e.stopPropagation()} />
+          <img src={photo} alt="Bill" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>
@@ -306,7 +306,7 @@ function Photos({ shots, onOpen }) {
     <div className="photos">
       {shots.map((a) => isPdf(a)
         ? <a key={a.storageId} className="pdf" href={a.url} target="_blank" rel="noreferrer">PDF</a>
-        : <button key={a.storageId} type="button" onClick={() => onOpen(a.url)}><img src={a.previewUrl || a.url} alt="बिल की फ़ोटो" loading="lazy" /></button>)}
+        : <button key={a.storageId} type="button" onClick={() => onOpen(a.url)}><img src={a.previewUrl || a.url} alt="Bill photo" loading="lazy" /></button>)}
     </div>
   )
 }
