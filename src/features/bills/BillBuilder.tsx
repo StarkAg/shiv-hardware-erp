@@ -2881,6 +2881,15 @@ export function BillBuilder() {
   }, [draft.customerName, liveCustomers])
   const [changeContact, setChangeContact] = useState(false)
   useEffect(() => { setChangeContact(false) }, [contactOnFile?.id])
+  // However the voucher was opened — the name typed, picked, or the voucher
+  // started from the account itself — empty boxes take the account's numbers,
+  // so the bill carries them and the boxes need not be asked.
+  useEffect(() => {
+    if (!contactOnFile) return
+    setDraft((d) => (d.customerPhone || d.customerUid
+      ? d
+      : { ...d, customerPhone: contactOnFile.mobile, customerUid: contactOnFile.uid ?? '' }))
+  }, [contactOnFile])
   const contactKnown = !!contactOnFile && !changeContact
     && (draft.customerPhone ?? '') === contactOnFile.mobile && (draft.customerUid ?? '') === contactOnFile.uid
 
