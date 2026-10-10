@@ -272,10 +272,12 @@ function Party({ party, onBack }) {
           return (
             <div key={it.key} className={`bubble ${right ? 'right' : 'left'}`}>
               <div className="kind">{kindOf(r)} · {r.vchLabel}{r.refNo ? ` · ${r.refNo}` : ''}</div>
-              <div className="money">{rupees(r.amount)}</div>
+              <div className="line">
+                <span className="money">{rupees(r.amount)}</span>
+                <span className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</span>
+              </div>
               {r.narration && <div className="narr">{r.narration}</div>}
               <Photos shots={shots} onOpen={setPhoto} />
-              <div className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</div>
             </div>
           )
         })}
