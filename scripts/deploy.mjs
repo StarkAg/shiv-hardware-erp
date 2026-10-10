@@ -137,7 +137,13 @@ const vercelAuthFile = [
   join(homedir(), 'Library', 'Application Support', 'com.vercel.cli', 'auth.json'),
   join(homedir(), '.local', 'share', 'com.vercel.cli', 'auth.json'),
 ].find((f) => existsSync(f))
-const VERCEL_TOKEN = vercelAuthFile ? readJson(vercelAuthFile)?.token : null
+// Read when needed, not at start: the CLI's login expires and is renewed by
+// running the CLI (see refreshVercelLogin), which writes a new token here.
+let VERCEL_TOKEN = vercelAuthFile ? readJson(vercelAuthFile)?.token : null
+async function refreshVercelLogin() {
+  await run('npx', ['vercel', 'whoami']).catch(() => {})
+  if (vercelAuthFile) VERCEL_TOKEN = readJson(vercelAuthFile)?.token ?? VERCEL_TOKEN
+}
 const VERCEL_TEAM = readJson(join(ROOT, '.vercel', 'project.json'))?.orgId
 
 async function vercelApi(path, init = {}) {
@@ -370,6 +376,7 @@ async function main() {
   const sha = git('rev-parse', 'HEAD')
 
   log(dim(`Reading what each part last deployed…`))
+  await refreshVercelLogin()
   const base = await baselines()
 
   const plan = TARGETS.map((t) => {
