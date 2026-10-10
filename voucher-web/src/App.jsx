@@ -2,6 +2,42 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 
+/**
+ * A bill page made small before it leaves the phone, every figure still
+ * readable: at most 1800px on its long side, WebP where the phone can write it
+ * (about half the size of a JPEG that looks the same), JPEG where it cannot —
+ * iPhone Safari answers a WebP request with a PNG, which would be bigger.
+ * Camera shots and photos chosen from the gallery go through the same door;
+ * a chosen photo used to go up as it was, often several MB.
+ */
+const MAX_SIDE = 1800
+const QUALITY = 0.72
+const canvasBlob = (canvas, type) => new Promise((resolve) => canvas.toBlob(resolve, type, QUALITY))
+
+async function compress(drawable, width, height) {
+  const scale = Math.min(1, MAX_SIDE / Math.max(width, height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(width * scale)
+  canvas.height = Math.round(height * scale)
+  canvas.getContext('2d').drawImage(drawable, 0, 0, canvas.width, canvas.height)
+  const webp = await canvasBlob(canvas, 'image/webp')
+  return webp?.type === 'image/webp' ? webp : canvasBlob(canvas, 'image/jpeg')
+}
+
+const asFile = (blob) => new File([blob], `voucher-${Date.now()}.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`, { type: blob.type })
+
+/** A gallery photo, compressed; the original when it cannot be read or would not shrink. */
+async function shrink(file) {
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    const blob = await compress(bitmap, bitmap.width, bitmap.height)
+    bitmap.close?.()
+    return blob && blob.size < file.size ? asFile(blob) : file
+  } catch {
+    return file
+  }
+}
+
 const newGroup = () => `voucher-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const queueLabel = (number) => String(number).padStart(4, '0')
 const ago = (at) => {
@@ -110,23 +146,19 @@ export default function App() {
     const source = video.current
     if (!source?.videoWidth) return
     const groupId = group.current
-    const scale = Math.min(1, 1800 / Math.max(source.videoWidth, source.videoHeight))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(source.videoWidth * scale)
-    canvas.height = Math.round(source.videoHeight * scale)
-    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height)
     setPages((count) => count + 1)
-    canvas.toBlob((blob) => {
-      if (blob) enqueue(new File([blob], `voucher-${Date.now()}.jpg`, { type: 'image/jpeg' }), groupId)
+    compress(source, source.videoWidth, source.videoHeight).then((blob) => {
+      if (blob) enqueue(asFile(blob), groupId)
       else setCameraError('The photo could not be prepared. Please try again.')
-    }, 'image/jpeg', 0.84)
+    })
   }, [enqueue])
 
-  const choose = (files) => {
+  const choose = async (files) => {
     const groupId = group.current
     const images = [...files].filter((file) => file.type.startsWith('image/'))
-    images.forEach((file) => enqueue(file, groupId))
     setPages((count) => count + images.length)
+    // One at a time, in the order chosen, so the pages of a bill keep their order.
+    for (const file of images) enqueue(await shrink(file), groupId)
   }
 
   const retry = (id) => {
