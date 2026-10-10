@@ -40,7 +40,9 @@ function cardPrintFromEnv() {
 module.exports = {
   ...base,
   appId: 'in.shivhardware.quotation',
-  productName: 'Shiv Quotation',
+  // Shiv Counter since 2026-10-10 (was Shiv Quotation). The appId and the data
+  // folder (electron/main.cjs) keep the old name, so nothing saved is lost.
+  productName: 'Shiv Counter',
   directories: { output: 'release-quotation' },
   // files/asarUnpack (card template + Epson script/DEVMODE) come from base.
   extraMetadata: { ...base.extraMetadata, shivEntry: 'counter', cardPrint: cardPrintFromEnv() },
@@ -49,10 +51,10 @@ module.exports = {
     ...base.win,
     // Gold quotation-sheet icon (scripts/make-quotation-icon.ps1), distinct from the panel's "S".
     icon: 'build/icon-quotation.ico',
-    artifactName: 'Shiv-Quotation-Setup-${version}.${ext}',
+    artifactName: 'Shiv-Counter-Setup-${version}.${ext}',
   },
   nsis: {
     ...base.nsis,
-    shortcutName: 'Shiv Quotation',
+    shortcutName: 'Shiv Counter',
   },
 }

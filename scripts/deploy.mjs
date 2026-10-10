@@ -61,7 +61,7 @@ const TARGETS = [
   site('qr', 'qr-redirect', 'gcvf', 'gcvf.vercel.app', 'Guarantee QR link'),
   { ...site('billshoot', 'billshoot-web', 'billshoot-web', 'shivhardware-billshoot.vercel.app', 'Bill Shoot'), optional: 'not live yet: its page model is still training' },
   { id: 'print-server', kind: 'print-server', label: 'Print server (shop PC)', paths: ['print-server'] },
-  { id: 'quotation', kind: 'quotation', label: 'Shiv Quotation app (shop PC)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs', 'electron-builder.quotation.cjs'] },
+  { id: 'quotation', kind: 'quotation', label: 'Shiv Counter app (shop PC)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs', 'electron-builder.quotation.cjs'] },
   { id: 'app', kind: 'release', label: 'Shiv Hardware Panel app (counter PCs)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs'] },
 ]
 
@@ -261,21 +261,22 @@ async function deployRailway(t, sha) {
 }
 
 // ── desktop and shop PC ────────────────────────────────────────────────────
-const QUOTATION_DIR = join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Shiv Quotation')
+// Shiv Counter (renamed from Shiv Quotation 2026-10-10).
+const QUOTATION_DIR = join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Shiv Counter')
 
 async function deployQuotation() {
   const env = { ELECTRON_RUN_AS_NODE: '' }
   await run('npm', ['run', 'dist:quotation'], { env, timeout: 30 * 60_000 })
   const version = readJson(join(ROOT, 'package.json')).version
-  const setup = join(ROOT, 'release-quotation', `Shiv-Quotation-Setup-${version}.exe`)
+  const setup = join(ROOT, 'release-quotation', `Shiv-Counter-Setup-${version}.exe`)
   const ps = (script) => run('powershell.exe', ['-NoProfile', '-Command', script])
   // Closed gracefully first, so a card being typed is not lost to a kill. The
   // `exit 0`: finding no app left to stop sets PowerShell's error flag, which
   // read as a failure and left the app closed and not reinstalled (2026-10-09).
-  await ps(`Get-Process 'Shiv Quotation' -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }; Start-Sleep 3; Get-Process 'Shiv Quotation' -ErrorAction SilentlyContinue | Stop-Process -Force; exit 0`)
+  await ps(`Get-Process 'Shiv Counter','Shiv Quotation' -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }; Start-Sleep 3; Get-Process 'Shiv Counter','Shiv Quotation' -ErrorAction SilentlyContinue | Stop-Process -Force; exit 0`)
   await ps(`Start-Process -Wait '${setup}' -ArgumentList '/S'`)
   // ELECTRON_RUN_AS_NODE (set in some shells) makes the app exit at once.
-  await ps(`Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; Start-Process '${join(QUOTATION_DIR, 'Shiv Quotation.exe')}'`)
+  await ps(`Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; Start-Process '${join(QUOTATION_DIR, 'Shiv Counter.exe')}'`)
   return `installed ${version} and reopened`
 }
 

@@ -16,7 +16,9 @@ import {
 } from '../../lib/types'
 import { GuaranteeCardFace } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
-import { fetchLatestGuaranteeSeq } from '../../lib/convexSync'
+import { convexEnabled, fetchLatestGuaranteeSeq } from '../../lib/convexSync'
+import { useLive } from '../ledger/lib/cache'
+import { api } from '../../../convex/_generated/api'
 import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, type ServerPrintPayload } from '../../lib/printServer'
 import { printViaShop } from '../../lib/printViaShop'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
@@ -304,6 +306,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     return { number, id: number, token: mintCardToken() }
   })
   const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
+  // The customer accounts the name box offers (see CustomerAccounts).
+  const [accounts, setAccounts] = useState<CustomerAccount[]>([])
   const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
   // On a phone the card preview is folded away until asked for.
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -782,8 +786,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             <Card className="shrink-0 p-4 text-stone-800 dark:text-stone-100">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">Customer</h2>
               {onCard2
-                ? <CustomerFields key="c2" value={customer2} onChange={setCustomer2} />
-                : <CustomerFields key="c1" value={customer} onChange={setCustomer} />}
+                ? <CustomerFields key="c2" value={customer2} onChange={setCustomer2} accounts={accounts} />
+                : <CustomerFields key="c1" value={customer} onChange={setCustomer} accounts={accounts} />}
+              {convexEnabled() && <CustomerAccounts onAccounts={setAccounts} />}
             </Card>
 
             {/* Not overflow-hidden: a Type/Thickness list opens below its row and may pass the card's edge. */}
@@ -907,10 +912,54 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 type CustomerInfo = { id: string; name: string; mobile: string; uid: string; address: string }
 
 /** Name, mobile and UID for one card; the same fields for card 1 and card 2. */
-function CustomerFields({ value, onChange }: { value: CustomerInfo; onChange: (next: CustomerInfo) => void }) {
+/** A customer account as the name box offers it: the name without "M/s", with what the account holds. */
+type CustomerAccount = { name: string; phone: string; aadhaar: string }
+
+/**
+ * Reads the customer accounts for the name box — mounted only where the cloud
+ * is set up, since without it there is no account list (and no Convex client).
+ */
+function CustomerAccounts({ onAccounts }: { onAccounts: (list: CustomerAccount[]) => void }) {
+  const masters = useLive(api.masters.all, {}, 'masters') as { ledgers?: { name: string; groupName?: string; phone?: string; aadhaar?: string }[] } | undefined
+  useEffect(() => {
+    if (!masters?.ledgers) return
+    onAccounts(masters.ledgers
+      .filter((l) => l.groupName === 'Sundry Debtors')
+      .map((l) => ({ name: l.name.replace(/^m\/s\.?\s+/i, '').trim(), phone: l.phone ?? '', aadhaar: l.aadhaar ?? '' }))
+      .filter((a) => a.name))
+  }, [masters, onAccounts])
+  return null
+}
+
+function CustomerFields({ value, onChange, accounts = [] }: { value: CustomerInfo; onChange: (next: CustomerInfo) => void; accounts?: CustomerAccount[] }) {
+  const byName = useMemo(() => new Map(accounts.map((a) => [brandKey(a.name), a])), [accounts])
+  const names = useMemo(() => accounts.map((a) => a.name), [accounts])
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-      <Input label="M/s (Name)" value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
+      {accounts.length ? (
+        // Pick the customer's account and the card takes its mobile and
+        // Aadhaar; a name not in the books can still be typed.
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-muted">M/s (Name)</span>
+          <ComboBox
+            value={value.name}
+            placeholder="Pick or type a customer"
+            options={names}
+            note={(n) => byName.get(brandKey(n))?.phone ?? ''}
+            onChange={(name) => {
+              const account = byName.get(brandKey(name))
+              onChange({
+                ...value,
+                name,
+                ...(account ? { mobile: account.phone || value.mobile, uid: account.aadhaar || value.uid } : {}),
+              })
+            }}
+            className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+          />
+        </label>
+      ) : (
+        <Input label="M/s (Name)" value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
+      )}
       <label className="block">
         <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>
         <input

@@ -36,13 +36,15 @@ const ENTRY = (() => {
 })()
 const IS_QUOTATION_APP = ENTRY === 'counter'
 const ENTRY_HTML = IS_QUOTATION_APP ? 'counter.html' : 'index.html'
-const APP_TITLE = IS_QUOTATION_APP ? 'Shiv Quotation' : 'Shiv Hardware Panel'
+const APP_TITLE = IS_QUOTATION_APP ? 'Shiv Counter' : 'Shiv Hardware Panel'
 
 // Own profile folder. Both builds share package name "shiv-panel", so by
 // default they'd share %APPDATA%\shiv-panel — and with the panel open, the
 // quotation app's window blocked ~12s on the panel's locked browser storage
 // before it could even paint (and then couldn't save locally at all).
 // Must run before the app is ready.
+// The data folder keeps the app's first name: renamed Shiv Counter (2026-10-10),
+// a new folder would have started it empty — cards, settings and all.
 if (IS_QUOTATION_APP) app.setPath('userData', path.join(app.getPath('appData'), 'Shiv Quotation'))
 
 function appIconPath() {
