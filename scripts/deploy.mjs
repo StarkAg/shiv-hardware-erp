@@ -261,8 +261,12 @@ async function deployRailway(t, sha) {
 }
 
 // ── desktop and shop PC ────────────────────────────────────────────────────
-// Shiv Counter (renamed from Shiv Quotation 2026-10-10).
-const QUOTATION_DIR = join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Shiv Counter')
+// Shiv Counter (renamed from Shiv Quotation 2026-10-10). Same appId, so the
+// installer upgrades in place: an existing install stays in the old folder.
+const QUOTATION_DIR = ['Shiv Quotation', 'Shiv Counter']
+  .map((name) => join(process.env.LOCALAPPDATA ?? '', 'Programs', name))
+  .find((dir) => existsSync(join(dir, 'Shiv Counter.exe')) || existsSync(join(dir, 'Shiv Quotation.exe')))
+  ?? join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Shiv Counter')
 
 async function deployQuotation() {
   const env = { ELECTRON_RUN_AS_NODE: '' }
