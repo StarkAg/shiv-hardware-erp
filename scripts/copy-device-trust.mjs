@@ -9,7 +9,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const APPS = ['cash-web', 'print-web', 'order-web', 'sort-web', 'voucher-web', 'mica-web', 'stock-web', 'inventory-web', 'attendance-web']
+const APPS = ['cash-web', 'print-web', 'order-web', 'sort-web', 'voucher-web', 'mica-web', 'stock-web', 'inventory-web', 'attendance-web', 'khata-web']
   .map((app) => [app, path.join(root, app, 'src', 'deviceTrust')])
 // Shiv Rates, in the ShivLedger repo beside this one, reads the panel's bills.
 const rates = path.join(root, '..', 'ShivLedger', 'rates')

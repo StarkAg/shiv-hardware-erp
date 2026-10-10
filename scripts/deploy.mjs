@@ -59,6 +59,7 @@ const TARGETS = [
   site('stock', 'stock-web', 'stock-web', 'shivhardware-stock.vercel.app', 'Stock'),
   site('voucher', 'voucher-web', 'shivhardware-voucher', 'shivhardware-voucher.vercel.app', 'Voucher'),
   site('qr', 'qr-redirect', 'gcvf', 'gcvf.vercel.app', 'Guarantee QR link'),
+  site('khata', 'khata-web', 'shivhardware-khata', 'shivhardware-khata.vercel.app', 'Shiv Khata (accounts to read)'),
   { ...site('billshoot', 'billshoot-web', 'billshoot-web', 'shivhardware-billshoot.vercel.app', 'Bill Shoot'), optional: 'not live yet: its page model is still training' },
   { id: 'print-server', kind: 'print-server', label: 'Print server (shop PC)', paths: ['print-server'] },
   { id: 'quotation', kind: 'quotation', label: 'Shiv Counter app (shop PC)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs', 'electron-builder.quotation.cjs'] },
