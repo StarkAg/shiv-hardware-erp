@@ -91,9 +91,11 @@ type Props = {
   docked?: boolean
   /** Docked only: open the same file full screen. */
   onExpand?: () => void
+  /** Controls of the caller's own, first in the same row as the zoom (the phone queue's ‹ ›). */
+  toolsBefore?: React.ReactNode
 }
 
-export default function AttachmentViewer({ attachments, title = 'Attachments', subtitle, initialIndex = 0, onClose, onDownloadPdf, loading = false, docked = false, onExpand }: Props) {
+export default function AttachmentViewer({ attachments, title = 'Attachments', subtitle, initialIndex = 0, onClose, onDownloadPdf, loading = false, docked = false, onExpand, toolsBefore }: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const stage = useRef<HTMLDivElement>(null)
@@ -191,6 +193,7 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
 
   const tools = (
         <div className="attachment-tools" aria-label="Preview controls">
+          {toolsBefore}
           <button type="button" onClick={() => changeZoom(-.5)} disabled={zoom <= 1 || !shown} aria-label="Zoom out"><Minus size={18} /></button>
           <output aria-label="Zoom level">{Math.round(zoom * 100)}%</output>
           <button type="button" onClick={() => changeZoom(.5)} disabled={zoom >= 5 || !shown} aria-label="Zoom in"><Plus size={18} /></button>

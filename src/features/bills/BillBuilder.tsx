@@ -41,6 +41,8 @@ const BillViewer = BillViewerUntyped as unknown as (props: {
   onClose: () => void
   docked?: boolean
   onExpand?: () => void
+  /** Controls first in the viewer's zoom row. */
+  toolsBefore?: React.ReactNode
 }) => JSX.Element
 
 /** A phone photo as the picker hands it over: the queue row, url and all. */
@@ -3881,31 +3883,27 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
 
       {photoShown != null && !photoFull && (
         <BillDock size={dockSize} onResize={setDockSize}>
-          {/* The next bill in the phone queue without going back to the tiles. */}
-          {photoPos && photoPos.count > 1 && (
-            <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-stone-200 bg-white/95 px-1 py-0.5 text-xs font-semibold text-stone-700 shadow-md dark:border-white/10 dark:bg-stone-900/95 dark:text-stone-200 md:top-2">
-              <button
-                type="button"
-                aria-label="Previous bill photo"
-                disabled={photoPos.index <= 0}
-                onClick={() => stepPhoto.current?.(-1)}
-                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-white/10"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="tabular-nums">{photoPos.label || 'Photo'} · {photoPos.index + 1} of {photoPos.count}</span>
-              <button
-                type="button"
-                aria-label="Next bill photo"
-                disabled={photoPos.index >= photoPos.count - 1}
-                onClick={() => stepPhoto.current?.(1)}
-                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-white/10"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          )}
-          <BillViewer key={dockKey} voucher={photoShown} docked onExpand={() => setPhotoFull(true)} onClose={() => setPhotoShown(null)} />
+          <BillViewer
+            key={dockKey}
+            voucher={photoShown}
+            docked
+            onExpand={() => setPhotoFull(true)}
+            onClose={() => setPhotoShown(null)}
+            // The next bill in the phone queue, in the same row as the zoom.
+            toolsBefore={photoPos && photoPos.count > 1 ? (
+              <>
+                <button type="button" aria-label="Previous bill photo" disabled={photoPos.index <= 0} onClick={() => stepPhoto.current?.(-1)}>
+                  <ChevronLeft size={18} />
+                </button>
+                <output className="tabular-nums" aria-label="Bill in the phone queue">
+                  {photoPos.label || 'Photo'} · {photoPos.index + 1} of {photoPos.count}
+                </output>
+                <button type="button" aria-label="Next bill photo" disabled={photoPos.index >= photoPos.count - 1} onClick={() => stepPhoto.current?.(1)}>
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            ) : undefined}
+          />
         </BillDock>
       )}
       {photoShown != null && photoFull && (
