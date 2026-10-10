@@ -1,12 +1,12 @@
 // Draws the Shiv Khata icons and writes them as PNGs (no image library).
-// An open account book on WhatsApp green: the app is read like a chat, and
-// sits on a phone next to WhatsApp, so it is green, but its own shape.
+// An open account book on the shop's brass, with parchment pages: the same
+// colours as the attendance app, so the shop's apps read as one family.
 const fs = require('fs')
 const zlib = require('zlib')
 
-const GREEN = [7, 94, 84]       // WhatsApp's dark teal
-const PAGE = [255, 255, 255]
-const LINE = [37, 211, 102]     // WhatsApp green, for the ruled lines
+const GREEN = [185, 146, 75]    // the shop's brass (the field)
+const PAGE = [243, 240, 234]    // parchment
+const LINE = [120, 90, 36]      // dark brass, for the ruled lines
 const SS = 4
 
 const rr = (x, y, cx, cy, w, h, r) => {

@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from 'convex/react'
+import { useConvex, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 
 /**
  * Shiv Khata — the shop's accounts to read, and nothing to change.
  *
- * Made to be used like WhatsApp by someone who has never opened the panel:
+ * Made to be used like a chat app by someone who has never opened the panel:
  * two tabs (Customers, Suppliers), each a list like chats — a name, what is
  * owed either way, green for money to come and red for money to pay. Opening
  * one reads the account like a chat: every bill and payment a bubble, newest
  * at the bottom, with the bill's photos to tap open. No buttons that write.
+ *
+ * Live: every figure is a Convex subscription, so a bill saved at the counter
+ * shows here within a second or two with the app left open — the light in the
+ * header says the line is up, and a row whose figure has just moved is tinted
+ * for a few seconds. In the shop's own colours (the attendance app's).
  */
 const api = anyApi
 
@@ -27,8 +32,17 @@ function useCached(fn, args, key) {
 
 const rupees = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
 const bare = (name) => String(name ?? '').replace(/^m\/s\.?\s+/i, '').trim()
-const COLORS = ['#25a85a', '#2b8cc4', '#e8743b', '#9a4fb5', '#d99a00', '#1f9e8f', '#d6457a', '#5763b8']
-const colorOf = (name) => COLORS[[...name].reduce((h, c) => h + c.charCodeAt(0), 0) % COLORS.length]
+
+/** The light that says the figures on screen are the live ones. */
+function LiveLight() {
+  const convex = useConvex()
+  const [on, setOn] = useState(() => convex.connectionState().isWebSocketConnected)
+  useEffect(() => {
+    const timer = setInterval(() => setOn(convex.connectionState().isWebSocketConnected), 1500)
+    return () => clearInterval(timer)
+  }, [convex])
+  return <span className={`live ${on ? 'on' : ''}`} role="status"><i />{on ? 'Live' : 'Connecting'}</span>
+}
 const dayOf = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 /** Dr / Cr in words a customer's or supplier's account is read in. */
 const sideWord = (side, tab) => (tab === 'customers'
@@ -67,12 +81,34 @@ function Lists({ tab, setTab, onOpen }) {
   const dr = sumOf('Dr')
   const cr = sumOf('Cr')
 
+  // A figure that moves while the list is open is tinted for a few seconds,
+  // so a change is seen rather than silently swapped in.
+  const seen = useRef(new Map())
+  const [changed, setChanged] = useState(() => new Set())
+  useEffect(() => {
+    const moved = new Set()
+    for (const r of book?.rows ?? []) {
+      const id = r.ledger?._id
+      const figure = `${r.closingSide}:${Math.round(Number(r.closing) || 0)}`
+      if (seen.current.has(id) && seen.current.get(id) !== figure) moved.add(id)
+      seen.current.set(id, figure)
+    }
+    if (!moved.size) return undefined
+    setChanged(moved)
+    const timer = setTimeout(() => setChanged(new Set()), 4000)
+    return () => clearTimeout(timer)
+  }, [book])
+
   return (
     <div className="app">
       <header className="top">
-        <div className="brand">
+        <div className="brandrow">
           <img src="/icon-192.png" alt="" />
-          <span>Shiv Khata</span>
+          <div>
+            <div className="brand">Shiv Khata</div>
+            <div className="sub">Accounts</div>
+          </div>
+          <LiveLight />
         </div>
         <nav className="tabs">
           <button className={tab === 'customers' ? 'on' : ''} onClick={() => setTab('customers')}>Customers</button>
@@ -104,9 +140,9 @@ function Lists({ tab, setTab, onOpen }) {
             : tab === 'customers' ? (toCome ? 'Owes us' : 'Advance with us')
             : (toCome ? 'Advance given, owes us' : 'We owe')
           return (
-            <li key={r.ledger._id}>
+            <li key={r.ledger._id} className={changed.has(r.ledger._id) ? 'changed' : undefined}>
               <button type="button" onClick={() => onOpen({ id: r.ledger._id, name, phone: r.ledger.phone ?? '', tab })}>
-                <span className="avatar" style={{ background: colorOf(name) }}>{name[0]?.toUpperCase() ?? '?'}</span>
+                <span className="avatar">{name[0]?.toUpperCase() ?? '?'}</span>
                 <span className="who">
                   <b>{name}</b>
                   <small>{what}{r.pendingCount ? ` · ${r.pendingCount} bill${r.pendingCount === 1 ? '' : 's'} without amount` : ''}</small>
@@ -155,7 +191,7 @@ function Party({ party, onBack }) {
     <div className="app chat">
       <header className="top chathead">
         <button type="button" className="back" onClick={onBack} aria-label="Back">‹</button>
-        <span className="avatar small" style={{ background: colorOf(party.name) }}>{party.name[0]?.toUpperCase() ?? '?'}</span>
+        <span className="avatar small">{party.name[0]?.toUpperCase() ?? '?'}</span>
         <span className="who">
           <b>{party.name}</b>
           <small>{closing}</small>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Check, Copy, Eye, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
+import { Check, Copy, Eye, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
@@ -733,12 +733,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
                   <Printer size={20} /> Print
                 </Button>
-                <button
-                  onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: `/guarantee/${layout}` } })}
-                  className="flex w-full min-w-32 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-stone-50 px-5 py-3 text-base font-semibold text-stone-700 shadow-sm transition hover:border-shiv-green hover:bg-stone-100 dark:border-white/15 dark:bg-white/5 dark:text-stone-100 dark:hover:bg-white/10 md:w-auto"
-                >
-                  <FileText size={20} /> From a bill
-                </button>
+                {/* No "From a bill" here any more: a sale marked Guarantee card is
+                    on the Guarantee list, and its Make card opens this form
+                    filled from that bill. */}
               </div>
             )}
             <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">
