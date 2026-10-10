@@ -4024,12 +4024,18 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 // already gone.
                 const name = toProperCase(e.target.value)
                 const match = liveCustomers.find(c => c.name.toLowerCase() === name.toLowerCase())
+                // A name with no account of its own keeps numbers typed for it,
+                // but not another customer's: bill 371 was moved from Chiranjeev
+                // Sikdar to a new customer and kept his phone and Aadhaar, which
+                // saving would have filed on the new account.
+                const someoneElses = (field: 'mobile' | 'uid', value?: string) =>
+                  !!value && liveCustomers.some((c) => c[field] === value)
                 setShowCust(true)
                 setDraft((d) => ({
                   ...d,
                   customerName: name,
-                  customerPhone: match ? match.mobile : d.customerPhone,
-                  customerUid: match ? (match.uid ?? '') : d.customerUid,
+                  customerPhone: match ? match.mobile : someoneElses('mobile', d.customerPhone) ? '' : d.customerPhone,
+                  customerUid: match ? (match.uid ?? '') : someoneElses('uid', d.customerUid) ? '' : d.customerUid,
                 }))
               }}
               className="w-full rounded-lg border border-stone-200 bg-white py-2 pl-11 pr-3 text-sm dark:border-white/10 dark:bg-stone-800 dark:text-white"
