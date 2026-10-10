@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { flushLocal, useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
 // The ledger's own photo picker: files chosen here, and photographs the phone
@@ -29,6 +29,10 @@ const BillDrop = BillDropUntyped as unknown as (props: {
   onPick: (picked: PickedPhoto[]) => void
   onViewBill?: (shown: unknown) => void
   attached?: { storageId: string }[]
+  /** Set to a function that swaps the picked bill for the tile before (-1) or after (+1) it. */
+  stepRef?: { current: ((dir: number) => boolean) | null }
+  /** Where the picked bill sits among the tiles, or null when none is picked. */
+  onPosition?: (pos: { index: number; count: number; label: string } | null) => void
 }) => JSX.Element
 
 /** The ledger's full-screen photo viewer, likewise plain JSX. */
@@ -2856,6 +2860,9 @@ export function BillBuilder() {
   const [photoFull, setPhotoFull] = useState(false)
   const [dockSize, setDockSize] = useState<DockSize>(readDockSize)
   const [dockKey, setDockKey] = useState(0)
+  // The phone queue's arrows on the docked photo (see BillDrop's stepRef).
+  const stepPhoto = useRef<((dir: number) => boolean) | null>(null)
+  const [photoPos, setPhotoPos] = useState<{ index: number; count: number; label: string } | null>(null)
   const showPhoto = (shown: unknown) => { setPhotoShown(shown); setPhotoFull(false); setDockKey((k) => k + 1) }
   // A different bill closes the photo — except a switch of voucher type
   // (Sale to Receipt…), which starts a fresh voucher from the same paper: the
@@ -3874,6 +3881,30 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
 
       {photoShown != null && !photoFull && (
         <BillDock size={dockSize} onResize={setDockSize}>
+          {/* The next bill in the phone queue without going back to the tiles. */}
+          {photoPos && photoPos.count > 1 && (
+            <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-stone-200 bg-white/95 px-1 py-0.5 text-xs font-semibold text-stone-700 shadow-md dark:border-white/10 dark:bg-stone-900/95 dark:text-stone-200 md:top-2">
+              <button
+                type="button"
+                aria-label="Previous bill photo"
+                disabled={photoPos.index <= 0}
+                onClick={() => stepPhoto.current?.(-1)}
+                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-white/10"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="tabular-nums">{photoPos.label || 'Photo'} · {photoPos.index + 1} of {photoPos.count}</span>
+              <button
+                type="button"
+                aria-label="Next bill photo"
+                disabled={photoPos.index >= photoPos.count - 1}
+                onClick={() => stepPhoto.current?.(1)}
+                className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-white/10"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
           <BillViewer key={dockKey} voucher={photoShown} docked onExpand={() => setPhotoFull(true)} onClose={() => setPhotoShown(null)} />
         </BillDock>
       )}
@@ -4661,6 +4692,9 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               picked={photoPicked}
               onPick={pickPhotos}
               onViewBill={showPhoto}
+              stepRef={stepPhoto}
+              onPosition={(pos: typeof photoPos) => setPhotoPos((was) =>
+                was?.index === pos?.index && was?.count === pos?.count && was?.label === pos?.label ? was : pos)}
             />
           </div>
         </div>

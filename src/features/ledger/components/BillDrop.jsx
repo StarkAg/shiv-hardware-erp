@@ -35,7 +35,7 @@ const queueSummary = (unit) => {
  * straight onto the voucher — and pasting catches a screenshot without it
  * ever becoming a file.
  */
-export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill, attached = [] }) {
+export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill, attached = [], stepRef, onPosition }) {
   const saved = useQuery(api.files.describe, attached.length ? { storageIds: attached.map((file) => file.storageId) } : 'skip');
   // The voucher shooter has its own queue. Keep older unstacked photos from
   // the panel camera; lettered stacks belong to the sorting site.
@@ -77,6 +77,27 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
   }, [fromPhone]);
 
   const isPicked = (unit) => unit.pages.every((r) => picked.some((p) => p._id === r._id));
+
+  /**
+   * The arrows on the bill photo beside the form: the picked bill is swapped
+   * for the tile before or after it, in the order the tiles are shown, so the
+   * next bill can be typed without going back to the tiles. Where the picked
+   * bill sits is reported for the "#0150 · 1 of 9" between the arrows.
+   */
+  const pickedAt = units.findIndex((unit) => isPicked(unit));
+  useEffect(() => {
+    if (stepRef) {
+      stepRef.current = (dir) => {
+        const at = units.findIndex((unit) => isPicked(unit));
+        const target = units[(at < 0 ? (dir > 0 ? -1 : units.length) : at) + dir];
+        if (!target) return false;
+        const drop = new Set((at >= 0 ? units[at].pages : []).map((r) => r._id));
+        onPick?.([...picked.filter((p) => !drop.has(p._id)), ...target.pages]);
+        return true;
+      };
+    }
+    onPosition?.(pickedAt >= 0 ? { index: pickedAt, count: units.length, label: queueSummary(units[pickedAt]) } : null);
+  });
 
   const toggle = (unit) => {
     const ids = new Set(unit.pages.map((r) => r._id));
