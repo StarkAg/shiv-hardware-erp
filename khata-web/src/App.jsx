@@ -73,8 +73,8 @@ export default function App() {
 }
 
 const SORTS = [
-  { id: 'amount', label: 'Amount' },
   { id: 'recent', label: 'Recent' },
+  { id: 'amount', label: 'Amount' },
   { id: 'name', label: 'Name A-Z' },
 ]
 const FILTERS = [
@@ -95,10 +95,12 @@ function Lists({ tab, setTab, onOpen }) {
   const customers = useCached(api.reports.receivables, {}, 'receivables')
   const suppliers = useCached(api.reports.outstanding, {}, 'payables')
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState(() => read('sort') ?? 'amount')
+  // 'sortBy', not 'sort': the first version stored 'amount' on every phone
+  // that opened it, without anyone having chosen it.
+  const [sort, setSort] = useState(() => read('sortBy') ?? 'recent')
   const [filter, setFilter] = useState(() => read('filter') ?? 'all')
   const [panel, setPanel] = useState(null)
-  useEffect(() => { write('sort', sort) }, [sort])
+  useEffect(() => { write('sortBy', sort) }, [sort])
   useEffect(() => { write('filter', filter) }, [filter])
   const book = tab === 'customers' ? customers : suppliers
   const rows = useMemo(() => {
@@ -174,7 +176,7 @@ function Lists({ tab, setTab, onOpen }) {
       </div>
       <div className="searchbar">
         <input type="search" placeholder="Search a name" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button type="button" className={`tool ${panel === 'sort' ? 'open' : ''} ${sort !== 'amount' ? 'set' : ''}`} aria-label="Sort" onClick={() => setPanel(panel === 'sort' ? null : 'sort')}><SortIcon /></button>
+        <button type="button" className={`tool ${panel === 'sort' ? 'open' : ''} ${sort !== 'recent' ? 'set' : ''}`} aria-label="Sort" onClick={() => setPanel(panel === 'sort' ? null : 'sort')}><SortIcon /></button>
         <button type="button" className={`tool ${panel === 'filter' ? 'open' : ''} ${filter !== 'all' ? 'set' : ''}`} aria-label="Filter" onClick={() => setPanel(panel === 'filter' ? null : 'filter')}><FilterIcon /></button>
       </div>
       {panel === 'sort' && pick(SORTS, sort, setSort)}
