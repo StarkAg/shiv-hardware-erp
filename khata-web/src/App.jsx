@@ -43,7 +43,7 @@ function LiveLight() {
     const timer = setInterval(() => setOn(convex.connectionState().isWebSocketConnected), 1500)
     return () => clearInterval(timer)
   }, [convex])
-  return <span className={`live ${on ? 'on' : ''}`} role="status"><i />{on ? 'Live' : 'Connecting'}</span>
+  return <span className={`live ${on ? 'on' : ''}`} role="status"><i />{on ? 'Live' : 'Jud raha hai'}</span>
 }
 const dayOf = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 /** Dr / Cr as the shop says it: Dr on a party is money to take, Cr to give. */
@@ -51,9 +51,9 @@ const sideWord = (side) => (side === 'Dr' ? 'lena hai' : 'dena hai')
 const SETTLED = 'Hisaab barabar'
 const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
 /** A line's voucher in the words of who sent what; the bubble's side says who. */
-const SENT = { Sale: 'Bill sent', Purchase: 'Bill received', Receipt: 'Payment sent', Payment: 'Payment sent' }
+const SENT = { Sale: 'Bill bheja', Purchase: 'Bill aaya', Receipt: 'Payment kiya', Payment: 'Payment kiya' }
 // The money taken with a sale or purchase is a payment, not the bill again.
-const kindOf = (r) => (r.settlement ? 'Payment sent' : SENT[r.vchType] ?? r.vchType)
+const kindOf = (r) => (r.settlement ? 'Payment kiya' : SENT[r.vchType] ?? r.vchType)
 
 export default function App() {
   const [tab, setTab] = useState(() => read('tab') ?? 'customers')
@@ -72,15 +72,15 @@ export default function App() {
 }
 
 const SORTS = [
-  { id: 'recent', label: 'Recent' },
-  { id: 'amount', label: 'Amount' },
-  { id: 'name', label: 'Name A-Z' },
+  { id: 'recent', label: 'Naya pehle' },
+  { id: 'amount', label: 'Rakam' },
+  { id: 'name', label: 'Naam A-Z' },
 ]
 const FILTERS = [
-  { id: 'all', label: 'All' },
+  { id: 'all', label: 'Sab' },
   { id: 'lena', label: 'Lena hai', test: (r) => r.closing >= 0.5 && r.closingSide === 'Dr' },
   { id: 'dena', label: 'Dena hai', test: (r) => r.closing >= 0.5 && r.closingSide === 'Cr' },
-  { id: 'unpriced', label: 'Without amount', test: (r) => r.pendingCount > 0 },
+  { id: 'unpriced', label: 'Bina rakam', test: (r) => r.pendingCount > 0 },
   { id: 'settled', label: SETTLED, test: (r) => r.closing < 0.5 && !r.pendingCount },
 ]
 const SortIcon = () => (
@@ -156,12 +156,12 @@ function Lists({ tab, setTab, onOpen }) {
           <LiveLight />
         </div>
         <nav className="tabs">
-          <button className={tab === 'customers' ? 'on' : ''} onClick={() => setTab('customers')}>Customers</button>
-          <button className={tab === 'suppliers' ? 'on' : ''} onClick={() => setTab('suppliers')}>Suppliers</button>
+          <button className={tab === 'customers' ? 'on' : ''} onClick={() => setTab('customers')}>Grahak</button>
+          <button className={tab === 'suppliers' ? 'on' : ''} onClick={() => setTab('suppliers')}>Supplier</button>
         </nav>
       </header>
       <div className="summary">
-        {!book ? 'Loading…' : tab === 'customers' ? (
+        {!book ? 'Aa raha hai…' : tab === 'customers' ? (
           <>
             <span className="in"><small>Lena hai</small>{rupees(dr)}</span>
             <span><small>Advance, dena hai</small>{rupees(cr)}</span>
@@ -174,7 +174,7 @@ function Lists({ tab, setTab, onOpen }) {
         )}
       </div>
       <div className="searchbar">
-        <input type="search" placeholder="Search a name" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input type="search" placeholder="Naam khojein" value={q} onChange={(e) => setQ(e.target.value)} />
         <button type="button" className={`tool ${panel === 'sort' ? 'open' : ''} ${sort !== 'recent' ? 'set' : ''}`} aria-label="Sort" onClick={() => setPanel(panel === 'sort' ? null : 'sort')}><SortIcon /></button>
         <button type="button" className={`tool ${panel === 'filter' ? 'open' : ''} ${filter !== 'all' ? 'set' : ''}`} aria-label="Filter" onClick={() => setPanel(panel === 'filter' ? null : 'filter')}><FilterIcon /></button>
       </div>
@@ -194,14 +194,14 @@ function Lists({ tab, setTab, onOpen }) {
                 <span className="avatar">{name[0]?.toUpperCase() ?? '?'}</span>
                 <span className="who">
                   <b>{name}</b>
-                  <small>{what}{r.pendingCount ? ` · ${r.pendingCount} bill${r.pendingCount === 1 ? '' : 's'} without amount` : ''}</small>
+                  <small>{what}{r.pendingCount ? ` · ${r.pendingCount} bill bina rakam` : ''}</small>
                 </span>
                 <span className={`amt ${zero ? '' : toCome ? 'in' : 'out'}`}>{zero ? '—' : rupees(r.closing)}</span>
               </button>
             </li>
           )
         })}
-        {book && !rows.length && <li className="empty">{q ? 'No name like that.' : filter !== 'all' ? 'Nobody in this filter.' : 'Nobody here yet.'}</li>}
+        {book && !rows.length && <li className="empty">{q ? 'Is naam ka koi nahi.' : filter !== 'all' ? 'Isme koi nahi.' : 'Abhi koi nahi.'}</li>}
       </ul>
     </div>
   )
@@ -234,7 +234,7 @@ function Party({ party, onBack }) {
     return out
   }, [data])
 
-  const closing = data ? (data.closing < 0.5 ? SETTLED : `${rupees(data.closing)} ${sideWord(data.closingSide)}`) : 'Loading…'
+  const closing = data ? (data.closing < 0.5 ? SETTLED : `${rupees(data.closing)} ${sideWord(data.closingSide)}`) : 'Aa raha hai…'
 
   return (
     <div className="app chat">
@@ -254,14 +254,14 @@ function Party({ party, onBack }) {
         )}
       </header>
       <main className="thread">
-        {data && !items.length && <p className="note">No bills or payments yet.</p>}
+        {data && !items.length && <p className="note">Abhi koi bill ya payment nahi.</p>}
         {items.map((it) => {
           if (it.day) return <div key={it.key} className="daytag"><span>{it.day}</span></div>
           if (it.p) {
             const shots = (it.p.attachmentUrls ?? []).filter((a) => a.url)
             return (
               <div key={it.key} className={`bubble ${pendingOurs ? 'right' : 'left'} pending`}>
-                <div className="kind">{SENT[it.p.vchType] ?? 'Bill'} · {it.p.vchLabel ?? ''} · amount not entered yet</div>
+                <div className="kind">{SENT[it.p.vchType] ?? 'Bill'} · {it.p.vchLabel ?? ''} · rakam abhi nahi daali</div>
                 <Photos shots={shots} onOpen={setPhoto} />
               </div>
             )
@@ -275,7 +275,7 @@ function Party({ party, onBack }) {
               <div className="money">{rupees(r.amount)}</div>
               {r.narration && <div className="narr">{r.narration}</div>}
               <Photos shots={shots} onOpen={setPhoto} />
-              <div className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</div>
+              <div className="bal">Baaki {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</div>
             </div>
           )
         })}
@@ -285,7 +285,7 @@ function Party({ party, onBack }) {
         <footer className={`due ${data.closing < 0.5 ? '' : data.closingSide === 'Dr' ? 'in' : 'out'}`}>
           <small>{data.closing < 0.5 ? SETTLED : data.closingSide === 'Dr' ? 'Lena hai' : 'Dena hai'}</small>
           <b>{data.closing < 0.5 ? rupees(0) : rupees(data.closing)}</b>
-          {data.pendingCount > 0 && <span>+ {data.pendingCount} bill{data.pendingCount === 1 ? '' : 's'} without amount</span>}
+          {data.pendingCount > 0 && <span>+ {data.pendingCount} bill bina rakam</span>}
         </footer>
       )}
       {photo && (
