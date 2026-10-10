@@ -101,20 +101,26 @@ export function findPartyIn(all: Doc<'ledgers'>[], name: string): Doc<'ledgers'>
 export async function openParty(
   ctx: MutationCtx,
   name: string,
-  opts: { phone?: string; group?: string } = {},
+  opts: { phone?: string; aadhaar?: string; group?: string } = {},
 ): Promise<Id<'ledgers'>> {
   // Proper case on the way in, as the account form does it.
   const clean = properText(name)
   if (!clean) throw new Error('No party name on this document.')
 
+  // A whole Aadhaar only: a half-typed one is not filed on the account.
+  const aadhaar = /^\d{12}$/.test(opts.aadhaar ?? '') ? opts.aadhaar : undefined
+
   const existing = await findParty(ctx, clean)
   if (existing) {
-    // Fill in a phone we didn't have, but never overwrite one already there:
-    // the master is not corrected from whatever an old document happened to
-    // carry.
-    if (opts.phone && !existing.phone) {
-      await ctx.db.patch(existing._id, { phone: opts.phone, updatedAt: Date.now() })
+    // Fill in a phone or Aadhaar we didn't have, but never overwrite one
+    // already there: the master is not corrected from whatever an old document
+    // happened to carry. Aadhaar is filled too since 2026-10-10 — before, a
+    // customer's UID stayed on the bill only, and every new bill asked again.
+    const fill = {
+      ...(opts.phone && !existing.phone ? { phone: opts.phone } : {}),
+      ...(aadhaar && !existing.aadhaar ? { aadhaar } : {}),
     }
+    if (Object.keys(fill).length) await ctx.db.patch(existing._id, { ...fill, updatedAt: Date.now() })
     return existing._id
   }
 
@@ -145,6 +151,7 @@ export async function openParty(
     name: filedAs,
     groupId: under._id,
     ...(opts.phone ? { phone: opts.phone } : {}),
+    ...(aadhaar ? { aadhaar } : {}),
     openingBalance: 0,
     openingSide: groupName === 'Sundry Creditors' ? ('Cr' as const) : ('Dr' as const),
     openingAsOf: now,

@@ -2,6 +2,7 @@ import { isWithoutBillParty } from './lib/text'
 import { ConvexError, v } from 'convex/values'
 import { mutation } from './lib/guarded'
 import type { MutationCtx } from './_generated/server'
+import { internalMutation } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { fyOf, round2 } from './lib/money'
 import { findParty, openParty } from './lib/parties'
@@ -409,6 +410,7 @@ export const postBill = mutation({
 
     const ledgerId = await openParty(ctx, customerName, {
       phone: bill.customerPhone || undefined,
+      aadhaar: bill.customerUid || undefined,
       group: spec.group,
     })
 
@@ -707,4 +709,37 @@ export const postBill = mutation({
 
     return { ledgerId, voucherId, number, bill: stored, rev }
   }),
+})
+
+/**
+ * One-off backfill (2026-10-10): accounts take the phone and Aadhaar already
+ * written on their bills, where the account has none — the same fill-only rule
+ * as saving a bill. Before this, a bill's UID never reached the account, so
+ * every new bill asked for it again. A page at a time:
+ *   npx convex run billLedger:backfillPartyContacts '{}'   (then pass the cursor it returns)
+ */
+export const backfillPartyContacts = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, { cursor }) => {
+    const page = await ctx.db.query('bills').paginate({ numItems: 200, cursor: cursor ?? null })
+    let filled = 0
+    for (const row of page.page) {
+      const bill: any = row.bill ?? {}
+      if (!bill.ledgerId) continue
+      const phone = /^\d{10}$/.test(bill.customerPhone ?? '') ? bill.customerPhone : undefined
+      const aadhaar = /^\d{12}$/.test(bill.customerUid ?? '') ? bill.customerUid : undefined
+      if (!phone && !aadhaar) continue
+      const account = await ctx.db.get(bill.ledgerId as Id<'ledgers'>).catch(() => null)
+      if (!account) continue
+      const fill = {
+        ...(phone && !account.phone ? { phone } : {}),
+        ...(aadhaar && !account.aadhaar ? { aadhaar } : {}),
+      }
+      if (Object.keys(fill).length) {
+        await ctx.db.patch(account._id, { ...fill, updatedAt: Date.now() })
+        filled += 1
+      }
+    }
+    return { filled, isDone: page.isDone, cursor: page.continueCursor }
+  },
 })

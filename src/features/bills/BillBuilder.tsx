@@ -2869,6 +2869,21 @@ export function BillBuilder() {
     }
     moveBillFocus(1)
   }
+  /**
+   * The customer's account already holds a whole phone and Aadhaar: they are
+   * shown from it, not asked for on every bill. "Change" brings the boxes back
+   * for this bill.
+   */
+  const contactOnFile = useMemo(() => {
+    const name = foldName(draft.customerName ?? '')
+    const account = name ? liveCustomers.find((c) => c.account && foldName(c.name) === name) : undefined
+    return account && /^\d{10}$/.test(account.mobile) && /^\d{12}$/.test(account.uid ?? '') ? account : undefined
+  }, [draft.customerName, liveCustomers])
+  const [changeContact, setChangeContact] = useState(false)
+  useEffect(() => { setChangeContact(false) }, [contactOnFile?.id])
+  const contactKnown = !!contactOnFile && !changeContact
+    && (draft.customerPhone ?? '') === contactOnFile.mobile && (draft.customerUid ?? '') === contactOnFile.uid
+
   const photoLabel = isMoneyVoucher ? 'Receipt photo' : 'Bill photo'
   const photoCount = (draft.attachments?.length ?? 0) + photoFiles.length + photoPicked.length
   const claimLock = useMutation(api.billLocks.claim)
@@ -4001,6 +4016,16 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 </span>
               </div>
             )}
+            {!isSupplierVoucher && contactKnown && contactOnFile && (
+              <div className="mt-0.5 flex items-baseline gap-2 pl-11 text-xs text-muted">
+                <span className="tabular-nums">
+                  {contactOnFile.mobile.replace(/(\d{5})(\d{5})/, '$1 $2')} · UID {(contactOnFile.uid ?? '').replace(/(\d{4})(?=\d)/g, '$1 ')}
+                </span>
+                <button type="button" onClick={() => setChangeContact(true)} className="underline hover:text-stone-700 dark:hover:text-stone-200">
+                  change
+                </button>
+              </div>
+            )}
             {showCust && custMatches.length > 0 && (draft.customerName ?? '').trim() && (
               <div className="absolute top-full left-0 right-0 z-30 mt-0.5 max-h-64 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl dark:border-white/10 dark:bg-stone-800">
                 {custMatches.map((c, i) => (
@@ -4026,7 +4051,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               the purchase book — not a customer on credit whose phone and
               Aadhaar are taken so they can be chased. Asking for them on a
               purchase is two boxes to tab past on every voucher. */}
-          {!isSupplierVoucher && (
+          {!isSupplierVoucher && !contactKnown && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">Phone (optional)</label>
             <input
@@ -4057,7 +4082,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             />
           </div>
           )}
-          {!isSupplierVoucher && (
+          {!isSupplierVoucher && !contactKnown && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">UID (optional)</label>
             <input
@@ -4360,6 +4385,57 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             </div>
           </div>
         </div>
+
+        {/* Sales only. Delivered is on from the start: untick it and the sale
+            waits on the Delivery list. Order and Guarantee card are off on
+            every new sale and put it on the Work list / Guarantee list. A
+            list's own button takes it off again. */}
+        {(draft.kind ?? 'sale') === 'sale' && (
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              {
+                key: 'delivered', label: 'Delivered', hint: 'Untick when the goods go later: the sale waits on the Delivery list',
+                on: (d: Bill) => !d.undelivered || !!d.deliveredAt,
+                flip: (d: Bill): Bill => (!d.undelivered || d.deliveredAt
+                  ? { ...d, undelivered: true, deliveredAt: undefined }
+                  : { ...d, undelivered: undefined }),
+              },
+              {
+                key: 'order', label: 'Order', hint: 'On the Work list until done',
+                on: (d: Bill) => !!d.workOrder,
+                flip: (d: Bill): Bill => ({ ...d, workOrder: !d.workOrder }),
+              },
+              {
+                key: 'card', label: 'Guarantee card', hint: 'On the Guarantee list until the card is made',
+                on: (d: Bill) => !!d.guaranteeCard,
+                flip: (d: Bill): Bill => ({ ...d, guaranteeCard: !d.guaranteeCard }),
+              },
+            ].map(({ key, label, hint, on: isOn, flip }) => {
+              const on = isOn(draft)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="switch"
+                  aria-checked={on}
+                  title={hint}
+                  disabled={readOnly}
+                  onClick={() => setDraft(flip)}
+                  className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    on
+                      ? 'border-shiv-green bg-shiv-green/15 text-stone-900 dark:text-stone-50'
+                      : 'border-stone-200 text-muted hover:border-stone-300 dark:border-white/10'
+                  }`}
+                >
+                  <span className={`relative h-4 w-7 rounded-full transition ${on ? 'bg-shiv-green' : 'bg-stone-300 dark:bg-stone-600'}`}>
+                    <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${on ? 'left-3.5' : 'left-0.5'}`} />
+                  </span>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Narration — Tally's last field before the voucher is accepted. It is
             the voucher's own wording, so it posts as the narration rather than
