@@ -23,8 +23,28 @@ function client(): ConvexHttpClient | null {
 
 export const convexEnabled = () => Boolean(CONVEX_URL)
 
-/** The same authorised client, for work that runs outside React (src/lib/billPhotoOutbox.ts). */
-export const convexHttp = () => client()
+/**
+ * A client of its own for the background outboxes (posting, bill photos).
+ *
+ * A ConvexHttpClient runs its mutations one at a time, in a queue. Sharing the
+ * one above put a bill's posting behind the whole-bill-list push that follows
+ * every save — and one call that never answered held every bill behind it at
+ * "Posting…" until the page was reloaded (2026-10-10).
+ */
+//
+// A new one for every call: a client whose call never answers keeps its own
+// queue blocked behind it even after the caller has given up waiting, so no
+// client is kept to be blocked. They are plain HTTP requests; nothing is lost.
+export const convexHttp = (): ConvexHttpClient | null =>
+  CONVEX_URL ? authorizeHttp(new ConvexHttpClient(CONVEX_URL)) : null
+
+/** A call that has not answered in `ms` is given up as unreachable, so a queue is never held by it. */
+export function withTimeout<T>(work: Promise<T>, ms = 25_000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no answer from the cloud in ${Math.round(ms / 1000)} s`)), ms)
+    work.then((v) => { clearTimeout(timer); resolve(v) }, (e) => { clearTimeout(timer); reject(e) })
+  })
+}
 
 /**
  * The shop's highest GC-<year>-NNNN already saved, so this device's counter

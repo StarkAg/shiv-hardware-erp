@@ -12,7 +12,7 @@
 import { api } from '../../convex/_generated/api'
 import { asImages, crop, shrink } from '../features/ledger/lib/image'
 import { toast } from '../components/Toast'
-import { convexHttp } from './convexSync'
+import { convexHttp, withTimeout } from './convexSync'
 
 type Job = {
   id: string
@@ -91,7 +91,7 @@ export async function queueBillPhotos(bill: { id: string; number: string }, kind
 async function uploadPage(file: File): Promise<string> {
   const c = convexHttp()
   if (!c) throw new Error('Not connected to the cloud.')
-  const url = await c.mutation(api.files.generateUploadUrl, {})
+  const url = await withTimeout(c.mutation(api.files.generateUploadUrl, {}))
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
   if (!res.ok) throw new Error(`Upload failed (${res.status})`)
   return (await res.json()).storageId as string
@@ -117,7 +117,7 @@ export function flushBillPhotos(): Promise<void> {
             await putJob(job)
           }
           for (let i = 0; i < job.uploaded.length; i += 12) {
-            await c.mutation(api.bills.addImages, { billId: job.billId, storageIds: job.uploaded.slice(i, i + 12) as never, kind: job.kind })
+            await withTimeout(c.mutation(api.bills.addImages, { billId: job.billId, storageIds: job.uploaded.slice(i, i + 12) as never, kind: job.kind }))
           }
           await dropJob(job.id)
           toast(`Bill ${job.billNumber}: ${job.uploaded.length === 1 ? 'photo' : `${job.uploaded.length} photos`} saved`, 'ok')

@@ -20,7 +20,7 @@
  */
 import { api } from '../../convex/_generated/api'
 import { toast } from '../components/Toast'
-import { convexHttp } from './convexSync'
+import { convexHttp, withTimeout } from './convexSync'
 import { useStore } from './store'
 import { flushBillPhotos } from './billPhotoOutbox'
 import type { Bill } from './types'
@@ -31,6 +31,8 @@ type Job = {
   expectedRev?: number | null
   attempts: number
   nextAt: number
+  /** Why the last try did not get through, shown beside "Posting…". */
+  lastError?: string
 }
 
 const KEY = 'shiv-panel:post-outbox:v1'
@@ -51,6 +53,8 @@ export function onPostQueue(fn: () => void) {
   return () => { listeners.delete(fn) }
 }
 export const isPosting = (billId: string) => readJobs().some((j) => j.billId === billId)
+/** Why a waiting bill has not got through yet, if a try has failed. */
+export const postingTrouble = (billId: string) => readJobs().find((j) => j.billId === billId)?.lastError
 
 /**
  * Keep this bill on the PC as waiting for the books, and send it. Returns at
@@ -90,12 +94,12 @@ export function flushPosts(): Promise<void> {
         if (!bill) { finish(job.billId); continue }
         const { pendingPost: _p, postError: _e, ...sending } = bill
         try {
-          const res = await client.mutation(api.billLedger.postBill, {
+          const res = await withTimeout(client.mutation(api.billLedger.postBill, {
             bill: plain(sending) as never,
             attachments: (bill.attachments ?? []) as never,
             keepAsBill: true,
             ...(job.expectedRev !== undefined ? { expectedRev: job.expectedRev } : {}),
-          })
+          }))
           adopt(bill, (res as { bill?: Bill })?.bill ?? {})
           finish(job.billId)
           void flushBillPhotos()
@@ -103,10 +107,13 @@ export function flushPosts(): Promise<void> {
           const data = (err as { data?: unknown })?.data
           if (data === undefined) {
             // No answer from the books at all — the network. Try again later.
+            const why = err instanceof Error ? err.message : String(err)
+            console.warn(`[posting] bill ${bill.number}: ${why}`)
             const jobs = readJobs().map((j) => (j.billId === job.billId
-              ? { ...j, attempts: j.attempts + 1, nextAt: Date.now() + backoff(j.attempts + 1) }
+              ? { ...j, attempts: j.attempts + 1, nextAt: Date.now() + backoff(j.attempts + 1), lastError: why }
               : j))
             writeJobs(jobs)
+            changed()
             if (job.attempts + 1 === 4) toast(`Bill ${bill.number} is saved on this PC; the books will get it when the internet is back.`, 'info')
             continue
           }

@@ -76,7 +76,7 @@ import { convexEnabled } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import { queueBillPhotos } from '../../lib/billPhotoOutbox'
-import { queuePost } from '../../lib/postOutbox'
+import { postingTrouble, queuePost } from '../../lib/postOutbox'
 import Confirm from '../ledger/components/Confirm'
 import { indiaDate, indiaToday } from '../../lib/businessDate'
 import { clearFormDraft, draftKey, loadFormDraft, saveFormDraft } from '../../lib/formDrafts'
@@ -4842,7 +4842,8 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         partyId: b.ledgerId,
         ref: b.ref || '',
         side: billSide(b),
-        account: quote ? 'Quotation — not in the books' : b.postError ? `Not posted — ${b.postError}` : b.pendingPost ? 'Posting…' : 'Not posted',
+        account: quote ? 'Quotation — not in the books' : b.postError ? `Not posted — ${b.postError}`
+          : b.pendingPost ? (postingTrouble(b.id) ? `Posting… retrying (${postingTrouble(b.id)})` : 'Posting…') : 'Not posted',
         quote,
         amount: b.total,
         photos: b.attachments ?? [],
