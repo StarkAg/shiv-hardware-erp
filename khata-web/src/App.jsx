@@ -51,13 +51,10 @@ const sideWord = (side, tab) => (tab === 'customers'
   ? (side === 'Dr' ? 'to come' : 'advance')
   : (side === 'Cr' ? 'to pay' : 'advance'))
 const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
-/** A line's voucher in the words of who sent what. */
-const SENT = { Sale: 'Bill sent', Purchase: 'Bill received', Receipt: 'Payment received', Payment: 'Payment sent' }
-const kindOf = (r) => {
-  // The money taken with a sale or purchase is a payment, not the bill again.
-  if (r.settlement) return r.side === 'Cr' ? 'Payment received' : 'Payment sent'
-  return SENT[r.vchType] ?? r.vchType
-}
+/** A line's voucher in the words of who sent what; the bubble's side says who. */
+const SENT = { Sale: 'Bill sent', Purchase: 'Bill received', Receipt: 'Payment sent', Payment: 'Payment sent' }
+// The money taken with a sale or purchase is a payment, not the bill again.
+const kindOf = (r) => (r.settlement ? 'Payment sent' : SENT[r.vchType] ?? r.vchType)
 
 export default function App() {
   const [tab, setTab] = useState(() => read('tab') ?? 'customers')
