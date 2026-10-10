@@ -2881,28 +2881,37 @@ export function BillBuilder() {
     moveBillFocus(1)
   }
   /**
-   * The customer's account already holds a whole phone and Aadhaar: they are
-   * shown from it, not asked for on every bill. "Change" brings the boxes back
-   * for this bill.
+   * What the customer's account already holds — a whole phone, a whole
+   * Aadhaar, or both. Each one held is shown from the account, not asked for
+   * on every bill; a box is only asked for what the account lacks. "Change"
+   * brings both boxes back for this bill.
    */
   const contactOnFile = useMemo(() => {
     const name = foldName(draft.customerName ?? '')
     const account = name ? liveCustomers.find((c) => c.account && foldName(c.name) === name) : undefined
-    return account && /^\d{10}$/.test(account.mobile) && /^\d{12}$/.test(account.uid ?? '') ? account : undefined
+    if (!account) return undefined
+    const phone = /^\d{10}$/.test(account.mobile) ? account.mobile : ''
+    const uid = /^\d{12}$/.test(account.uid ?? '') ? account.uid ?? '' : ''
+    return phone || uid ? { id: account.id, phone, uid } : undefined
   }, [draft.customerName, liveCustomers])
   const [changeContact, setChangeContact] = useState(false)
   useEffect(() => { setChangeContact(false) }, [contactOnFile?.id])
   // However the voucher was opened — the name typed, picked, or the voucher
-  // started from the account itself — empty boxes take the account's numbers,
-  // so the bill carries them and the boxes need not be asked.
+  // started from the account itself — an empty box takes the account's
+  // number, so the bill carries it and it need not be asked.
   useEffect(() => {
     if (!contactOnFile) return
-    setDraft((d) => (d.customerPhone || d.customerUid
-      ? d
-      : { ...d, customerPhone: contactOnFile.mobile, customerUid: contactOnFile.uid ?? '' }))
+    setDraft((d) => (
+      (!d.customerPhone && contactOnFile.phone) || (!d.customerUid && contactOnFile.uid)
+        ? {
+            ...d,
+            customerPhone: d.customerPhone || contactOnFile.phone,
+            customerUid: d.customerUid || contactOnFile.uid,
+          }
+        : d))
   }, [contactOnFile])
-  const contactKnown = !!contactOnFile && !changeContact
-    && (draft.customerPhone ?? '') === contactOnFile.mobile && (draft.customerUid ?? '') === contactOnFile.uid
+  const phoneKnown = !!contactOnFile?.phone && !changeContact && (draft.customerPhone ?? '') === contactOnFile.phone
+  const uidKnown = !!contactOnFile?.uid && !changeContact && (draft.customerUid ?? '') === contactOnFile.uid
 
   const photoLabel = isMoneyVoucher ? 'Receipt photo' : 'Bill photo'
   const photoCount = (draft.attachments?.length ?? 0) + photoFiles.length + photoPicked.length
@@ -4036,10 +4045,13 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 </span>
               </div>
             )}
-            {!isSupplierVoucher && contactKnown && contactOnFile && (
+            {!isSupplierVoucher && (phoneKnown || uidKnown) && contactOnFile && (
               <div className="mt-0.5 flex items-baseline gap-2 pl-11 text-xs text-muted">
                 <span className="tabular-nums">
-                  {contactOnFile.mobile.replace(/(\d{5})(\d{5})/, '$1 $2')} · UID {(contactOnFile.uid ?? '').replace(/(\d{4})(?=\d)/g, '$1 ')}
+                  {[
+                    phoneKnown && contactOnFile.phone.replace(/(\d{5})(\d{5})/, '$1 $2'),
+                    uidKnown && `UID ${contactOnFile.uid.replace(/(\d{4})(?=\d)/g, '$1 ')}`,
+                  ].filter(Boolean).join(' · ')}
                 </span>
                 <button type="button" onClick={() => setChangeContact(true)} className="underline hover:text-stone-700 dark:hover:text-stone-200">
                   change
@@ -4071,7 +4083,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               the purchase book — not a customer on credit whose phone and
               Aadhaar are taken so they can be chased. Asking for them on a
               purchase is two boxes to tab past on every voucher. */}
-          {!isSupplierVoucher && !contactKnown && (
+          {!isSupplierVoucher && !phoneKnown && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">Phone (optional)</label>
             <input
@@ -4102,7 +4114,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             />
           </div>
           )}
-          {!isSupplierVoucher && !contactKnown && (
+          {!isSupplierVoucher && !uidKnown && (
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">UID (optional)</label>
             <input
