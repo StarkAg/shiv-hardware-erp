@@ -4843,7 +4843,9 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         ref: b.ref || '',
         side: billSide(b),
         account: quote ? 'Quotation — not in the books' : b.postError ? `Not posted — ${b.postError}`
-          : b.pendingPost ? (postingTrouble(b.id) ? `Posting… retrying (${postingTrouble(b.id)})` : 'Posting…') : 'Not posted',
+          : b.pendingPost ? (postingTrouble(b.id) ? `Posting… retrying (${postingTrouble(b.id)})` : 'Posting…')
+          // Just posted: the books' own row for it is a moment from arriving here.
+          : b.voucherId ? 'Posted' : 'Not posted',
         quote,
         amount: b.total,
         photos: b.attachments ?? [],
