@@ -18,7 +18,7 @@ self.addEventListener('fetch', (event) => {
     const cache = await caches.open(CACHE)
     try {
       const response = await fetch(request)
-      if (response.ok && (request.mode === 'navigate' || ['script', 'style', 'image', 'manifest'].includes(request.destination))) {
+      if (response.ok && (request.mode === 'navigate' || ['script', 'style', 'image', 'manifest', 'font'].includes(request.destination))) {
         await cache.put(request, response.clone())
       }
       return response

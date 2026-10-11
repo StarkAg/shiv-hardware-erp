@@ -1,9 +1,10 @@
 # Shiv design language: "Signs"
 
 One look for every Shiv Hardware app. Chosen by Tony on 11 Oct 2026, first
-built in the two Workshop apps (`workshop-web/`). The working copy of
-everything below is `workshop-web/src/index.css`: copy from it, do not
-re-invent it.
+built in the two Workshop apps (`workshop-web/`). The shared part (colours,
+lettering, buttons) is `design/signs/signs.css`, copied into each app by
+`node scripts/copy-signs.mjs`; `workshop-web/src/index.css` is the fullest
+example of the rest. Copy from them, do not re-invent.
 
 ## The idea
 
@@ -113,13 +114,16 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 
 ## Bringing an app over
 
-1. Copy `workshop-web/src/fonts/` and the top of `workshop-web/src/index.css`
-   (the `@font-face` rules, `:root` tokens, base rules, `.key`, `.dock`, `.round`).
+1. Add the app to the list in `scripts/copy-signs.mjs` and run it. That puts
+   the shared sheet and its lettering in the app's `src/signs/` (the source is
+   `design/signs/`: tokens, base rules, `.key`, `.dock`, `.round`, `.sign`).
+   Begin the app's stylesheet with `@import "./signs/signs.css";`.
 2. Replace the app's colours with the tokens. Map by meaning, not by look:
    the main action becomes blue or green, status becomes a sign, delete stays red.
 3. Remove rounded corners, shadows, tinted icon squares and any dark mode.
 4. Move the screen's one main action to a `.dock` at the foot.
-5. Set `theme-color` and the manifest colours to `#ffffff`. Bump the service worker version.
+5. Set `theme-color` and the manifest colours to `#ffffff`. Bump the service
+   worker version, and let it keep fonts (`.woff2`) for use offline.
 6. Shoot every screen with the command above and look at each picture.
 
 ## Where it is live
@@ -127,4 +131,6 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | App | Folder | State |
 |---|---|---|
 | Shiv Workshop, Workshop Counter | `workshop-web/` | Signs, 11 Oct 2026 |
+| Shiv Mechanic | `mechanic-web/` | Signs, 11 Oct 2026 |
+| The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Everything else | | still the older parchment and brass look |

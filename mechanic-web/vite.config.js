@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react(), {
     name: 'mechanic-offline-shell',
     writeBundle(options, bundle) {
-      const assets = Object.keys(bundle).filter((name) => /\.(js|css)$/.test(name)).map((name) => `/${name}`)
+      const assets = Object.keys(bundle).filter((name) => /\.(js|css|woff2)$/.test(name)).map((name) => `/${name}`)
       const core = ['/', '/index.html', '/icon-192.png', '/manifest.webmanifest', ...assets]
       const source = readFileSync(new URL('./public/sw.js', import.meta.url), 'utf8')
       const version = createHash('sha256').update(source + assets.join(',')).digest('hex').slice(0, 12)

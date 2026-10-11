@@ -1,74 +1,18 @@
-/* Shiv Workshop and Workshop Counter.
- *
- * Read like the signs on a factory floor, by people who use it every day:
- * white ground, black print, and three colours that mean one thing each.
- *
- *   blue    what you must do: the step that is yours, the button that does it
- *   green   done: a finished step, and the button that finishes one
- *   yellow  wait: the step is with the other side
- *   red     delete, and nothing else
- *
- * Two shapes say the same without the colour: a circle is "do this", a square
- * is a state. Nothing is rounded otherwise. The lettering is Barlow, the free
- * relative of the DIN lettering on such signs: condensed for names, labels and
- * buttons, semi-condensed for everything read as a line.
+/* Shiv Workshop and Workshop Counter, in the Signs look (DESIGN.md; the
+ * colours, lettering and buttons come from ./signs/signs.css).
  *
  * Two screens: the jobs as rows, and one job as a page built around its steps,
  * with the one action always at the foot of the screen, under the thumb.
- * There is no dark mode on purpose: a sign is white, and it is read in the sun.
  */
-@font-face { font-family: "Barlow Condensed"; font-weight: 600; font-display: swap; src: url("./fonts/barlow-condensed-600.woff2") format("woff2"); }
-@font-face { font-family: "Barlow Condensed"; font-weight: 700; font-display: swap; src: url("./fonts/barlow-condensed-700.woff2") format("woff2"); }
-@font-face { font-family: "Barlow Condensed"; font-weight: 800; font-display: swap; src: url("./fonts/barlow-condensed-800.woff2") format("woff2"); }
-@font-face { font-family: "Barlow Semi Condensed"; font-weight: 500; font-display: swap; src: url("./fonts/barlow-semi-condensed-500.woff2") format("woff2"); }
-@font-face { font-family: "Barlow Semi Condensed"; font-weight: 600; font-display: swap; src: url("./fonts/barlow-semi-condensed-600.woff2") format("woff2"); }
-@font-face { font-family: "Barlow Semi Condensed"; font-weight: 700; font-display: swap; src: url("./fonts/barlow-semi-condensed-700.woff2") format("woff2"); }
-/* What stands in until the lettering arrives, cut to the same widths so nothing jumps. */
-@font-face { font-family: "Barlow Condensed Fallback"; src: local("Arial"), local("Liberation Sans"), local("Arimo"), local("Helvetica"); size-adjust: 78.14%; ascent-override: 127.98%; descent-override: 25.6%; line-gap-override: 0%; }
-@font-face { font-family: "Barlow Semi Condensed Fallback"; src: local("Arial"), local("Liberation Sans"), local("Arimo"), local("Helvetica"); size-adjust: 84.39%; ascent-override: 118.49%; descent-override: 23.7%; line-gap-override: 0%; }
+@import "./signs/signs.css";
 
-:root {
-  --wall: #ffffff;
-  --ink: #0e1318;
-  --dim: #4c5660;         /* small print: 7.4 to 1 on the wall */
-  --line: #c9cfd5;
-  --key: #edf0f3;         /* a quiet button */
-  --must: #0054b4;        /* blue: do this */
-  --safe: #007a3d;        /* green: done */
-  --wait: #ffcc00;        /* yellow: with the other side */
-  --stop: #b3202a;        /* red: delete */
-  --sign: "Barlow Condensed", "Barlow Condensed Fallback", "Arial Narrow", sans-serif;
-  --text: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", system-ui, sans-serif;
-  color-scheme: light;
-}
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body, #root { height: 100%; margin: 0; }
-html { background: #e3e6e9; }
-body { font: 500 16px/1.3 var(--text); color: var(--ink); -webkit-font-smoothing: antialiased; }
-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; border-radius: 0; cursor: pointer; }
-button:disabled { opacity: .45; cursor: default; }
-p { margin: 0; }
-:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+html, body, #root { height: 100%; }
 .nowpanel.mine :focus-visible, .nowpanel.over :focus-visible { outline-color: #fff; }
 /* On a white plate inside a panel the ring is black again, and inside a field it is drawn within it. */
 .nowpanel[class] .counter :focus-visible, .nowpanel[class] .visit :focus-visible { outline-color: var(--ink); }
 .nowpanel[class] input:focus, .nowpanel[class] input:focus-visible { outline: 3px solid var(--ink); outline-offset: -5px; }
 
 .app { position: relative; display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; background: var(--wall); }
-
-/* ── buttons ───────────────────────────────────────────────────────────────── */
-/* A key does one thing. Blue does the step, green finishes it, grey is the rest. */
-.key { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; padding: 0 16px; font: 800 22px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; text-decoration: none; white-space: nowrap; }
-.key.must { background: var(--must); color: #fff; }
-.key.safe { background: var(--safe); color: #fff; }
-.key.ghost { background: var(--key); color: var(--ink); box-shadow: inset 0 -4px 0 var(--line); }
-.nowpanel .key.ghost { background: #fff; }
-.key:active:not(:disabled) { transform: translateY(2px); }
-/* The one action of a screen, always at its foot, under the thumb. */
-.dock { flex: none; padding: 10px 12px calc(env(safe-area-inset-bottom) + 12px); background: var(--wall); border-top: 4px solid var(--ink); }
-.dock .key { width: 100%; min-height: 64px; font-size: 26px; }
-/* A round blue button is a thing to do at once: ring this number. */
-.round { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--must); color: #fff; display: flex; align-items: center; justify-content: center; }
 
 /* ── the list ──────────────────────────────────────────────────────────────── */
 .top { flex: none; padding: calc(env(safe-area-inset-top) + 10px) 12px 8px; border-bottom: 4px solid var(--ink); }
@@ -109,12 +53,6 @@ p { margin: 0; }
 .card { position: relative; display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
 .card .open { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; text-align: left; }
 .card .open:active { background: var(--key); }
-/* Where the job stands, as a sign: a blue circle is yours to do, a yellow
-   square is with the other side, a green square is finished. */
-.sign { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font: 800 25px/1 var(--sign); font-variant-numeric: tabular-nums; }
-.sign.mine { background: var(--must); color: #fff; border-radius: 50%; }
-.sign.wait { background: var(--wait); color: var(--ink); }
-.sign.done { background: var(--safe); color: #fff; }
 .card .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .card .head, .card .sub, .card .foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .card .head b { flex: 1; min-width: 0; font: 700 22px/1.15 var(--sign); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -175,6 +113,7 @@ p { margin: 0; }
    yellow when it is with the other side, green once the job is finished. */
 .nowpanel { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 14px; }
 .nowpanel.mine { background: var(--must); color: #fff; }
+.nowpanel .key.ghost { background: #fff; }
 .nowpanel.wait { background: var(--wait); color: var(--ink); }
 .nowpanel.over { background: var(--safe); color: #fff; }
 .nowhead { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 10px; }
@@ -350,5 +289,5 @@ p { margin: 0; }
   .spin { animation-duration: 2s; }
   .camstage.snap::after { animation: none; opacity: 0; }
   .savebar i, .pieces .track i { transition: none; }
-  .key:active:not(:disabled), .counter button:active:not(:disabled) { transform: none; }
+  .counter button:active:not(:disabled) { transform: none; }
 }

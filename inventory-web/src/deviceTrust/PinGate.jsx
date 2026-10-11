@@ -83,11 +83,14 @@ export function PinGate({ convexUrl, app, client, children }) {
   )
 }
 
+// An app in the Signs look (DESIGN.md) sets the --pin-* values in its
+// signs.css, and the PIN screen wears them; an app that does not is shown as
+// before.
 const styles = {
   page: {
     minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 16, background: 'Canvas', color: 'CanvasText', colorScheme: 'light dark',
-    fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+    padding: 16, background: 'var(--pin-wall, Canvas)', color: 'var(--pin-ink, CanvasText)', colorScheme: 'light dark',
+    fontFamily: 'var(--pin-font, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)',
   },
   card: {
     width: '100%', maxWidth: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
@@ -95,11 +98,12 @@ const styles = {
   label: { fontSize: 14, fontWeight: 600 },
   input: {
     width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 20, letterSpacing: 6,
-    textAlign: 'center', borderRadius: 10, border: '1px solid GrayText', background: 'Field', color: 'FieldText',
+    textAlign: 'center', borderRadius: 'var(--pin-corner, 10px)', border: 'var(--pin-edge, 1px solid GrayText)',
+    background: 'var(--pin-wall, Field)', color: 'var(--pin-ink, FieldText)',
   },
-  error: { margin: 0, fontSize: 13, color: '#dc2626' },
+  error: { margin: 0, fontSize: 13, color: 'var(--pin-stop, #dc2626)' },
   button: {
-    width: '100%', padding: '12px 14px', fontSize: 15, fontWeight: 700, borderRadius: 10, border: 0,
-    background: '#b98f4b', color: '#1c1917', cursor: 'pointer',
+    width: '100%', padding: '12px 14px', fontSize: 15, fontWeight: 700, borderRadius: 'var(--pin-corner, 10px)', border: 0,
+    background: 'var(--pin-key, #b98f4b)', color: 'var(--pin-print, #1c1917)', cursor: 'pointer',
   },
 }

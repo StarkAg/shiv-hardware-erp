@@ -1,5 +1,121 @@
-/* Parchment and brass palette shared with Shiv Attendance and Khata. */
-:root{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#1c1917;background:#e8e5df;font-synthesis:none;--paper:#f3f0ea;--line:rgba(28,25,23,.12);--muted:#78716c;--brass:#b9924b;--brass-ink:#201804;--tint:#ede9e1;--error:#9f1d20;--green:#1a7a4a;color-scheme:light}
-*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}button:focus-visible,a:focus-visible{outline:3px solid var(--brass);outline-offset:3px}input,select,textarea{width:100%;min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:inherit;padding:11px 12px}input:focus,select:focus,textarea:focus{outline:2px solid var(--brass);outline-offset:1px}label{font-size:13px;font-weight:600}small,.hint{color:var(--muted)}p{line-height:1.5}h1,h2,h3,p{margin:0}h2{font-size:21px}h3{font-size:16px}button{color:inherit}.app{max-width:660px;margin:auto;min-height:100dvh}.top{display:flex;align-items:center;justify-content:space-between;padding:22px 20px 19px;border-bottom:1px solid var(--line);gap:12px}.brand{display:flex;align-items:center;gap:11px}.brand-icon{display:grid;place-items:center;background:var(--brass);color:var(--brass-ink);border-radius:12px;width:44px;height:44px}.brand h1{font-size:21px;letter-spacing:-.6px}.brand small{font-size:12px}.live{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);max-width:110px}.live i{width:7px;height:7px;flex:none;border-radius:50%;background:#a58d57}.live.on i{background:var(--green)}main{padding:20px}.tabs{display:flex;border-bottom:1px solid var(--line);gap:8px;margin-bottom:16px}.tabs button{flex:1;background:none;border:0;border-bottom:3px solid transparent;padding:12px 6px;color:var(--muted)}.tabs button.selected{color:var(--brass);border-color:var(--brass);font-weight:700}.tabs b{font-size:12px;padding:3px 6px;background:var(--tint);border-radius:5px;margin-left:6px}.search{margin-bottom:18px}.notice,.hint{font-size:13px;margin-bottom:16px}.orders{display:grid;gap:12px}.order-card{width:100%;text-align:left;border:1px solid var(--line);border-radius:15px;background:var(--paper);padding:18px}.card-meta{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);margin-bottom:10px}.order-card h2{margin-bottom:5px}.order-card p,.visit>p{font-size:14px;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}.card-foot{border-top:1px solid var(--line);margin-top:17px;padding-top:12px;display:flex;justify-content:space-between;font-size:12px}.card-foot>span:last-child{color:var(--brass);font-weight:700}.empty{text-align:center;padding:46px 12px;color:var(--muted)}.empty svg{margin-bottom:15px}.empty h2{font-size:19px;margin-bottom:8px}.empty p{font-size:14px}.back{border:0;background:none;padding:0 0 20px;color:var(--brass);min-height:44px;font-weight:600}.visit{padding:19px;border:1px solid var(--line);border-radius:14px;background:var(--paper);margin-bottom:25px}.visit h2{margin-bottom:7px}.visit a{display:inline-block;margin-top:12px;color:var(--brass);min-height:32px}.visit .shop-note{border-top:1px solid var(--line);padding-top:12px;margin-top:7px}fieldset{border:0;padding:0;margin:0;min-width:0}.measure-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.measure-heading h2{font-size:19px}.measure-heading label{display:flex;align-items:center;gap:8px}.measure-heading select{width:140px}.pieces{display:grid;gap:14px}.piece{padding:17px;background:var(--paper);border:1px solid var(--line);border-radius:14px}.piece-title{display:flex;align-items:flex-start;gap:10px;margin-bottom:18px}.piece-title>span{background:var(--tint);color:var(--brass);font-size:12px;font-weight:700;border-radius:7px;padding:5px 8px}.piece-title h3{overflow-wrap:anywhere}.piece-title small{font-size:12px}.dimensions{display:grid;grid-template-columns:minmax(0,1fr) 12px minmax(0,1fr);gap:9px;align-items:end}.dimensions input{margin-top:6px;font-size:19px;font-weight:600}.dimensions>span{padding-bottom:15px;text-align:center;color:var(--muted)}.remark{display:block;margin-top:14px;font-weight:400;color:var(--muted)}.remark input{margin-top:5px;font-size:14px}.add{width:100%;min-height:46px;margin:15px 0 22px;border:1px dashed var(--brass);border-radius:10px;background:none;color:var(--brass)}.notes{display:block}.notes textarea{margin-top:6px;resize:vertical}.save-bar{padding:20px 0 8px}.save-bar>p{font-size:13px;margin-bottom:12px}.save-buttons{display:flex;gap:10px}.save-buttons button{flex:1;min-height:52px;border:1px solid var(--brass);border-radius:11px;background:var(--paper);font-size:14px;font-weight:700;padding:10px}.save-buttons .primary{color:var(--brass-ink);background:var(--brass)}.save-bar>small{display:block;text-align:center;margin-top:12px;font-size:11px}.error{padding:12px;background:#f9e7e4;border-radius:9px;color:var(--error);margin-bottom:15px;font-size:13px}.error button{margin-top:9px;padding:9px;background:var(--paper);border:1px solid currentColor;border-radius:8px;display:block}.detail{padding-bottom:max(25px,env(safe-area-inset-bottom))}
-@media(prefers-color-scheme:dark){:root{background:#12110f;color:#eae7e1;--paper:#1a1815;--line:rgba(255,255,255,.10);--muted:#a8a29e;--brass:#c9a45c;--brass-ink:#1a1204;--tint:#211e1a;--error:#d3595c;--green:#4fbf85;color-scheme:dark}.error{background:#4d2926}.brand-icon,.save-buttons .primary{color:var(--brass-ink)}}
-@media(max-width:360px){main{padding:14px}.top{padding:18px 14px}.brand h1{font-size:19px}.measure-heading{align-items:flex-start;flex-direction:column}.save-buttons{flex-direction:column}}
+/* Shiv Mechanic, in the Signs look (DESIGN.md; the colours, lettering and
+ * buttons come from ./signs/signs.css).
+ *
+ * Two screens: the orders to measure as rows, and one order as a page: who and
+ * where, then a width and a height for each piece, with Send at the foot of
+ * the screen, under the thumb.
+ */
+@import "./signs/signs.css";
+
+html, body, #root { height: 100%; }
+h1, h2, h3 { margin: 0; }
+.app { display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; background: var(--wall); }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px calc(env(safe-area-inset-bottom) + 24px); }
+
+/* A field: black edged, square, big enough to read at arm's length. */
+input, select, textarea { width: 100%; min-height: 52px; padding: 10px 12px; border: 2px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); font: 600 19px/1.2 var(--text); }
+input:focus, select:focus, textarea:focus { outline: 3px solid var(--ink); outline-offset: -5px; }
+/* What a field is, printed over it. */
+.lbl { display: block; font: 700 14px/1.15 var(--sign); text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+
+/* ── the list ──────────────────────────────────────────────────────────────── */
+.top { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 4px solid var(--ink); }
+.top img { width: 40px; height: 40px; border-radius: 9px; }
+.top h1 { font: 800 27px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; }
+/* Whether what is on screen is the live list. */
+.live { margin-left: auto; display: flex; align-items: center; gap: 6px; font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.live i { width: 12px; height: 12px; background: var(--wait); box-shadow: inset 0 0 0 1px #8a6d00; }
+.live.on { color: var(--safe); }
+.live.on i { background: var(--safe); box-shadow: none; }
+
+.search { display: block; margin: 10px 0 8px; }
+/* To measure, or measured: the box that is on is the black one. */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 10px; }
+.tabs button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; background: var(--key); font: 700 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.tabs button b { min-width: 24px; padding: 3px 6px; background: var(--dim); color: #fff; font-size: 16px; font-variant-numeric: tabular-nums; }
+.tabs button.selected { background: var(--ink); color: #fff; }
+.tabs button.selected b { background: #fff; color: var(--ink); }
+/* A thing to mind: no line to the shop, an order that has changed. Yellow, black print. */
+.notice { margin: 0 0 10px; padding: 10px 12px; background: var(--wait); color: var(--ink); font-weight: 600; }
+
+/* The orders, a row each. */
+.orders { border-top: 2px solid var(--ink); }
+.order { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 12px 0; border-bottom: 1px solid var(--line); text-align: left; }
+.order:active { background: var(--key); }
+.order .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.order .head { display: flex; align-items: baseline; gap: 8px; }
+.order .head b { flex: 1; min-width: 0; font: 700 22px/1.15 var(--sign); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order .head time { flex: none; font-size: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.order .site { font-size: 15px; color: var(--dim); overflow-wrap: anywhere; }
+.order .foot { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
+.order .foot small { flex: 1; min-width: 0; font-size: 15px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* What is waiting, in words. */
+.chip { flex: none; font: 700 15px/1.2 var(--sign); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.chip.mine { color: var(--must); }
+.chip.done { color: var(--safe); }
+.chip.held { color: var(--ink); background: var(--wait); padding: 1px 6px; }
+.empty { padding: 44px 24px; text-align: center; color: var(--dim); line-height: 1.4; }
+.empty h2 { margin-bottom: 6px; font: 800 24px/1.1 var(--sign); text-transform: uppercase; color: var(--ink); }
+
+/* ── an order's page ───────────────────────────────────────────────────────── */
+.pagehead { flex: none; display: flex; align-items: center; gap: 4px; padding: calc(env(safe-area-inset-top) + 8px) 12px 10px 2px; border-bottom: 4px solid var(--ink); }
+.pagehead .back { flex: none; width: 48px; height: 52px; display: flex; align-items: center; justify-content: center; }
+.pagehead .round { width: 52px; height: 52px; }
+.pagehead .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pagehead .who b { font: 700 28px/1.15 var(--sign); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Where the site is, in full: it is where the mechanic has to go. */
+.pagehead .who small { font-size: 15px; line-height: 1.25; color: var(--dim); overflow-wrap: anywhere; }
+
+/* The work in hand, as the sign it is: blue while it is to measure, green once measured. */
+.nowpanel { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; padding: 14px; background: var(--must); color: #fff; }
+.nowpanel.over { background: var(--safe); }
+.nowpanel :focus-visible { outline-color: #fff; }
+.nowhead { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 10px; }
+.nowhead b { min-width: 0; font: 800 34px/1 var(--sign); text-transform: uppercase; }
+.nowhead small { font: 700 16px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+/* The unit every size is in: three keys, the one that is on is the white one. */
+.units { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.units button { min-height: 52px; box-shadow: inset 0 0 0 2px currentColor; font: 700 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.units button.on { background: #fff; color: var(--ink); box-shadow: none; }
+
+/* A line each: the order, the note from the shop. */
+.rows { margin-top: 12px; border-top: 2px solid var(--ink); }
+.rowline { display: flex; align-items: baseline; gap: 12px; min-height: 48px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.rowline .lbl { flex: none; width: 88px; }
+.rowline .val { flex: 1; min-width: 0; font-size: 18px; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Something is wrong, and what to do about it. */
+.error { margin-top: 12px; padding: 10px 12px; box-shadow: inset 0 0 0 2px var(--stop); color: var(--stop); font-weight: 700; }
+.error .key { margin-top: 10px; width: 100%; }
+
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+/* The pieces, one under the other: its number, what it is, then width by height. */
+.piece { padding: 14px 0 16px; border-bottom: 1px solid var(--line); }
+.piece-title { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.piece-title > span { flex: none; min-width: 36px; height: 36px; padding: 0 6px; display: flex; align-items: center; justify-content: center; background: var(--ink); color: #fff; font: 800 22px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.piece-title h3 { font: 700 22px/1.15 var(--sign); text-transform: uppercase; overflow-wrap: anywhere; }
+.piece-title small { font-size: 15px; color: var(--dim); }
+.dimensions { display: grid; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); gap: 8px; align-items: end; }
+.dimensions input { margin-top: 4px; min-height: 60px; font: 700 28px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.dimensions input::placeholder { font: 500 17px/1 var(--text); }
+.dimensions > span { padding-bottom: 18px; text-align: center; font: 700 20px/1 var(--sign); color: var(--dim); }
+.remark { display: block; margin-top: 12px; }
+.remark input, .notes textarea { margin-top: 4px; font-size: 17px; font-weight: 500; }
+.add { width: 100%; margin: 14px 0 18px; }
+.notes { display: block; }
+.notes textarea { display: block; resize: vertical; }
+.sentby { display: block; margin-top: 14px; font-size: 14px; color: var(--dim); }
+
+/* Send, at the foot: part of the sizes, or all of them and the visit is done. */
+.dock .status { margin-bottom: 8px; font-size: 15px; font-weight: 600; }
+.dock .status.bad { color: var(--stop); }
+.dock .pair { display: flex; gap: 8px; }
+.dock .pair .key { min-width: 0; padding: 0 8px; font-size: 22px; }
+.dock .pair .key.ghost { flex: 1; }
+.dock .pair .key.safe { flex: 1.5; }
+
+@media (max-width: 359px) {
+  .scroll { padding-inline: 8px; }
+  .tabs button { font-size: 17px; }
+  .dock .pair .key { font-size: 19px; }
+}
