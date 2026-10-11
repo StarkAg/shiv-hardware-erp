@@ -72,7 +72,8 @@ button:disabled { opacity: .5; cursor: default; }
 /* Where the work stands: three boxes under the search, each with how many
    jobs are there; one picked shows only those. */
 .stages { flex: none; display: flex; gap: 8px; padding: 0 14px 10px; }
-.stages button { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 13px; font-weight: 800; color: var(--muted); }
+.stages { gap: 6px; }
+.stages button { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 2px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 12px; font-weight: 800; letter-spacing: -.01em; color: var(--muted); overflow: hidden; white-space: nowrap; }
 .stages button b { font-size: 19px; line-height: 1.1; color: var(--fg); font-variant-numeric: tabular-nums; min-height: 21px; }
 .stages button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
 .stages button.on b { color: var(--brass-ink); }
@@ -154,6 +155,20 @@ button.who { text-align: left; }
 .composer .tool { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--card2); color: var(--muted); display: flex; align-items: center; justify-content: center; }
 .composer .go { flex: none; min-width: 48px; height: 48px; padding: 0 13px; border-radius: 24px; background: var(--brass); color: var(--brass-ink); font-size: 15px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
 .composer .go.grow { flex: 1; }
+/* The workshop's foot: the three lines that open its steps, and what is waiting. */
+.composer .tool.menu { width: 52px; height: 52px; border-radius: 16px; background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+.composer .now { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kind.step { color: var(--green); }
+/* The steps, in the sheet the three lines open: done, now, not yet. */
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.steps button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card2); text-align: left; }
+.steps button.now { border-color: var(--brass); background: var(--mine); }
+.steps .mark { flex: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--card); border: 1px solid var(--line); color: var(--muted); }
+.steps button.now .mark { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+.steps button.done .mark { color: var(--green); }
+.steps .what { display: flex; flex-direction: column; min-width: 0; }
+.steps .what b { font-size: 17px; }
+.steps .what small { font-size: 13px; color: var(--muted); }
 .composer .go.full { width: 100%; height: 54px; font-size: 17px; border-radius: 16px; }
 .spin { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 3px solid rgba(32, 24, 4, .25); border-top-color: var(--brass-ink); animation: spin .8s linear infinite; }
 .spin.dark { border-color: var(--line); border-top-color: var(--brass); }

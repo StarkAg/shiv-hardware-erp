@@ -1090,14 +1090,19 @@ export default defineSchema({
     ledgerId: v.optional(v.id('ledgers')),
     title: v.optional(v.string()),
     status: v.union(v.literal('open'), v.literal('done')),
-    // Where the work stands: to be measured on site, being put together in the
-    // workshop, or being fitted at the customer's. Absent means measurement.
-    stage: v.optional(v.union(v.literal('measurement'), v.literal('assemble'), v.literal('fitting'))),
+    // Where the work stands, in the order it goes: to be measured on site
+    // (the workshop), the work order to be made from the measurements (the
+    // shop), to be put together (the workshop), to be fitted at the
+    // customer's (the workshop). Absent means measurement.
+    stage: v.optional(v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('fitting'))),
     messages: v.array(v.object({
       id: v.string(),
       from: v.union(v.literal('shop'), v.literal('workshop')),
       photos: v.array(v.id('_storage')),
       text: v.optional(v.string()),
+      // The step these photographs are the proof of: the measurements, the
+      // work order, the assembled piece, the fitted one.
+      step: v.optional(v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('fitting'))),
       // The device it was sent from, as the Trusted devices list names it.
       by: v.optional(v.string()),
       at: v.number(),

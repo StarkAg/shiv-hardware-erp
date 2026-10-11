@@ -21,7 +21,16 @@ import type { Id } from './_generated/dataModel'
  */
 
 const side = v.union(v.literal('shop'), v.literal('workshop'))
-const stage = v.union(v.literal('measurement'), v.literal('assemble'), v.literal('fitting'))
+const stage = v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('fitting'))
+type Stage = 'measurement' | 'quotation' | 'assemble' | 'fitting'
+/**
+ * The order the work goes in, and whose turn each step is. A step is done by
+ * photographing it: the workshop the measurements, the shop the work order it
+ * makes from them, the workshop the piece assembled and then fitted. The
+ * photograph from the side whose turn it is moves the job to the next step.
+ */
+const TURN: Record<Stage, 'shop' | 'workshop'> = { measurement: 'workshop', quotation: 'shop', assemble: 'workshop', fitting: 'workshop' }
+const NEXT: Record<Stage, Stage | null> = { measurement: 'quotation', quotation: 'assemble', assemble: 'fitting', fitting: null }
 const COUNTER = 'workshop-job'
 const MAX_PHOTOS = 10
 
@@ -102,6 +111,7 @@ export const list = query({
           job.messages.map(async (m) => ({
             id: m.id,
             from: m.from,
+            step: m.step ?? null,
             text: m.text ?? '',
             by: m.by ?? '',
             at: m.at,
@@ -157,15 +167,23 @@ export const create = mutation({
   },
 })
 
-/** A reply in a job's thread, from either side: photographs, a line of text, or both. */
+/**
+ * A reply in a job's thread. From the shop: photographs, a line of text, or
+ * both. From the workshop: photographs only, of the step it names.
+ *
+ * Photographs of the job's present step, from the side whose turn it is, are
+ * that step done: the job moves to the next one, and after fitting it is
+ * finished. Photographs of a step already done are added to it and move nothing.
+ */
 export const send = mutation({
   args: {
     jobId: v.id('workshopJobs'),
     from: side,
     photos: v.array(v.id('_storage')),
     text: v.optional(v.string()),
+    step: v.optional(stage),
   },
-  handler: async (ctx, { jobId, from, photos, text }) => {
+  handler: async (ctx, { jobId, from, photos, text, step: named }) => {
     const job = await ctx.db.get(jobId)
     if (!job) throw new ConvexError('That work order is gone.')
     // The workshop's answer is the photograph of the measurements and nothing
@@ -176,9 +194,15 @@ export const send = mutation({
     await checkPhotos(ctx, photos)
     const now = Date.now()
     const device = await deviceOf(ctx)
+    const at: Stage = job.stage ?? 'measurement'
+    // Which step the photographs belong to: the one named, when it is this
+    // side's to do; else the present one, when it is this side's turn.
+    const step = !photos.length ? undefined : named && TURN[named] === from ? named : TURN[at] === from ? at : undefined
+    const done = job.status !== 'done' && step === at
     await ctx.db.patch(jobId, {
-      messages: [...job.messages, { id: `${now}-${job.messages.length}`, from, photos, text: said, by: device?.name, at: now }],
+      messages: [...job.messages, { id: `${now}-${job.messages.length}`, from, photos, text: said, ...(step ? { step } : {}), by: device?.name, at: now }],
       updatedAt: now,
+      ...(done ? (NEXT[at] ? { stage: NEXT[at]! } : { status: 'done' as const }) : {}),
       // Whoever writes has read what was there.
       ...(from === 'shop' ? { shopSeenAt: now } : { workshopSeenAt: now }),
     })

@@ -49,15 +49,25 @@ const addressOf = (job) => {
 /** What the other side has sent since this side last had the thread open. */
 const newIn = (job) => job.messages.filter((m) => m.from === OTHER && m.at > (job[`${SIDE}SeenAt`] ?? 0)).length
 /** The three places a job can stand, in the order the work goes. */
+/**
+ * The steps a job goes through, in order, and whose turn each is. A step is
+ * done by photographing it (convex/workshop.ts `send`): the workshop the
+ * measurements, the shop the work order it makes from them, the workshop the
+ * piece assembled and then fitted. `todo` is what the list says while a step
+ * waits, `sent` what its photographs are called in the chat.
+ */
 const STAGES = [
-  { id: 'measurement', label: 'Measurement' },
-  { id: 'assemble', label: 'Assemble' },
-  { id: 'fitting', label: 'Fitting' },
+  { id: 'measurement', label: 'Measurement', todo: 'To measure', sent: 'Measurement', turn: 'workshop' },
+  { id: 'quotation', label: 'Quotation', todo: 'Work order to make', sent: 'Work order', turn: 'shop' },
+  { id: 'assemble', label: 'Assemble', todo: 'To assemble', sent: 'Assembled', turn: 'workshop' },
+  { id: 'fitting', label: 'Fitting', todo: 'To fit', sent: 'Fitted', turn: 'workshop' },
 ]
 const stageId = (job) => job.stage ?? 'measurement'
-/** At measurement a job is still to be measured until the workshop has sent a photo back. */
-const measured = (job) => job.messages.some((m) => m.from === 'workshop' && m.photos.length)
-const stageOf = (job) => (stageId(job) === 'measurement' ? (measured(job) ? 'Measured' : 'To measure') : STAGES.find((s) => s.id === stageId(job))?.label ?? '')
+const stageAt = (job) => STAGES.find((s) => s.id === stageId(job)) ?? STAGES[0]
+const finished = (job) => job.status === 'done'
+const stageOf = (job) => (finished(job) ? 'Done' : stageAt(job).todo)
+/** Whether the step a job stands at is this side's to do. */
+const myTurn = (job) => !finished(job) && stageAt(job).turn === SIDE
 
 /**
  * The numbers to ring a customer on. The books keep one line for the phone,
@@ -153,7 +163,7 @@ async function deliver(item) {
   try {
     // Photos that went up before a failed post are not sent up again.
     item.photoIds ??= await upload(outbox.convex, item.files)
-    if (item.jobId) await outbox.convex.mutation(api.workshop.send, { jobId: item.jobId, from: SIDE, photos: item.photoIds, text: item.text || undefined })
+    if (item.jobId) await outbox.convex.mutation(api.workshop.send, { jobId: item.jobId, from: SIDE, photos: item.photoIds, text: item.text || undefined, ...(item.step ? { step: item.step } : {}) })
     else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds })
     // The live list has it by now, so its stand-in goes.
     discard(item)
@@ -207,6 +217,8 @@ const PlusIcon = (p) => <Icon {...p} d={<path d="M12 5v14M5 12h14" />} />
 const PhoneIcon = (p) => <Icon {...p} d={<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />} />
 const PersonIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>} />
 const PinIcon = (p) => <Icon {...p} d={<><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.6" /></>} />
+const MenuIcon = (p) => <Icon {...p} d={<path d="M4 6h16M4 12h16M4 18h16" />} />
+const TickIcon = (p) => <Icon {...p} d={<path d="M5 12.5l4.5 4.5L19 7.5" />} />
 const ShareIcon = (p) => <Icon {...p} d={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></>} />
 
 /** The light that says the list on screen is the live one. */
@@ -299,10 +311,10 @@ function List({ jobs, onOpen, onNew, saving }) {
   // The box picked under the search: only the jobs standing there. None picked, all of them.
   const [stage, setStage] = useState(null)
   const rows = useMemo(() => (jobs ?? [])
-    .filter((j) => !stage || stageId(j) === stage)
+    .filter((j) => !stage || (!finished(j) && stageId(j) === stage))
     .filter((j) => !q.trim() || `${titleOf(j)} ${j.number}`.toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) => b.updatedAt - a.updatedAt), [jobs, q, stage])
-  const count = (id) => (jobs ?? []).filter((j) => stageId(j) === id).length
+  const count = (id) => (jobs ?? []).filter((j) => !finished(j) && stageId(j) === id).length
   // New orders still on their way: shown at the head of the list from the moment they are sent.
   const sending = useOutbox().filter((item) => !item.jobId)
   const remove = useMutation(api.workshop.remove)
@@ -360,7 +372,7 @@ function List({ jobs, onOpen, onNew, saving }) {
                 <span className="who">
                   <b>{nameOf(job)}</b>
                   {addressOf(job) && <small className="addr">{addressOf(job)}</small>}
-                  <small><em className={`stage ${standing === 'To measure' ? 'wait' : 'ok'}`}>{standing}</em>{line}</small>
+                  <small><em className={`stage ${myTurn(job) ? 'wait' : 'ok'}`}>{standing}</em>{line}</small>
                 </span>
                 <span className="side">
                   <time className={news ? 'new' : ''}>{whenOf(job.updatedAt)}</time>
@@ -648,7 +660,7 @@ function Thread({ job, onBack }) {
     const line = SIDE === 'workshop' ? '' : text.trim()
     if (!picked.length && !line) return
     const photos = take()
-    post({ jobId: job.id, text: line, files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
+    post({ jobId: job.id, text: line, files: photos.map((p) => p.file), previews: photos.map((p) => p.url), ...(SIDE === 'workshop' && step ? { step } : {}) })
     setText('')
     setError('')
   }
@@ -666,7 +678,12 @@ function Thread({ job, onBack }) {
 
   const standing = stageOf(job)
   const first = photos[0]
-  const waiting = SIDE === 'workshop' && standing === 'To measure'
+  // The workshop's steps, from the three-lines button at the foot: which one
+  // the photos being taken are for, and whether the list of them is open.
+  const [menu, setMenu] = useState(false)
+  const [step, setStep] = useState(null)
+  const stepSent = STAGES.find((s) => s.id === step)?.sent ?? 'photo'
+  const takeFor = (id) => { setStep(id); setMenu(false); camera.current?.click() }
 
   return (
     <div className="app chat">
@@ -711,7 +728,9 @@ function Thread({ job, onBack }) {
           const mine = m.from === SIDE
           return (
             <div key={it.key} className={`bubble holdable ${mine ? 'right' : 'left'}`} {...holdToDelete(m)}>
-              {m.from === 'workshop' && m.photos.length > 0 ? <div className="kind">Measurement</div> : !mine && <div className="kind">{SIDE_NAME[m.from]}</div>}
+              {m.step ? <div className="kind step">{STAGES.find((s) => s.id === m.step)?.sent}</div>
+                : m.from === 'workshop' && m.photos.length > 0 ? <div className="kind">Measurement</div>
+                : !mine && <div className="kind">{SIDE_NAME[m.from]}</div>}
               {m.photos.length > 0 && (
                 <div className={`shots n${Math.min(m.photos.length, 3)}`}>
                   {m.photos.map((p) => (
@@ -744,7 +763,13 @@ function Thread({ job, onBack }) {
             )}
           </div>
         ))}
-        {waiting && !outgoing.length && <p className="hint">Visit the site and measure. Then tap Mark measured and photograph the measurements.</p>}
+        {!outgoing.length && !finished(job) && (
+          <p className="hint">
+            {SIDE === 'workshop'
+              ? (myTurn(job) ? `${stageAt(job).todo}. When it is done, tap the three lines below, then ${stageAt(job).label}, and photograph it.` : 'With the shop now: the work order is being made from your measurements.')
+              : (myTurn(job) ? 'Measured. Make the work order, then send its photo here: it goes to the workshop to assemble.' : `With the workshop: ${stageAt(job).todo.toLowerCase()}.`)}
+          </p>
+        )}
         <div ref={end} />
       </main>
 
@@ -759,12 +784,13 @@ function Thread({ job, onBack }) {
           {picked.length ? (
             <div className="row">
               <button type="button" className="tool" onClick={() => camera.current?.click()} aria-label="Take another photo"><CameraIcon /></button>
-              <button type="button" className="go grow" onClick={reply}><SendIcon /> Send measurement</button>
+              <button type="button" className="go grow" onClick={reply}><SendIcon /> Send: {stepSent}</button>
             </div>
           ) : (
-            <button type="button" className="go full" onClick={() => camera.current?.click()}>
-              <CameraIcon /> {measured(job) ? 'Add a measurement photo' : 'Mark measured'}
-            </button>
+            <div className="row">
+              <button type="button" className="tool menu" onClick={() => setMenu(true)} aria-label="Steps: measurement, assemble, fitting"><MenuIcon /></button>
+              <span className="now">{finished(job) ? 'Finished' : myTurn(job) ? `${stageAt(job).todo}: tap the lines` : 'With the shop: work order'}</span>
+            </div>
           )}
         </footer>
       ) : (
@@ -779,14 +805,41 @@ function Thread({ job, onBack }) {
           {picked.length || text.trim() ? (
             <button type="button" className="go" onClick={reply} aria-label="Send"><SendIcon /></button>
           ) : (
-            <button type="button" className={`go ${waiting ? 'wide' : ''}`} onClick={() => camera.current?.click()} aria-label="Take a photo">
-              <CameraIcon />{waiting && ' Measurement photo'}
+            <button type="button" className={`go ${myTurn(job) ? 'wide' : ''}`} onClick={() => camera.current?.click()} aria-label="Take a photo">
+              <CameraIcon />{myTurn(job) && ' Work order'}
             </button>
           )}
         </div>
       </footer>
       )}
 
+      {menu && (
+        <div className="sheetback" onClick={() => setMenu(false)}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="Steps" onClick={(e) => e.stopPropagation()}>
+            <b className="sheettitle">Which step is done?</b>
+            <p>Tap it and photograph it. The photo is attached and the job moves on.</p>
+            <ul className="steps">
+              {STAGES.filter((s) => s.turn === 'workshop').map((s) => {
+                const order = STAGES.findIndex((x) => x.id === s.id)
+                const now = STAGES.findIndex((x) => x.id === stageId(job))
+                const done = finished(job) || order < now
+                const current = !finished(job) && order === now
+                return (
+                  <li key={s.id}>
+                    <button type="button" className={current ? 'now' : done ? 'done' : ''} disabled={!current && !done} onClick={() => takeFor(s.id)}>
+                      <span className="mark">{done ? <TickIcon size={18} /> : <CameraIcon size={18} />}</span>
+                      <span className="what"><b>{s.label}</b><small>{done ? 'Done. Tap to add another photo' : current ? 'Take the photo' : now < STAGES.findIndex((x) => x.id === 'assemble') && s.id === 'assemble' ? 'After the shop sends the work order' : 'Not yet'}</small></span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="sheetbtns">
+              <button type="button" className="ghost" onClick={() => setMenu(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
       {info && (
         <div className="sheetback" onClick={() => setInfo(false)}>

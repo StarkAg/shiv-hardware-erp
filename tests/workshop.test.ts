@@ -149,6 +149,41 @@ describe('workshop: a work order as a chat in photos', () => {
     void supplier
   })
 
+  it('moves a job on, a step at a time, as each side photographs its step', async () => {
+    const t = convexTest(schema, modules)
+    const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
+    const id = await t.mutation(api.workshop.create, { photos: [await photo()] })
+    const job = async () => (await t.query(api.workshop.list, {})).find((j) => j.id === id)!
+    const steps = async () => (await job()).messages.map((m) => m.step)
+
+    // The shop's photo while the workshop is still to measure moves nothing.
+    await t.mutation(api.workshop.send, { jobId: id, from: 'shop', photos: [await photo()] })
+    expect(await job()).toMatchObject({ stage: 'measurement', status: 'open' })
+    // The workshop cannot do a later step first: a photo named for it is kept, and moves nothing.
+    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'fitting' })
+    expect(await job()).toMatchObject({ stage: 'measurement' })
+
+    // Measured: the job is the shop's, for the work order.
+    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'measurement' })
+    expect(await job()).toMatchObject({ stage: 'quotation', status: 'open' })
+    // Another measurement photo afterwards is added to the measurement, and moves nothing.
+    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'measurement' })
+    expect(await job()).toMatchObject({ stage: 'quotation' })
+    // A line from the shop is not the work order.
+    await t.mutation(api.workshop.send, { jobId: id, from: 'shop', photos: [], text: 'Making it now' })
+    expect(await job()).toMatchObject({ stage: 'quotation' })
+
+    // The work order's photo sends it to the workshop to assemble.
+    await t.mutation(api.workshop.send, { jobId: id, from: 'shop', photos: [await photo()] })
+    expect(await job()).toMatchObject({ stage: 'assemble', status: 'open' })
+    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'assemble' })
+    expect(await job()).toMatchObject({ stage: 'fitting', status: 'open' })
+    // Fitted: finished.
+    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'fitting' })
+    expect(await job()).toMatchObject({ stage: 'fitting', status: 'done' })
+    expect(await steps()).toEqual([null, null, 'fitting', 'measurement', 'measurement', null, 'quotation', 'assemble', 'fitting'])
+  })
+
   it('refuses a photo that never uploaded', async () => {
     const t = convexTest(schema, modules)
     const real = await t.run((ctx) => ctx.storage.store(new Blob(['x'], { type: 'image/jpeg' })))
