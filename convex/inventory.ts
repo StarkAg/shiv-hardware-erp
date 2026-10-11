@@ -447,6 +447,56 @@ export const addItem = mutation({
   },
 });
 
+/**
+ * An item written into a bill's Stock out or Stock in that the shelf list
+ * does not have yet.
+ *
+ * It joins the list with nothing counted on the shelf, so the bill that named
+ * it takes it below nil (a sale: the shelf owes it) or starts it off (a
+ * purchase). The count is nil from before any bill, so a bill dated last week
+ * moves it the same as one dated today.
+ *
+ * No PIN, unlike Inventory's Add: this cannot say how many there are. The
+ * count starts at nil and only bills move it; setting a real count is still
+ * Inventory's, behind its PIN.
+ *
+ * A name the list already has, in the seed or added before, is answered with
+ * that item rather than made twice.
+ */
+export const addFromBill = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, { name: raw }) => {
+    const typed = raw.replace(/[×✕]/g, "x").replace(/\s+/g, " ").trim(); // emoji-ok: reads a typed cross
+    if (!typed || typed.length > 100) throw new ConvexError("Write the name of the item, up to 100 characters.");
+
+    // "12mm Signature 7x3" is a sheet: filed by thickness, brand and size, as Inventory's Add files one.
+    const sheet = typed.match(/^(\d+(?:\.\d+)?)\s*mm\s+(.+?)\s+(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)$/i);
+    const key = (value: string) => encodeURIComponent(value.toLowerCase().replace(/\s+/g, ""));
+    const product = sheet
+      ? (() => {
+          const [, mm, brand, height, width] = sheet;
+          const size = `${height}x${width}`;
+          return {
+            ref: `custom:ply:${brand.toLowerCase().replace(/ /g, "-")}:${Number(mm)}:${size}`,
+            name: `${Number(mm)}mm ${brand} ${height} x ${width}`,
+            category: "ply" as const, brand, mm: Number(mm), size,
+          };
+        })()
+      : { ref: `custom:other:typed:${key(typed)}`, name: typed, category: "other" as const, brand: "Unbranded", label: typed, size: "Pc" };
+
+    const seedRef = seedRefForName(product.name);
+    const seed = seedRef ? INVENTORY_SEED.find((item) => item.ref === seedRef) : undefined;
+    if (seed) return { ref: seed.ref, name: seed.name, added: false };
+    const products = await ctx.db.query("inventoryProducts").collect();
+    const have = products.find((item) => item.ref === product.ref || foldItemName(item.name) === foldItemName(product.name));
+    if (have) return { ref: have.ref, name: have.name, added: false };
+
+    await ctx.db.insert("inventoryProducts", product);
+    await ctx.db.insert("stockCounts", { ref: product.ref, qty: 0, day: "2000-01-01", at: 0, note: "Added from a bill: nothing counted on the shelf yet" });
+    return { ref: product.ref, name: product.name, added: true };
+  },
+});
+
 /** One-time opening stock. Re-running never resets an existing count or edit. */
 export const initializeSeed = mutation({
   args: { pin: v.string() },

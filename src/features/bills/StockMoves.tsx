@@ -1,5 +1,7 @@
+import { useState } from 'react'
+import { useMutation } from 'convex/react'
 import { useLive } from '../ledger/lib/cache'
-import { Boxes, Plus, X } from 'lucide-react'
+import { Boxes, Check, Plus, X } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Bill, BillItem, StockLine } from '../../lib/types'
 import { isAmountOnlyLine, isRoundupLine } from '../../lib/types'
@@ -14,7 +16,14 @@ const uid = () => Math.random().toString(36).slice(2, 10)
  * left (on a sale) or came in (on a purchase) without listing its goods:
  * pick the item from the stock list, type how many. It moves the stock the
  * same way a line would, and never prints or prices anything.
+ *
+ * An item the list does not have is written in at the foot of the same list
+ * ("Write a new item"): it joins the stock list with nothing on the shelf, so
+ * a sale of it shows below nil until its real count is entered in Inventory.
  */
+
+/** The choice at the foot of an item list that opens the box to write a new one. */
+const NEW_ITEM = '__new__'
 
 type StockRow = { ref: string; name: string; stock: number; category?: string }
 
@@ -94,6 +103,22 @@ export function StockMoves({ bill, out, onChange }: {
 
   const byRef = new Map((list ?? []).map((r) => [r.ref, r]))
 
+  // The row whose item is being written in rather than picked, and what is typed.
+  const addFromBill = useMutation(api.inventory.addFromBill)
+  const [writing, setWriting] = useState<{ at: number; name: string; busy: boolean; error: string } | null>(null)
+  async function addWritten() {
+    if (!writing || writing.busy || !writing.name.trim()) return
+    setWriting({ ...writing, busy: true, error: '' })
+    try {
+      const made = await addFromBill({ name: writing.name })
+      patchLine(writing.at, { ref: made.ref, name: made.name })
+      setWriting(null)
+    } catch (err) {
+      const said = typeof (err as { data?: unknown })?.data === 'string' ? (err as { data: string }).data : 'Could not add the item. Check the connection and try again.'
+      setWriting((now) => (now ? { ...now, busy: false, error: said } : now))
+    }
+  }
+
   return (
     <div className="mt-3 rounded-lg border border-stone-300 p-3 dark:border-white/15">
       {showTotal && (
@@ -134,9 +159,40 @@ export function StockMoves({ bill, out, onChange }: {
             const after = row ? row.stock + (out ? -1 : 1) * (Number(l.qty) || 0) : null
             return (
               <div key={at} className="flex items-center gap-2">
+                {writing?.at === at ? (
+                  // Written rather than picked: Enter (or the tick) adds it to the stock list.
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={writing.name}
+                        maxLength={100}
+                        disabled={writing.busy}
+                        placeholder="New item, e.g. 12mm Signature 7 x 3"
+                        aria-label="New stock item"
+                        onChange={(e) => setWriting({ ...writing, name: e.target.value, error: '' })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); void addWritten() }
+                          else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setWriting(null) }
+                        }}
+                        className="min-w-0 flex-1 rounded-lg border border-shiv-green bg-white px-2 py-1.5 text-sm outline-none dark:bg-stone-900 dark:text-white"
+                      />
+                      <button type="button" onClick={() => void addWritten()} disabled={writing.busy || !writing.name.trim()}
+                        className="rounded-lg bg-shiv-green p-1.5 text-stone-950 disabled:opacity-40" aria-label="Add this item to the stock list" title="Add to the stock list">
+                        <Check size={15} />
+                      </button>
+                      <button type="button" onClick={() => setWriting(null)} disabled={writing.busy}
+                        className="rounded p-1.5 text-muted hover:bg-stone-100 dark:hover:bg-white/10" aria-label="Pick from the list instead" title="Pick from the list instead">
+                        <X size={15} />
+                      </button>
+                    </span>
+                    {writing.error && <span role="alert" className="text-xs font-semibold text-red-600">{writing.error}</span>}
+                  </span>
+                ) : (
                 <select
                   value={l.ref}
-                  onChange={(e) => pick(at, e.target.value)}
+                  onChange={(e) => (e.target.value === NEW_ITEM ? setWriting({ at, name: '', busy: false, error: '' }) : pick(at, e.target.value))}
                   className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-900 dark:text-white"
                 >
                   {!row && <option value={l.ref}>{l.name || 'Pick an item'}</option>}
@@ -152,7 +208,9 @@ export function StockMoves({ bill, out, onChange }: {
                       </optgroup>
                     ))
                   })}
+                  <option value={NEW_ITEM}>Write a new item…</option>
                 </select>
+                )}
                 <input
                   type="number"
                   inputMode="numeric"
