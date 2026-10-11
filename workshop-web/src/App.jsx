@@ -251,6 +251,13 @@ const PersonIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="8" r="4" /><path
 const PinIcon = (p) => <Icon {...p} d={<><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.6" /></>} />
 const MenuIcon = (p) => <Icon {...p} d={<path d="M4 6h16M4 12h16M4 18h16" />} />
 const TickIcon = (p) => <Icon {...p} d={<path d="M5 12.5l4.5 4.5L19 7.5" />} />
+// The filter boxes' own: what is to do, everything, and one for each step.
+const TodoIcon = (p) => <Icon {...p} d={<><path d="M9 11.5l2.5 2.5L20 5.5" /><path d="M20 12.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h10" /></>} />
+const AllIcon = (p) => <Icon {...p} d={<><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>} />
+const RuleIcon = (p) => <Icon {...p} d={<><path d="M3.5 16.5l13-13 4 4-13 13z" /><path d="M7.5 12.5l2 2M10.5 9.5l2 2M13.5 6.5l2 2" /></>} />
+const SheetIcon = (p) => <Icon {...p} d={<><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5M10 13h6M10 17h6" /></>} />
+const ToolIcon = (p) => <Icon {...p} d={<path d="M14.7 6.3a4 4 0 0 0-5.3 5.3L3 18l3 3 6.4-6.4a4 4 0 0 0 5.3-5.3l-2.6 2.6-2.4-.6-.6-2.4z" />} />
+const DoorIcon = (p) => <Icon {...p} d={<><path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M4 21h16" /><path d="M14.5 12v1.5" /></>} />
 const ShareIcon = (p) => <Icon {...p} d={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></>} />
 
 /** The light that says the list on screen is the live one. */
@@ -346,10 +353,11 @@ function List({ jobs, onOpen, onNew, saving }) {
    * so the list a phone opens on is the work in hand. Then All, and the jobs
    * standing at each step.
    */
+  const STEP_ICONS = { measurement: RuleIcon, quotation: SheetIcon, assemble: ToolIcon, goahead: PhoneIcon, fitting: DoorIcon }
   const FILTERS = [
-    { id: 'todo', label: 'To do', test: (j) => myTurn(j) || newIn(j) > 0 },
-    { id: 'all', label: 'All', test: () => true },
-    ...STAGES.map((st) => ({ id: st.id, label: st.label, test: (j) => !finished(j) && stageId(j) === st.id })),
+    { id: 'todo', label: 'To do', icon: TodoIcon, test: (j) => myTurn(j) || newIn(j) > 0 },
+    { id: 'all', label: 'All', icon: AllIcon, test: () => true },
+    ...STAGES.map((st) => ({ id: st.id, label: st.label, icon: STEP_ICONS[st.id], test: (j) => !finished(j) && stageId(j) === st.id })),
   ]
   const [filter, setFilter] = useState('todo')
   const showing = FILTERS.find((f) => f.id === filter) ?? FILTERS[0]
@@ -381,7 +389,9 @@ function List({ jobs, onOpen, onNew, saving }) {
       <div className="filters" role="group" aria-label="Which jobs to show">
         {FILTERS.map((f) => (
           <button key={f.id} type="button" className={`${filter === f.id ? 'on' : ''} ${f.id === 'todo' ? 'todo' : ''}`} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
-            {f.label}{jobs && <b>{jobs.filter(f.test).length}</b>}
+            <f.icon size={19} />
+            <span>{f.label}</span>
+            {jobs && jobs.filter(f.test).length > 0 && <b>{jobs.filter(f.test).length}</b>}
           </button>
         ))}
       </div>
