@@ -1,7 +1,7 @@
 // Minimal service worker — enables install; network-first, so a deploy is picked
 // up immediately. The figures are read live; the last ones are kept in localStorage.
 // Bump SW_VERSION on deploys that must force every client onto the newest app shell.
-const SW_VERSION = '2026-10-10-shiv-accounts'
+const SW_VERSION = '2026-10-11-shiv-accounts'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => {

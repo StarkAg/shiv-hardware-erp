@@ -1,4 +1,10 @@
 {
+  "images": {
+    "sizes": [192, 1200],
+    "remotePatterns": [{ "protocol": "https", "hostname": "sensible-panther-176.convex.cloud" }],
+    "minimumCacheTTL": 31536000,
+    "formats": ["image/webp"]
+  },
   "headers": [
     {
       "source": "/",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useConvex, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 
@@ -11,7 +11,9 @@ import { anyApi } from 'convex/server'
  * one reads the account like a chat: every bill and payment a bubble, newest
  * at the bottom, with the bill's photos to tap open. What the shop sent sits
  * on the right, what the party sent on the left, and what the account comes
- * to (to get / to pay) stays in a box at the foot. No buttons that write.
+ * to (to get / to pay) stays in a box at the foot. Nothing here changes the
+ * books; the one thing it sends anywhere is a bill's photos to the shop's
+ * printer, when asked and confirmed.
  *
  * Live: every figure is a Convex subscription, so a bill saved at the counter
  * shows here within a second or two with the app left open — the light in the
@@ -50,6 +52,37 @@ const dayOf = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short
 const sideWord = (side) => (side === 'Dr' ? 'to get' : 'to pay')
 const SETTLED = 'All clear'
 const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
+
+/**
+ * A photo brought down to the size it is shown at.
+ *
+ * A bill's photo is 300-800 KB, and the thumbnail in a bubble used to fetch
+ * all of it to fill a 56px square: an account with a dozen bills in view was
+ * megabytes before anything showed. The site's own image service (vercel.json
+ * "images") sends a few KB instead and keeps it. Where that is not to be had
+ * (a quota, a computer running this from the repo) the photo itself is shown.
+ */
+const sized = (url, width) => `/_vercel/image?url=${encodeURIComponent(url)}&w=${width}&q=70`
+function Shot({ url, width, ...rest }) {
+  const [src, setSrc] = useState(() => sized(url, width))
+  useEffect(() => { setSrc(sized(url, width)) }, [url, width])
+  return <img src={src} onError={() => { if (src !== url) setSrc(url) }} {...rest} />
+}
+
+/** JPEG as it stands; anything else (a PNG screenshot) redrawn as one, on white. */
+async function asJpeg(blob) {
+  if (blob.type === 'image/jpeg') return blob
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(bitmap, 0, 0)
+  bitmap.close?.()
+  return await new Promise((done) => canvas.toBlob((made) => done(made ?? blob), 'image/jpeg', 0.92))
+}
 /** A line's voucher in the words of who sent what; the bubble's side says who. */
 const SENT = { Sale: 'Bill sent', Purchase: 'Bill sent', Receipt: 'Payment sent', Payment: 'Payment sent' }
 // The money taken with a sale or purchase is a payment, not the bill again.
@@ -59,9 +92,10 @@ export default function App() {
   const [tab, setTab] = useState(() => read('tab') ?? 'customers')
   const [open, setOpen] = useState(null)
   useEffect(() => { write('tab', tab) }, [tab])
-  // The phone's Back closes an account, as it closes a chat.
+  // The phone's Back closes an account, as it closes a chat. A photo open
+  // over the account is closed first (Party), and the account stays.
   useEffect(() => {
-    const onPop = () => setOpen(null)
+    const onPop = (e) => { if (!e.state?.party) setOpen(null) }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
@@ -99,6 +133,7 @@ function Lists({ tab, setTab, onOpen }) {
   const [sort, setSort] = useState(() => read('sortBy') ?? 'recent')
   const [filter, setFilter] = useState(() => read('filter') ?? 'all')
   const [panel, setPanel] = useState(null)
+  const [profile, setProfile] = useState(null)
   useEffect(() => { write('sortBy', sort) }, [sort])
   useEffect(() => { write('filter', filter) }, [filter])
   const book = tab === 'customers' ? customers : suppliers
@@ -188,10 +223,15 @@ function Lists({ tab, setTab, onOpen }) {
           const what = zero ? SETTLED
             : tab === 'customers' ? (toCome ? 'To get' : 'Advance, to pay')
             : (toCome ? 'Advance, to get' : 'To pay')
+          const party = { id: r.ledger._id, name, phone: r.ledger.phone ?? '', tab }
           return (
             <li key={r.ledger._id} className={changed.has(r.ledger._id) ? 'changed' : undefined}>
-              <button type="button" onClick={() => onOpen({ id: r.ledger._id, name, phone: r.ledger.phone ?? '', tab })}>
+              {/* The round letter is its own button: the whole name, which the row cuts short. */}
+              <button type="button" className="face" aria-label={`${name}: full name`}
+                onClick={() => setProfile({ party, what, amount: zero ? '' : rupees(r.closing), tone: zero ? '' : toCome ? 'in' : 'out' })}>
                 <span className="avatar">{name[0]?.toUpperCase() ?? '?'}</span>
+              </button>
+              <button type="button" className="row" onClick={() => onOpen(party)}>
                 <span className="who">
                   <b>{name}</b>
                   <small>{what}{r.pendingCount ? ` · ${r.pendingCount} bill${r.pendingCount === 1 ? '' : 's'} with no amount` : ''}</small>
@@ -203,14 +243,44 @@ function Lists({ tab, setTab, onOpen }) {
         })}
         {book && !rows.length && <li className="empty">{q ? 'No one by that name.' : filter !== 'all' ? 'No one here.' : 'No one yet.'}</li>}
       </ul>
+      {profile && <Profile {...profile} onClose={() => setProfile(null)} onOpen={() => { setProfile(null); onOpen(profile.party) }} />}
+    </div>
+  )
+}
+
+/** Who this is, in full: the name the list and the chat's header cut short. */
+function Profile({ party, what, amount, tone, onClose, onOpen }) {
+  return (
+    <div className="sheetback" onClick={onClose}>
+      <div className="sheet profile" role="dialog" aria-modal="true" aria-label={party.name} onClick={(e) => e.stopPropagation()}>
+        <span className="avatar big">{party.name[0]?.toUpperCase() ?? '?'}</span>
+        <b className="fullname">{party.name}</b>
+        {party.phone && <a className="phone" href={`tel:${party.phone}`}>{party.phone}</a>}
+        {what && <div className={`standing ${tone}`}><small>{what}</small>{amount && <b>{amount}</b>}</div>}
+        <div className="sheetbtns">
+          <button type="button" className="ghost" onClick={onClose}>Close</button>
+          {onOpen && <button type="button" className="solid" onClick={onOpen}>Open account</button>}
+        </div>
+      </div>
     </div>
   )
 }
 
 function Party({ party, onBack }) {
   const data = useCached(api.reports.ledger, { ledgerId: party.id }, `ledger:${party.id}`)
-  const [photo, setPhoto] = useState(null)
+  const [viewer, setViewer] = useState(null)
+  const [profile, setProfile] = useState(false)
   const end = useRef(null)
+  // A bill's photos open over the account; the phone's Back closes them.
+  const openPhotos = (shots, at, label) => {
+    window.history.pushState({ party: party.id, photo: true }, '')
+    setViewer({ shots, at, label })
+  }
+  useEffect(() => {
+    const onPop = (e) => { if (!e.state?.photo) setViewer(null) }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
   // Like a chat: opens at the newest.
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [data?.rows?.length])
 
@@ -240,7 +310,9 @@ function Party({ party, onBack }) {
     <div className="app chat">
       <header className="top chathead">
         <button type="button" className="back" onClick={onBack} aria-label="Back">‹</button>
-        <span className="avatar small">{party.name[0]?.toUpperCase() ?? '?'}</span>
+        <button type="button" className="face" aria-label={`${party.name}: full name`} onClick={() => setProfile(true)}>
+          <span className="avatar small">{party.name[0]?.toUpperCase() ?? '?'}</span>
+        </button>
         <span className="who">
           <b>{party.name}</b>
           <small>{closing}</small>
@@ -262,7 +334,7 @@ function Party({ party, onBack }) {
             return (
               <div key={it.key} className={`bubble ${pendingOurs ? 'right' : 'left'} pending`}>
                 <div className="kind">{SENT[it.p.vchType] ?? 'Bill'} · {it.p.vchLabel ?? ''} · amount not added yet</div>
-                <Photos shots={shots} onOpen={setPhoto} />
+                <Photos shots={shots} onOpen={(pages, at) => openPhotos(pages, at, `${it.p.vchLabel ?? 'Bill'} ${party.name}`)} />
               </div>
             )
           }
@@ -277,7 +349,7 @@ function Party({ party, onBack }) {
                 <span className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</span>
               </div>
               {r.narration && <div className="narr">{r.narration}</div>}
-              <Photos shots={shots} onOpen={setPhoto} />
+              <Photos shots={shots} onOpen={(pages, at) => openPhotos(pages, at, `${r.vchLabel}${r.refNo ? ` ${r.refNo}` : ''} ${party.name}`)} />
             </div>
           )
         })}
@@ -290,13 +362,15 @@ function Party({ party, onBack }) {
           {data.pendingCount > 0 && <span>+ {data.pendingCount} bill{data.pendingCount === 1 ? '' : 's'} with no amount</span>}
         </footer>
       )}
-      {photo && (
-        <div className="viewer" onClick={() => setPhoto(null)}>
-          <button type="button" className="close" aria-label="Close">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-          </button>
-          <img src={photo} alt="Bill" onClick={(e) => e.stopPropagation()} />
-        </div>
+      {viewer && <Viewer key={viewer.label} {...viewer} onClose={() => window.history.back()} />}
+      {profile && (
+        <Profile
+          party={party}
+          what={data ? (data.closing < 0.5 ? SETTLED : data.closingSide === 'Dr' ? 'To get' : 'To pay') : ''}
+          amount={data && data.closing >= 0.5 ? rupees(data.closing) : ''}
+          tone={!data || data.closing < 0.5 ? '' : data.closingSide === 'Dr' ? 'in' : 'out'}
+          onClose={() => setProfile(false)}
+        />
       )}
     </div>
   )
@@ -304,11 +378,189 @@ function Party({ party, onBack }) {
 
 function Photos({ shots, onOpen }) {
   if (!shots.length) return null
+  // The viewer turns through a bill's photos; a PDF opens on its own.
+  const pages = shots.filter((a) => !isPdf(a))
   return (
     <div className="photos">
       {shots.map((a) => isPdf(a)
         ? <a key={a.storageId} className="pdf" href={a.url} target="_blank" rel="noreferrer">PDF</a>
-        : <button key={a.storageId} type="button" onClick={() => onOpen(a.url)}><img src={a.previewUrl || a.url} alt="Bill photo" loading="lazy" /></button>)}
+        : <button key={a.storageId} type="button" onClick={() => onOpen(pages, pages.indexOf(a))}><Shot url={a.url} width={192} alt="Bill photo" loading="lazy" decoding="async" /></button>)}
     </div>
   )
+}
+
+const CloseIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+)
+const ShareIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>
+)
+const PrintIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></svg>
+)
+
+/**
+ * A bill's photos, full screen: swipe (or the arrow keys) to turn its pages.
+ *
+ * Each page shows at once from a screen-sized copy, and the photo itself is
+ * fetched behind it, once: that one copy is what sharpens the page for
+ * zooming, what Share hands on (every page, as JPG, in the bill's order) and
+ * what Print sends to the shop.
+ */
+function Viewer({ shots, at: start, label, onClose }) {
+  const convex = useConvex()
+  const strip = useRef(null)
+  const [at, setAt] = useState(start)
+  const [full, setFull] = useState({})
+  const [note, setNote] = useState('')
+  const [asking, setAsking] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [job, setJob] = useState(null)
+
+  useEffect(() => {
+    let closed = false
+    const made = []
+    for (const shot of shots) {
+      void (async () => {
+        try {
+          const res = await fetch(shot.url)
+          if (!res.ok) return
+          const blob = await res.blob()
+          if (closed) return
+          const url = URL.createObjectURL(blob)
+          made.push(url)
+          setFull((have) => ({ ...have, [shot.storageId]: { blob, url } }))
+        } catch { /* the screen-sized copy stays; Share and Print wait */ }
+      })()
+    }
+    return () => { closed = true; for (const url of made) URL.revokeObjectURL(url) }
+  }, [shots])
+
+  // Opens on the page that was tapped.
+  useLayoutEffect(() => {
+    const el = strip.current
+    if (el) el.scrollLeft = start * el.clientWidth
+  }, [start])
+
+  const turn = (by) => {
+    const el = strip.current
+    if (el) el.scrollTo({ left: Math.min(shots.length - 1, Math.max(0, at + by)) * el.clientWidth, behavior: 'smooth' })
+  }
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'ArrowRight') turn(1)
+      else if (e.key === 'ArrowLeft') turn(-1)
+      else if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const ready = shots.every((s) => full[s.storageId])
+  const base = label.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Bill'
+  const nameOf = (i) => (shots.length > 1 ? `${base} page ${i + 1}.jpg` : `${base}.jpg`)
+  const pages = `${shots.length} ${shots.length === 1 ? 'page' : 'pages'}`
+  /** Every page as a JPG, named in the bill's order. */
+  const jpegs = () => Promise.all(shots.map(async (s, i) => new File([await asJpeg(full[s.storageId].blob)], nameOf(i), { type: 'image/jpeg' })))
+
+  const share = async () => {
+    setNote('')
+    try {
+      const files = await jpegs()
+      if (navigator.canShare?.({ files })) {
+        await navigator.share({ files, title: base })
+        return
+      }
+      // No share sheet here (a computer): the pages are saved instead, in order.
+      for (const file of files) {
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(file)
+        link.download = file.name
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+      }
+      setNote(`Saved ${pages} to this device.`)
+    } catch (err) {
+      if (err?.name !== 'AbortError') setNote('Could not share. Try again.')
+    }
+  }
+
+  /**
+   * To the shop's printer, the way Shiv Print sends a file: a copy of each
+   * page goes up for the job (the print server deletes a job's files once
+   * printed, so never the bill's own photo) and the shop PC prints them.
+   */
+  const print = async () => {
+    setAsking(false)
+    setSending(true)
+    setNote('')
+    setJob(null)
+    try {
+      const files = await Promise.all((await jpegs()).map(async (file) => {
+        const url = await convex.mutation(api.files.generateUploadUrl, {})
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': file.type }, body: file })
+        if (!res.ok) throw new Error('upload')
+        const { storageId } = await res.json()
+        return { storageId, name: file.name, mediaType: file.type }
+      }))
+      setJob(await convex.mutation(api.printJobs.sendFiles, { files, mode: 'bw', copies: 1 }))
+    } catch {
+      setNote('Could not send to the printer. Try again.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="viewer" role="dialog" aria-modal="true" aria-label={base}>
+      <div className="vbar">
+        <button type="button" onClick={onClose} aria-label="Close"><CloseIcon /></button>
+        <span className="count">{shots.length > 1 ? `${at + 1} of ${shots.length}` : ''}</span>
+        <button type="button" className="text" onClick={share} disabled={!ready}><ShareIcon /> Share</button>
+        <button type="button" className="text" onClick={() => setAsking(true)} disabled={!ready || sending}><PrintIcon /> Print</button>
+      </div>
+      <div className="vstrip" ref={strip}
+        onScroll={(e) => setAt(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}>
+        {shots.map((s, i) => (
+          <div key={s.storageId} className="vslide" onClick={onClose}>
+            {full[s.storageId]
+              ? <img src={full[s.storageId].url} alt={`Bill, page ${i + 1}`} onClick={(e) => e.stopPropagation()} />
+              : <Shot url={s.url} width={1200} alt={`Bill, page ${i + 1}`} onClick={(e) => e.stopPropagation()} />}
+          </div>
+        ))}
+      </div>
+      {shots.length > 1 && (
+        <div className="vdots" aria-hidden="true">{shots.map((s, i) => <i key={s.storageId} className={i === at ? 'on' : ''} />)}</div>
+      )}
+      {(note || sending || job) && (
+        <div className="vnote" role="status">
+          {sending ? 'Sending to the shop printer' : job ? <PrintStatus id={job} /> : note}
+        </div>
+      )}
+      {asking && (
+        <div className="sheetback" onClick={() => setAsking(false)}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="Print this bill" onClick={(e) => e.stopPropagation()}>
+            <b className="sheettitle">Print this bill at the shop?</b>
+            <p>{base}<br />{pages}, black and white, on the shop printer.</p>
+            <div className="sheetbtns">
+              <button type="button" className="ghost" onClick={() => setAsking(false)}>Cancel</button>
+              <button type="button" className="solid" onClick={print}>Print</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** A sent print job, followed live until the shop PC prints it or says why not. */
+function PrintStatus({ id }) {
+  const live = useQuery(api.printJobs.getById, { id })
+  const status = live?.status
+  return status === 'printed' ? 'Printed at the shop'
+    : status === 'failed' ? `Not printed: ${live.error || 'the printer refused it'}`
+    : status === 'claimed' || status === 'printing' ? 'Printing at the shop'
+    : 'Sent. Waiting for the shop PC'
 }

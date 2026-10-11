@@ -74,13 +74,18 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .chips button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
 
 .chats { list-style: none; margin: 0 14px; padding: 0; overflow-y: auto; flex: 1; border-radius: 16px 16px 0 0; background: var(--card); border: 1px solid var(--line); border-bottom: 0; }
-.chats li > button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); transition: background-color .6s; }
-.chats li > button:active { background: var(--card2); }
+/* A row is two buttons: the round letter (the whole name) and the rest (the account). */
+.chats li { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); transition: background-color .6s; }
+.chats li > .face { flex: none; display: flex; align-items: center; padding: 12px 0 12px 14px; }
+.chats li > .row { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 12px; text-align: left; }
+.chats li > .row:active, .face:active .avatar { background: var(--card2); }
 /* A figure that has just changed while the list is open. */
-.chats li.changed > button { background: var(--mine); }
+.chats li.changed { background: var(--mine); }
 .chats .empty { padding: 30px; text-align: center; color: var(--muted); }
 .avatar { flex: none; width: 46px; height: 46px; border-radius: 50%; background: var(--card2); border: 1px solid var(--line); color: var(--brass); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 19px; }
 .avatar.small { width: 38px; height: 38px; font-size: 16px; }
+.avatar.big { width: 84px; height: 84px; font-size: 36px; }
+.chathead .face { flex: none; display: flex; }
 .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .who b { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .who small { font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -121,6 +126,38 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .due.out { border-color: var(--red); }
 .due.out small, .due.out b { color: var(--red); }
 
-.viewer { position: fixed; inset: 0; background: #000; z-index: 10; display: flex; align-items: center; justify-content: center; overflow: auto; }
-.viewer img { max-width: 100%; max-height: 100%; object-fit: contain; touch-action: pinch-zoom; }
-.viewer .close { position: fixed; top: calc(env(safe-area-inset-top) + 10px); right: 12px; color: #fff; background: rgba(255,255,255,.15); width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+/* A bill's photos, full screen: a strip that snaps to a page at a time, so a
+   swipe turns the page; the bar above it closes, shares and prints. */
+.viewer { position: fixed; inset: 0; background: #000; color: #fff; z-index: 10; display: flex; flex-direction: column; }
+.vbar { flex: none; display: flex; align-items: center; gap: 8px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; }
+.vbar button { height: 42px; min-width: 42px; border-radius: 21px; background: rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; gap: 7px; }
+.vbar button.text { padding: 0 14px; font-size: 15px; font-weight: 700; }
+.vbar button:disabled { opacity: .45; }
+.vbar .count { flex: 1; text-align: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.vstrip { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior: contain; }
+.vstrip::-webkit-scrollbar { display: none; }
+.vslide { flex: none; width: 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; display: flex; align-items: center; justify-content: center; }
+.vslide img { max-width: 100%; max-height: 100%; object-fit: contain; touch-action: pan-x pinch-zoom; }
+.vdots { flex: none; display: flex; justify-content: center; gap: 7px; padding: 10px 0 calc(env(safe-area-inset-bottom) + 12px); }
+.vdots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.35); }
+.vdots i.on { background: #fff; }
+.vnote { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 34px); margin: 0 auto; max-width: 420px; padding: 11px 14px; border-radius: 12px; background: rgba(40,37,33,.94); border: 1px solid rgba(255,255,255,.18); text-align: center; font-size: 15px; font-weight: 700; }
+
+/* A small sheet over the screen: the print question, and who an account is. */
+.sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.sheet { width: 100%; max-width: 360px; padding: 20px; border-radius: 18px; background: var(--card); color: var(--fg); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.sheet p { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.sheettitle { font-size: 19px; }
+.sheetbtns { display: flex; gap: 10px; margin-top: 18px; }
+.sheetbtns button { flex: 1; padding: 13px 0; border-radius: 12px; font-size: 16px; font-weight: 800; }
+.sheetbtns .ghost { border: 1px solid var(--line); background: var(--card2); }
+.sheetbtns .solid { background: var(--brass); color: var(--brass-ink); }
+.profile { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+.profile .fullname { font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; }
+.profile .phone { color: var(--brass); font-size: 18px; font-weight: 700; text-decoration: none; }
+.profile .standing { display: flex; flex-direction: column; margin-top: 4px; color: var(--muted); }
+.profile .standing small { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+.profile .standing b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.profile .standing.in { color: var(--green); }
+.profile .standing.out { color: var(--red); }
+.profile .sheetbtns { align-self: stretch; }
