@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useConvex, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
+import { SCREEN, THUMB, saveEverything, saveLedger, savedLedger, sized } from './offline.js'
 
 /**
  * Shiv Accounts — the shop's accounts to read, and nothing to change.
@@ -19,6 +20,10 @@ import { anyApi } from 'convex/server'
  * shows here within a second or two with the app left open — the light in the
  * header says the line is up, and a row whose figure has just moved is tinted
  * for a few seconds. In the shop's own colours (the attendance app's).
+ *
+ * Kept on the phone: each time it opens, every account and every bill photo
+ * is saved to the phone in the background (src/offline.js), so an account
+ * opens at once from there, the live figures replacing it a moment later.
  */
 const api = anyApi
 
@@ -32,6 +37,61 @@ function useCached(fn, args, key) {
   useEffect(() => { setCached(read(key)) }, [key])
   useEffect(() => { if (live !== undefined) write(key, live) }, [live, key])
   return live !== undefined ? live : cached
+}
+
+/** An account's page: the copy kept on the phone at once, then the live one, which is kept in turn. */
+function useLedger(id) {
+  const live = useQuery(api.reports.ledger, { ledgerId: id })
+  const [kept, setKept] = useState(undefined)
+  useEffect(() => {
+    let current = true
+    setKept(undefined)
+    void savedLedger(id).then((rec) => { if (current) setKept(rec?.data) })
+    return () => { current = false }
+  }, [id])
+  useEffect(() => { if (live !== undefined && live !== null) void saveLedger(id, live) }, [live, id])
+  return live !== undefined ? live : kept
+}
+
+// Accounts were first kept in localStorage, which a few hundred of them
+// overfill; they are in IndexedDB now (offline.js), and the old copies go.
+try {
+  for (const key of Object.keys(localStorage)) if (key.startsWith('khata:ledger:')) localStorage.removeItem(key)
+} catch { /* nothing kept */ }
+
+/**
+ * Saves every account and bill photo to the phone, in the background, each
+ * time the lists arrive or change. Returns how far it has got, for the list
+ * to say: { step, done, total } (see saveEverything).
+ */
+function useSaveToPhone() {
+  const convex = useConvex()
+  const customers = useQuery(api.reports.receivables, {})
+  const suppliers = useQuery(api.reports.outstanding, {})
+  const [progress, setProgress] = useState(null)
+  const state = useRef({ running: false, again: false, rows: [] })
+  useEffect(() => {
+    if (!customers || !suppliers) return
+    const s = state.current
+    s.rows = [...customers.rows, ...suppliers.rows]
+    // One run at a time: a list that changes mid-run starts another after it.
+    if (s.running) { s.again = true; return }
+    s.running = true
+    void (async () => {
+      do {
+        s.again = false
+        try {
+          await saveEverything({
+            rows: s.rows,
+            fetchLedger: (ledgerId) => convex.query(api.reports.ledger, { ledgerId }),
+            onProgress: setProgress,
+          })
+        } catch { /* a phone that keeps nothing still reads everything live */ }
+      } while (s.again)
+      s.running = false
+    })()
+  }, [customers, suppliers, convex])
+  return progress
 }
 
 const rupees = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
@@ -59,10 +119,10 @@ const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
  * A bill's photo is 300-800 KB, and the thumbnail in a bubble used to fetch
  * all of it to fill a 56px square: an account with a dozen bills in view was
  * megabytes before anything showed. The site's own image service (vercel.json
- * "images") sends a few KB instead and keeps it. Where that is not to be had
- * (a quota, a computer running this from the repo) the photo itself is shown.
+ * "images") sends a few KB instead, and the phone keeps it (offline.js).
+ * Where that is not to be had (a quota, a computer running this from the
+ * repo) the photo itself is shown.
  */
-const sized = (url, width) => `/_vercel/image?url=${encodeURIComponent(url)}&w=${width}&q=70`
 function Shot({ url, width, ...rest }) {
   const [src, setSrc] = useState(() => sized(url, width))
   useEffect(() => { setSrc(sized(url, width)) }, [url, width])
@@ -91,6 +151,7 @@ const kindOf = (r) => (r.settlement ? 'Payment sent' : SENT[r.vchType] ?? r.vchT
 export default function App() {
   const [tab, setTab] = useState(() => read('tab') ?? 'customers')
   const [open, setOpen] = useState(null)
+  const saving = useSaveToPhone()
   useEffect(() => { write('tab', tab) }, [tab])
   // The phone's Back closes an account, as it closes a chat. A photo open
   // over the account is closed first (Party), and the account stays.
@@ -102,7 +163,28 @@ export default function App() {
   const openParty = (party) => { window.history.pushState({ party: party.id }, ''); setOpen(party) }
   return open
     ? <Party party={open} onBack={() => window.history.back()} />
-    : <Lists tab={tab} setTab={setTab} onOpen={openParty} />
+    : <Lists tab={tab} setTab={setTab} onOpen={openParty} saving={saving} />
+}
+
+/**
+ * How far the saving to the phone has got: a line and a bar under the tabs.
+ * The accounts are the quick part, so the bar gives them its first tenth and
+ * the bill photos the rest.
+ */
+function Saving({ saving }) {
+  if (!saving || saving.step === 'paused') return null
+  const share = saving.total ? saving.done / saving.total : 1
+  const [text, part] =
+    saving.step === 'accounts' ? [`Saving accounts on this phone: ${saving.done} of ${saving.total}`, share * 0.1]
+    : saving.step === 'photos' ? [`Saving bill photos on this phone: ${saving.done} of ${saving.total}`, 0.1 + share * 0.9]
+    : ['All accounts and bills are saved on this phone', 1]
+  const percent = Math.round(part * 100)
+  return (
+    <div className={`saving ${saving.step === 'done' ? 'ok' : ''}`} role="status">
+      <div className="savetext"><span>{text}</span>{saving.step !== 'done' && <b>{percent}%</b>}</div>
+      <div className="savebar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><i style={{ width: `${percent}%` }} /></div>
+    </div>
+  )
 }
 
 const SORTS = [
@@ -124,7 +206,7 @@ const FilterIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z" /></svg>
 )
 
-function Lists({ tab, setTab, onOpen }) {
+function Lists({ tab, setTab, onOpen, saving }) {
   const customers = useCached(api.reports.receivables, {}, 'receivables')
   const suppliers = useCached(api.reports.outstanding, {}, 'payables')
   const [q, setQ] = useState('')
@@ -194,6 +276,7 @@ function Lists({ tab, setTab, onOpen }) {
           <button className={tab === 'customers' ? 'on' : ''} onClick={() => setTab('customers')}>Customers</button>
           <button className={tab === 'suppliers' ? 'on' : ''} onClick={() => setTab('suppliers')}>Suppliers</button>
         </nav>
+        <Saving saving={saving} />
       </header>
       <div className="summary">
         {!book ? 'Loading…' : tab === 'customers' ? (
@@ -267,7 +350,7 @@ function Profile({ party, what, amount, tone, onClose, onOpen }) {
 }
 
 function Party({ party, onBack }) {
-  const data = useCached(api.reports.ledger, { ledgerId: party.id }, `ledger:${party.id}`)
+  const data = useLedger(party.id)
   const [viewer, setViewer] = useState(null)
   const [profile, setProfile] = useState(false)
   const end = useRef(null)
@@ -384,7 +467,7 @@ function Photos({ shots, onOpen }) {
     <div className="photos">
       {shots.map((a) => isPdf(a)
         ? <a key={a.storageId} className="pdf" href={a.url} target="_blank" rel="noreferrer">PDF</a>
-        : <button key={a.storageId} type="button" onClick={() => onOpen(pages, pages.indexOf(a))}><Shot url={a.url} width={192} alt="Bill photo" loading="lazy" decoding="async" /></button>)}
+        : <button key={a.storageId} type="button" onClick={() => onOpen(pages, pages.indexOf(a))}><Shot url={a.url} width={THUMB} alt="Bill photo" loading="lazy" decoding="async" /></button>)}
     </div>
   )
 }
@@ -527,7 +610,7 @@ function Viewer({ shots, at: start, label, onClose }) {
           <div key={s.storageId} className="vslide" onClick={onClose}>
             {full[s.storageId]
               ? <img src={full[s.storageId].url} alt={`Bill, page ${i + 1}`} onClick={(e) => e.stopPropagation()} />
-              : <Shot url={s.url} width={1200} alt={`Bill, page ${i + 1}`} onClick={(e) => e.stopPropagation()} />}
+              : <Shot url={s.url} width={SCREEN} alt={`Bill, page ${i + 1}`} onClick={(e) => e.stopPropagation()} />}
           </div>
         ))}
       </div>
