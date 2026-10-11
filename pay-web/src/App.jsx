@@ -22,11 +22,14 @@ export default function App() {
   const [picture, setPicture] = useState('')
   const [miss, setMiss] = useState(null)
   const [copied, setCopied] = useState('')
+  // The UPI ID was copied by the app itself, on the way to PhonePe.
+  const [held, setHeld] = useState(false)
   const fileInput = useRef(null)
   const sharedTaken = useRef(false)
 
-  const take = useCallback(async ({ photo, text }) => {
+  const take = useCallback(async ({ photo, text }, direct = false) => {
     setStage('reading')
+    setHeld(false)
     setPicture((old) => {
       if (old) URL.revokeObjectURL(old)
       return photo ? URL.createObjectURL(photo) : ''
@@ -44,7 +47,16 @@ export default function App() {
     if (found) {
       setPayee(found)
       setAmount(found.am)
-      return setStage('payee')
+      setStage('payee')
+      // Shared from another app: straight on to PhonePe, with no tap here. The
+      // UPI ID is copied on the way, ready to paste there if PhonePe refuses
+      // the link. Where the phone does not let a page open an app by itself,
+      // nothing happens and this screen is the way on.
+      if (direct) {
+        setHeld(await navigator.clipboard?.writeText(found.pa).then(() => true, () => false) ?? false)
+        location.href = payLinks(found, found.am).phonepe
+      }
+      return
     }
     setMiss(texts.length
       ? { title: 'This is not a payment QR', hint: 'It says:', said: texts[0] }
@@ -59,7 +71,7 @@ export default function App() {
     history.replaceState(null, '', '/')
     setStage('reading')
     takeShared().catch(() => null).then((shared) => {
-      if (shared) return take(shared)
+      if (shared) return take(shared, true)
       setMiss({ title: 'Nothing came through', hint: 'Share the QR photo to QR Pay again.' })
       setStage('miss')
     })
@@ -130,7 +142,7 @@ export default function App() {
             <div className="drop">
               <Icon d={QR} size={56} />
               <h1>Share a QR photo here</h1>
-              <p>In WhatsApp or Gallery open the QR photo, tap Share and pick QR Pay. It opens PhonePe straight on that payee.</p>
+              <p>In WhatsApp or Gallery open the QR photo, tap Share and pick QR Pay. PhonePe opens on that payee by itself.</p>
             </div>
             {choose}
             <p className="small">First time: open this page in Chrome, tap the menu and Add to Home screen. After that QR Pay shows in the Share menu.</p>
@@ -192,7 +204,9 @@ export default function App() {
             {links && <a className="other" href={links.any}>Pay with another UPI app</a>}
 
             <p className="small">Check the name PhonePe shows before you pay.</p>
-            <p className="small">PhonePe may refuse the link, or stop at ₹2,000, for a personal or small-shop QR. Then tap Copy UPI ID, open PhonePe, send money to a UPI ID and paste it there: that way takes any amount.</p>
+            {held
+              ? <p className="small">The UPI ID is already copied. If PhonePe refuses the link, or stops at ₹2,000, send money to a UPI ID there and paste it: that way takes any amount.</p>
+              : <p className="small">PhonePe may refuse the link, or stop at ₹2,000, for a personal or small-shop QR. Then tap Copy UPI ID, open PhonePe, send money to a UPI ID and paste it there: that way takes any amount.</p>}
 
             <button className="again" onClick={() => { setPayee(null); setStage('start') }}>Another QR</button>
           </>
