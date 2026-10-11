@@ -454,10 +454,22 @@ function CustomerPicker({ value, onChange, disabled }) {
 /** A picked or typed customer, as the server takes it. */
 const customerArgs = (c) => (c?.ledgerId ? { ledgerId: c.ledgerId } : c?.name?.trim() ? { title: c.name.trim() } : {})
 
-/** A new work order: its photo or photos, and who it is for. */
+/** Which of the list's three boxes a job is in: one of them, always. */
+function StagePick({ value, onChange }) {
+  return (
+    <div className="stages pick" role="group" aria-label="Which box it goes in">
+      {STAGES.map((s) => (
+        <button key={s.id} type="button" className={value === s.id ? 'on' : ''} aria-pressed={value === s.id} onClick={() => onChange(s.id)}>{s.label}</button>
+      ))}
+    </div>
+  )
+}
+
+/** A new work order: its photo or photos, who it is for, and which box it goes in. */
 function NewOrder({ onClose }) {
   const { picked, add, drop, take } = usePicked()
   const [customer, setCustomer] = useState(null)
+  const [stage, setStage] = useState('measurement')
   const camera = useRef(null)
   const gallery = useRef(null)
 
@@ -465,7 +477,7 @@ function NewOrder({ onClose }) {
   const send = () => {
     if (!picked.length) return
     const photos = take()
-    post({ customer: customerArgs(customer), title: customer?.name?.trim() ?? '', files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
+    post({ customer: { ...customerArgs(customer), stage }, title: customer?.name?.trim() ?? '', files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
     onClose()
   }
 
@@ -481,6 +493,7 @@ function NewOrder({ onClose }) {
           <button type="button" className="pick" onClick={() => gallery.current?.click()}><PhotosIcon /> Choose</button>
         </div>
         <CustomerPicker value={customer} onChange={setCustomer} />
+        <StagePick value={stage} onChange={setStage} />
         <div className="sheetbtns">
           <button type="button" className="ghost" onClick={onClose}>Cancel</button>
           <button type="button" className="solid" onClick={send} disabled={!picked.length}>Send to workshop</button>
@@ -612,14 +625,6 @@ function Thread({ job, onBack }) {
         </button>
         {contactsOf(job.phone)[0] && <a className="call" href={`tel:${contactsOf(job.phone)[0]}`} aria-label={`Call ${titleOf(job)}`}><PhoneIcon /></a>}
       </header>
-      <div className="stages inthread" role="group" aria-label="Where the work stands">
-        {STAGES.map((s) => (
-          <button key={s.id} type="button" className={stageId(job) === s.id ? 'on' : ''} aria-pressed={stageId(job) === s.id}
-            onClick={() => { if (stageId(job) !== s.id) setStage({ jobId: job.id, stage: s.id }).catch((err) => setError(said(err))) }}>
-            {s.label}
-          </button>
-        ))}
-      </div>
       {SIDE === 'shop' && (
         <div className="actions">
           <button type="button" onClick={() => setChoosing(job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: job.phone } : job.title ? { name: job.title } : null)}>
@@ -706,6 +711,7 @@ function Thread({ job, onBack }) {
             ) : (
               <p className="none">{job.ledgerId ? 'No phone number is saved for this customer in the panel.' : 'No customer account is attached to this order.'}</p>
             )}
+            <StagePick value={stageId(job)} onChange={(id) => { if (id !== stageId(job)) setStage({ jobId: job.id, stage: id }).catch((err) => setError(said(err))) }} />
             {mapLinkOf(job) && (
               <a className="maplink" href={mapLinkOf(job)} target="_blank" rel="noreferrer"><PinIcon size={20} /><span>Site location</span><em>Open map</em></a>
             )}

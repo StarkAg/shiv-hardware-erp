@@ -124,10 +124,12 @@ export const create = mutation({
   args: {
     ledgerId: v.optional(v.id('ledgers')),
     title: v.optional(v.string()),
+    // Which box it goes in on the list; measurement when the counter did not say.
+    stage: v.optional(stage),
     photos: v.array(v.id('_storage')),
     text: v.optional(v.string()),
   },
-  handler: async (ctx, { ledgerId, title, photos, text }) => {
+  handler: async (ctx, { ledgerId, title, stage, photos, text }) => {
     if (!photos.length) throw new ConvexError('Add a photo of the work order.')
     await checkPhotos(ctx, photos)
     const account = ledgerId ? await ctx.db.get(ledgerId) : null
@@ -144,6 +146,7 @@ export const create = mutation({
       // Kept beside the account too, so the job still has a name if the account is ever removed.
       title: clean(account ? bare(account.name) : title, 80),
       status: 'open',
+      ...(stage ? { stage } : {}),
       messages: [{ id: `${now}-0`, from: 'shop', photos, text: clean(text, 500), by: device?.name, at: now }],
       shopSeenAt: now,
       workshopSeenAt: 0,

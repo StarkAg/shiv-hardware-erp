@@ -15,7 +15,7 @@ describe('workshop: a work order as a chat in photos', () => {
     await expect(t.mutation(api.workshop.create, { photos: [] })).rejects.toThrow('photo')
 
     const first = await t.mutation(api.workshop.create, { title: '  Sanjay  Mahto,  Korambe ', photos: [order] })
-    const second = await t.mutation(api.workshop.create, { photos: [await photo()] })
+    const second = await t.mutation(api.workshop.create, { stage: 'assemble', photos: [await photo()] })
     let jobs = await t.query(api.workshop.list, {})
     expect(jobs.map((j) => j.number).sort()).toEqual([1, 2])
     let job = jobs.find((j) => j.id === first)!
@@ -29,8 +29,9 @@ describe('workshop: a work order as a chat in photos', () => {
       j.messages.filter((m) => m.from !== side && m.at > (side === 'shop' ? j.shopSeenAt : j.workshopSeenAt)).length
     expect([newTo(job, 'workshop'), newTo(job, 'shop')]).toEqual([1, 0])
 
-    // A new order is at measurement, and either side moves it on.
+    // A new order is at measurement unless the counter put it elsewhere, and either side moves it on.
     expect(job.stage).toBe('measurement')
+    expect(jobs.find((j) => j.id === second)!.stage).toBe('assemble')
     await t.mutation(api.workshop.setStage, { jobId: second, stage: 'fitting' })
     expect((await t.query(api.workshop.list, {})).map((j) => [j.number, j.stage]).sort()).toEqual([[1, 'measurement'], [2, 'fitting']])
 
