@@ -1,6 +1,14 @@
-/* Shiv Workshop and Workshop Counter — the shop's own look, the same parchment
-   and brass as the accounts and attendance apps, read like a chat. Big type
-   and big buttons: it is used on site, one-handed, often in the sun. */
+/* Shiv Workshop and Workshop Counter.
+ *
+ * The shop's own look, the same parchment and brass as the accounts and
+ * attendance apps. Two screens: the jobs as cards, and one job as a page built
+ * around its steps. Used on site, one-handed, often in the sun: big type, and
+ * nothing to tap smaller than a thumb.
+ *
+ * Colour means one thing each: green is done, brass is the step in hand and
+ * the button that does it, amber is "waiting on you", grey is still to come,
+ * red is delete and nothing else.
+ */
 :root {
   --bg: #e8e5df;          /* warm parchment */
   --card: #f3f0ea;
@@ -10,10 +18,15 @@
   --line: rgba(28, 25, 23, 0.12);
   --brass: #b9924b;
   --brass-ink: #201804;
+  --brass-tint: rgba(185, 146, 75, 0.16);
   --red: #9f1d20;
   --green: #1a7a4a;
+  --green-tint: rgba(26, 122, 74, 0.12);
   --amber: #b47016;
-  --mine: rgba(185, 146, 75, 0.24);   /* one's own bubbles */
+  --amber-tint: rgba(180, 112, 22, 0.14);
+  --lift: 0 1px 2px rgba(28, 25, 23, 0.06), 0 2px 8px rgba(28, 25, 23, 0.05);
+  --r: 16px;              /* a card's corner */
+  --r-in: 12px;           /* a button's, a field's */
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -26,36 +39,37 @@
     --line: rgba(255, 255, 255, 0.10);
     --brass: #c9a45c;
     --brass-ink: #1a1204;
+    --brass-tint: rgba(201, 164, 92, 0.16);
     --red: #d3595c;
     --green: #4fbf85;
+    --green-tint: rgba(79, 191, 133, 0.14);
     --amber: #d9a441;
-    --mine: rgba(201, 164, 92, 0.22);
+    --amber-tint: rgba(217, 164, 65, 0.15);
+    --lift: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body, #root { height: 100%; margin: 0; }
-body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--fg); background: var(--bg); font-size: 17px; }
+body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--fg); background: var(--bg); font-size: 17px; line-height: 1.3; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
-button:disabled { opacity: .5; cursor: default; }
+button:disabled { opacity: .45; cursor: default; }
+p { margin: 0; }
 
 .app { position: relative; display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; background: var(--bg); }
 
-.top { padding: calc(env(safe-area-inset-top) + 14px) 14px 10px; flex: none; }
+/* ── the list ──────────────────────────────────────────────────────────────── */
+.top { flex: none; padding: calc(env(safe-area-inset-top) + 14px) 14px 10px; }
 .brandrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .brandrow img { width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
 .brand { font-weight: 800; letter-spacing: 0.01em; font-size: 20px; line-height: 1.1; }
 
-/* Whether the list on screen is the live one. */
+/* Whether what is on screen is the live list. */
 .live { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .live i { width: 9px; height: 9px; border-radius: 50%; background: var(--amber); }
 .live.on { color: var(--green); }
 .live.on i { background: var(--green); animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(26, 122, 74, .45); } 50% { box-shadow: 0 0 0 6px rgba(26, 122, 74, 0); } }
 @media (prefers-reduced-motion: reduce) { .live.on i { animation: none; } }
-
-.tabs { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--card2); border: 1px solid var(--line); }
-.tabs button { flex: 1; padding: 10px 0; border-radius: 10px; font-size: 15px; font-weight: 800; color: var(--muted); }
-.tabs button.on { background: var(--brass); color: var(--brass-ink); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
 
 /* How far the saving of photos to the phone has got. */
 .saving { font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -65,105 +79,169 @@ button:disabled { opacity: .5; cursor: default; }
 .saving.ok { color: var(--green); }
 .saving.ok .savebar i { background: var(--green); }
 
-.searchbar { padding: 0 14px 10px; flex: none; display: flex; }
-.searchbar input { flex: 1; min-width: 0; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 16px; outline: none; }
+.searchbar { flex: none; display: flex; padding: 0 14px 10px; }
+.searchbar input { flex: 1; min-width: 0; padding: 11px 14px; border-radius: var(--r-in); border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 16px; outline: none; }
 .searchbar input:focus { border-color: var(--brass); }
 
 /* Which jobs to show: a row of small boxes under the search, an icon and a
    word each, all in one line with nothing to scroll. The count sits on the
    box's corner. To do is the one a phone opens on. */
-.filters { flex: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; padding: 0 14px 9px; }
+.filters { flex: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; padding: 0 14px 10px; }
 .filters button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 7px 1px 5px; border-radius: 11px; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
-.filters button span { max-width: 100%; font-size: 9.5px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+.filters button span { max-width: 100%; font-size: 9.5px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; white-space: nowrap; overflow: hidden; }
 .filters button b { position: absolute; top: -5px; right: -3px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--fg); color: var(--bg); font-size: 10px; line-height: 17px; text-align: center; font-variant-numeric: tabular-nums; }
 .filters button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
 .filters button.todo b { background: var(--green); color: #fff; }
 
-/* The jobs, as chats */
-.chats { list-style: none; margin: 0 14px; padding: 0 0 84px; overflow-y: auto; flex: 1; border-radius: 16px 16px 0 0; background: var(--card); border: 1px solid var(--line); border-bottom: 0; }
-.chats li > button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); }
-.chats li > button:active { background: var(--card2); }
-.chats .empty { padding: 34px 24px; text-align: center; color: var(--muted); line-height: 1.4; }
-.avatar { flex: none; width: 52px; height: 52px; border-radius: 12px; overflow: hidden; background: var(--card2); border: 1px solid var(--line); color: var(--brass); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; }
-.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.avatar.small { width: 40px; height: 40px; border-radius: 10px; font-size: 16px; }
-.avatar.big { width: 76px; height: 76px; border-radius: 50%; font-size: 32px; }
-button.who { text-align: left; }
-.who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.who b { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.who small { font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The jobs, a card each. */
+.jobs { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 2px 14px 96px; display: flex; flex-direction: column; gap: 9px; }
+.card { flex: none; position: relative; display: flex; align-items: stretch; border-radius: var(--r); border: 1px solid var(--line); background: var(--card); box-shadow: var(--lift); overflow: hidden; }
+/* Waiting on this side: marked down its edge, so the work in hand stands out of the list. */
+.card.mine { border-left: 4px solid var(--amber); }
+.card.over { opacity: .72; }
+.card .open { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 12px; text-align: left; }
+.card .open:active { background: var(--card2); }
+.thumb { flex: none; width: 58px; height: 58px; border-radius: var(--r-in); overflow: hidden; background: var(--card2); border: 1px solid var(--line); color: var(--brass); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.card .head, .card .sub, .card .foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.card .head b { flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .head time { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card .head time.new { color: var(--green); font-weight: 800; }
 /* Where the customer is: small, on one line, cut short rather than wrapped. */
-.who small.addr { font-size: 13px; }
-/* Where a job stands: still to be measured, or measured. */
-.stage { font-style: normal; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px; border-radius: 6px; margin-right: 6px; }
-.stage.wait { color: var(--amber); background: rgba(180, 112, 22, .14); }
-.stage.ok { color: var(--green); background: rgba(26, 122, 74, .13); }
-.side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.side time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.side time.new { color: var(--green); font-weight: 800; }
-/* How many the other side has sent since this thread was last open. */
-.badge { font-style: normal; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--green); color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.card .addr { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card small.bad { font-size: 13px; color: var(--red); font-weight: 700; }
+/* How many the other side has sent since this job was last open. */
+.badge { flex: none; font-style: normal; min-width: 21px; height: 21px; padding: 0 6px; border-radius: 11px; background: var(--green); color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.card .foot { margin-top: 1px; }
+.card .last { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .foot .boards { flex: 1; }
+/* What is waiting: in amber when it waits on this side. */
+.chip { flex: none; font-style: normal; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 3px 8px; border-radius: 7px; white-space: nowrap; }
+.chip.wait { color: var(--amber); background: var(--amber-tint); }
+.chip.idle { color: var(--muted); background: var(--card2); }
+.chip.done { color: var(--green); background: var(--green-tint); }
+/* A new order still on its way. */
+.card.outgoing .open { align-items: center; }
+.card.outgoing.sending { opacity: .8; }
+.card .drop { flex: none; align-self: center; width: 36px; height: 36px; margin-right: 10px; border-radius: 50%; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--red); }
+.jobs .empty { padding: 44px 24px; text-align: center; color: var(--muted); line-height: 1.4; }
 
-.fab { position: absolute; right: 22px; bottom: calc(env(safe-area-inset-bottom) + 18px); display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); font-size: 16px; font-weight: 800; box-shadow: 0 6px 18px rgba(0,0,0,.28); }
+.fab { position: absolute; right: 20px; bottom: calc(env(safe-area-inset-bottom) + 18px); display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); font-size: 16px; font-weight: 800; box-shadow: 0 6px 18px rgba(0,0,0,.28); }
 
-/* A job, as a chat */
-.chathead { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); background: var(--card); }
-.chathead .back { flex: none; width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); font-size: 26px; line-height: 1; padding-bottom: 3px; }
-.chathead .call { flex: none; color: var(--brass); padding: 9px; display: flex; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); }
-/* The counter's own row under the header: who it is for, done, delete. */
-.actions { flex: none; display: flex; gap: 8px; padding: 8px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
-.actions button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); font-size: 14px; font-weight: 800; }
-/* Who the job is for, at the head of the chat and always in view. */
-.custcard { flex: none; display: flex; flex-direction: column; gap: 7px; padding: 9px 12px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
-.custcard .names { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.custcard .names b { font-size: 17px; overflow-wrap: anywhere; }
-.custcard .names small { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-.custcard .links { display: flex; flex-wrap: wrap; gap: 7px; }
-.custcard .links a, .custcard .links button { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); text-decoration: none; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.custcard .links a svg { color: var(--brass); }
-.custcard .links button { color: var(--muted); font-size: 14px; }
-.thread { flex: 1; overflow-y: auto; padding: 8px 8px 12px; display: flex; flex-direction: column; gap: 5px; }
-.daytag { display: flex; justify-content: center; margin: 6px 0 2px; }
-.daytag span { background: var(--card2); border: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; }
-.bubble { max-width: 78%; padding: 5px 5px 4px; border-radius: 14px; border: 1px solid var(--line); }
-.bubble.left { align-self: flex-start; background: var(--card); border-top-left-radius: 4px; }
-.bubble.right { align-self: flex-end; background: var(--mine); border-top-right-radius: 4px; }
-.kind { font-size: 11px; font-weight: 800; color: var(--brass); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px 4px; }
-/* A message's photos: one fills the bubble, more share it two across. */
-.shots { display: grid; gap: 3px; grid-template-columns: 1fr; }
-.shots.n2, .shots.n3 { grid-template-columns: 1fr 1fr; }
-.shots button { display: block; border-radius: 10px; overflow: hidden; background: var(--card2); min-width: 0; }
-.shots img { display: block; width: 100%; height: auto; max-height: 52vh; object-fit: cover; }
-.shots.n1 button { width: min(66vw, 320px); min-height: 120px; }
-.shots.n2 img, .shots.n3 img { aspect-ratio: 1; height: 100%; }
-.bubble .text { padding: 5px 6px 0; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
-.bubble .meta { text-align: right; font-size: 11px; color: var(--muted); padding: 2px 5px 0; font-variant-numeric: tabular-nums; }
-/* A message, or a job in the list, is held to delete it, so holding must not
-   select its text or bring up the phone's own menu for the picture. */
+/* ── where a job stands ────────────────────────────────────────────────────── */
+/* On a card: five dots joined by a line. Done, the one in hand, still to come. */
+.minitrack { display: flex; align-items: center; gap: 0; height: 12px; }
+.minitrack i { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); margin-right: 22px; }
+.minitrack i:last-child { margin-right: 0; }
+.minitrack i:not(:last-child)::after { content: ''; position: absolute; top: 2px; left: 8px; width: 22px; height: 2px; background: var(--line); }
+.minitrack i.done { border-color: var(--green); background: var(--green); }
+.minitrack i.done:not(:last-child)::after { background: var(--green); }
+.minitrack i.now { border-color: var(--brass); background: var(--brass); box-shadow: 0 0 0 3px var(--brass-tint); }
+
+/* On a job's page: the five steps, numbered and named. */
+.tracker { list-style: none; margin: 0; padding: 14px 6px 4px; display: flex; }
+.tracker li { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.tracker li:not(:first-child)::before { content: ''; position: absolute; top: 14px; right: 50%; width: 100%; height: 3px; background: var(--line); }
+.tracker li.done::before, .tracker li.now::before { background: var(--green); }
+.tracker .dot { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--bg); color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tracker .word { max-width: 100%; font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tracker li.done .dot { border-color: var(--green); background: var(--green); color: #fff; }
+.tracker li.done .word { color: var(--green); }
+.tracker li.now .dot { border-color: var(--brass); background: var(--brass); color: var(--brass-ink); box-shadow: 0 0 0 4px var(--brass-tint); }
+.tracker li.now .word { color: var(--fg); font-weight: 800; }
+
+/* ── a job's page ──────────────────────────────────────────────────────────── */
+.pagehead { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 12px) 12px 12px; background: var(--card); border-bottom: 1px solid var(--line); }
+.pagehead .back, .pagehead .call { flex: none; width: 44px; height: 44px; border-radius: var(--r-in); border: 1px solid var(--line); background: var(--card2); display: flex; align-items: center; justify-content: center; }
+.pagehead .call { color: var(--brass); }
+.pagehead .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pagehead .who b { font-size: 19px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pagehead .who small { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px calc(env(safe-area-inset-bottom) + 24px); display: flex; flex-direction: column; gap: 12px; }
+
+/* The one thing to do now. Brass when it is this side's; quiet when it waits on the other. */
+.now { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--card); box-shadow: var(--lift); }
+.now.mine { border: 2px solid var(--brass); background: linear-gradient(var(--brass-tint), var(--brass-tint)), var(--card); }
+.now.over { border-color: var(--green); background: linear-gradient(var(--green-tint), var(--green-tint)), var(--card); }
+.nowhead { display: flex; align-items: flex-start; gap: 12px; }
+.nowhead .num { flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--card2); border: 1px solid var(--line); color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; }
+.now.mine .nowhead .num { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+.nowhead .num.done { background: var(--green); border-color: var(--green); color: #fff; }
+.nowhead > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nowhead small { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.now.mine .nowhead small { color: var(--amber); }
+.nowhead b { font-size: 22px; line-height: 1.15; }
+.nowhead p { font-size: 15px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+
+/* Buttons: the one that does the step is solid brass; the rest are quiet. */
+.row { display: flex; align-items: stretch; gap: 8px; }
+.btn { flex: none; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 16px; border-radius: var(--r-in); font-size: 16px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.btn.grow { flex: 1; min-width: 0; }
+.btn.big { min-height: 56px; font-size: 17px; }
+.btn.square { width: 52px; padding: 0; }
+.btn.solid { background: var(--brass); color: var(--brass-ink); }
+.btn.good { background: var(--green); color: #fff; }
+.btn.ghost { border: 1px solid var(--line); background: var(--card2); color: var(--fg); }
+.btn:active:not(:disabled) { filter: brightness(.95); }
+
+/* The work status: minus, the figure, plus. */
+.tally { display: flex; align-items: center; gap: 12px; }
+.tally .step { flex: none; width: 64px; min-height: 64px; padding: 0; font-size: 32px; line-height: 1; border-radius: var(--r); }
+.tally .figure { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; font-variant-numeric: tabular-nums; }
+.tally .figure b { font-size: 40px; line-height: 1; }
+.tally .figure small { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 3px; }
+
+/* A question with its answer: the boards to make, when to visit, whom to call. */
+.ask { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.ask input, .field { width: 100%; padding: 12px 14px; border-radius: var(--r-in); border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; font-size: 17px; font-weight: 400; letter-spacing: 0; text-transform: none; outline: none; }
+.ask input:focus, .field:focus { border-color: var(--brass); }
+.ask.inline { flex-direction: row; align-items: center; justify-content: space-between; }
+.ask.inline input { width: 104px; text-align: center; font-size: 20px; font-weight: 800; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card2); font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.chips button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+/* When to go and whom to ring, once the go-ahead is given. */
+.visit { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-in); background: var(--bg); border: 1px solid var(--line); }
+.visit span { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.visit b { font-size: 17px; }
+.visit .btn { min-height: 42px; padding: 0 12px; font-size: 15px; color: var(--brass); }
+
+/* Who it is for: every number to ring, the map, and at the counter the customer. */
+.customer { flex: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.customer a, .customer button { display: flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg); text-decoration: none; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.customer a svg { color: var(--brass); }
+.customer button { color: var(--muted); }
+
+/* Everything sent so far, a block for each step, the latest first. */
+.stepsec { flex: none; border-radius: var(--r); border: 1px solid var(--line); background: var(--card); overflow: hidden; }
+.stepsec > header { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+.stepsec .ico { flex: none; width: 32px; height: 32px; border-radius: 9px; background: var(--card2); color: var(--brass); display: flex; align-items: center; justify-content: center; }
+.stepsec header b { flex: 1; min-width: 0; font-size: 16px; }
+.stepsec header small { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.entry { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.entry + .entry { border-top: 1px solid var(--line); }
+.shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.shots button, .shots span { display: block; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: var(--card2); border: 1px solid var(--line); }
+.shots img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A marker: boards made, Complete, the go-ahead. */
+.mark { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 15px; font-weight: 700; color: var(--muted); }
+.mark b { font-size: 17px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.mark time { margin-left: auto; font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.mark.ok { align-items: center; color: var(--green); }
+.mark a { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--brass); text-decoration: none; font-weight: 800; }
+/* Still on its way: a shade lighter until it lands. */
+.entry.pending.sending .shots, .entry.pending.sending .mark { opacity: .65; }
+.state { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.state.bad { color: var(--red); }
+.state .x { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; }
+
+/* Something sent, or a job in the list, is held to delete it, so holding must
+   not select its text or bring up the phone's own menu for the picture. */
 .holdable, .holdable img { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.bubble.holdable:active { filter: brightness(.94); }
-.hint { align-self: center; max-width: 320px; margin: 12px 0 4px; padding: 9px 14px; border-radius: 12px; border: 1px dashed var(--brass); color: var(--muted); font-size: 14px; text-align: center; line-height: 1.35; }
+.entry.holdable:active { background: var(--card2); }
 
-/* The foot of a thread: photos, a line of text, send. */
-.composer { flex: none; padding: 8px 10px calc(env(safe-area-inset-bottom) + 10px); border-top: 1px solid var(--line); background: var(--card); }
-.composer .row { display: flex; align-items: center; gap: 8px; }
-.composer input[type='text'] { flex: 1; min-width: 0; padding: 12px 14px; border-radius: 22px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 16px; outline: none; }
-.composer input[type='text']:focus { border-color: var(--brass); }
-.composer .tool { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--card2); color: var(--muted); display: flex; align-items: center; justify-content: center; }
-.composer .go { flex: none; min-width: 48px; height: 48px; padding: 0 13px; border-radius: 24px; background: var(--brass); color: var(--brass-ink); font-size: 15px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
-.composer .go.grow { flex: 1; }
-/* The workshop's foot: the three lines that open its steps, and what is waiting. */
-.composer .tool.menu { width: 52px; height: 52px; border-radius: 16px; background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
-.composer .now { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kind.step { color: var(--green); }
-/* A marker in a bubble: boards made, Complete, the go-ahead. Said large, as it is the whole message. */
-.marker { display: flex; align-items: center; gap: 7px; padding: 4px 8px 2px; font-size: 16px; font-weight: 700; }
-.marker b { font-size: 22px; font-variant-numeric: tabular-nums; }
-.marker.small { font-size: 14px; color: var(--muted); }
-.marker.ok { color: var(--green); font-size: 17px; }
-.marker.goahead { flex-direction: column; align-items: flex-start; gap: 6px; }
-.marker.goahead b { font-size: 17px; }
-.marker.goahead a, .custcard .facts a { display: inline-flex; align-items: center; gap: 6px; color: var(--brass); text-decoration: none; font-weight: 800; }
+/* ── shared pieces ─────────────────────────────────────────────────────────── */
 /* How far the boards are, as a bar with its figure. */
 .boards { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .boards .track { flex: 1; height: 6px; min-width: 40px; border-radius: 3px; background: var(--card2); border: 1px solid var(--line); overflow: hidden; }
@@ -171,71 +249,54 @@ button.who { text-align: left; }
 .boards b { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .boards.full .track i { background: var(--green); }
 .boards.full b { color: var(--green); }
-.boards.big { flex: 1 1 100%; }
-.boards.big .track { height: 10px; border-radius: 5px; }
-.boards.big b { font-size: 15px; color: var(--fg); }
-/* A work status or Complete in the chat: one slim line across it, with its time. */
-.statusline { display: flex; justify-content: center; margin: 1px 0; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.statusline span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 13px; font-weight: 700; color: var(--muted); }
-.statusline b { font-size: 15px; color: var(--fg); font-variant-numeric: tabular-nums; }
-.statusline time { margin-left: 4px; font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
-.statusline.ok span { color: var(--green); border-color: var(--green); }
-/* The workshop's quick log while assembling: minus, the figure, plus, Complete. */
-.composer .row.tally { gap: 7px; }
-.composer .row.tally .tool.menu { width: 46px; height: 46px; border-radius: 14px; background: var(--card2); border-color: var(--line); color: var(--muted); }
-.composer .step { flex: none; width: 52px; height: 52px; border-radius: 16px; border: 1px solid var(--line); background: var(--card2); font-size: 28px; font-weight: 700; line-height: 1; }
-.composer .step.plus { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
-.composer .figure { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; font-size: 15px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.composer .figure b { font-size: 24px; line-height: 1; color: var(--fg); }
-.composer .figure small { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
-.composer .row.tally .go { height: 52px; padding: 0 11px; border-radius: 16px; background: var(--green); color: #fff; font-size: 14px; }
-/* On the card at the head of the chat: how far the boards are, and when to go. */
-.custcard .facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
-/* With the work order's photo: the boards it asks for. */
-.boardsask { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 2px 10px; font-size: 15px; font-weight: 700; color: var(--muted); }
-.boardsask input { width: 96px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 18px; font-weight: 800; text-align: center; outline: none; }
-/* How many boards: a number with a button either side. */
-.stepper { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 4px; }
-.stepper button { width: 56px; height: 56px; border-radius: 16px; border: 1px solid var(--line); background: var(--card2); font-size: 30px; font-weight: 700; line-height: 1; }
-.stepper input { width: 110px; padding: 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 30px; font-weight: 800; text-align: center; outline: none; font-variant-numeric: tabular-nums; }
-/* The go-ahead: when, and which number. */
-.asklabel { display: block; margin-top: 12px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.asklabel .field { margin-top: 6px; text-transform: none; letter-spacing: 0; font-weight: 400; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.chips button { padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card2); font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.chips button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
-.composer .now { white-space: normal; line-height: 1.25; }
-/* The steps, in the sheet the three lines open: done, now, not yet. */
-.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.steps button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card2); text-align: left; }
-.steps button.now { border-color: var(--brass); background: var(--mine); }
-.steps .mark { flex: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--card); border: 1px solid var(--line); color: var(--muted); }
-.steps button.now .mark { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
-.steps button.done .mark { color: var(--green); }
-.steps .what { display: flex; flex-direction: column; min-width: 0; }
-.steps .what b { font-size: 17px; }
-.steps .what small { font-size: 13px; color: var(--muted); }
-.composer .go.full { width: 100%; height: 54px; font-size: 17px; border-radius: 16px; }
-.spin { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 3px solid rgba(32, 24, 4, .25); border-top-color: var(--brass-ink); animation: spin .8s linear infinite; }
-.spin.dark { border-color: var(--line); border-top-color: var(--brass); }
-.spin.tiny { display: inline-block; vertical-align: -2px; width: 12px; height: 12px; border-width: 2px; }
-/* A send still on its way: in the thread or the list already, a shade lighter until it lands. */
-.bubble.outgoing .shots span { display: block; border-radius: 10px; overflow: hidden; }
-.bubble.outgoing.sending .shots, .bubble.outgoing.sending .text { opacity: .7; }
-.bubble .meta.bad { display: flex; justify-content: flex-end; align-items: center; gap: 8px; color: var(--red); font-size: 13px; font-weight: 800; padding-top: 5px; }
-.bubble .meta.bad button:last-child { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; }
-.chats li.outgoing { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
-.chats li.outgoing > button:first-child { flex: 1; min-width: 0; border-bottom: 0; }
-.chats li.outgoing .drop { flex: none; width: 34px; height: 34px; margin-right: 12px; border-radius: 50%; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--red); }
-.who small.bad { color: var(--red); font-weight: 700; white-space: normal; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.error { margin: 0 0 8px; color: var(--red); font-size: 14px; font-weight: 700; }
-/* Photos chosen and not yet sent. */
-.picked { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; }
-.picked span { position: relative; flex: none; width: 76px; height: 76px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
-.picked img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.picked button { position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; display: flex; align-items: center; justify-content: center; }
+.boards.big .track { height: 12px; border-radius: 6px; }
+.boards.big .track i { border-radius: 6px; }
+.boards.big b { font-size: 16px; color: var(--fg); }
 
+/* Photos chosen and not yet sent. */
+.picked { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }
+.picked span { position: relative; flex: none; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+.picked img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.picked button { position: absolute; top: 3px; right: 3px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; display: flex; align-items: center; justify-content: center; }
+
+.spin { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--brass); animation: spin .8s linear infinite; }
+.spin.tiny { display: inline-block; width: 12px; height: 12px; border-width: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error { color: var(--red); font-size: 14px; font-weight: 700; }
+
+/* A small sheet over the screen: a new order, Complete, the customer, a delete. */
+.sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.sheet { width: 100%; max-width: 360px; max-height: 100%; overflow-y: auto; padding: 20px; border-radius: 20px; background: var(--card); color: var(--fg); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.sheet.wide { max-width: 440px; }
+.sheet p { margin: 8px 0 14px; color: var(--muted); font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.sheet p.error { color: var(--red); margin: 10px 0 0; }
+.sheet .field { margin-top: 12px; }
+.sheettitle { font-size: 20px; }
+.field.pin { text-align: center; font-size: 22px; letter-spacing: 6px; }
+.sheetbtns { display: flex; gap: 10px; margin-top: 18px; }
+.sheetbtns button { flex: 1; min-height: 50px; border-radius: var(--r-in); font-size: 16px; font-weight: 800; }
+.sheetbtns .ghost { border: 1px solid var(--line); background: var(--card2); }
+.sheetbtns .solid { background: var(--brass); color: var(--brass-ink); }
+.sheetbtns .solid.danger { background: var(--red); color: #fff; }
+/* A new visit order: take a photo, or choose one. */
+.pickrow { display: flex; gap: 10px; margin-top: 10px; }
+.pick { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 8px; border-radius: 14px; border: 1px dashed var(--brass); background: var(--card2); color: var(--brass); font-size: 15px; font-weight: 800; }
+/* Who it is for: the accounts that match what is typed, then the one picked. */
+.picker { margin-top: 12px; }
+.picker .field { margin-top: 0; }
+.found { list-style: none; margin: 6px 0 0; padding: 0; max-height: 236px; overflow-y: auto; border-radius: var(--r-in); border: 1px solid var(--line); background: var(--bg); }
+.found button { display: flex; flex-direction: column; gap: 1px; width: 100%; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+.found li:last-child button { border-bottom: 0; }
+.found b { font-size: 16px; overflow-wrap: anywhere; }
+.found small { font-size: 13px; color: var(--muted); }
+.sheet p.pickhint { margin: 6px 2px 0; font-size: 13px; }
+.chosen { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: var(--r-in); border: 1px solid var(--brass); background: var(--brass-tint); color: var(--fg); }
+.chosen span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.chosen b { font-size: 16px; overflow-wrap: anywhere; }
+.chosen small { font-size: 13px; color: var(--muted); }
+.chosen button { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); display: flex; align-items: center; justify-content: center; }
+
+/* ── over everything: the camera, and a photo full screen ─────────────────── */
 /* The camera, live, over everything: what it sees, the shutter under it, and
    what has been shot so far waiting to be used. */
 .camera { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; display: flex; flex-direction: column; }
@@ -280,47 +341,3 @@ button.who { text-align: left; }
 .vdots i.on { background: #fff; }
 .vnote { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 34px); margin: 0 auto; max-width: 420px; padding: 11px 14px; border-radius: 12px; background: rgba(40,37,33,.94); border: 1px solid rgba(255,255,255,.18); text-align: center; font-size: 15px; font-weight: 700; }
 
-/* Who a job is for: the name in full, every number to ring, and the site on the map when there is one. */
-.sheet.customer { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
-.customer .fullname { font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; margin-top: 4px; }
-.customer .sub { font-size: 14px; color: var(--muted); }
-.customer .contacts { list-style: none; margin: 10px 0 0; padding: 0; align-self: stretch; display: flex; flex-direction: column; gap: 8px; }
-.customer .contacts a, .customer .maplink { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); text-decoration: none; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.customer .contacts a svg, .customer .maplink svg { flex: none; color: var(--brass); }
-.customer .contacts span, .customer .maplink span { flex: 1; text-align: left; }
-.customer .contacts em, .customer .maplink em { font-style: normal; font-size: 13px; color: var(--brass); text-transform: uppercase; letter-spacing: .06em; }
-.customer .maplink { align-self: stretch; margin-top: 8px; font-size: 16px; }
-.sheet.customer p.none { margin: 10px 0 0; }
-.sheet.customer .sheetbtns { align-self: stretch; }
-
-/* A small sheet over the screen: a new order, and the delete question. */
-.sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 20px; }
-.sheet { width: 100%; max-width: 360px; max-height: 100%; overflow-y: auto; padding: 20px; border-radius: 18px; background: var(--card); color: var(--fg); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
-.sheet.wide { max-width: 440px; }
-.sheet p { margin: 8px 0 14px; color: var(--muted); font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
-.sheet p.error { color: var(--red); margin: 10px 0 0; }
-.sheettitle { font-size: 19px; }
-.pickrow { display: flex; gap: 10px; }
-.pick { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 8px; border-radius: 14px; border: 1px dashed var(--brass); background: var(--card2); color: var(--brass); font-size: 15px; font-weight: 800; }
-/* Who it is for: the accounts that match what is typed, then the one picked. */
-.picker { margin-top: 12px; }
-.picker .field { margin-top: 0; }
-.found { list-style: none; margin: 6px 0 0; padding: 0; max-height: 236px; overflow-y: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
-.found button { display: flex; flex-direction: column; gap: 1px; width: 100%; padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); }
-.found li:last-child button { border-bottom: 0; }
-.found b { font-size: 16px; overflow-wrap: anywhere; }
-.found small { font-size: 13px; color: var(--muted); }
-.sheet p.pickhint { margin: 6px 2px 0; font-size: 13px; }
-.chosen { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--brass); background: var(--mine); color: var(--fg); }
-.chosen span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.chosen b { font-size: 16px; overflow-wrap: anywhere; }
-.chosen small { font-size: 13px; color: var(--muted); }
-.chosen button { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); display: flex; align-items: center; justify-content: center; }
-.field { width: 100%; margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 16px; outline: none; }
-.field:focus { border-color: var(--brass); }
-.field.pin { text-align: center; font-size: 22px; letter-spacing: 6px; }
-.sheetbtns { display: flex; gap: 10px; margin-top: 18px; }
-.sheetbtns button { flex: 1; padding: 13px 0; border-radius: 12px; font-size: 16px; font-weight: 800; }
-.sheetbtns .ghost { border: 1px solid var(--line); background: var(--card2); }
-.sheetbtns .solid { background: var(--brass); color: var(--brass-ink); }
-.sheetbtns .solid.danger { background: var(--red); color: #fff; }
