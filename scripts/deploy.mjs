@@ -65,6 +65,9 @@ const TARGETS = [
   site('qr', 'qr-redirect', 'gcvf', 'gcvf.vercel.app', 'Guarantee QR link'),
   site('khata', 'khata-web', 'shivhardware-khata', 'shivhardware-khata.vercel.app', 'Shiv Accounts (accounts to read)'),
   site('mechanic', 'mechanic-web', 'shivhardware-mechanic', 'shivhardware-mechanic.vercel.app', 'Shiv Mechanic (site sizes)'),
+  // One folder, two sites: the address says which app it is (workshop-web/src/side.js).
+  site('workshop', 'workshop-web', 'shivhardware-workshop', 'shivhardware-workshop.vercel.app', 'Shiv Workshop (Gopal & Bandhu)'),
+  site('workshop-counter', 'workshop-web', 'shivhardware-workshop-counter', 'shivhardware-workshop-counter.vercel.app', 'Shiv Workshop Counter (work orders in photos)'),
   { ...site('billshoot', 'billshoot-web', 'billshoot-web', 'shivhardware-billshoot.vercel.app', 'Bill Shoot'), optional: 'not live yet: its page model is still training' },
   { id: 'print-server', kind: 'print-server', label: 'Print server (shop PC)', paths: ['print-server'] },
   { id: 'quotation', kind: 'quotation', label: 'Shiv Counter app (shop PC)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs', 'electron-builder.quotation.cjs'] },

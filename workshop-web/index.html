@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#e8e5df" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Shiv Workshop</title>
+    <script>
+      // One build, two apps: the address says which (src/side.js), and with it
+      // the name, the icon and the manifest a phone installs it by.
+      (function () {
+        var shop = /counter/i.test(location.hostname) || /[?&]side=shop\b/.test(location.search)
+        var dir = shop ? '/counter' : '/workshop'
+        var name = shop ? 'Shiv Workshop Counter' : 'Shiv Workshop'
+        document.title = name
+        var add = function (tag, attrs) {
+          var el = document.createElement(tag)
+          for (var key in attrs) el.setAttribute(key, attrs[key])
+          document.head.appendChild(el)
+        }
+        add('link', { rel: 'manifest', href: dir + '/manifest.webmanifest' })
+        add('link', { rel: 'icon', type: 'image/png', href: dir + '/icon-192.png' })
+        add('link', { rel: 'apple-touch-icon', href: dir + '/apple-touch-icon.png' })
+        add('meta', { name: 'apple-mobile-web-app-title', content: shop ? 'W Counter' : 'Workshop' })
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

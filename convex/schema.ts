@@ -1073,4 +1073,33 @@ export default defineSchema({
   })
     .index("by_brand", ["brand"])
     .index("by_code", ["code"]),
+
+  /**
+   * Workshop: a work order as a conversation, in pictures (convex/workshop.ts).
+   *
+   * One row is one job and its whole thread: the counter's photographs of the
+   * order, the workshop's photographs of the measurements, and any line typed
+   * with them. A thread is a handful of messages, so they live on the row and
+   * one read gives a phone everything it shows.
+   */
+  workshopJobs: defineTable({
+    number: v.number(),
+    // Who or where it is for, when the counter typed it; the photo says the rest.
+    title: v.optional(v.string()),
+    status: v.union(v.literal('open'), v.literal('done')),
+    messages: v.array(v.object({
+      id: v.string(),
+      from: v.union(v.literal('shop'), v.literal('workshop')),
+      photos: v.array(v.id('_storage')),
+      text: v.optional(v.string()),
+      // The device it was sent from, as the Trusted devices list names it.
+      by: v.optional(v.string()),
+      at: v.number(),
+    })),
+    // When each side last had the thread open: what came after is new to it.
+    shopSeenAt: v.number(),
+    workshopSeenAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_status_updated', ['status', 'updatedAt']),
 })

@@ -78,6 +78,7 @@ import type * as voucherInbox from "../voucherInbox.js";
 import type * as vouchers from "../vouchers.js";
 import type * as whatsapp from "../whatsapp.js";
 import type * as workOrders from "../workOrders.js";
+import type * as workshop from "../workshop.js";
 
 import type {
   ApiFromModules,
@@ -156,6 +157,7 @@ declare const fullApi: ApiFromModules<{
   vouchers: typeof vouchers;
   whatsapp: typeof whatsapp;
   workOrders: typeof workOrders;
+  workshop: typeof workshop;
 }>;
 
 /**
