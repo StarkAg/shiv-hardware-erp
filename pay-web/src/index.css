@@ -10,7 +10,7 @@
   --brass: #b9924b;
   --brass-ink: #201804;
   --red: #9f1d20;
-  --pay: #5f259f;         /* PhonePe's purple, so the button says where it goes */
+  --pay: #1a7a4a;         /* the shop's green for money, as in Shiv Accounts */
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -24,7 +24,7 @@
     --brass: #c9a45c;
     --brass-ink: #1a1204;
     --red: #d3595c;
-    --pay: #7b3fc4;
+    --pay: #1f8a55;
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }

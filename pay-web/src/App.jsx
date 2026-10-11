@@ -67,7 +67,7 @@ export default function App() {
   const [picture, setPicture] = useState('')
   const [miss, setMiss] = useState(null)
   const [copied, setCopied] = useState('')
-  // The UPI ID was copied by the app itself, on the way to PhonePe.
+  // The UPI ID was copied by the app itself, on the way to the UPI app.
   const [held, setHeld] = useState(false)
   const fileInput = useRef(null)
   const sharedTaken = useRef(false)
@@ -93,13 +93,15 @@ export default function App() {
       setPayee(found)
       setAmount(found.am)
       setStage('payee')
-      // Shared from another app: straight on to PhonePe, with no tap here. The
-      // UPI ID is copied on the way, ready to paste there if PhonePe refuses
-      // the link. Where the phone does not let a page open an app by itself,
+      // Shared from another app: straight on to the phone's UPI apps, with no
+      // tap here. It is the plain UPI link, not one app's by name: sent to
+      // PhonePe by name, Chrome first asks whether this site may open it. The
+      // UPI ID is copied on the way, ready to paste if the app refuses the
+      // link. Where the phone does not let a page open an app by itself,
       // nothing happens and this screen is the way on.
       if (direct) {
         setHeld(await navigator.clipboard?.writeText(found.pa).then(() => true, () => false) ?? false)
-        location.href = payLinks(found, found.am).phonepe
+        location.href = payLinks(found, found.am).any
       }
       return
     }
@@ -195,7 +197,7 @@ export default function App() {
               <p>Scan it, or upload its photo.</p>
             </div>
             {choose}
-            <p className="small">From WhatsApp or Gallery: open the QR photo, tap Share and pick QR Pay. PhonePe opens on that payee by itself.</p>
+            <p className="small">From WhatsApp or Gallery: open the QR photo, tap Share and pick QR Pay. Your UPI app opens on that payee by itself.</p>
             <p className="small">First time: open this page in Chrome, tap the menu and Add to Home screen. After that QR Pay shows in the Share menu.</p>
           </>
         )}
@@ -233,7 +235,7 @@ export default function App() {
               <input
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="type it in PhonePe"
+                placeholder="type it in the UPI app"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
@@ -241,25 +243,25 @@ export default function App() {
             {clean === null && <p className="warn">Type the amount in figures, such as 12500 or 12500.50</p>}
 
             {links
-              ? <a className="pay" href={links.phonepe}>Pay in PhonePe</a>
-              : <button className="pay" disabled>Pay in PhonePe</button>}
+              ? <a className="pay" href={links.any}>Pay with UPI app</a>
+              : <button className="pay" disabled>Pay with UPI app</button>}
 
             <div className="choose">
               <button className="btn" onClick={() => copy('upi', payee.pa)}>
                 <Icon d={copied === 'upi' ? DONE : COPY} /> {copied === 'upi' ? 'Copied' : 'Copy UPI ID'}
               </button>
               {links && (
-                <button className="btn" onClick={() => copy('link', links.phonepeText)}>
+                <button className="btn" onClick={() => copy('link', links.any)}>
                   <Icon d={copied === 'link' ? DONE : COPY} /> {copied === 'link' ? 'Copied' : 'Copy link'}
                 </button>
               )}
             </div>
-            {links && <a className="other" href={links.any}>Pay with another UPI app</a>}
+            {links && <a className="other" href={links.phonepe}>Open in PhonePe only</a>}
 
-            <p className="small">Check the name PhonePe shows before you pay.</p>
+            <p className="small">Check the name the UPI app shows before you pay.</p>
             {held
-              ? <p className="small">The UPI ID is already copied. If PhonePe refuses the link, or stops at ₹2,000, send money to a UPI ID there and paste it: that way takes any amount.</p>
-              : <p className="small">PhonePe may refuse the link, or stop at ₹2,000, for a personal or small-shop QR. Then tap Copy UPI ID, open PhonePe, send money to a UPI ID and paste it there: that way takes any amount.</p>}
+              ? <p className="small">The UPI ID is already copied. If the UPI app refuses the link, or stops at ₹2,000, send money to a UPI ID there and paste it: that way takes any amount.</p>
+              : <p className="small">The UPI app may refuse the link, or stop at ₹2,000, for a personal or small-shop QR. Then tap Copy UPI ID, open the app, send money to a UPI ID and paste it there: that way takes any amount.</p>}
 
             <button className="again" onClick={() => { setPayee(null); setStage('start') }}>Another QR</button>
           </>

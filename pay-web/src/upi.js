@@ -102,11 +102,11 @@ const ANDROID = typeof navigator !== 'undefined' && /Android/i.test(navigator.us
 export function payLinks(payee, amount) {
   const query = payQuery(payee, amount)
   return {
+    // The plain UPI link: the phone offers every UPI app on it (or goes to the
+    // one set as the usual). This is the one used by default and when copied.
+    any: `upi://pay?${query}`,
     // On Android the UPI link is handed to PhonePe by name, so no app chooser
     // comes up; the iPhone has only PhonePe's own kind of link.
     phonepe: ANDROID ? `intent://pay?${query}#Intent;scheme=upi;package=com.phonepe.app;end` : `phonepe://pay?${query}`,
-    // The link as text, to copy or send.
-    phonepeText: `phonepe://pay?${query}`,
-    any: `upi://pay?${query}`,
   }
 }
