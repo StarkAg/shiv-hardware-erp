@@ -18,9 +18,9 @@ import { BUBBLE, SMALL, savePhotos, sized } from './offline.js'
  * the books have them today, with a button to ring the customer.
  *
  * Every photo is saved on the phone as the app opens (src/offline.js), so a
- * thread opens at once and can be read on a site with no signal. The counter
- * can take a message out of a thread by holding a finger on it, with its
- * delete PIN.
+ * thread opens at once and can be read on a site with no signal. Holding a
+ * finger on a message takes it out of its thread, and on a job in the list
+ * takes the whole work order off it: on either phone, with the delete PIN.
  *
  * Read like a chat app on both sides: a list of jobs with what is new on
  * each, and a thread per job, one's own photos on the right. Everything is a
@@ -293,6 +293,11 @@ function List({ jobs, onOpen, onNew, saving }) {
   const count = (id) => (jobs ?? []).filter((j) => stageId(j) === id).length
   // New orders still on their way: shown at the head of the list from the moment they are sent.
   const sending = useOutbox().filter((item) => !item.jobId)
+  const remove = useMutation(api.workshop.remove)
+  // The work order about to be deleted, once a finger has been held on it.
+  const [deleting, setDeleting] = useState(null)
+  const holdToDelete = useHold(setDeleting)
+  const photosIn = (job) => job.messages.reduce((n, m) => n + m.photos.length, 0)
 
   return (
     <div className="app">
@@ -337,7 +342,7 @@ function List({ jobs, onOpen, onNew, saving }) {
             ? `${last.from === SIDE ? 'You: ' : ''}${last.photos.length ? (last.photos.length > 1 ? `${last.photos.length} photos` : 'Photo') : ''}${last.photos.length && last.text ? ' · ' : ''}${last.text}`
             : ''
           return (
-            <li key={job.id}>
+            <li key={job.id} className="holdable" {...holdToDelete(job)}>
               <button type="button" onClick={() => onOpen(job.id)}>
                 <span className="avatar">{first ? <Shot url={first.url} width={SMALL} alt="" loading="lazy" decoding="async" /> : titleOf(job)[0]?.toUpperCase()}</span>
                 <span className="who">
@@ -363,6 +368,12 @@ function List({ jobs, onOpen, onNew, saving }) {
       {SIDE === 'shop' && (
         <button type="button" className="fab" onClick={onNew}><PlusIcon /> New order</button>
       )}
+      {deleting && (
+        <DeleteSheet title="Delete this work order?" onClose={() => setDeleting(null)} run={(pin) => remove({ jobId: deleting.id, pin })}>
+          {titleOf(deleting)}{photosIn(deleting) ? ` · ${photosIn(deleting)} ${photosIn(deleting) === 1 ? 'photo' : 'photos'}` : ''}
+          <br />The whole work order is removed for both sides, for good.
+        </DeleteSheet>
+      )}
     </div>
   )
 }
@@ -372,6 +383,77 @@ function List({ jobs, onOpen, onNew, saving }) {
 const heldPin = { pin: '', until: 0 }
 const pinStillGood = () => heldPin.until > Date.now()
 const holdPin = (pin) => { heldPin.pin = pin; heldPin.until = Date.now() + 5 * 60_000 }
+
+/**
+ * Holding a finger for half a second on a message (its photo or its text) or
+ * on a job in the list asks to delete it: `onHold` is told which. A finger
+ * that moves is scrolling, not holding; and the tap that ends a hold does not
+ * also open what was held.
+ */
+function useHold(onHold) {
+  const press = useRef({ timer: 0, x: 0, y: 0, held: false })
+  useEffect(() => () => clearTimeout(press.current.timer), [])
+  return (what) => ({
+    onPointerDown: (e) => {
+      const p = press.current
+      clearTimeout(p.timer)
+      p.held = false
+      p.x = e.clientX
+      p.y = e.clientY
+      p.timer = setTimeout(() => { p.held = true; navigator.vibrate?.(15); onHold(what) }, 550)
+    },
+    onPointerMove: (e) => { const p = press.current; if (Math.abs(e.clientX - p.x) > 10 || Math.abs(e.clientY - p.y) > 10) clearTimeout(p.timer) },
+    onPointerUp: () => clearTimeout(press.current.timer),
+    onPointerCancel: () => clearTimeout(press.current.timer),
+    onPointerLeave: () => clearTimeout(press.current.timer),
+    // The phone's own long-press menu (save image, copy) would come up over the question.
+    onContextMenu: (e) => e.preventDefault(),
+    onClickCapture: (e) => { if (press.current.held) { press.current.held = false; e.stopPropagation(); e.preventDefault() } },
+  })
+}
+
+/**
+ * The question before anything is deleted, with the delete PIN typed under
+ * it. `run(pin)` does the deleting; a PIN the books refuse is asked for again.
+ */
+function DeleteSheet({ title, children, run, onClose }) {
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState('')
+  const [checking, setChecking] = useState(false)
+  const confirm = async () => {
+    const code = pinStillGood() ? heldPin.pin : pin.trim()
+    if (!code || checking) return
+    setChecking(true)
+    setError('')
+    try {
+      await run(code)
+      holdPin(code)
+      onClose()
+    } catch (err) {
+      heldPin.until = 0
+      setPin('')
+      setError(said(err))
+      setChecking(false)
+    }
+  }
+  return (
+    <div className="sheetback" onClick={checking ? undefined : onClose}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+        <b className="sheettitle">{title}</b>
+        <p>{children}</p>
+        {!pinStillGood() && (
+          <input className="field pin" type="password" inputMode="numeric" autoComplete="off" placeholder="Delete PIN" value={pin} autoFocus
+            onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void confirm() }} />
+        )}
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="sheetbtns">
+          <button type="button" className="ghost" onClick={onClose} disabled={checking}>Cancel</button>
+          <button type="button" className="solid danger" onClick={confirm} disabled={checking || (!pinStillGood() && !pin.trim())}>{checking ? 'Checking' : 'Delete'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** Photos chosen and not yet sent, each with its own preview. */
 function usePicked() {
@@ -519,52 +601,9 @@ function Thread({ job, onBack }) {
   // Who the job is for, in a window of its own. It opens by itself the first
   // time this side opens a job that names somebody, and from the header after.
   const [info, setInfo] = useState(() => (job[`${SIDE}SeenAt`] ?? 0) === 0 && !!(job.title || job.phone))
-  // The message the counter is about to delete, and the PIN being typed for it.
+  // The message about to be deleted, once a finger has been held on it.
   const [deleting, setDeleting] = useState(null)
-  const [pin, setPin] = useState('')
-  const [pinError, setPinError] = useState('')
-  const [checking, setChecking] = useState(false)
-  const askDelete = (m) => { setDeleting(m); setPin(''); setPinError('') }
-  /**
-   * At the counter, holding a finger on a message (its photo or its text)
-   * for half a second asks to delete it. A finger that moves is scrolling,
-   * not holding; and the tap that ends a hold does not also open the photo.
-   */
-  const press = useRef({ timer: 0, x: 0, y: 0, held: false })
-  const holdToDelete = (m) => (SIDE !== 'shop' ? {} : {
-    onPointerDown: (e) => {
-      const p = press.current
-      clearTimeout(p.timer)
-      p.held = false
-      p.x = e.clientX
-      p.y = e.clientY
-      p.timer = setTimeout(() => { p.held = true; navigator.vibrate?.(15); askDelete(m) }, 550)
-    },
-    onPointerMove: (e) => { const p = press.current; if (Math.abs(e.clientX - p.x) > 10 || Math.abs(e.clientY - p.y) > 10) clearTimeout(p.timer) },
-    onPointerUp: () => clearTimeout(press.current.timer),
-    onPointerCancel: () => clearTimeout(press.current.timer),
-    onPointerLeave: () => clearTimeout(press.current.timer),
-    // The phone's own long-press menu (save image, copy) would come up over the question.
-    onContextMenu: (e) => e.preventDefault(),
-    onClickCapture: (e) => { if (press.current.held) { press.current.held = false; e.stopPropagation(); e.preventDefault() } },
-  })
-  const confirmDelete = async () => {
-    const code = pinStillGood() ? heldPin.pin : pin.trim()
-    if (!code || checking) return
-    setChecking(true)
-    setPinError('')
-    try {
-      await removeMessage({ jobId: job.id, messageId: deleting.id, pin: code })
-      holdPin(code)
-      setDeleting(null)
-    } catch (err) {
-      heldPin.until = 0
-      setPin('')
-      setPinError(said(err))
-    } finally {
-      setChecking(false)
-    }
-  }
+  const holdToDelete = useHold(setDeleting)
   const camera = useRef(null)
   const gallery = useRef(null)
   const end = useRef(null)
@@ -639,7 +678,7 @@ function Thread({ job, onBack }) {
           const m = it.m
           const mine = m.from === SIDE
           return (
-            <div key={it.key} className={`bubble ${mine ? 'right' : 'left'}${SIDE === 'shop' ? ' holdable' : ''}`} {...holdToDelete(m)}>
+            <div key={it.key} className={`bubble holdable ${mine ? 'right' : 'left'}`} {...holdToDelete(m)}>
               {!mine && <div className="kind">{SIDE_NAME[m.from]}</div>}
               {m.photos.length > 0 && (
                 <div className={`shots n${Math.min(m.photos.length, 3)}`}>
@@ -738,24 +777,10 @@ function Thread({ job, onBack }) {
         </div>
       )}
       {deleting && (
-        <div className="sheetback" onClick={checking ? undefined : () => setDeleting(null)}>
-          <div className="sheet" role="dialog" aria-modal="true" aria-label="Delete this message" onClick={(e) => e.stopPropagation()}>
-            <b className="sheettitle">Delete this message?</b>
-            <p>
-              {SIDE_NAME[deleting.from]}, {clock(deleting.at)}{deleting.photos.length ? ` · ${deleting.photos.length} ${deleting.photos.length === 1 ? 'photo' : 'photos'}` : ''}
-              <br />It is removed for both sides, for good.{job.messages.length === 1 ? ' It is the only message here, so the work order goes with it.' : ''}
-            </p>
-            {!pinStillGood() && (
-              <input className="field pin" type="password" inputMode="numeric" autoComplete="off" placeholder="Delete PIN" value={pin} autoFocus
-                onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void confirmDelete() }} />
-            )}
-            {pinError && <p className="error" role="alert">{pinError}</p>}
-            <div className="sheetbtns">
-              <button type="button" className="ghost" onClick={() => setDeleting(null)} disabled={checking}>Cancel</button>
-              <button type="button" className="solid danger" onClick={confirmDelete} disabled={checking || (!pinStillGood() && !pin.trim())}>{checking ? 'Checking' : 'Delete'}</button>
-            </div>
-          </div>
-        </div>
+        <DeleteSheet title="Delete this message?" onClose={() => setDeleting(null)} run={(pin) => removeMessage({ jobId: job.id, messageId: deleting.id, pin })}>
+          {SIDE_NAME[deleting.from]}, {clock(deleting.at)}{deleting.photos.length ? ` · ${deleting.photos.length} ${deleting.photos.length === 1 ? 'photo' : 'photos'}` : ''}
+          <br />It is removed for both sides, for good.{job.messages.length === 1 ? ' It is the only message here, so the work order goes with it.' : ''}
+        </DeleteSheet>
       )}
     </div>
   )

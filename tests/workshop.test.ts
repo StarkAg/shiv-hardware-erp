@@ -53,7 +53,7 @@ describe('workshop: a work order as a chat in photos', () => {
     expect(jobs.find((j) => j.id === first)).toMatchObject({ status: 'done' })
     expect(jobs.find((j) => j.id === first)!.messages).toHaveLength(2)
 
-    // A message is taken out only with the counter's delete PIN.
+    // A message is taken out only with the delete PIN.
     const [sent, replied] = jobs.find((j) => j.id === first)!.messages
     process.env.WORKSHOP_DELETE_PIN = '4321'
     await expect(t.mutation(api.workshop.removeMessage, { jobId: first, messageId: replied.id, pin: '1234' })).rejects.toThrow('Wrong PIN')
@@ -77,6 +77,34 @@ describe('workshop: a work order as a chat in photos', () => {
     // The next order does not take the removed one's number.
     const third = await t.mutation(api.workshop.create, { photos: [await photo()] })
     expect((await t.query(api.workshop.list, {})).find((j) => j.id === third)!.number).toBe(3)
+  })
+
+  it('takes a whole work order off the list, with every photo in it, only with the delete PIN', async () => {
+    const t = convexTest(schema, modules)
+    const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
+    const [order, measured, other] = [await photo(), await photo(), await photo()]
+    const gone = await t.mutation(api.workshop.create, { title: 'Sanjay Mahto', photos: [order] })
+    await t.mutation(api.workshop.send, { jobId: gone, from: 'workshop', photos: [measured], text: 'Two doors' })
+    const kept = await t.mutation(api.workshop.create, { photos: [other] })
+
+    // No PIN on the deployment, or the wrong one: it stays, photos and all.
+    delete process.env.WORKSHOP_DELETE_PIN
+    await expect(t.mutation(api.workshop.remove, { jobId: gone, pin: '4321' })).rejects.toThrow('No delete PIN')
+    process.env.WORKSHOP_DELETE_PIN = '4321'
+    await expect(t.mutation(api.workshop.remove, { jobId: gone, pin: '1234' })).rejects.toThrow('Wrong PIN')
+    await expect(t.mutation(api.workshop.remove, { jobId: gone, pin: '' })).rejects.toThrow('Wrong PIN')
+    expect((await t.query(api.workshop.list, {})).map((j) => j.id).sort()).toEqual([gone, kept].sort())
+    expect(await t.run((ctx) => ctx.storage.getUrl(measured))).toBeTruthy()
+
+    // With it, the job and both sides' photos go; the other job is not touched.
+    await t.mutation(api.workshop.remove, { jobId: gone, pin: '4321' })
+    expect((await t.query(api.workshop.list, {})).map((j) => j.id)).toEqual([kept])
+    expect(await t.run((ctx) => ctx.storage.getUrl(order))).toBeNull()
+    expect(await t.run((ctx) => ctx.storage.getUrl(measured))).toBeNull()
+    expect(await t.run((ctx) => ctx.storage.getUrl(other))).toBeTruthy()
+    // Asked again, from a phone that still shows it: nothing to do, and no error.
+    await t.mutation(api.workshop.remove, { jobId: gone, pin: '4321' })
+    delete process.env.WORKSHOP_DELETE_PIN
   })
 
   it('takes the customer from the books, and follows a correction made in the panel', async () => {

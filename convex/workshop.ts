@@ -14,8 +14,9 @@ import type { Id } from './_generated/dataModel'
  *
  * Trusted devices only, like the panel: the shop PIN once on the phone.
  *
- * Nothing is taken out of a thread without the counter's delete PIN. It lives
- * in the deployment's environment, never in source or in the app:
+ * Nothing is taken out, a message or a whole work order, without the delete
+ * PIN, on either phone. It lives in the deployment's environment, never in
+ * source or in the app:
  *   npx convex env set WORKSHOP_DELETE_PIN <pin>
  */
 
@@ -228,9 +229,9 @@ export const setStatus = mutation({
 })
 
 /**
- * One message taken out of a thread, with its photographs, for good: the
- * counter's to do, and only with the delete PIN. A thread left with nothing
- * in it goes too, so a job sent by mistake is removed by removing what it said.
+ * One message taken out of a thread, with its photographs, for good: either
+ * side's to do, and only with the delete PIN. A thread left with nothing in
+ * it goes too.
  */
 export const removeMessage = mutation({
   args: { jobId: v.id('workshopJobs'), messageId: v.string(), pin: v.string() },
@@ -245,5 +246,22 @@ export const removeMessage = mutation({
     const left = job.messages.filter((m) => m.id !== messageId)
     if (left.length) await ctx.db.patch(jobId, { messages: left, updatedAt: Date.now() })
     else await ctx.db.delete(jobId)
+  },
+})
+
+/**
+ * A whole work order taken off the list, with every photograph in its thread,
+ * for good: either side's to do, and only with the delete PIN.
+ */
+export const remove = mutation({
+  args: { jobId: v.id('workshopJobs'), pin: v.string() },
+  handler: async (ctx, { jobId, pin }) => {
+    requireDeletePin(pin)
+    const job = await ctx.db.get(jobId)
+    if (!job) return
+    for (const id of job.messages.flatMap((m) => m.photos)) {
+      try { await ctx.storage.delete(id) } catch { /* already gone */ }
+    }
+    await ctx.db.delete(jobId)
   },
 })
