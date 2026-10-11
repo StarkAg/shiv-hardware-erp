@@ -292,7 +292,7 @@ function Lists({ tab, setTab, onOpen, saving }) {
         )}
       </div>
       <div className="searchbar">
-        <input type="search" aria-label="Search name" placeholder="Search name" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input type="search" placeholder="Search name" value={q} onChange={(e) => setQ(e.target.value)} />
         <button type="button" className={`tool ${panel === 'sort' ? 'open' : ''} ${sort !== 'recent' ? 'set' : ''}`} aria-label="Sort" onClick={() => setPanel(panel === 'sort' ? null : 'sort')}><SortIcon /></button>
         <button type="button" className={`tool ${panel === 'filter' ? 'open' : ''} ${filter !== 'all' ? 'set' : ''}`} aria-label="Filter" onClick={() => setPanel(panel === 'filter' ? null : 'filter')}><FilterIcon /></button>
       </div>

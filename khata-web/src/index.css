@@ -1,159 +1,171 @@
-/* Shiv Accounts, in the Signs look (DESIGN.md; the colours, lettering and
- * buttons come from ./signs/signs.css). Read like a chat, in big type: it is
- * read by someone who would rather not squint.
- *
- * Money keeps the colours of every account book, on figures only: green is to
- * come, red is to pay (DESIGN.md, "Money").
- */
-@import "./signs/signs.css";
+/* Shiv Accounts — the shop's own look, the same parchment and brass as the
+   attendance app (attendance-web/src/index.css), read like a chat. Big type:
+   it is read by someone who would rather not squint. */
+:root {
+  --bg: #e8e5df;          /* warm parchment */
+  --card: #f3f0ea;
+  --card2: #ede9e1;
+  --fg: #1c1917;
+  --muted: #78716c;
+  --line: rgba(28, 25, 23, 0.12);
+  --brass: #b9924b;
+  --brass-ink: #201804;
+  --red: #9f1d20;         /* money to pay */
+  --green: #1a7a4a;       /* money to come */
+  --amber: #b47016;
+  --mine: rgba(185, 146, 75, 0.24);   /* the bubble for money the other way */
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12110f;
+    --card: #1a1815;
+    --card2: #211e1a;
+    --fg: #eae7e1;
+    --muted: #a8a29e;
+    --line: rgba(255, 255, 255, 0.10);
+    --brass: #c9a45c;
+    --brass-ink: #1a1204;
+    --red: #d3595c;
+    --green: #4fbf85;
+    --amber: #d9a441;
+    --mine: rgba(201, 164, 92, 0.22);
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body, #root { height: 100%; margin: 0; }
+body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--fg); background: var(--bg); font-size: 17px; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 
-:root { --in: var(--safe); --out: var(--stop); }
-html, body, #root { height: 100%; }
+.app { display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; background: var(--bg); }
 
-.app { position: relative; display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; background: var(--wall); }
-
-.top { flex: none; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 4px solid var(--ink); }
-.brandrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.brandrow img { width: 40px; height: 40px; }
-.brand { font: 800 27px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; }
+.top { padding: calc(env(safe-area-inset-top) + 14px) 14px 10px; flex: none; }
+.brandrow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.brandrow img { width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+.brand { font-weight: 800; letter-spacing: 0.01em; font-size: 20px; line-height: 1.1; }
 
 /* Whether the figures on screen are the live ones. */
-.live { margin-left: auto; display: flex; align-items: center; gap: 6px; font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
-.live i { width: 12px; height: 12px; background: var(--wait); box-shadow: inset 0 0 0 1px #8a6d00; }
-.live.on { color: var(--safe); }
-.live.on i { background: var(--safe); box-shadow: none; }
+.live { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.live i { width: 9px; height: 9px; border-radius: 50%; background: var(--amber); }
+.live.on { color: var(--green); }
+.live.on i { background: var(--green); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(26, 122, 74, .45); } 50% { box-shadow: 0 0 0 6px rgba(26, 122, 74, 0); } }
+@media (prefers-reduced-motion: reduce) { .live.on i { animation: none; } }
 
-/* Customers or suppliers: the key that is on is the black one. */
-.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-.tabs button { min-height: 48px; padding: 0 8px; background: var(--key); font: 800 21px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
-.tabs button.on { background: var(--ink); color: #fff; }
+.tabs { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--card2); border: 1px solid var(--line); }
+.tabs button { flex: 1; padding: 10px 0; border-radius: 10px; font-size: 15px; font-weight: 800; color: var(--muted); }
+.tabs button.on { background: var(--brass); color: var(--brass-ink); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
 
 /* How far the saving of accounts and bills to the phone has got. */
-.saving { margin-top: 8px; font-size: 14px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
+.saving { margin-top: 10px; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 .savetext { display: flex; justify-content: space-between; gap: 10px; }
-.savebar { margin-top: 4px; height: 6px; background: var(--key); overflow: hidden; }
-.savebar i { display: block; height: 100%; background: var(--must); transition: width .3s; }
-.saving.ok { color: var(--safe); }
-.saving.ok .savebar { display: none; }
+.savebar { margin-top: 5px; height: 6px; border-radius: 3px; background: var(--card2); border: 1px solid var(--line); overflow: hidden; }
+.savebar i { display: block; height: 100%; background: var(--brass); border-radius: 3px; transition: width .3s; }
+.saving.ok { color: var(--green); }
+.saving.ok .savebar i { background: var(--green); }
 
-/* What the whole list comes to, either way. */
-.summary { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 12px 8px; color: var(--dim); }
-.summary span { min-width: 0; display: flex; flex-direction: column; gap: 2px; font: 800 30px/1 var(--sign); font-variant-numeric: tabular-nums; color: var(--ink); }
-.summary small { font: 700 14px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
-.summary .in { color: var(--in); }
-.summary .out { color: var(--out); }
+.summary { display: flex; gap: 10px; padding: 0 14px 10px; flex: none; }
+.summary span { flex: 1; display: flex; flex-direction: column; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
+.summary small { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.summary .in { color: var(--green); }
+.summary .out { color: var(--red); }
+.searchbar { padding: 0 14px 10px; flex: none; display: flex; gap: 8px; }
+.searchbar input { flex: 1; min-width: 0; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 16px; outline: none; }
+.searchbar input:focus { border-color: var(--brass); }
+/* Sort and filter: an icon each; a dot on the icon says one is in use. */
+.tool { position: relative; flex: none; width: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--muted); display: flex; align-items: center; justify-content: center; }
+.tool.open { border-color: var(--brass); color: var(--brass); }
+.tool.set { color: var(--brass); }
+.tool.set::after { content: ''; position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--brass); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; flex: none; }
+.chips button { padding: 8px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 14px; font-weight: 700; color: var(--muted); }
+.chips button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
 
-.searchbar { flex: none; display: flex; gap: 4px; padding: 4px 12px 8px; }
-.searchbar input { flex: 1; min-width: 0; min-height: 48px; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); font: 500 18px/1.2 var(--text); }
-/* Sort and filter: a key each; a mark on the key says one is in use. */
-.tool { position: relative; flex: none; width: 48px; min-height: 48px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); display: flex; align-items: center; justify-content: center; }
-.tool.open { background: var(--ink); color: #fff; box-shadow: none; }
-.tool.set::after { content: ''; position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; background: var(--must); border-radius: 50%; }
-.chips { flex: none; display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px 8px; }
-.chips button { min-height: 44px; padding: 0 12px; background: var(--key); font: 700 16px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
-.chips button.on { background: var(--ink); color: #fff; }
-
-/* The accounts, a row each. A row is two buttons: the letter in its box (the whole name)
-   and the rest (the account). */
-.chats { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0 12px; padding: 0; border-top: 2px solid var(--ink); }
+.chats { list-style: none; margin: 0 14px; padding: 0; overflow-y: auto; flex: 1; border-radius: 16px 16px 0 0; background: var(--card); border: 1px solid var(--line); border-bottom: 0; }
+/* A row is two buttons: the round letter (the whole name) and the rest (the account). */
 .chats li { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); transition: background-color .6s; }
-.chats li > .face { flex: none; display: flex; align-items: center; padding: 10px 0; }
-.chats li > .row { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px 0 10px 12px; text-align: left; }
-.chats li > .row:active, .face:active .avatar { background: var(--key); }
-.chats li > .row:focus-visible, .chats li > .face:focus-visible { outline-offset: -3px; }
+.chats li > .face { flex: none; display: flex; align-items: center; padding: 12px 0 12px 14px; }
+.chats li > .row { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 12px; text-align: left; }
+.chats li > .row:active, .face:active .avatar { background: var(--card2); }
 /* A figure that has just changed while the list is open. */
-.chats li.changed { background: var(--key); }
-.chats .empty { padding: 40px 24px; text-align: center; color: var(--dim); border: 0; display: block; }
-.avatar { flex: none; width: 44px; height: 44px; box-shadow: inset 0 0 0 2px var(--ink); display: flex; align-items: center; justify-content: center; font: 800 24px/1 var(--sign); }
-.avatar.small { width: 44px; height: 44px; }
-.avatar.big { width: 84px; height: 84px; font-size: 48px; }
+.chats li.changed { background: var(--mine); }
+.chats .empty { padding: 30px; text-align: center; color: var(--muted); }
+.avatar { flex: none; width: 46px; height: 46px; border-radius: 50%; background: var(--card2); border: 1px solid var(--line); color: var(--brass); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 19px; }
+.avatar.small { width: 38px; height: 38px; font-size: 16px; }
+.avatar.big { width: 84px; height: 84px; font-size: 36px; }
 .chathead .face { flex: none; display: flex; }
-.who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.who b { font: 700 22px/1.15 var(--sign); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.who small { font-size: 15px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.amt { flex: none; font: 800 23px/1 var(--sign); font-variant-numeric: tabular-nums; color: var(--dim); }
-.amt.in { color: var(--in); }
-.amt.out { color: var(--out); }
+.who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.who b { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who small { font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.amt { flex: none; font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.amt.in { color: var(--green); }
+.amt.out { color: var(--red); }
 
-/* ── the account, as a chat ───────────────────────────────────────────────── */
-.chathead { display: flex; align-items: center; gap: 8px; padding-left: 2px; }
-.chathead .back { flex: none; width: 48px; height: 52px; display: flex; align-items: center; justify-content: center; font: 700 40px/1 var(--sign); padding-bottom: 6px; }
-/* A round blue button is a thing to do at once: ring this number. */
-.chathead .call { flex: none; width: 52px; height: 52px; border-radius: 50%; background: var(--must); color: #fff; display: flex; align-items: center; justify-content: center; }
-.thread { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
-.note { text-align: center; color: var(--dim); margin-top: 40px; }
-.daytag { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; }
-.daytag::before, .daytag::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-.daytag span { color: var(--dim); font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; }
-/* What the party sent is on the left, grey; what the shop sent on the right, outlined. */
-.bubble { max-width: 84%; padding: 7px 10px 8px; }
-.bubble.left { align-self: flex-start; background: var(--key); }
-.bubble.right { align-self: flex-end; box-shadow: inset 0 0 0 2px var(--ink); }
-.bubble.pending { background: none; box-shadow: none; outline: 2px dashed var(--dim); outline-offset: -2px; }
-.kind { font: 700 14px/1.2 var(--sign); text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+/* The account, as a chat */
+.chathead { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); background: var(--card); }
+.chathead .back { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); font-size: 26px; line-height: 1; padding-bottom: 3px; }
+.chathead .call { color: var(--brass); padding: 9px; display: flex; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); }
+.thread { flex: 1; overflow-y: auto; padding: 8px 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+.note { text-align: center; color: var(--muted); margin-top: 40px; }
+.daytag { display: flex; justify-content: center; margin: 6px 0 2px; }
+.daytag span { background: var(--card2); border: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; }
+.bubble { max-width: 80%; padding: 5px 10px 6px; border-radius: 12px; border: 1px solid var(--line); }
+.bubble.left { align-self: flex-start; background: var(--card); border-top-left-radius: 4px; }
+.bubble.right { align-self: flex-end; background: var(--mine); border-top-right-radius: 4px; }
+.bubble.pending { border-style: dashed; border-color: var(--brass); }
+.kind { font-size: 11px; font-weight: 700; color: var(--brass); text-transform: uppercase; letter-spacing: .05em; }
 /* Amount and the balance after it on one line, to keep a bubble short. */
-.line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.money { font: 800 24px/1.1 var(--sign); font-variant-numeric: tabular-nums; }
-.narr { margin-top: 2px; font-size: 15px; color: var(--dim); overflow-wrap: anywhere; }
-.bal { font-size: 14px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.photos { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.photos button, .photos .pdf { width: 56px; height: 56px; overflow: hidden; background: #fff; box-shadow: inset 0 0 0 2px var(--ink); padding: 2px; display: flex; align-items: center; justify-content: center; }
+.line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.money { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.narr { font-size: 13px; color: var(--muted); margin-top: 1px; }
+.bal { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.photos { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.photos button, .photos .pdf { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--card2); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; }
 .photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.photos .pdf { font: 800 18px/1 var(--sign); color: var(--ink); text-decoration: none; }
+.photos .pdf { font-weight: 800; color: var(--brass); text-decoration: none; }
 
 /* What the account comes to, always in view at the foot of the chat. */
-.due { flex: none; display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 12px; padding: 10px 12px calc(env(safe-area-inset-bottom) + 12px); border-top: 4px solid var(--ink); }
-.due small { font: 700 17px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
-.due b { margin-left: auto; font: 800 38px/1 var(--sign); font-variant-numeric: tabular-nums; }
-.due span { flex-basis: 100%; font-size: 15px; font-weight: 600; color: var(--dim); }
-.due.in small, .due.in b { color: var(--in); }
-.due.out small, .due.out b { color: var(--out); }
+.due { flex: none; margin: 0 10px calc(env(safe-area-inset-bottom) + 10px); padding: 10px 14px; border-radius: 14px; background: var(--card); border: 2px solid var(--line); display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.due small { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.due b { margin-left: auto; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.due span { flex-basis: 100%; font-size: 13px; color: var(--amber); font-weight: 700; }
+.due.in { border-color: var(--green); }
+.due.in small, .due.in b { color: var(--green); }
+.due.out { border-color: var(--red); }
+.due.out small, .due.out b { color: var(--red); }
 
-/* A bill's photos, full screen, on black: a strip that snaps to a page at a
-   time, so a swipe turns the page; the bar above it closes, shares and prints. */
+/* A bill's photos, full screen: a strip that snaps to a page at a time, so a
+   swipe turns the page; the bar above it closes, shares and prints. */
 .viewer { position: fixed; inset: 0; background: #000; color: #fff; z-index: 10; display: flex; flex-direction: column; }
-.viewer :focus-visible { outline-color: #fff; }
-.vbar { flex: none; display: flex; align-items: center; gap: 6px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; }
-.vbar button { height: 48px; min-width: 48px; background: #2a3138; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; }
-.vbar button.text { padding: 0 14px; font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
-.vbar .count { flex: 1; min-width: 0; text-align: center; white-space: nowrap; font: 700 19px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.vbar { flex: none; display: flex; align-items: center; gap: 8px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; }
+.vbar button { height: 42px; min-width: 42px; border-radius: 21px; background: rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; gap: 7px; }
+.vbar button.text { padding: 0 14px; font-size: 15px; font-weight: 700; }
+.vbar button:disabled { opacity: .45; }
+.vbar .count { flex: 1; text-align: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .vstrip { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior: contain; }
 .vstrip::-webkit-scrollbar { display: none; }
 .vslide { flex: none; width: 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; display: flex; align-items: center; justify-content: center; }
 .vslide img { max-width: 100%; max-height: 100%; object-fit: contain; touch-action: pan-x pinch-zoom; }
-.vdots { flex: none; display: flex; justify-content: center; gap: 6px; padding: 10px 0 calc(env(safe-area-inset-bottom) + 12px); }
-.vdots i { width: 8px; height: 8px; background: rgba(255, 255, 255, .35); }
+.vdots { flex: none; display: flex; justify-content: center; gap: 7px; padding: 10px 0 calc(env(safe-area-inset-bottom) + 12px); }
+.vdots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.35); }
 .vdots i.on { background: #fff; }
-.vnote { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 34px); margin: 0 auto; max-width: 420px; padding: 12px 14px; background: #fff; color: #0e1318; text-align: center; font-size: 16px; font-weight: 700; }
+.vnote { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 34px); margin: 0 auto; max-width: 420px; padding: 11px 14px; border-radius: 12px; background: rgba(40,37,33,.94); border: 1px solid rgba(255,255,255,.18); text-align: center; font-size: 15px; font-weight: 700; }
 
 /* A small sheet over the screen: the print question, and who an account is. */
-.sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(14, 19, 24, .62); display: flex; align-items: center; justify-content: center; padding: 16px; }
-.sheet { width: 100%; max-width: 380px; max-height: 100%; overflow-y: auto; padding: 16px; background: var(--wall); color: var(--ink); border: 4px solid var(--ink); }
-.sheet :focus-visible { outline-color: var(--ink); }
-.sheet p { margin: 6px 0 0; color: var(--dim); font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
-.sheettitle { display: block; font: 800 27px/1.1 var(--sign); text-transform: uppercase; }
-.sheetbtns { display: flex; gap: 8px; margin-top: 16px; }
-.sheetbtns button { flex: 1; min-width: 0; min-height: 56px; padding: 0 8px; font: 800 21px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; }
-.sheetbtns .ghost { background: var(--key); box-shadow: inset 0 -4px 0 var(--line); }
-.sheetbtns .solid { flex: 1.7; background: var(--must); color: #fff; }
-.sheetbtns button:active { transform: translateY(2px); }
-.profile { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.profile .fullname { font: 800 30px/1.1 var(--sign); text-transform: uppercase; overflow-wrap: anywhere; }
-.profile .phone { color: var(--must); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.profile .standing { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; color: var(--dim); }
-.profile .standing small { font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; }
-.profile .standing b { font: 800 34px/1 var(--sign); font-variant-numeric: tabular-nums; }
-.profile .standing.in { color: var(--in); }
-.profile .standing.out { color: var(--out); }
+.sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.sheet { width: 100%; max-width: 360px; padding: 20px; border-radius: 18px; background: var(--card); color: var(--fg); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.sheet p { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.sheettitle { font-size: 19px; }
+.sheetbtns { display: flex; gap: 10px; margin-top: 18px; }
+.sheetbtns button { flex: 1; padding: 13px 0; border-radius: 12px; font-size: 16px; font-weight: 800; }
+.sheetbtns .ghost { border: 1px solid var(--line); background: var(--card2); }
+.sheetbtns .solid { background: var(--brass); color: var(--brass-ink); }
+.profile { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+.profile .fullname { font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; }
+.profile .phone { color: var(--brass); font-size: 18px; font-weight: 700; text-decoration: none; }
+.profile .standing { display: flex; flex-direction: column; margin-top: 4px; color: var(--muted); }
+.profile .standing small { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+.profile .standing b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.profile .standing.in { color: var(--green); }
+.profile .standing.out { color: var(--red); }
 .profile .sheetbtns { align-self: stretch; }
-
-@media (max-width: 359px) {
-  .vbar { gap: 4px; }
-  .vbar button.text { padding: 0 9px; gap: 6px; font-size: 17px; }
-  .vbar .count { font-size: 17px; }
-  .summary span { font-size: 26px; }
-  .who b { font-size: 20px; }
-  .amt { font-size: 21px; }
-  .due b { font-size: 34px; }
-}
-@media (prefers-reduced-motion: reduce) { .sheetbtns button:active { transform: none; } }

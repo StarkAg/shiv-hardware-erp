@@ -47,7 +47,7 @@ Rules:
 In the apps that read money (Accounts, Cashier and the like) a figure keeps the
 colours of every account book: **green is money to come, red is money to pay**.
 On figures and their labels only, never on a button or a ground. Chosen by Tony,
-11 Oct 2026; `khata-web/src/index.css` names them `--in` and `--out`.
+11 Oct 2026.
 
 ### Attendance marks
 
@@ -153,10 +153,10 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Shiv Print | `print-web/` | Signs, 11 Oct 2026 |
 | Inventory | `inventory-web/` | Signs, 11 Oct 2026 |
 | Stock (the laptop panel) | `stock-web/` | Signs, 11 Oct 2026 |
-| Shiv Accounts | `khata-web/` | Signs, 11 Oct 2026 |
 | Attendance | `attendance-web/` | Signs, 11 Oct 2026 |
 | Sort (bill sorting) | `sort-web/` | Signs, 11 Oct 2026 |
 | Orders, and its Workshop panel | `order-web/` | Signs, 11 Oct 2026 (what it prints is unchanged) |
 | Mica Match | `mica-web/` | Signs lettering and shapes on a dark ground, 11 Oct 2026 |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
+| Shiv Accounts | `khata-web/` | kept in the older parchment and brass look: Tony tried Signs on it on 11 Oct 2026 and wanted the earlier version back |
 | Everything else | | still the older parchment and brass look |

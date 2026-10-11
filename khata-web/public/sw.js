@@ -10,7 +10,7 @@
 // The figures are read live; the last ones are kept by the app (localStorage
 // and IndexedDB). Bump SW_VERSION on deploys that must force every client
 // onto the newest app shell.
-const SW_VERSION = '2026-10-11c-shiv-accounts'
+const SW_VERSION = '2026-10-11d-shiv-accounts'
 const SHELL = `khata-shell-${SW_VERSION}`
 // Same name as src/offline.js. Not versioned: the photos outlive every deploy.
 const PHOTOS = 'khata-photos-v1'

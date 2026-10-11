@@ -1,3 +1,0 @@
-Barlow Condensed and Barlow Semi Condensed, latin subset.
-Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow).
-Licensed under the SIL Open Font License, Version 1.1: https://openfontlicense.org
