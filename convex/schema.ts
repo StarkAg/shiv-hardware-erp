@@ -1084,7 +1084,10 @@ export default defineSchema({
    */
   workshopJobs: defineTable({
     number: v.number(),
-    // Who or where it is for, when the counter typed it; the photo says the rest.
+    // Who it is for: the customer's account in the books when the counter
+    // picked one (its name and phone are then read from the account, so a
+    // correction in the panel shows here), else whatever was typed.
+    ledgerId: v.optional(v.id('ledgers')),
     title: v.optional(v.string()),
     status: v.union(v.literal('open'), v.literal('done')),
     messages: v.array(v.object({

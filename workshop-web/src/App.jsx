@@ -12,6 +12,10 @@ import { APP_NAME, ICON, OTHER, SIDE, SIDE_NAME } from './side.js'
  * a photograph of the measurements, which the counter sees at once. No item
  * list and no money: the paper says it all.
  *
+ * Who an order is for comes from the panel: the counter picks the customer's
+ * account, and the job then carries that account's name, place and phone as
+ * the books have them today, with a button to ring the customer.
+ *
  * Read like a chat app on both sides: a list of jobs with what is new on
  * each, and a thread per job, one's own photos on the right. Everything is a
  * live read (convex/workshop.ts), so nothing needs refreshing.
@@ -97,6 +101,8 @@ const CloseIcon = (p) => <Icon {...p} d={<path d="M6 6l12 12M18 6L6 18" />} />
 const PlusIcon = (p) => <Icon {...p} d={<path d="M12 5v14M5 12h14" />} />
 const TickIcon = (p) => <Icon {...p} d={<path d="M5 12.5l4.5 4.5L19 7.5" />} />
 const TrashIcon = (p) => <Icon {...p} d={<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />} />
+const PhoneIcon = (p) => <Icon {...p} d={<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />} />
+const PersonIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>} />
 const ShareIcon = (p) => <Icon {...p} d={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></>} />
 
 /** The light that says the list on screen is the live one. */
@@ -242,12 +248,58 @@ function Picked({ picked, onDrop }) {
   )
 }
 
-/** A new work order: its photo or photos, and who it is for if the counter cares to say. */
+/**
+ * Who an order is for: `{ ledgerId, name, place, phone }` once an account is
+ * picked from the panel's customers, `{ name }` for a name typed for someone
+ * who has no account yet, or null.
+ */
+function CustomerPicker({ value, onChange, disabled }) {
+  const customers = useQuery(api.workshop.customers, {})
+  const [q, setQ] = useState(value && !value.ledgerId ? value.name : '')
+
+  if (value?.ledgerId) {
+    return (
+      <div className="chosen">
+        <PersonIcon size={20} />
+        <span>
+          <b>{value.name}</b>
+          <small>{[value.place, value.phone].filter(Boolean).join(' · ') || 'From the accounts'}</small>
+        </span>
+        <button type="button" onClick={() => { setQ(''); onChange(null) }} disabled={disabled} aria-label="Pick another customer"><CloseIcon size={16} /></button>
+      </div>
+    )
+  }
+  const needle = q.trim().toLowerCase()
+  const found = needle ? (customers ?? []).filter((c) => `${c.name} ${c.place} ${c.phone}`.toLowerCase().includes(needle)).slice(0, 8) : []
+  return (
+    <div className="picker">
+      <input className="field" placeholder="Customer: search the accounts, or type a name" value={q} maxLength={80} disabled={disabled}
+        onChange={(e) => { setQ(e.target.value); onChange(e.target.value.trim() ? { name: e.target.value } : null) }} />
+      {found.length > 0 && (
+        <ul className="found">
+          {found.map((c) => (
+            <li key={c.id}>
+              <button type="button" onClick={() => onChange({ ledgerId: c.id, name: c.name, place: c.place, phone: c.phone })}>
+                <b>{c.name}</b>
+                <small>{[c.place, c.phone].filter(Boolean).join(' · ')}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {needle && customers && !found.length && <p className="pickhint">Not in the accounts. It is sent under this name.</p>}
+    </div>
+  )
+}
+/** A picked or typed customer, as the server takes it. */
+const customerArgs = (c) => (c?.ledgerId ? { ledgerId: c.ledgerId } : c?.name?.trim() ? { title: c.name.trim() } : {})
+
+/** A new work order: its photo or photos, and who it is for. */
 function NewOrder({ onClose, onMade }) {
   const convex = useConvex()
   const create = useMutation(api.workshop.create)
   const { picked, add, drop } = usePicked()
-  const [title, setTitle] = useState('')
+  const [customer, setCustomer] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const camera = useRef(null)
@@ -259,7 +311,7 @@ function NewOrder({ onClose, onMade }) {
     setError('')
     try {
       const photos = await upload(convex, picked.map((p) => p.file))
-      onMade(await create({ title: title.trim() || undefined, photos }))
+      onMade(await create({ ...customerArgs(customer), photos }))
     } catch (err) {
       setError(said(err))
       setBusy(false)
@@ -277,7 +329,7 @@ function NewOrder({ onClose, onMade }) {
           <button type="button" className="pick" onClick={() => camera.current?.click()} disabled={busy}><CameraIcon /> Take photo</button>
           <button type="button" className="pick" onClick={() => gallery.current?.click()} disabled={busy}><PhotosIcon /> Choose</button>
         </div>
-        <input className="field" placeholder="Customer or place (optional)" value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} disabled={busy} />
+        <CustomerPicker value={customer} onChange={setCustomer} disabled={busy} />
         {error && <p className="error" role="alert">{error}</p>}
         <div className="sheetbtns">
           <button type="button" className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
@@ -294,6 +346,9 @@ function Thread({ job, onBack }) {
   const seen = useMutation(api.workshop.seen)
   const setStatus = useMutation(api.workshop.setStatus)
   const remove = useMutation(api.workshop.remove)
+  const setCustomer = useMutation(api.workshop.setCustomer)
+  // The customer being chosen in the "Customer" sheet; undefined while it is shut.
+  const [choosing, setChoosing] = useState(undefined)
   const { picked, add, drop, clear } = usePicked()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -363,17 +418,21 @@ function Thread({ job, onBack }) {
         <span className="avatar small">{first ? <Shot url={first.url} width={256} alt="" /> : titleOf(job)[0]?.toUpperCase()}</span>
         <span className="who">
           <b>{titleOf(job)}</b>
-          <small>{job.title ? `Work order ${job.number} · ` : ''}{stage}</small>
+          <small>{[job.title ? `Work order ${job.number}` : '', job.place, stage].filter(Boolean).join(' · ')}</small>
         </span>
-        {SIDE === 'shop' && (
-          <>
-            <button type="button" className="act" onClick={() => setStatus({ jobId: job.id, status: job.status === 'done' ? 'open' : 'done' }).catch((err) => setError(said(err)))}>
-              {job.status === 'done' ? 'Reopen' : <><TickIcon size={18} /> Done</>}
-            </button>
-            <button type="button" className="act icon" onClick={() => setAsking(true)} aria-label="Delete this work order"><TrashIcon size={18} /></button>
-          </>
-        )}
+        {job.phone && <a className="call" href={`tel:${job.phone}`} aria-label={`Call ${titleOf(job)}`}><PhoneIcon /></a>}
       </header>
+      {SIDE === 'shop' && (
+        <div className="actions">
+          <button type="button" onClick={() => setChoosing(job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: job.phone } : job.title ? { name: job.title } : null)}>
+            <PersonIcon size={17} /> Customer
+          </button>
+          <button type="button" onClick={() => setStatus({ jobId: job.id, status: job.status === 'done' ? 'open' : 'done' }).catch((err) => setError(said(err)))}>
+            {job.status === 'done' ? 'Reopen' : <><TickIcon size={17} /> Done</>}
+          </button>
+          <button type="button" className="del" onClick={() => setAsking(true)}><TrashIcon size={17} /> Delete</button>
+        </div>
+      )}
 
       <main className="thread">
         {items.map((it) => {
@@ -420,6 +479,19 @@ function Thread({ job, onBack }) {
       </footer>
 
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
+      {choosing !== undefined && (
+        <div className="sheetback" onClick={() => setChoosing(undefined)}>
+          <div className="sheet wide" role="dialog" aria-modal="true" aria-label="Customer" onClick={(e) => e.stopPropagation()}>
+            <b className="sheettitle">Who is this for?</b>
+            <p>Pick the customer's account from the panel; the name, place and phone come with it.</p>
+            <CustomerPicker value={choosing} onChange={setChoosing} />
+            <div className="sheetbtns">
+              <button type="button" className="ghost" onClick={() => setChoosing(undefined)}>Cancel</button>
+              <button type="button" className="solid" onClick={() => { const args = customerArgs(choosing); setChoosing(undefined); setCustomer({ jobId: job.id, ...args }).catch((err) => setError(said(err))) }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
       {asking && (
         <div className="sheetback" onClick={() => setAsking(false)}>
           <div className="sheet" role="dialog" aria-modal="true" aria-label="Delete this work order" onClick={(e) => e.stopPropagation()}>

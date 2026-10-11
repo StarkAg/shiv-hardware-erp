@@ -87,8 +87,11 @@ button:disabled { opacity: .5; cursor: default; }
 /* A job, as a chat */
 .chathead { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); background: var(--card); }
 .chathead .back { flex: none; width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); font-size: 26px; line-height: 1; padding-bottom: 3px; }
-.chathead .act { flex: none; display: flex; align-items: center; gap: 5px; height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); font-size: 14px; font-weight: 800; }
-.chathead .act.icon { padding: 0; width: 40px; justify-content: center; color: var(--red); }
+.chathead .call { flex: none; color: var(--brass); padding: 9px; display: flex; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); }
+/* The counter's own row under the header: who it is for, done, delete. */
+.actions { flex: none; display: flex; gap: 8px; padding: 8px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
+.actions button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); font-size: 14px; font-weight: 800; }
+.actions .del { color: var(--red); }
 .thread { flex: 1; overflow-y: auto; padding: 8px 8px 12px; display: flex; flex-direction: column; gap: 5px; }
 .daytag { display: flex; justify-content: center; margin: 6px 0 2px; }
 .daytag span { background: var(--card2); border: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; }
@@ -147,6 +150,20 @@ button:disabled { opacity: .5; cursor: default; }
 .sheettitle { font-size: 19px; }
 .pickrow { display: flex; gap: 10px; }
 .pick { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 8px; border-radius: 14px; border: 1px dashed var(--brass); background: var(--card2); color: var(--brass); font-size: 15px; font-weight: 800; }
+/* Who it is for: the accounts that match what is typed, then the one picked. */
+.picker { margin-top: 12px; }
+.picker .field { margin-top: 0; }
+.found { list-style: none; margin: 6px 0 0; padding: 0; max-height: 236px; overflow-y: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+.found button { display: flex; flex-direction: column; gap: 1px; width: 100%; padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+.found li:last-child button { border-bottom: 0; }
+.found b { font-size: 16px; overflow-wrap: anywhere; }
+.found small { font-size: 13px; color: var(--muted); }
+.sheet p.pickhint { margin: 6px 2px 0; font-size: 13px; }
+.chosen { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--brass); background: var(--mine); color: var(--fg); }
+.chosen span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.chosen b { font-size: 16px; overflow-wrap: anywhere; }
+.chosen small { font-size: 13px; color: var(--muted); }
+.chosen button { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); display: flex; align-items: center; justify-content: center; }
 .field { width: 100%; margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 16px; outline: none; }
 .field:focus { border-color: var(--brass); }
 .sheetbtns { display: flex; gap: 10px; margin-top: 18px; }

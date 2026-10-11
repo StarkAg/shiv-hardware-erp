@@ -58,6 +58,43 @@ describe('workshop: a work order as a chat in photos', () => {
     expect((await t.query(api.workshop.list, {})).find((j) => j.id === third)!.number).toBe(3)
   })
 
+  it('takes the customer from the books, and follows a correction made in the panel', async () => {
+    const t = convexTest(schema, modules)
+    const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
+    const { sanjay, supplier } = await t.run(async (ctx) => {
+      const debtors = await ctx.db.insert('groups', { name: 'Sundry Debtors', nature: 'asset', normalSide: 'Dr', sort: 0 })
+      const creditors = await ctx.db.insert('groups', { name: 'Sundry Creditors', nature: 'liability', normalSide: 'Cr', sort: 1 })
+      const account = { openingBalance: 0, openingSide: 'Dr' as const, openingAsOf: 1, active: true, createdAt: 1, updatedAt: 1 }
+      return {
+        sanjay: await ctx.db.insert('ledgers', { ...account, name: 'M/s Sanjay Mahto Ji, Korambe', groupId: debtors, phone: '8340785465', place: 'Korambe', aadhaar: '123412341234' }),
+        supplier: await ctx.db.insert('ledgers', { ...account, name: 'M/s Ply Supplier', groupId: creditors }),
+      }
+    })
+
+    // The picker: customers only, and nothing but the name, place and phone.
+    expect(await t.query(api.workshop.customers, {})).toEqual([{ id: sanjay, name: 'Sanjay Mahto Ji, Korambe', place: 'Korambe', phone: '8340785465' }])
+
+    const id = await t.mutation(api.workshop.create, { ledgerId: sanjay, photos: [await photo()] })
+    const job = async () => (await t.query(api.workshop.list, {})).find((j) => j.id === id)!
+    expect(await job()).toMatchObject({ title: 'Sanjay Mahto Ji, Korambe', phone: '8340785465', place: 'Korambe', ledgerId: sanjay })
+
+    // The phone is corrected in the panel: the job shows the new one.
+    await t.run((ctx) => ctx.db.patch(sanjay, { phone: '9000000000' }))
+    expect((await job()).phone).toBe('9000000000')
+
+    // Moved to a typed name, then back to the account.
+    await t.mutation(api.workshop.setCustomer, { jobId: id, title: 'Walk-in, Ghutwa' })
+    expect(await job()).toMatchObject({ title: 'Walk-in, Ghutwa', phone: '', ledgerId: null })
+    await t.mutation(api.workshop.setCustomer, { jobId: id, ledgerId: sanjay })
+    expect(await job()).toMatchObject({ title: 'Sanjay Mahto Ji, Korambe', ledgerId: sanjay })
+
+    // The account goes: the job keeps the name it was sent with.
+    await t.run((ctx) => ctx.db.delete(sanjay))
+    expect(await job()).toMatchObject({ title: 'Sanjay Mahto Ji, Korambe', phone: '', ledgerId: null })
+    await expect(t.mutation(api.workshop.create, { ledgerId: sanjay, photos: [await photo()] })).rejects.toThrow('no longer in the books')
+    void supplier
+  })
+
   it('refuses a photo that never uploaded', async () => {
     const t = convexTest(schema, modules)
     const real = await t.run((ctx) => ctx.storage.store(new Blob(['x'], { type: 'image/jpeg' })))

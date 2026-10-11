@@ -19,6 +19,9 @@ const side = v.union(v.literal('shop'), v.literal('workshop'))
 const COUNTER = 'workshop-job'
 const MAX_PHOTOS = 10
 
+/** A party's name as it is said: without the "M/s" the books write before it. */
+const bare = (name: string | undefined) => String(name ?? '').replace(/^m\/s\.?\s+/i, '').trim()
+
 const clean = (text: string | undefined, max: number) => {
   const tidy = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
   return tidy || undefined
@@ -30,6 +33,24 @@ async function checkPhotos(ctx: MutationCtx, photos: Id<'_storage'>[]) {
     if (!(await ctx.db.system.get(id))) throw new ConvexError('A photo did not upload. Try again.')
   }
 }
+
+/**
+ * The shop's customers, for the counter to pick who an order is for: every
+ * account under Sundry Debtors, by name. Only what the picker shows — the
+ * name, the place and the phone — and nothing else the books hold on them.
+ */
+export const customers = query({
+  args: {},
+  handler: async (ctx) => {
+    const group = (await ctx.db.query('groups').collect()).find((g) => g.name === 'Sundry Debtors')
+    if (!group) return []
+    const accounts = await ctx.db.query('ledgers').withIndex('by_group', (q) => q.eq('groupId', group._id)).collect()
+    return accounts
+      .filter((l) => l.active !== false && bare(l.name))
+      .map((l) => ({ id: l._id, name: bare(l.name), place: l.place ?? '', phone: l.phone ?? '' }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  },
+})
 
 /** Every open job, and the last sixty finished, each with its photos' links. */
 export const list = query({
@@ -46,10 +67,16 @@ export const list = query({
       .order('desc')
       .take(60)
     return Promise.all(
-      [...open, ...done].map(async (job) => ({
+      [...open, ...done].map(async (job) => {
+        // The customer's account, read as it stands in the books today.
+        const account = job.ledgerId ? await ctx.db.get(job.ledgerId) : null
+        return {
         id: job._id,
         number: job.number,
-        title: job.title ?? '',
+        title: (account ? bare(account.name) : '') || job.title || '',
+        ledgerId: account?._id ?? null,
+        place: account?.place ?? '',
+        phone: account?.phone ?? '',
         status: job.status,
         shopSeenAt: job.shopSeenAt,
         workshopSeenAt: job.workshopSeenAt,
@@ -67,21 +94,29 @@ export const list = query({
             ).filter((p) => p.url),
           })),
         ),
-      })),
+        }
+      }),
     )
   },
 })
 
-/** A new work order from the counter: its photographs, and who it is for if that was typed. */
+/**
+ * A new work order from the counter: its photographs, and who it is for —
+ * a customer's account picked from the books, or a name typed for someone
+ * who has none yet.
+ */
 export const create = mutation({
   args: {
+    ledgerId: v.optional(v.id('ledgers')),
     title: v.optional(v.string()),
     photos: v.array(v.id('_storage')),
     text: v.optional(v.string()),
   },
-  handler: async (ctx, { title, photos, text }) => {
+  handler: async (ctx, { ledgerId, title, photos, text }) => {
     if (!photos.length) throw new ConvexError('Add a photo of the work order.')
     await checkPhotos(ctx, photos)
+    const account = ledgerId ? await ctx.db.get(ledgerId) : null
+    if (ledgerId && !account) throw new ConvexError('That customer is no longer in the books. Pick again.')
     const now = Date.now()
     const device = await deviceOf(ctx)
     const counter = await ctx.db.query('counters').withIndex('by_name', (q) => q.eq('name', COUNTER)).unique()
@@ -90,7 +125,9 @@ export const create = mutation({
     else await ctx.db.insert('counters', { name: COUNTER, value: number })
     return await ctx.db.insert('workshopJobs', {
       number,
-      title: clean(title, 80),
+      ...(account ? { ledgerId: account._id } : {}),
+      // Kept beside the account too, so the job still has a name if the account is ever removed.
+      title: clean(account ? bare(account.name) : title, 80),
       status: 'open',
       messages: [{ id: `${now}-0`, from: 'shop', photos, text: clean(text, 500), by: device?.name, at: now }],
       shopSeenAt: now,
@@ -133,6 +170,22 @@ export const seen = mutation({
     const job = await ctx.db.get(jobId)
     if (!job) return
     await ctx.db.patch(jobId, side === 'shop' ? { shopSeenAt: Date.now() } : { workshopSeenAt: Date.now() })
+  },
+})
+
+/** Who a job is for, set or corrected after it was sent: an account from the books, or a typed name. */
+export const setCustomer = mutation({
+  args: { jobId: v.id('workshopJobs'), ledgerId: v.optional(v.id('ledgers')), title: v.optional(v.string()) },
+  handler: async (ctx, { jobId, ledgerId, title }) => {
+    const job = await ctx.db.get(jobId)
+    if (!job) throw new ConvexError('That work order is gone.')
+    const account = ledgerId ? await ctx.db.get(ledgerId) : null
+    if (ledgerId && !account) throw new ConvexError('That customer is no longer in the books. Pick again.')
+    await ctx.db.patch(jobId, {
+      ledgerId: account?._id,
+      title: clean(account ? bare(account.name) : title, 80),
+      updatedAt: Date.now(),
+    })
   },
 })
 
