@@ -179,7 +179,7 @@ export default function App() {
         <header className="top">
           <span className="mark" aria-hidden="true">SH</span>
           <div className="top-copy"><h1>Voucher Bill Shooter</h1><small>Shiv Hardware</small></div>
-          <span className={`status${failed ? ' error' : ''}`} role="status" aria-live="polite">{failed ? `${failed} failed` : pending ? `${pending} sending` : 'Ready'}</span>
+          <span className={`status${failed ? ' error' : pending ? ' busy' : ''}`} role="status" aria-live="polite">{failed ? `${failed} failed` : pending ? `${pending} sending` : 'Ready'}</span>
         </header>
 
         <section className="camera" aria-label="Voucher bill camera">
