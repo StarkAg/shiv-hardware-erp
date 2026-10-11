@@ -96,7 +96,7 @@ function validate(f, items) {
   return e
 }
 
-function ClaimForm({ convexUrl, number, token, items, onDone, seller }) {
+function ClaimForm({ convexUrl, number, token, items, onDone, seller, termiteCovered }) {
   const [f, setF] = useState(empty)
   const [photos, setPhotos] = useState([]) // close-ups of the damage: { id, file, url }
   const [proof, setProof] = useState({}) // card | bill | door -> { file, url }
@@ -238,7 +238,7 @@ function ClaimForm({ convexUrl, number, token, items, onDone, seller }) {
               </button>
             ))}
           </div>
-          <small className="gc-note">Termite damage is not covered.</small>
+          {termiteCovered ? null : <small className="gc-note">Termite damage is not covered.</small>}
           {err('issue')}
         </div>
         <label className={cls('description')}><span>Describe the issue</span>
@@ -321,7 +321,7 @@ function Submitted({ refNo, phone, onClose, seller }) {
 }
 
 // Neutral: the seller is never named here ("the seller").
-export default function CardActions({ convexUrl, number, token, items, seller = '', onClaimed }) {
+export default function CardActions({ convexUrl, number, token, items, seller = '', onClaimed, termiteCovered = false }) {
   const [open, setOpen] = useState(false)
   const [done, setDone] = useState(null)
   const close = useMemo(() => () => {
@@ -339,7 +339,7 @@ export default function CardActions({ convexUrl, number, token, items, seller = 
         <Sheet title={done ? 'Guarantee claim' : 'Claim guarantee'} onClose={close} wide>
           {done
             ? <Submitted refNo={done.ref} phone={done.phone} onClose={close} seller={seller} />
-            : <ClaimForm convexUrl={convexUrl} number={number} token={token} items={items} onDone={setDone} seller={seller} />}
+            : <ClaimForm convexUrl={convexUrl} number={number} token={token} items={items} onDone={setDone} seller={seller} termiteCovered={termiteCovered} />}
         </Sheet>
       ) : null}
     </>

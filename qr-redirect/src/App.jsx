@@ -249,9 +249,10 @@ function CardView({ doc, token, claims, onClaimed }) {
       <div className="gc-terms-short">
         <span>Terms</span>
         <ul>
-          <li>Covers borer and air bubbles only.</li>
-          {/* Not said of a card made with its termite line switched off. */}
-          {doc.termiteNote === false ? null : <li>Termite damage is not covered.</li>}
+          {/* A card made with its termite line switched off is guaranteed against termites too. */}
+          {doc.termiteNote === false
+            ? <li>Covers borer, termite and air bubbles.</li>
+            : <><li>Covers borer and air bubbles only.</li><li>Termite damage is not covered.</li></>}
           <li>Valid for the years shown, from the date on this card.</li>
           <li>Replacement requires the original card and bill, subject to inspection.</li>
         </ul>
@@ -261,6 +262,7 @@ function CardView({ doc, token, claims, onClaimed }) {
         convexUrl={CONVEX_URL}
         number={doc.number}
         token={token}
+        termiteCovered={doc.termiteNote === false}
         items={items.map((it) => ({
           label: [it.brandName || 'Item', fmtThickness(it.thickness), itemSize(it)].filter(Boolean).join(' · '),
           qty: Number(it.qty) || 0,

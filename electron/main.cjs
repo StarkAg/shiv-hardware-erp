@@ -5,6 +5,7 @@ const os = require('node:os')
 const { execFile } = require('node:child_process')
 const { pathToFileURL } = require('node:url')
 const { autoUpdater } = require('electron-updater')
+const screens = require('./screens.cjs')
 
 let mainWindow = null
 
@@ -97,7 +98,57 @@ function createWindow() {
     const devUrl = process.env.VITE_DEV_SERVER_URL.replace(/\/+$/, '')
     mainWindow.loadURL(IS_QUOTATION_APP ? `${devUrl}/${ENTRY_HTML}` : devUrl)
   } else {
-    mainWindow.loadFile(appPath('dist', ENTRY_HTML))
+    // Screens a deploy put in that will not load are left for the installer's own.
+    mainWindow.webContents.on('did-fail-load', (_event, code, _text, _url, isMainFrame) => {
+      if (!isMainFrame || code === -3 || !showing || showing.packaged) return
+      refusedScreens.add(showing.builtAt)
+      showScreens()
+    })
+    showScreens()
+    const stop = screens.watch(app.getPath('userData'), offerNewScreens)
+    mainWindow.on('closed', stop)
+  }
+}
+
+// ── Screens (electron/screens.cjs) ───────────────────────────────────────────
+// The copy of the screens in the window, and any that failed to load this run.
+let showing = null
+const refusedScreens = new Set()
+let askingAboutScreens = false
+
+function newestScreens() {
+  return screens.pick({
+    packagedDir: appPath('dist'),
+    userData: app.getPath('userData'),
+    entry: ENTRY_HTML,
+    refused: refusedScreens,
+  })
+}
+
+function showScreens() {
+  showing = newestScreens()
+  mainWindow.loadFile(path.join(showing.dir, ENTRY_HTML))
+  screens.prune(app.getPath('userData'), [showing.dir])
+}
+
+/** A deploy has put newer screens in: take them now, or when the app next opens. */
+async function offerNewScreens() {
+  if (askingAboutScreens || !mainWindow || mainWindow.isDestroyed() || !showing) return
+  if (newestScreens().builtAt <= showing.builtAt) return
+  askingAboutScreens = true
+  try {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: ['Update now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Update ready',
+      message: `${APP_TITLE} has an update.`,
+      detail: 'It takes a second. Anything typed and not yet saved is cleared. Later: it is there when the app next opens.',
+    })
+    if (response === 0 && !mainWindow.isDestroyed()) showScreens()
+  } finally {
+    askingAboutScreens = false
   }
 }
 

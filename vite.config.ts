@@ -1,9 +1,10 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { execSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
 
 const pkg = createRequire(import.meta.url)('./package.json') as { version: string }
 
@@ -24,6 +25,21 @@ function buildId() {
   return [sha.slice(0, 7), stamp].filter(Boolean).join(' · ')
 }
 
+/**
+ * build.json beside the build: when it was made. The desktop app compares it
+ * to tell which copy of its screens is the newer one, the installer's or one
+ * a deploy has put in since (electron/screens.cjs).
+ */
+function buildStamp(): Plugin {
+  let outDir = ''
+  return {
+    name: 'shiv-build-stamp',
+    apply: 'build',
+    configResolved(config) { outDir = path.resolve(config.root, config.build.outDir) },
+    closeBundle() { writeFileSync(path.join(outDir, 'build.json'), JSON.stringify({ builtAt: Date.now(), id: buildId() })) },
+  }
+}
+
 // HTTPS on the dev server so phones/tablets (which auto-upgrade http -> https)
 // can open the LAN URL. The cert is self-signed: the device shows a one-time
 // "not private" warning — tap Advanced > Proceed to continue.
@@ -37,7 +53,7 @@ export default defineConfig({
   // the LAN IP, so on a phone the page loads after the warning but the HMR
   // websocket is refused — changes then need a manual refresh. Plain HTTP over
   // the LAN keeps hot reload working.
-  plugins: [react(), ...(process.env.VITE_HTTPS === '1' ? [basicSsl()] : [])],
+  plugins: [react(), buildStamp(), ...(process.env.VITE_HTTPS === '1' ? [basicSsl()] : [])],
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },

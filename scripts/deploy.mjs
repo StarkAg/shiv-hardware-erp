@@ -22,7 +22,7 @@
 // and commits not yet on GitHub are pushed first (the panel site deploys from
 // GitHub, and every stamp below names a commit others can see).
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync, rmSync, rmdirSync, cpSync, statSync, symlinkSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, renameSync, rmSync, rmdirSync, cpSync, statSync, symlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir, hostname, platform } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -38,6 +38,9 @@ const SHOP_PC = hostname().toLowerCase() === 'hp'
 // its project named outright: four of these folders are not linked to any
 // project, and a plain `vercel --prod` there makes a new, wrong one.
 const PANEL_SOURCES = ['src', 'public', 'index.html', 'counter.html', 'vite.config.ts', 'tailwind.config.js', 'postcss.config.js', 'package.json', 'package-lock.json', 'convex/_generated', 'tsconfig.json']
+// The desktop app's shell: what only its installer can change. Everything
+// else it shows is screens, which reach the installed app without one.
+const QUOTATION_SHELL = ['electron', 'print-server/template.mjs', 'print-server/tools', 'print-server/data/epson-card.devmode', 'electron-builder.quotation.cjs', 'build']
 const RAILWAY_PROJECT = '3204a621-3a84-4ad0-9960-d9195243d081'
 const RELEASES_REPO = 'StarkAg/shiv-panel-releases'
 
@@ -300,7 +303,27 @@ const QUOTATION_DIR = ['Shiv Quotation', 'Shiv Counter']
   .find((dir) => existsSync(join(dir, 'Shiv Counter.exe')) || existsSync(join(dir, 'Shiv Quotation.exe')))
   ?? join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Shiv Counter')
 
-async function deployQuotation() {
+/**
+ * Screens only: the build copied into the installed app's data folder, where
+ * the app finds it (electron/screens.cjs). No installer, and the app stays
+ * open: it asks to update, or shows the new screens when it next opens.
+ */
+async function pushQuotationScreens() {
+  // The sites built from this same commit have already been type-checked.
+  await run('npx', ['vite', 'build'], { timeout: 10 * 60_000 })
+  const built = readJson(join(ROOT, 'dist', 'build.json'))
+  if (!built?.builtAt) throw new Error('dist/build.json is missing after the build')
+  const home = join(process.env.APPDATA ?? '', 'Shiv Quotation', 'screens')
+  const name = String(built.builtAt)
+  cpSync(join(ROOT, 'dist'), join(home, name), { recursive: true })
+  // Written last and put in place whole: the app watches this file.
+  writeFileSync(join(home, 'current.json.part'), JSON.stringify({ dir: name, builtAt: built.builtAt }))
+  renameSync(join(home, 'current.json.part'), join(home, 'current.json'))
+  return 'screens updated, no installer: the app asks to update (or shows them when next opened)'
+}
+
+async function deployQuotation(quick = false) {
+  if (quick) return pushQuotationScreens()
   const env = { ELECTRON_RUN_AS_NODE: '' }
   await run('npm', ['run', 'dist:quotation'], { env, timeout: 30 * 60_000 })
   const version = readJson(join(ROOT, 'package.json')).version
@@ -375,7 +398,17 @@ async function baselines() {
           // a build installed by hand is dated by the file, which can only over-count.
           const when = statSync(asar).mtime
           const mine = state.quotation && Math.abs(new Date(state.quotation.at) - when) < 10 * 60_000
-          out.set(t.id, { base: mine ? state.quotation.sha : commitAt(when), when, stamped: mine })
+          // Screens put in since that install count as deployed too. And when the
+          // installed shell takes screens and nothing of the shell has changed
+          // since, screens are all this deploy needs: no installer.
+          const pushed = mine ? state.quotationScreens : null
+          const shell = mine && state.quotation.screens ? changedSince(state.quotation.sha, QUOTATION_SHELL) : null
+          out.set(t.id, {
+            base: pushed?.sha ?? (mine ? state.quotation.sha : commitAt(when)),
+            when: pushed?.at ?? when,
+            stamped: mine,
+            quick: Array.isArray(shell) && shell.length === 0,
+          })
         }
       } else if (t.kind === 'release') {
         const r = await latestRelease()
@@ -446,7 +479,7 @@ async function main() {
     const when = b.when ? new Date(b.when).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
     const changed = b.error || b.skip ? '—' : files === null ? 'unknown' : String(files.length)
     const tint = action === 'deploy' ? green : action === 'error' ? red : action === 'optional' || action === 'held' ? yellow : dim
-    const why = b.error ?? b.skip ?? b.held ?? (action === 'optional' ? t.optional : '') ?? ''
+    const why = b.error ?? b.skip ?? b.held ?? (action === 'optional' ? t.optional : b.quick && action === 'deploy' ? 'screens only: no installer' : '') ?? ''
     log(`${t.id.padEnd(13)}${(when + (b.note ? ` ${b.note}` : '')).slice(0, 30).padEnd(31)}${changed.padEnd(10)}${tint(action)}${why ? dim(`  ${why}`) : ''}`)
   }
   const todo = plan.filter((p) => p.action === 'deploy')
@@ -469,7 +502,7 @@ async function main() {
   // apps — the desktop release last, as it adds a commit of its own.
   const order = ['convex', 'railway', 'print-server', 'vercel', 'vercel-git', 'quotation', 'release']
   const results = []
-  const runOne = async ({ t }) => {
+  const runOne = async ({ t, b }) => {
     const started = Date.now()
     try {
       let where
@@ -477,10 +510,12 @@ async function main() {
       else if (t.kind === 'railway') where = await deployRailway(t, sha)
       else if (t.kind === 'vercel') where = await deployVercel(t, sha)
       else if (t.kind === 'vercel-git') where = await verifyVercelGit(t, sha)
-      else if (t.kind === 'quotation') where = await deployQuotation()
+      else if (t.kind === 'quotation') where = await deployQuotation(b.quick)
       else if (t.kind === 'release') where = await releaseApp()
       else if (t.kind === 'print-server') where = await checkPrintServer()
-      if (['convex', 'print-server', 'quotation'].includes(t.kind)) { state[t.id] = { sha, at: new Date().toISOString() }; saveState() }
+      if (t.kind === 'quotation' && b.quick) { state.quotationScreens = { sha, at: new Date().toISOString() }; saveState() }
+      else if (t.kind === 'quotation') { state.quotation = { sha, at: new Date().toISOString(), screens: true }; delete state.quotationScreens; saveState() }
+      else if (['convex', 'print-server'].includes(t.kind)) { state[t.id] = { sha, at: new Date().toISOString() }; saveState() }
       results.push({ t, ok: true, where, secs: Math.round((Date.now() - started) / 1000) })
       log(`${green('OK')} ${t.id.padEnd(13)} ${where} ${dim(`${Math.round((Date.now() - started) / 1000)}s`)}`)
     } catch (err) {
