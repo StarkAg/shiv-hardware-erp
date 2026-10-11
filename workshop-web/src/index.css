@@ -72,16 +72,12 @@ button:disabled { opacity: .5; cursor: default; }
 /* Where the work stands: three boxes under the search, each with how many
    jobs are there; one picked shows only those. */
 .stages { flex: none; display: flex; gap: 8px; padding: 0 14px 10px; }
-.stages { gap: 6px; }
-.stages button { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 2px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 12px; font-weight: 800; letter-spacing: -.01em; color: var(--muted); overflow: hidden; white-space: nowrap; }
+.stages { gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.stages::-webkit-scrollbar { display: none; }
+.stages button { flex: 1 0 auto; min-width: 74px; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 2px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 12px; font-weight: 800; letter-spacing: -.01em; color: var(--muted); overflow: hidden; white-space: nowrap; }
 .stages button b { font-size: 19px; line-height: 1.1; color: var(--fg); font-variant-numeric: tabular-nums; min-height: 21px; }
 .stages button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
 .stages button.on b { color: var(--brass-ink); }
-/* The same three in a sheet: which box this job goes in. */
-.stages.pick { padding: 0; margin-top: 12px; align-self: stretch; }
-.stages.pick button { padding: 10px 4px; background: var(--card2); }
-.stages.pick button.on { background: var(--brass); }
-
 /* The jobs, as chats */
 .chats { list-style: none; margin: 0 14px; padding: 0 0 84px; overflow-y: auto; flex: 1; border-radius: 16px 16px 0 0; background: var(--card); border: 1px solid var(--line); border-bottom: 0; }
 .chats li > button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); }
@@ -159,6 +155,30 @@ button.who { text-align: left; }
 .composer .tool.menu { width: 52px; height: 52px; border-radius: 16px; background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
 .composer .now { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kind.step { color: var(--green); }
+/* A marker in a bubble: boards made, Complete, the go-ahead. Said large, as it is the whole message. */
+.marker { display: flex; align-items: center; gap: 7px; padding: 4px 8px 2px; font-size: 16px; font-weight: 700; }
+.marker b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.marker.small { font-size: 14px; color: var(--muted); }
+.marker.ok { color: var(--green); font-size: 17px; }
+.marker.goahead { flex-direction: column; align-items: flex-start; gap: 6px; }
+.marker.goahead b { font-size: 17px; }
+.marker.goahead a, .custcard .facts a { display: inline-flex; align-items: center; gap: 6px; color: var(--brass); text-decoration: none; font-weight: 800; }
+/* On the card at the head of the chat: how far the boards are, and when to go. */
+.custcard .facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* With the work order's photo: the boards it asks for. */
+.boardsask { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 2px 10px; font-size: 15px; font-weight: 700; color: var(--muted); }
+.boardsask input { width: 96px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 18px; font-weight: 800; text-align: center; outline: none; }
+/* How many boards: a number with a button either side. */
+.stepper { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 4px; }
+.stepper button { width: 56px; height: 56px; border-radius: 16px; border: 1px solid var(--line); background: var(--card2); font-size: 30px; font-weight: 700; line-height: 1; }
+.stepper input { width: 110px; padding: 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 30px; font-weight: 800; text-align: center; outline: none; font-variant-numeric: tabular-nums; }
+/* The go-ahead: when, and which number. */
+.asklabel { display: block; margin-top: 12px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.asklabel .field { margin-top: 6px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.chips button { padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card2); font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.chips button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+.composer .now { white-space: normal; line-height: 1.25; }
 /* The steps, in the sheet the three lines open: done, now, not yet. */
 .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .steps button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card2); text-align: left; }

@@ -21,16 +21,36 @@ import type { Id } from './_generated/dataModel'
  */
 
 const side = v.union(v.literal('shop'), v.literal('workshop'))
-const stage = v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('fitting'))
-type Stage = 'measurement' | 'quotation' | 'assemble' | 'fitting'
+const stage = v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('goahead'), v.literal('fitting'))
+const tag = v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('goahead'), v.literal('fitting'))
+type Stage = 'measurement' | 'quotation' | 'assemble' | 'goahead' | 'fitting'
+type Tag = 'visit' | Stage
+type Side = 'shop' | 'workshop'
 /**
- * The order the work goes in, and whose turn each step is. A step is done by
- * photographing it: the workshop the measurements, the shop the work order it
- * makes from them, the workshop the piece assembled and then fitted. The
- * photograph from the side whose turn it is moves the job to the next step.
+ * The order the work goes in, and whose turn each step is:
+ *
+ *   measurement  the workshop measures on site and photographs the figures
+ *   quotation    the shop makes the work order from them and sends its photograph
+ *   assemble     the workshop builds it, saying how many boards are made, then Complete
+ *   goahead      the shop rings the customer and says when to go and whom to ring
+ *   fitting      the workshop fits it and photographs it; the job is finished
+ *
+ * Each step is done by the side whose turn it is, and that moves the job on.
+ * Nothing in a thread is free text: every message is tagged with what it is.
  */
-const TURN: Record<Stage, 'shop' | 'workshop'> = { measurement: 'workshop', quotation: 'shop', assemble: 'workshop', fitting: 'workshop' }
-const NEXT: Record<Stage, Stage | null> = { measurement: 'quotation', quotation: 'assemble', assemble: 'fitting', fitting: null }
+const TURN: Record<Stage, Side> = { measurement: 'workshop', quotation: 'shop', assemble: 'workshop', goahead: 'shop', fitting: 'workshop' }
+const NEXT: Record<Stage, Stage | null> = { measurement: 'quotation', quotation: 'assemble', assemble: 'goahead', goahead: 'fitting', fitting: null }
+/** Whose each tag is to send. The visit order is the shop's, at any time. */
+const SENDER: Record<Tag, Side> = { visit: 'shop', ...TURN }
+const ORDER: Stage[] = ['measurement', 'quotation', 'assemble', 'goahead', 'fitting']
+/** A step the job has not come to yet: nothing is added to it, so none can be skipped to. */
+const notYet = (step: Tag, at: Stage) => step !== 'visit' && ORDER.indexOf(step) > ORDER.indexOf(at)
+
+/** A count of boards: a whole number nobody could mistype into the thousands. */
+function boardCount(n: number) {
+  if (!Number.isFinite(n) || n < 0 || n > 999) throw new ConvexError('Give the number of boards.')
+  return Math.trunc(n)
+}
 const COUNTER = 'workshop-job'
 const MAX_PHOTOS = 10
 
@@ -103,6 +123,10 @@ export const list = query({
         phone: account?.phone ?? '',
         status: job.status,
         stage: job.stage ?? 'measurement',
+        boardsTotal: job.boardsTotal ?? null,
+        boardsMade: job.boardsMade ?? null,
+        visitAt: job.visitAt ?? null,
+        callPhone: job.callPhone ?? '',
         shopSeenAt: job.shopSeenAt,
         workshopSeenAt: job.workshopSeenAt,
         createdAt: job.createdAt,
@@ -112,6 +136,11 @@ export const list = query({
             id: m.id,
             from: m.from,
             step: m.step ?? null,
+            boards: m.boards ?? null,
+            complete: m.complete === true,
+            visitAt: m.visitAt ?? null,
+            callPhone: m.callPhone ?? '',
+            // Lines typed before threads became tags only.
             text: m.text ?? '',
             by: m.by ?? '',
             at: m.at,
@@ -135,12 +164,12 @@ export const create = mutation({
   args: {
     ledgerId: v.optional(v.id('ledgers')),
     title: v.optional(v.string()),
-    // Which box it goes in on the list; measurement when the counter did not say.
+    // Sent by apps from before the steps were fixed; not used. A job starts at measurement.
     stage: v.optional(stage),
     photos: v.array(v.id('_storage')),
     text: v.optional(v.string()),
   },
-  handler: async (ctx, { ledgerId, title, stage, photos, text }) => {
+  handler: async (ctx, { ledgerId, title, photos }) => {
     if (!photos.length) throw new ConvexError('Add a photo of the work order.')
     await checkPhotos(ctx, photos)
     const account = ledgerId ? await ctx.db.get(ledgerId) : null
@@ -157,8 +186,7 @@ export const create = mutation({
       // Kept beside the account too, so the job still has a name if the account is ever removed.
       title: clean(account ? bare(account.name) : title, 80),
       status: 'open',
-      ...(stage ? { stage } : {}),
-      messages: [{ id: `${now}-0`, from: 'shop', photos, text: clean(text, 500), by: device?.name, at: now }],
+      messages: [{ id: `${now}-0`, from: 'shop', photos, step: 'visit', by: device?.name, at: now }],
       shopSeenAt: now,
       workshopSeenAt: 0,
       createdAt: now,
@@ -168,41 +196,89 @@ export const create = mutation({
 })
 
 /**
- * A reply in a job's thread. From the shop: photographs, a line of text, or
- * both. From the workshop: photographs only, of the step it names.
+ * What either side adds to a job's thread. Never free text: photographs
+ * tagged with what they are, or a marker.
  *
- * Photographs of the job's present step, from the side whose turn it is, are
- * that step done: the job moves to the next one, and after fitting it is
- * finished. Photographs of a step already done are added to it and move nothing.
+ * From the workshop:
+ *   - photographs of the measurements or of the fitted piece (`step`);
+ *   - the work status while assembling: `boards` made so far;
+ *   - `complete`: assembling is finished.
+ * From the shop:
+ *   - photographs of the visit order (any time) or of the work order, with
+ *     the `boards` it asks for;
+ *   - the go-ahead: `visitAt` and `callPhone`, once the work is complete.
+ *
+ * What is the present step's, from the side whose turn it is, moves the job
+ * on: the measurements, the work order, Complete, the go-ahead, and the
+ * fitted piece, after which the job is finished. A photograph of a step
+ * already done is added to it and moves nothing.
  */
 export const send = mutation({
   args: {
     jobId: v.id('workshopJobs'),
     from: side,
     photos: v.array(v.id('_storage')),
+    step: v.optional(tag),
+    boards: v.optional(v.number()),
+    complete: v.optional(v.boolean()),
+    visitAt: v.optional(v.number()),
+    callPhone: v.optional(v.string()),
+    // Sent by apps from before threads were tags only; no longer kept.
     text: v.optional(v.string()),
-    step: v.optional(stage),
   },
-  handler: async (ctx, { jobId, from, photos, text, step: named }) => {
+  handler: async (ctx, { jobId, from, photos, step: named, boards, complete, visitAt, callPhone }) => {
     const job = await ctx.db.get(jobId)
     if (!job) throw new ConvexError('That work order is gone.')
-    // The workshop's answer is the photograph of the measurements and nothing
-    // else: no line typed with it, and never a line on its own.
-    if (from === 'workshop' && !photos.length) throw new ConvexError('Send a photo of the measurements.')
-    const said = from === 'workshop' ? undefined : clean(text, 500)
-    if (!photos.length && !said) throw new ConvexError('Add a photo or write something.')
     await checkPhotos(ctx, photos)
     const now = Date.now()
     const device = await deviceOf(ctx)
     const at: Stage = job.stage ?? 'measurement'
-    // Which step the photographs belong to: the one named, when it is this
-    // side's to do; else the present one, when it is this side's turn.
-    const step = !photos.length ? undefined : named && TURN[named] === from ? named : TURN[at] === from ? at : undefined
-    const done = job.status !== 'done' && step === at
+    const open = job.status !== 'done'
+
+    let step: Tag
+    let moves = false
+    const marks: { boards?: number; complete?: boolean; visitAt?: number; callPhone?: string } = {}
+    const facts: { boardsTotal?: number; boardsMade?: number; visitAt?: number; callPhone?: string } = {}
+
+    if (from === 'workshop' && complete) {
+      if (!open || at !== 'assemble') throw new ConvexError('Only a job being assembled can be marked complete.')
+      step = 'assemble'
+      marks.complete = true
+      moves = true
+    } else if (from === 'workshop' && boards !== undefined) {
+      if (!open || at !== 'assemble') throw new ConvexError('The work status is for a job being assembled.')
+      step = 'assemble'
+      marks.boards = facts.boardsMade = boardCount(boards)
+    } else if (from === 'workshop') {
+      if (!photos.length) throw new ConvexError('Send a photo of the measurements.')
+      // The step named, when it is the workshop's; else the present one, or the measurements.
+      step = named && named !== 'visit' && SENDER[named] === 'workshop' ? named : TURN[at] === 'workshop' ? at : 'measurement'
+      if (notYet(step, at)) throw new ConvexError('That step comes later. The one before it is not done yet.')
+      // Assembling is finished by Complete, not by a photograph of it.
+      moves = open && step === at && step !== 'assemble'
+    } else if (visitAt !== undefined) {
+      if (!open || (at !== 'goahead' && at !== 'fitting')) throw new ConvexError('The go-ahead is given once the work is complete.')
+      const phone = String(callPhone ?? '').replace(/[^\d+]/g, '')
+      if (!Number.isFinite(visitAt) || visitAt <= 0) throw new ConvexError('Say when to visit.')
+      if (phone.replace(/\D/g, '').length < 7) throw new ConvexError('Say which number to call.')
+      step = 'goahead'
+      marks.visitAt = facts.visitAt = visitAt
+      marks.callPhone = facts.callPhone = phone
+      // Given again while the fitting is still to do, it is a change of plan, not a new step.
+      moves = at === 'goahead'
+    } else {
+      if (!photos.length) throw new ConvexError('Add a photo.')
+      step = named === 'visit' || named === 'quotation' ? named : at === 'quotation' ? 'quotation' : 'visit'
+      if (notYet(step, at)) throw new ConvexError('The work order comes after the measurements.')
+      if (step === 'quotation' && boards !== undefined) marks.boards = facts.boardsTotal = boardCount(boards)
+      moves = open && step === at
+    }
+
     await ctx.db.patch(jobId, {
-      messages: [...job.messages, { id: `${now}-${job.messages.length}`, from, photos, text: said, ...(step ? { step } : {}), by: device?.name, at: now }],
+      messages: [...job.messages, { id: `${now}-${job.messages.length}`, from, photos, step, ...marks, by: device?.name, at: now }],
       updatedAt: now,
-      ...(done ? (NEXT[at] ? { stage: NEXT[at]! } : { status: 'done' as const }) : {}),
+      ...facts,
+      ...(moves ? (NEXT[at] ? { stage: NEXT[at]! } : { status: 'done' as const }) : {}),
       // Whoever writes has read what was there.
       ...(from === 'shop' ? { shopSeenAt: now } : { workshopSeenAt: now }),
     })
@@ -232,16 +308,6 @@ export const setCustomer = mutation({
       title: clean(account ? bare(account.name) : title, 80),
       updatedAt: Date.now(),
     })
-  },
-})
-
-/** Where the work stands: measurement, then assembling, then fitting. Either side moves it. */
-export const setStage = mutation({
-  args: { jobId: v.id('workshopJobs'), stage },
-  handler: async (ctx, { jobId, stage }) => {
-    const job = await ctx.db.get(jobId)
-    if (!job) throw new ConvexError('That work order is gone.')
-    await ctx.db.patch(jobId, { stage, updatedAt: Date.now() })
   },
 })
 

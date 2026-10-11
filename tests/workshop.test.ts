@@ -15,13 +15,15 @@ describe('workshop: a work order as a chat in photos', () => {
     await expect(t.mutation(api.workshop.create, { photos: [] })).rejects.toThrow('photo')
 
     const first = await t.mutation(api.workshop.create, { title: '  Sanjay  Mahto,  Korambe ', photos: [order] })
+    // A stage sent with a new job, as an older app does, is not used.
     const second = await t.mutation(api.workshop.create, { stage: 'assemble', photos: [await photo()] })
     let jobs = await t.query(api.workshop.list, {})
     expect(jobs.map((j) => j.number).sort()).toEqual([1, 2])
     let job = jobs.find((j) => j.id === first)!
     expect(job).toMatchObject({ title: 'Sanjay Mahto, Korambe', status: 'open', workshopSeenAt: 0 })
     expect(job.messages).toHaveLength(1)
-    expect(job.messages[0]).toMatchObject({ from: 'shop', text: '' })
+    // The photo that opens a job is the shop's visit order.
+    expect(job.messages[0]).toMatchObject({ from: 'shop', step: 'visit', text: '' })
     expect(job.messages[0].photos[0]).toMatchObject({ storageId: order })
     expect(job.messages[0].photos[0].url).toBeTruthy()
     // New to the workshop, not to the shop that sent it.
@@ -29,11 +31,8 @@ describe('workshop: a work order as a chat in photos', () => {
       j.messages.filter((m) => m.from !== side && m.at > (side === 'shop' ? j.shopSeenAt : j.workshopSeenAt)).length
     expect([newTo(job, 'workshop'), newTo(job, 'shop')]).toEqual([1, 0])
 
-    // A new order is at measurement unless the counter put it elsewhere, and either side moves it on.
-    expect(job.stage).toBe('measurement')
-    expect(jobs.find((j) => j.id === second)!.stage).toBe('assemble')
-    await t.mutation(api.workshop.setStage, { jobId: second, stage: 'fitting' })
-    expect((await t.query(api.workshop.list, {})).map((j) => [j.number, j.stage]).sort()).toEqual([[1, 'measurement'], [2, 'fitting']])
+    // Every job starts at measurement; no step is picked.
+    expect(jobs.map((j) => [j.number, j.stage]).sort()).toEqual([[1, 'measurement'], [2, 'measurement']])
 
     // The workshop opens it, then answers with the measurements.
     await t.mutation(api.workshop.seen, { jobId: first, side: 'workshop' })
@@ -41,12 +40,10 @@ describe('workshop: a work order as a chat in photos', () => {
     const measured = await photo()
     await t.mutation(api.workshop.send, { jobId: first, from: 'workshop', photos: [measured], text: 'Two doors' })
     job = (await t.query(api.workshop.list, {})).find((j) => j.id === first)!
-    // What the workshop typed with it is not kept: its answer is the photo.
-    expect(job.messages.map((m) => [m.from, m.photos.length, m.text])).toEqual([['shop', 1, ''], ['workshop', 1, '']])
+    // What was typed with it is not kept: nothing in a thread is free text, from either side.
+    expect(job.messages.map((m) => [m.from, m.step, m.photos.length, m.text])).toEqual([['shop', 'visit', 1, ''], ['workshop', 'measurement', 1, '']])
     await expect(t.mutation(api.workshop.send, { jobId: first, from: 'workshop', photos: [], text: 'Two doors' })).rejects.toThrow('photo of the measurements')
-    // The counter can still write a line.
-    await t.mutation(api.workshop.send, { jobId: second, from: 'shop', photos: [], text: 'Call before going' })
-    expect((await t.query(api.workshop.list, {})).find((j) => j.id === second)!.messages.at(-1)).toMatchObject({ from: 'shop', text: 'Call before going' })
+    await expect(t.mutation(api.workshop.send, { jobId: second, from: 'shop', photos: [], text: 'Call before going' })).rejects.toThrow('Add a photo')
     expect([newTo(job, 'workshop'), newTo(job, 'shop')]).toEqual([0, 1])
     await t.mutation(api.workshop.seen, { jobId: first, side: 'shop' })
     job = (await t.query(api.workshop.list, {})).find((j) => j.id === first)!
@@ -149,39 +146,68 @@ describe('workshop: a work order as a chat in photos', () => {
     void supplier
   })
 
-  it('moves a job on, a step at a time, as each side photographs its step', async () => {
+  it('moves a job through its steps, each done by the side whose turn it is', async () => {
     const t = convexTest(schema, modules)
     const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
     const id = await t.mutation(api.workshop.create, { photos: [await photo()] })
     const job = async () => (await t.query(api.workshop.list, {})).find((j) => j.id === id)!
-    const steps = async () => (await job()).messages.map((m) => m.step)
+    const send = (args: Record<string, unknown>) => t.mutation(api.workshop.send, { jobId: id, photos: [], ...args } as never)
+    const when = Date.parse('2026-10-14T10:30:00+05:30')
 
-    // The shop's photo while the workshop is still to measure moves nothing.
-    await t.mutation(api.workshop.send, { jobId: id, from: 'shop', photos: [await photo()] })
+    // 1. Measurement, the workshop's. Another visit-order photo from the shop moves nothing.
+    await send({ from: 'shop', photos: [await photo()] })
     expect(await job()).toMatchObject({ stage: 'measurement', status: 'open' })
-    // The workshop cannot do a later step first: a photo named for it is kept, and moves nothing.
-    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'fitting' })
+    // Nothing from a later step can be done first: no step is skipped.
+    await expect(send({ from: 'workshop', photos: [await photo()], step: 'fitting' })).rejects.toThrow('comes later')
+    await expect(send({ from: 'shop', photos: [await photo()], step: 'quotation' })).rejects.toThrow('after the measurements')
+    await expect(send({ from: 'workshop', boards: 2 })).rejects.toThrow('being assembled')
+    await expect(send({ from: 'workshop', complete: true })).rejects.toThrow('being assembled')
+    await expect(send({ from: 'shop', visitAt: when, callPhone: '8340785465' })).rejects.toThrow('once the work is complete')
     expect(await job()).toMatchObject({ stage: 'measurement' })
-
-    // Measured: the job is the shop's, for the work order.
-    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'measurement' })
-    expect(await job()).toMatchObject({ stage: 'quotation', status: 'open' })
-    // Another measurement photo afterwards is added to the measurement, and moves nothing.
-    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'measurement' })
+    await send({ from: 'workshop', photos: [await photo()], step: 'measurement' })
     expect(await job()).toMatchObject({ stage: 'quotation' })
-    // A line from the shop is not the work order.
-    await t.mutation(api.workshop.send, { jobId: id, from: 'shop', photos: [], text: 'Making it now' })
+    // A second measurement photo is added to the measurement, and moves nothing.
+    await send({ from: 'workshop', photos: [await photo()], step: 'measurement' })
     expect(await job()).toMatchObject({ stage: 'quotation' })
 
-    // The work order's photo sends it to the workshop to assemble.
-    await t.mutation(api.workshop.send, { jobId: id, from: 'shop', photos: [await photo()] })
-    expect(await job()).toMatchObject({ stage: 'assemble', status: 'open' })
-    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'assemble' })
-    expect(await job()).toMatchObject({ stage: 'fitting', status: 'open' })
-    // Fitted: finished.
-    await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'fitting' })
+    // 2. The work order, the shop's, with the boards it asks for.
+    await send({ from: 'shop', photos: [await photo()], step: 'visit' })
+    expect(await job()).toMatchObject({ stage: 'quotation' })
+    await send({ from: 'shop', photos: [await photo()], step: 'quotation', boards: 8 })
+    expect(await job()).toMatchObject({ stage: 'assemble', boardsTotal: 8, boardsMade: null })
+
+    // 3. Assembling: the work status as often as wanted, then Complete.
+    await send({ from: 'workshop', boards: 3 })
+    await send({ from: 'workshop', boards: 6.9 })
+    expect(await job()).toMatchObject({ stage: 'assemble', boardsMade: 6 })
+    await expect(send({ from: 'workshop', boards: -1 })).rejects.toThrow('number of boards')
+    // A photo of the work in hand is kept as work status; it is Complete that ends the step.
+    await send({ from: 'workshop', photos: [await photo()], step: 'assemble' })
+    expect(await job()).toMatchObject({ stage: 'assemble' })
+    await send({ from: 'workshop', complete: true })
+    expect(await job()).toMatchObject({ stage: 'goahead', status: 'open' })
+    await expect(send({ from: 'workshop', complete: true })).rejects.toThrow('being assembled')
+
+    // 4. The go-ahead, the shop's: when to go and whom to ring. Both are needed.
+    await expect(send({ from: 'shop', visitAt: when, callPhone: '12' })).rejects.toThrow('which number')
+    await expect(send({ from: 'shop', visitAt: 0, callPhone: '8340785465' })).rejects.toThrow('when to visit')
+    await send({ from: 'shop', visitAt: when, callPhone: '83407 85465' })
+    expect(await job()).toMatchObject({ stage: 'fitting', visitAt: when, callPhone: '8340785465' })
+    // Given again, it is a change of plan: the job stays at fitting.
+    await send({ from: 'shop', visitAt: when + 3600_000, callPhone: '+91 90000 00000' })
+    expect(await job()).toMatchObject({ stage: 'fitting', status: 'open', visitAt: when + 3600_000, callPhone: '+919000000000' })
+
+    // 5. Fitted: finished.
+    await send({ from: 'workshop', photos: [await photo()], step: 'fitting' })
     expect(await job()).toMatchObject({ stage: 'fitting', status: 'done' })
-    expect(await steps()).toEqual([null, null, 'fitting', 'measurement', 'measurement', null, 'quotation', 'assemble', 'fitting'])
+    expect((await job()).messages.map((m) => [m.step, m.boards, m.complete, m.visitAt ? 'visit' : null])).toEqual([
+      ['visit', null, false, null], ['visit', null, false, null],
+      ['measurement', null, false, null], ['measurement', null, false, null],
+      ['visit', null, false, null], ['quotation', 8, false, null],
+      ['assemble', 3, false, null], ['assemble', 6, false, null], ['assemble', null, false, null], ['assemble', null, true, null],
+      ['goahead', null, false, 'visit'], ['goahead', null, false, 'visit'],
+      ['fitting', null, false, null],
+    ])
   })
 
   it('refuses a photo that never uploaded', async () => {

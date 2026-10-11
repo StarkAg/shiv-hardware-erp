@@ -1092,17 +1092,35 @@ export default defineSchema({
     status: v.union(v.literal('open'), v.literal('done')),
     // Where the work stands, in the order it goes: to be measured on site
     // (the workshop), the work order to be made from the measurements (the
-    // shop), to be put together (the workshop), to be fitted at the
-    // customer's (the workshop). Absent means measurement.
-    stage: v.optional(v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('fitting'))),
+    // shop), being put together (the workshop), complete and waiting for the
+    // shop's go-ahead once it has rung the customer (the shop), to be fitted
+    // at the customer's (the workshop). Absent means measurement.
+    stage: v.optional(v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('goahead'), v.literal('fitting'))),
+    // The boards the work order asks for and how many are made so far, and
+    // the go-ahead: when to go and which number to ring. The latest of each,
+    // for the list and the card at the head of the chat.
+    boardsTotal: v.optional(v.number()),
+    boardsMade: v.optional(v.number()),
+    visitAt: v.optional(v.number()),
+    callPhone: v.optional(v.string()),
     messages: v.array(v.object({
       id: v.string(),
       from: v.union(v.literal('shop'), v.literal('workshop')),
       photos: v.array(v.id('_storage')),
       text: v.optional(v.string()),
-      // The step these photographs are the proof of: the measurements, the
-      // work order, the assembled piece, the fitted one.
-      step: v.optional(v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('fitting'))),
+      // What the message is. Nothing in a thread is free text: every
+      // message is tagged, and is photographs of that thing or a marker.
+      //   visit        the shop's visit order (photographs)
+      //   measurement  the workshop's measurements (photographs)
+      //   quotation    the shop's work order (photographs, and `boards` to make)
+      //   assemble     the workshop's work status (`boards` made so far), or `complete`
+      //   goahead      the shop's go-ahead (`visitAt`, `callPhone`)
+      //   fitting      the workshop's fitted piece (photographs)
+      step: v.optional(v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('goahead'), v.literal('fitting'))),
+      boards: v.optional(v.number()),
+      complete: v.optional(v.boolean()),
+      visitAt: v.optional(v.number()),
+      callPhone: v.optional(v.string()),
       // The device it was sent from, as the Trusted devices list names it.
       by: v.optional(v.string()),
       at: v.number(),

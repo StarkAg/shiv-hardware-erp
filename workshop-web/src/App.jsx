@@ -50,24 +50,48 @@ const addressOf = (job) => {
 const newIn = (job) => job.messages.filter((m) => m.from === OTHER && m.at > (job[`${SIDE}SeenAt`] ?? 0)).length
 /** The three places a job can stand, in the order the work goes. */
 /**
- * The steps a job goes through, in order, and whose turn each is. A step is
- * done by photographing it (convex/workshop.ts `send`): the workshop the
- * measurements, the shop the work order it makes from them, the workshop the
- * piece assembled and then fitted. `todo` is what the list says while a step
- * waits, `sent` what its photographs are called in the chat.
+ * The steps a job goes through, in order, and whose turn each is
+ * (convex/workshop.ts `send` is where each is done and the job moved on):
+ *
+ *   measurement  the workshop measures on site and photographs the figures
+ *   quotation    the shop makes the work order from them and sends its photo
+ *   assemble     the workshop builds it, says how many boards are made, then Complete
+ *   goahead      the shop rings the customer and says when to go and whom to ring
+ *   fitting      the workshop fits it and photographs it; the job is finished
+ *
+ * `todo` is what the list says while a step waits.
  */
 const STAGES = [
-  { id: 'measurement', label: 'Measurement', todo: 'To measure', sent: 'Measurement', turn: 'workshop' },
-  { id: 'quotation', label: 'Quotation', todo: 'Work order to make', sent: 'Work order', turn: 'shop' },
-  { id: 'assemble', label: 'Assemble', todo: 'To assemble', sent: 'Assembled', turn: 'workshop' },
-  { id: 'fitting', label: 'Fitting', todo: 'To fit', sent: 'Fitted', turn: 'workshop' },
+  { id: 'measurement', label: 'Measurement', todo: 'To measure', turn: 'workshop' },
+  { id: 'quotation', label: 'Work order', todo: 'Work order to make', turn: 'shop' },
+  { id: 'assemble', label: 'Assemble', todo: 'Being assembled', turn: 'workshop' },
+  { id: 'goahead', label: 'Go-ahead', todo: 'Complete: go-ahead to give', turn: 'shop' },
+  { id: 'fitting', label: 'Fitting', todo: 'To fit', turn: 'workshop' },
 ]
+/**
+ * Nothing in a thread is free text: every message is tagged with what it is,
+ * and this is what each tag is called in the chat.
+ */
+const TAGS = { visit: 'Visit order', measurement: 'Measurement', quotation: 'Work order', assemble: 'Work status', goahead: 'Go-ahead', fitting: 'Fitted' }
 const stageId = (job) => job.stage ?? 'measurement'
 const stageAt = (job) => STAGES.find((s) => s.id === stageId(job)) ?? STAGES[0]
+const stageNo = (id) => STAGES.findIndex((s) => s.id === id)
 const finished = (job) => job.status === 'done'
 const stageOf = (job) => (finished(job) ? 'Done' : stageAt(job).todo)
 /** Whether the step a job stands at is this side's to do. */
 const myTurn = (job) => !finished(job) && stageAt(job).turn === SIDE
+
+const boardsLine = (made, total) => `${made}${total ? ` of ${total}` : ''} ${made === 1 && !total ? 'board' : 'boards'} made`
+const visitLine = (ms) => new Date(ms).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+/** A message in a few words: for the list, and for one still on its way. */
+const lineOf = (m, job) => {
+  const n = m.photos?.length ?? m.files?.length ?? 0
+  if (m.complete) return 'Complete'
+  if (m.visitAt) return `Go-ahead: ${visitLine(m.visitAt)}`
+  if (m.boards != null && m.step !== 'quotation') return `Work status: ${boardsLine(m.boards, job?.boardsTotal)}`
+  if (n) return `${TAGS[m.step] ?? (m.from === 'workshop' ? 'Measurement' : 'Photo')}${n > 1 ? ` · ${n} photos` : ''}`
+  return m.text || ''
+}
 
 /**
  * The numbers to ring a customer on. The books keep one line for the phone,
@@ -163,7 +187,15 @@ async function deliver(item) {
   try {
     // Photos that went up before a failed post are not sent up again.
     item.photoIds ??= await upload(outbox.convex, item.files)
-    if (item.jobId) await outbox.convex.mutation(api.workshop.send, { jobId: item.jobId, from: SIDE, photos: item.photoIds, text: item.text || undefined, ...(item.step ? { step: item.step } : {}) })
+    if (item.jobId) {
+      await outbox.convex.mutation(api.workshop.send, {
+        jobId: item.jobId, from: SIDE, photos: item.photoIds,
+        ...(item.step ? { step: item.step } : {}),
+        ...(item.boards != null ? { boards: item.boards } : {}),
+        ...(item.complete ? { complete: true } : {}),
+        ...(item.visitAt ? { visitAt: item.visitAt, callPhone: item.callPhone } : {}),
+      })
+    }
     else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds })
     // The live list has it by now, so its stand-in goes.
     discard(item)
@@ -174,8 +206,8 @@ async function deliver(item) {
   }
 }
 /**
- * The rest of what a thread can do (where the work stands, who it is for, and
- * marking it read) shows on this phone the moment it is tapped: the list here
+ * The rest of what a thread can do (who it is for, and marking it read)
+ * shows on this phone the moment it is tapped: the list here
  * is changed first and the books a moment later, which then send back the
  * same thing. If the books refuse, the list goes back to what they hold.
  */
@@ -185,7 +217,6 @@ const withJob = (store, jobId, change) => {
 }
 const atOnce = {
   seen: (store, { jobId, side }) => withJob(store, jobId, (j) => ({ ...j, [`${side}SeenAt`]: Date.now() })),
-  setStage: (store, { jobId, stage }) => withJob(store, jobId, (j) => ({ ...j, stage, updatedAt: Date.now() })),
   setCustomer: (store, { jobId, ledgerId, title }) => {
     const account = ledgerId ? store.getQuery(api.workshop.customers, {})?.find((c) => c.id === ledgerId) : null
     withJob(store, jobId, (j) => ({ ...j, ledgerId: account?.id ?? null, title: account?.name ?? title ?? '', place: account?.place ?? '', phone: account?.phone ?? '', updatedAt: Date.now() }))
@@ -194,7 +225,7 @@ const atOnce = {
 
 /** Puts a reply (`jobId`) or a new order (`customer`) in the outbox and starts it on its way. */
 function post(item) {
-  const queued = { id: `out-${Date.now()}-${outbox.items.length}`, at: Date.now(), state: 'sending', error: '', ...item }
+  const queued = { id: `out-${Date.now()}-${outbox.items.length}`, at: Date.now(), state: 'sending', error: '', files: [], previews: [], ...item }
   outbox.items.push(queued)
   told()
   void deliver(queued)
@@ -362,9 +393,7 @@ function List({ jobs, onOpen, onNew, saving }) {
           const first = job.messages.flatMap((m) => m.photos)[0]
           const news = newIn(job)
           const standing = stageOf(job)
-          const line = last
-            ? `${last.from === SIDE ? 'You: ' : ''}${last.photos.length ? (last.photos.length > 1 ? `${last.photos.length} photos` : 'Photo') : ''}${last.photos.length && last.text ? ' · ' : ''}${last.text}`
-            : ''
+          const line = last ? `${last.from === SIDE ? 'You: ' : ''}${lineOf(last, job)}` : ''
           return (
             <li key={job.id} className="holdable" {...holdToDelete(job)}>
               <button type="button" onClick={() => onOpen(job.id)}>
@@ -561,22 +590,10 @@ function CustomerPicker({ value, onChange, disabled }) {
 /** A picked or typed customer, as the server takes it. */
 const customerArgs = (c) => (c?.ledgerId ? { ledgerId: c.ledgerId } : c?.name?.trim() ? { title: c.name.trim() } : {})
 
-/** Which of the list's three boxes a job is in: one of them, always. */
-function StagePick({ value, onChange }) {
-  return (
-    <div className="stages pick" role="group" aria-label="Which box it goes in">
-      {STAGES.map((s) => (
-        <button key={s.id} type="button" className={value === s.id ? 'on' : ''} aria-pressed={value === s.id} onClick={() => onChange(s.id)}>{s.label}</button>
-      ))}
-    </div>
-  )
-}
-
-/** A new work order: its photo or photos, who it is for, and which box it goes in. */
+/** A new job: the photo or photos of the visit order, and who it is for. It starts at measurement. */
 function NewOrder({ onClose }) {
   const { picked, add, drop, take } = usePicked()
   const [customer, setCustomer] = useState(null)
-  const [stage, setStage] = useState('measurement')
   const camera = useRef(null)
   const gallery = useRef(null)
 
@@ -584,15 +601,15 @@ function NewOrder({ onClose }) {
   const send = () => {
     if (!picked.length) return
     const photos = take()
-    post({ customer: { ...customerArgs(customer), stage }, title: customer?.name?.trim() ?? '', files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
+    post({ customer: customerArgs(customer), title: customer?.name?.trim() ?? '', files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
     onClose()
   }
 
   return (
     <div className="sheetback" onClick={onClose}>
       <div className="sheet wide" role="dialog" aria-modal="true" aria-label="New work order" onClick={(e) => e.stopPropagation()}>
-        <b className="sheettitle">New work order</b>
-        <p>Photograph the order. It goes to the workshop as it is.</p>
+        <b className="sheettitle">New visit order</b>
+        <p>Photograph the visit order. It goes to the workshop, to visit and measure.</p>
         <PhotoInputs camera={camera} gallery={gallery} onFiles={add} />
         <Picked picked={picked} onDrop={drop} />
         <div className="pickrow">
@@ -600,7 +617,6 @@ function NewOrder({ onClose }) {
           <button type="button" className="pick" onClick={() => gallery.current?.click()}><PhotosIcon /> Choose</button>
         </div>
         <CustomerPicker value={customer} onChange={setCustomer} />
-        <StagePick value={stage} onChange={setStage} />
         <div className="sheetbtns">
           <button type="button" className="ghost" onClick={onClose}>Cancel</button>
           <button type="button" className="solid" onClick={send} disabled={!picked.length}>Send to workshop</button>
@@ -613,12 +629,10 @@ function NewOrder({ onClose }) {
 function Thread({ job, onBack }) {
   const seen = useMutation(api.workshop.seen).withOptimisticUpdate(atOnce.seen)
   const removeMessage = useMutation(api.workshop.removeMessage)
-  const setStage = useMutation(api.workshop.setStage).withOptimisticUpdate(atOnce.setStage)
   const setCustomer = useMutation(api.workshop.setCustomer).withOptimisticUpdate(atOnce.setCustomer)
   // The customer being chosen in the "Customer" sheet; undefined while it is shut.
   const [choosing, setChoosing] = useState(undefined)
   const { picked, add, drop, take } = usePicked()
-  const [text, setText] = useState('')
   const [error, setError] = useState('')
   // This thread's replies still on their way: shown as sent from the moment Send is tapped.
   const outgoing = useOutbox().filter((item) => item.jobId === job.id)
@@ -630,7 +644,6 @@ function Thread({ job, onBack }) {
   const [deleting, setDeleting] = useState(null)
   const holdToDelete = useHold(setDeleting)
   const camera = useRef(null)
-  const gallery = useRef(null)
   const end = useRef(null)
 
   // Like a chat: opens at the newest, and follows it.
@@ -654,15 +667,60 @@ function Thread({ job, onBack }) {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  // Sent at once: the reply shows in the thread while it goes up behind (the outbox).
-  const reply = () => {
-    // The workshop sends the measurement photo and nothing with it.
-    const line = SIDE === 'workshop' ? '' : text.trim()
-    if (!picked.length && !line) return
-    const photos = take()
-    post({ jobId: job.id, text: line, files: photos.map((p) => p.file), previews: photos.map((p) => p.url), ...(SIDE === 'workshop' && step ? { step } : {}) })
-    setText('')
+  /**
+   * What this side can add to the thread, from the three-lines button at the
+   * foot. Never a typed line: each is photographs tagged with what they are,
+   * or a marker (boards made, Complete, the go-ahead). `stage` is the step it
+   * belongs to; one with none (the visit order) can be added at any time.
+   */
+  const ACTIONS = SIDE === 'workshop' ? [
+    { id: 'measurement', label: 'Measurement', kind: 'photo', stage: 'measurement', say: 'Photograph the measurements' },
+    { id: 'status', label: 'Work status', kind: 'boards', stage: 'assemble', say: 'How many boards are made' },
+    { id: 'complete', label: 'Complete', kind: 'complete', stage: 'assemble', say: 'Assembling is finished' },
+    { id: 'fitting', label: 'Fitting', kind: 'photo', stage: 'fitting', say: 'Photograph it fitted' },
+  ] : [
+    { id: 'visit', label: 'Visit order', kind: 'photo', stage: null, say: 'Add a photo of the visit order' },
+    { id: 'quotation', label: 'Work order', kind: 'photo', stage: 'quotation', say: 'Attach the work order' },
+    { id: 'goahead', label: 'Go-ahead', kind: 'goahead', stage: 'goahead', say: 'When to visit and whom to call' },
+  ]
+  const [menu, setMenu] = useState(false)
+  // The tag of the photos being taken, and the three small sheets.
+  const [step, setStep] = useState(null)
+  const [boardsOpen, setBoardsOpen] = useState(false)
+  const [boards, setBoards] = useState(0)
+  const [boardsToMake, setBoardsToMake] = useState('')
+  const [completing, setCompleting] = useState(false)
+  const [going, setGoing] = useState(null)
+  const act = (action) => {
+    setMenu(false)
     setError('')
+    if (action.kind === 'photo') { setStep(action.id); camera.current?.click() }
+    else if (action.kind === 'boards') { setBoards(job.boardsMade ?? 0); setBoardsOpen(true) }
+    else if (action.kind === 'complete') setCompleting(true)
+    else {
+      // Tomorrow at ten unless a time is already set; the customer's first number.
+      const at = new Date(job.visitAt ?? Date.now() + 86400000)
+      if (!job.visitAt) at.setHours(10, 0, 0, 0)
+      const local = new Date(at.getTime() - at.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+      setGoing({ when: local, phone: job.callPhone || contactsOf(job.phone)[0] || '' })
+    }
+  }
+  // Each is sent at once: it shows in the thread while it goes up behind (the outbox).
+  const sendPhotos = () => {
+    if (!picked.length || !step) return
+    const photos = take()
+    const n = Number(boardsToMake)
+    post({ jobId: job.id, step, files: photos.map((p) => p.file), previews: photos.map((p) => p.url), ...(step === 'quotation' && boardsToMake !== '' && n >= 0 ? { boards: n } : {}) })
+    setBoardsToMake('')
+    setError('')
+  }
+  const sendBoards = () => { post({ jobId: job.id, step: 'assemble', boards }); setBoardsOpen(false) }
+  const sendComplete = () => { post({ jobId: job.id, step: 'assemble', complete: true }); setCompleting(false) }
+  const sendGoAhead = () => {
+    const visitAt = new Date(going.when).getTime()
+    if (!visitAt || contactsOf(going.phone).length !== 1) return
+    post({ jobId: job.id, step: 'goahead', visitAt, callPhone: contactsOf(going.phone)[0] })
+    setGoing(null)
   }
 
   const items = useMemo(() => {
@@ -678,12 +736,22 @@ function Thread({ job, onBack }) {
 
   const standing = stageOf(job)
   const first = photos[0]
-  // The workshop's steps, from the three-lines button at the foot: which one
-  // the photos being taken are for, and whether the list of them is open.
-  const [menu, setMenu] = useState(false)
-  const [step, setStep] = useState(null)
-  const stepSent = STAGES.find((s) => s.id === step)?.sent ?? 'photo'
-  const takeFor = (id) => { setStep(id); setMenu(false); camera.current?.click() }
+  // What the foot of the chat says is waiting, in the reader's own words.
+  const at = stageId(job)
+  const waitingFor = finished(job) ? 'Finished'
+    : SIDE === 'workshop' ? {
+      measurement: 'To measure. Tap the lines, then Measurement',
+      quotation: 'With the shop: the work order is being made',
+      assemble: 'Assembling. Tap the lines for work status or Complete',
+      goahead: 'Complete. Waiting for the shop\'s go-ahead',
+      fitting: 'Go-ahead given. Tap the lines, then Fitting, once fitted',
+    }[at] : {
+      measurement: 'With the workshop: to measure',
+      quotation: 'Measured. Tap the lines, then Work order',
+      assemble: 'With the workshop: being assembled',
+      goahead: 'Complete. Call the customer, then tap the lines for the go-ahead',
+      fitting: 'With the workshop: to fit',
+    }[at]
 
   return (
     <div className="app chat">
@@ -718,6 +786,13 @@ function Thread({ job, onBack }) {
               </button>
             )}
           </div>
+          {(job.boardsTotal != null || job.boardsMade != null || job.visitAt) && (
+            <div className="facts">
+              {(job.boardsTotal != null || job.boardsMade != null) && <span>{job.boardsMade != null ? boardsLine(job.boardsMade, job.boardsTotal) : `${job.boardsTotal} boards to make`}</span>}
+              {job.visitAt && <span>Visit {visitLine(job.visitAt)}</span>}
+              {job.visitAt && job.callPhone && <a href={`tel:${job.callPhone}`}><PhoneIcon size={14} />Call {job.callPhone}</a>}
+            </div>
+          )}
         </section>
       )}
 
@@ -728,18 +803,26 @@ function Thread({ job, onBack }) {
           const mine = m.from === SIDE
           return (
             <div key={it.key} className={`bubble holdable ${mine ? 'right' : 'left'}`} {...holdToDelete(m)}>
-              {m.step ? <div className="kind step">{STAGES.find((s) => s.id === m.step)?.sent}</div>
-                : m.from === 'workshop' && m.photos.length > 0 ? <div className="kind">Measurement</div>
-                : !mine && <div className="kind">{SIDE_NAME[m.from]}</div>}
+              <div className="kind step">{TAGS[m.step] ?? (m.from === 'workshop' && m.photos.length ? 'Measurement' : SIDE_NAME[m.from])}</div>
               {m.photos.length > 0 && (
                 <div className={`shots n${Math.min(m.photos.length, 3)}`}>
                   {m.photos.map((p) => (
                     <button key={p.storageId} type="button" onClick={() => openPhoto(p.storageId)}>
-                      <Shot url={p.url} width={BUBBLE} alt={m.from === 'workshop' ? 'Measurement photo' : 'Work order photo'} loading="lazy" decoding="async" />
+                      <Shot url={p.url} width={BUBBLE} alt={TAGS[m.step] ?? 'Photo'} loading="lazy" decoding="async" />
                     </button>
                   ))}
                 </div>
               )}
+              {m.complete && <div className="marker ok"><TickIcon size={20} /> Assembling complete</div>}
+              {m.boards != null && m.step === 'quotation' && <div className="marker small">{m.boards} boards to make</div>}
+              {m.boards != null && m.step !== 'quotation' && <div className="marker"><b>{m.boards}</b>{job.boardsTotal ? ` of ${job.boardsTotal}` : ''} boards made</div>}
+              {m.visitAt && (
+                <div className="marker goahead">
+                  <span>Visit: <b>{visitLine(m.visitAt)}</b></span>
+                  {m.callPhone && <a href={`tel:${m.callPhone}`}><PhoneIcon size={16} />Call {m.callPhone}</a>}
+                </div>
+              )}
+              {/* A line typed before threads became tags only. */}
               {m.text && <div className="text">{m.text}</div>}
               <div className="meta">{clock(m.at)}</div>
             </div>
@@ -747,12 +830,13 @@ function Thread({ job, onBack }) {
         })}
         {outgoing.map((item) => (
           <div key={item.id} className={`bubble right outgoing ${item.state}`}>
+            <div className="kind step">{TAGS[item.step] ?? 'Photo'}</div>
             {item.previews.length > 0 && (
               <div className={`shots n${Math.min(item.previews.length, 3)}`}>
                 {item.previews.map((url) => <span key={url}><img src={url} alt="" /></span>)}
               </div>
             )}
-            {item.text && <div className="text">{item.text}</div>}
+            {!item.previews.length && <div className="marker">{lineOf(item, job)}</div>}
             {item.state === 'failed' ? (
               <div className="meta bad">
                 <button type="button" onClick={() => void deliver(item)}>Not sent. Tap to try again</button>
@@ -763,72 +847,57 @@ function Thread({ job, onBack }) {
             )}
           </div>
         ))}
-        {!outgoing.length && !finished(job) && (
-          <p className="hint">
-            {SIDE === 'workshop'
-              ? (myTurn(job) ? `${stageAt(job).todo}. When it is done, tap the three lines below, then ${stageAt(job).label}, and photograph it.` : 'With the shop now: the work order is being made from your measurements.')
-              : (myTurn(job) ? 'Measured. Make the work order, then send its photo here: it goes to the workshop to assemble.' : `With the workshop: ${stageAt(job).todo.toLowerCase()}.`)}
-          </p>
-        )}
+        {!outgoing.length && !finished(job) && <p className="hint">{waitingFor}.</p>}
         <div ref={end} />
       </main>
 
-      {SIDE === 'workshop' ? (
-        // The workshop's one answer: mark the job measured, which is to
-        // photograph the measurements, with the camera, there and then. No
-        // line to type and no picture from the phone's gallery.
-        <footer className="composer">
-          <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { add(e.target.files); e.target.value = '' }} />
-          <Picked picked={picked} onDrop={drop} />
-          {error && <p className="error" role="alert">{error}</p>}
-          {picked.length ? (
-            <div className="row">
-              <button type="button" className="tool" onClick={() => camera.current?.click()} aria-label="Take another photo"><CameraIcon /></button>
-              <button type="button" className="go grow" onClick={reply}><SendIcon /> Send: {stepSent}</button>
-            </div>
-          ) : (
-            <div className="row">
-              <button type="button" className="tool menu" onClick={() => setMenu(true)} aria-label="Steps: measurement, assemble, fitting"><MenuIcon /></button>
-              <span className="now">{finished(job) ? 'Finished' : myTurn(job) ? `${stageAt(job).todo}: tap the lines` : 'With the shop: work order'}</span>
-            </div>
-          )}
-        </footer>
-      ) : (
+      {/* The foot of the chat: no line to type on either side. The three lines
+          open what this side can add; photos being sent wait here with their
+          tag. The workshop photographs with the camera, there and then; the
+          shop may also pick a picture already on the phone. */}
       <footer className="composer">
-        <PhotoInputs camera={camera} gallery={gallery} onFiles={add} />
+        <input ref={camera} type="file" accept="image/*" hidden multiple={SIDE === 'shop'} {...(SIDE === 'workshop' ? { capture: 'environment' } : {})}
+          onChange={(e) => { add(e.target.files); e.target.value = '' }} />
         <Picked picked={picked} onDrop={drop} />
+        {picked.length > 0 && step === 'quotation' && (
+          <label className="boardsask">
+            Boards to make
+            <input type="number" inputMode="numeric" min={0} max={999} placeholder="0" value={boardsToMake} onChange={(e) => setBoardsToMake(e.target.value)} />
+          </label>
+        )}
         {error && <p className="error" role="alert">{error}</p>}
-        <div className="row">
-          <button type="button" className="tool" onClick={() => gallery.current?.click()} aria-label="Choose photos from the phone"><PhotosIcon /></button>
-          <input type="text" placeholder="Write a line" value={text} maxLength={500}
-            onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') reply() }} />
-          {picked.length || text.trim() ? (
-            <button type="button" className="go" onClick={reply} aria-label="Send"><SendIcon /></button>
-          ) : (
-            <button type="button" className={`go ${myTurn(job) ? 'wide' : ''}`} onClick={() => camera.current?.click()} aria-label="Take a photo">
-              <CameraIcon />{myTurn(job) && ' Work order'}
-            </button>
-          )}
-        </div>
+        {picked.length ? (
+          <div className="row">
+            <button type="button" className="tool" onClick={() => camera.current?.click()} aria-label="Add another photo"><CameraIcon /></button>
+            <button type="button" className="go grow" onClick={sendPhotos}><SendIcon /> Send: {TAGS[step] ?? 'photo'}</button>
+          </div>
+        ) : (
+          <div className="row">
+            <button type="button" className="tool menu" onClick={() => setMenu(true)} aria-label="What to add"><MenuIcon /></button>
+            <span className="now">{waitingFor}</span>
+          </div>
+        )}
       </footer>
-      )}
 
       {menu && (
         <div className="sheetback" onClick={() => setMenu(false)}>
-          <div className="sheet" role="dialog" aria-modal="true" aria-label="Steps" onClick={(e) => e.stopPropagation()}>
-            <b className="sheettitle">Which step is done?</b>
-            <p>Tap it and photograph it. The photo is attached and the job moves on.</p>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="What to add" onClick={(e) => e.stopPropagation()}>
+            <b className="sheettitle">What is done?</b>
             <ul className="steps">
-              {STAGES.filter((s) => s.turn === 'workshop').map((s) => {
-                const order = STAGES.findIndex((x) => x.id === s.id)
-                const now = STAGES.findIndex((x) => x.id === stageId(job))
-                const done = finished(job) || order < now
-                const current = !finished(job) && order === now
+              {ACTIONS.map((a) => {
+                // Before its step, at it, or after it. The visit order has no step: any time.
+                const past = a.stage != null && (finished(job) || stageNo(a.stage) < stageNo(at))
+                const current = a.stage != null && !finished(job) && a.stage === at
+                const open = !finished(job) && (a.stage == null || current || (past && a.kind === 'photo') || (a.kind === 'goahead' && at === 'fitting'))
+                const note = current ? a.say
+                  : a.stage == null ? a.say
+                  : past ? (a.kind === 'photo' ? 'Done. Tap to add another photo' : a.kind === 'goahead' && open ? 'Given. Tap to change it' : 'Done')
+                  : `After ${STAGES[stageNo(a.stage) - 1]?.label.toLowerCase() ?? 'the step before'}`
                 return (
-                  <li key={s.id}>
-                    <button type="button" className={current ? 'now' : done ? 'done' : ''} disabled={!current && !done} onClick={() => takeFor(s.id)}>
-                      <span className="mark">{done ? <TickIcon size={18} /> : <CameraIcon size={18} />}</span>
-                      <span className="what"><b>{s.label}</b><small>{done ? 'Done. Tap to add another photo' : current ? 'Take the photo' : now < STAGES.findIndex((x) => x.id === 'assemble') && s.id === 'assemble' ? 'After the shop sends the work order' : 'Not yet'}</small></span>
+                  <li key={a.id}>
+                    <button type="button" className={current ? 'now' : past ? 'done' : ''} disabled={!open} onClick={() => act(a)}>
+                      <span className="mark">{past ? <TickIcon size={18} /> : a.kind === 'photo' ? <CameraIcon size={18} /> : a.kind === 'goahead' ? <PhoneIcon size={18} /> : <TickIcon size={18} />}</span>
+                      <span className="what"><b>{a.label}</b><small>{finished(job) ? 'Finished' : note}</small></span>
                     </button>
                   </li>
                 )
@@ -836,6 +905,61 @@ function Thread({ job, onBack }) {
             </ul>
             <div className="sheetbtns">
               <button type="button" className="ghost" onClick={() => setMenu(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {boardsOpen && (
+        <div className="sheetback" onClick={() => setBoardsOpen(false)}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="Work status" onClick={(e) => e.stopPropagation()}>
+            <b className="sheettitle">Work status</b>
+            <p>How many boards are made so far{job.boardsTotal ? `, of ${job.boardsTotal}` : ''}?</p>
+            <div className="stepper">
+              <button type="button" onClick={() => setBoards((n) => Math.max(0, n - 1))} aria-label="One fewer">−</button>
+              <input type="number" inputMode="numeric" min={0} max={999} value={boards} aria-label="Boards made"
+                onChange={(e) => setBoards(Math.max(0, Math.min(999, Math.trunc(Number(e.target.value) || 0))))} onFocus={(e) => e.target.select()} />
+              <button type="button" onClick={() => setBoards((n) => Math.min(999, n + 1))} aria-label="One more">+</button>
+            </div>
+            <div className="sheetbtns">
+              <button type="button" className="ghost" onClick={() => setBoardsOpen(false)}>Cancel</button>
+              <button type="button" className="solid" onClick={sendBoards}>Send</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {completing && (
+        <div className="sheetback" onClick={() => setCompleting(false)}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-label="Complete" onClick={(e) => e.stopPropagation()}>
+            <b className="sheettitle">Assembling complete?</b>
+            <p>The shop is told. It will call the customer and send you the go-ahead: when to visit and whom to call.</p>
+            <div className="sheetbtns">
+              <button type="button" className="ghost" onClick={() => setCompleting(false)}>Not yet</button>
+              <button type="button" className="solid" onClick={sendComplete}>Complete</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {going && (
+        <div className="sheetback" onClick={() => setGoing(null)}>
+          <div className="sheet wide" role="dialog" aria-modal="true" aria-label="Go-ahead" onClick={(e) => e.stopPropagation()}>
+            <b className="sheettitle">Go-ahead to the workshop</b>
+            <p>After calling the customer: when to visit, and whom to call.</p>
+            <label className="asklabel">When to visit
+              <input className="field" type="datetime-local" value={going.when} onChange={(e) => setGoing({ ...going, when: e.target.value })} />
+            </label>
+            <span className="asklabel">Whom to call</span>
+            {contactsOf(job.phone).length > 0 && (
+              <div className="chips">
+                {contactsOf(job.phone).map((number) => (
+                  <button key={number} type="button" className={contactsOf(going.phone)[0] === number ? 'on' : ''} onClick={() => setGoing({ ...going, phone: number })}>{number}</button>
+                ))}
+              </div>
+            )}
+            <input className="field" type="tel" inputMode="tel" placeholder="Phone number" value={going.phone} maxLength={16}
+              onChange={(e) => setGoing({ ...going, phone: e.target.value.replace(/[^\d+\s-]/g, '') })} />
+            <div className="sheetbtns">
+              <button type="button" className="ghost" onClick={() => setGoing(null)}>Cancel</button>
+              <button type="button" className="solid" onClick={sendGoAhead} disabled={!going.when || contactsOf(going.phone).length !== 1}>Send go-ahead</button>
             </div>
           </div>
         </div>
@@ -856,7 +980,6 @@ function Thread({ job, onBack }) {
             ) : (
               <p className="none">{job.ledgerId ? 'No phone number is saved for this customer in the panel.' : 'No customer account is attached to this order.'}</p>
             )}
-            <StagePick value={stageId(job)} onChange={(id) => { if (id !== stageId(job)) setStage({ jobId: job.id, stage: id }).catch((err) => setError(said(err))) }} />
             {mapLinkOf(job) && (
               <a className="maplink" href={mapLinkOf(job)} target="_blank" rel="noreferrer"><PinIcon size={20} /><span>Site location</span><em>Open map</em></a>
             )}
