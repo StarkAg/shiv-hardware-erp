@@ -89,6 +89,8 @@ button:disabled { opacity: .5; cursor: default; }
 .avatar { flex: none; width: 52px; height: 52px; border-radius: 12px; overflow: hidden; background: var(--card2); border: 1px solid var(--line); color: var(--brass); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar.small { width: 40px; height: 40px; border-radius: 10px; font-size: 16px; }
+.avatar.big { width: 76px; height: 76px; border-radius: 50%; font-size: 32px; }
+button.who { text-align: left; }
 .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .who b { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .who small { font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -173,6 +175,19 @@ button:disabled { opacity: .5; cursor: default; }
 .vdots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.35); }
 .vdots i.on { background: #fff; }
 .vnote { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 34px); margin: 0 auto; max-width: 420px; padding: 11px 14px; border-radius: 12px; background: rgba(40,37,33,.94); border: 1px solid rgba(255,255,255,.18); text-align: center; font-size: 15px; font-weight: 700; }
+
+/* Who a job is for: the name in full, every number to ring, and the site on the map when there is one. */
+.sheet.customer { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
+.customer .fullname { font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; margin-top: 4px; }
+.customer .sub { font-size: 14px; color: var(--muted); }
+.customer .contacts { list-style: none; margin: 10px 0 0; padding: 0; align-self: stretch; display: flex; flex-direction: column; gap: 8px; }
+.customer .contacts a, .customer .maplink { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); text-decoration: none; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.customer .contacts a svg, .customer .maplink svg { flex: none; color: var(--brass); }
+.customer .contacts span, .customer .maplink span { flex: 1; text-align: left; }
+.customer .contacts em, .customer .maplink em { font-style: normal; font-size: 13px; color: var(--brass); text-transform: uppercase; letter-spacing: .06em; }
+.customer .maplink { align-self: stretch; margin-top: 8px; font-size: 16px; }
+.sheet.customer p.none { margin: 10px 0 0; }
+.sheet.customer .sheetbtns { align-self: stretch; }
 
 /* A small sheet over the screen: a new order, and the delete question. */
 .sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 20px; }

@@ -46,6 +46,19 @@ const stageId = (job) => job.stage ?? 'measurement'
 const measured = (job) => job.messages.some((m) => m.from === 'workshop' && m.photos.length)
 const stageOf = (job) => (stageId(job) === 'measurement' ? (measured(job) ? 'Measured' : 'To measure') : STAGES.find((s) => s.id === stageId(job))?.label ?? '')
 
+/**
+ * The numbers to ring a customer on. The books keep one line for the phone,
+ * and where a customer has two they are written into it side by side
+ * ("8340785465 / 9000000000"): each run of digits long enough to be a number
+ * is one contact.
+ */
+const contactsOf = (phone) => [...new Set((String(phone ?? '').match(/\+?\d[\d\s-]{8,}\d/g) ?? [])
+  .map((n) => n.replace(/[\s-]+/g, ''))
+  // Two ten-digit numbers with only a space between them read as one run: taken apart again.
+  .flatMap((n) => (/^\d{20,}$/.test(n) && n.length % 10 === 0 ? n.match(/\d{10}/g) : [n])))]
+/** Where the site is, as a link the phone's map opens, when the job carries one. */
+const mapLinkOf = (job) => job.mapUrl || (job.location?.lat != null ? `https://www.google.com/maps?q=${job.location.lat},${job.location.lng}` : '')
+
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString()
 const clock = (ms) => new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
 const dayOf = (ms) => {
@@ -181,6 +194,7 @@ const PlusIcon = (p) => <Icon {...p} d={<path d="M12 5v14M5 12h14" />} />
 const TrashIcon = (p) => <Icon {...p} d={<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />} />
 const PhoneIcon = (p) => <Icon {...p} d={<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />} />
 const PersonIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>} />
+const PinIcon = (p) => <Icon {...p} d={<><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.6" /></>} />
 const ShareIcon = (p) => <Icon {...p} d={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></>} />
 
 /** The light that says the list on screen is the live one. */
@@ -489,6 +503,9 @@ function Thread({ job, onBack }) {
   // This thread's replies still on their way: shown as sent from the moment Send is tapped.
   const outgoing = useOutbox().filter((item) => item.jobId === job.id)
   const [viewer, setViewer] = useState(null)
+  // Who the job is for, in a window of its own. It opens by itself the first
+  // time this side opens a job that names somebody, and from the header after.
+  const [info, setInfo] = useState(() => (job[`${SIDE}SeenAt`] ?? 0) === 0 && !!(job.title || job.phone))
   // The message the counter is about to delete, and the PIN being typed for it.
   const [deleting, setDeleting] = useState(null)
   const [pin, setPin] = useState('')
@@ -566,11 +583,11 @@ function Thread({ job, onBack }) {
       <header className="top chathead">
         <button type="button" className="back" onClick={onBack} aria-label="Back">‹</button>
         <span className="avatar small">{first ? <Shot url={first.url} width={SMALL} alt="" /> : titleOf(job)[0]?.toUpperCase()}</span>
-        <span className="who">
+        <button type="button" className="who" onClick={() => setInfo(true)} aria-label={`${titleOf(job)}: customer details`}>
           <b>{titleOf(job)}</b>
           <small>{[job.title ? `Work order ${job.number}` : '', job.place, standing].filter(Boolean).join(' · ')}</small>
-        </span>
-        {job.phone && <a className="call" href={`tel:${job.phone}`} aria-label={`Call ${titleOf(job)}`}><PhoneIcon /></a>}
+        </button>
+        {contactsOf(job.phone)[0] && <a className="call" href={`tel:${contactsOf(job.phone)[0]}`} aria-label={`Call ${titleOf(job)}`}><PhoneIcon /></a>}
       </header>
       <div className="stages inthread" role="group" aria-label="Where the work stands">
         {STAGES.map((s) => (
@@ -654,6 +671,33 @@ function Thread({ job, onBack }) {
       </footer>
 
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
+      {info && (
+        <div className="sheetback" onClick={() => setInfo(false)}>
+          <div className="sheet customer" role="dialog" aria-modal="true" aria-label="Customer" onClick={(e) => e.stopPropagation()}>
+            <span className="avatar big">{titleOf(job)[0]?.toUpperCase()}</span>
+            <b className="fullname">{titleOf(job)}</b>
+            <small className="sub">{[job.title ? `Work order ${job.number}` : '', job.place].filter(Boolean).join(' · ')}</small>
+            {contactsOf(job.phone).length > 0 ? (
+              <ul className="contacts">
+                {contactsOf(job.phone).map((number) => (
+                  <li key={number}><a href={`tel:${number}`}><PhoneIcon size={20} /><span>{number}</span><em>Call</em></a></li>
+                ))}
+              </ul>
+            ) : (
+              <p className="none">{job.ledgerId ? 'No phone number is saved for this customer in the panel.' : 'No customer account is attached to this order.'}</p>
+            )}
+            {mapLinkOf(job) && (
+              <a className="maplink" href={mapLinkOf(job)} target="_blank" rel="noreferrer"><PinIcon size={20} /><span>Site location</span><em>Open map</em></a>
+            )}
+            <div className="sheetbtns">
+              {SIDE === 'shop' && (
+                <button type="button" className="ghost" onClick={() => { setInfo(false); setChoosing(job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: job.phone } : job.title ? { name: job.title } : null) }}>Change</button>
+              )}
+              <button type="button" className="solid" onClick={() => setInfo(false)}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
       {choosing !== undefined && (
         <div className="sheetback" onClick={() => setChoosing(undefined)}>
           <div className="sheet wide" role="dialog" aria-modal="true" aria-label="Customer" onClick={(e) => e.stopPropagation()}>
