@@ -69,15 +69,16 @@ button:disabled { opacity: .5; cursor: default; }
 .searchbar input { flex: 1; min-width: 0; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 16px; outline: none; }
 .searchbar input:focus { border-color: var(--brass); }
 
-/* Where the work stands: three boxes under the search, each with how many
-   jobs are there; one picked shows only those. */
-.stages { flex: none; display: flex; gap: 8px; padding: 0 14px 10px; }
-.stages { gap: 6px; overflow-x: auto; scrollbar-width: none; }
-.stages::-webkit-scrollbar { display: none; }
-.stages button { flex: 1 0 auto; min-width: 74px; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 2px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 12px; font-weight: 800; letter-spacing: -.01em; color: var(--muted); overflow: hidden; white-space: nowrap; }
-.stages button b { font-size: 19px; line-height: 1.1; color: var(--fg); font-variant-numeric: tabular-nums; min-height: 21px; }
-.stages button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
-.stages button.on b { color: var(--brass-ink); }
+/* Which jobs to show: small chips under the search, each with its count,
+   wrapping onto a second line rather than scrolling. To do is the one a phone
+   opens on. */
+.filters { flex: none; display: flex; flex-wrap: wrap; gap: 5px; padding: 0 14px 9px; }
+.filters button { display: flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 12px; font-weight: 800; color: var(--muted); white-space: nowrap; }
+.filters button b { min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--card2); color: var(--fg); font-size: 11px; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.filters button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+.filters button.on b { background: rgba(32, 24, 4, .16); color: var(--brass-ink); }
+.filters button.todo:not(.on) b { background: var(--green); color: #fff; }
+
 /* The jobs, as chats */
 .chats { list-style: none; margin: 0 14px; padding: 0 0 84px; overflow-y: auto; flex: 1; border-radius: 16px 16px 0 0; background: var(--card); border: 1px solid var(--line); border-bottom: 0; }
 .chats li > button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); }

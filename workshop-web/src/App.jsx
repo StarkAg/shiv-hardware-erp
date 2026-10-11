@@ -340,13 +340,23 @@ export default function App() {
 
 function List({ jobs, onOpen, onNew, saving }) {
   const [q, setQ] = useState('')
-  // The box picked under the search: only the jobs standing there. None picked, all of them.
-  const [stage, setStage] = useState(null)
+  /**
+   * The filter under the search. It opens on To do: the jobs waiting on this
+   * side (the step is its turn) and any with something new from the other,
+   * so the list a phone opens on is the work in hand. Then All, and the jobs
+   * standing at each step.
+   */
+  const FILTERS = [
+    { id: 'todo', label: 'To do', test: (j) => myTurn(j) || newIn(j) > 0 },
+    { id: 'all', label: 'All', test: () => true },
+    ...STAGES.map((st) => ({ id: st.id, label: st.label, test: (j) => !finished(j) && stageId(j) === st.id })),
+  ]
+  const [filter, setFilter] = useState('todo')
+  const showing = FILTERS.find((f) => f.id === filter) ?? FILTERS[0]
   const rows = useMemo(() => (jobs ?? [])
-    .filter((j) => !stage || (!finished(j) && stageId(j) === stage))
+    .filter((j) => showing.test(j))
     .filter((j) => !q.trim() || `${titleOf(j)} ${j.number}`.toLowerCase().includes(q.trim().toLowerCase()))
-    .sort((a, b) => b.updatedAt - a.updatedAt), [jobs, q, stage])
-  const count = (id) => (jobs ?? []).filter((j) => !finished(j) && stageId(j) === id).length
+    .sort((a, b) => b.updatedAt - a.updatedAt), [jobs, q, filter])
   // New orders still on their way: shown at the head of the list from the moment they are sent.
   const sending = useOutbox().filter((item) => !item.jobId)
   const remove = useMutation(api.workshop.remove)
@@ -368,10 +378,10 @@ function List({ jobs, onOpen, onNew, saving }) {
       <div className="searchbar">
         <input type="search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
-      <div className="stages" role="group" aria-label="Where the work stands">
-        {STAGES.map((s) => (
-          <button key={s.id} type="button" className={stage === s.id ? 'on' : ''} aria-pressed={stage === s.id} onClick={() => setStage(stage === s.id ? null : s.id)}>
-            <b>{jobs ? count(s.id) : ''}</b>{s.label}
+      <div className="filters" role="group" aria-label="Which jobs to show">
+        {FILTERS.map((f) => (
+          <button key={f.id} type="button" className={`${filter === f.id ? 'on' : ''} ${f.id === 'todo' ? 'todo' : ''}`} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+            {f.label}{jobs && <b>{jobs.filter(f.test).length}</b>}
           </button>
         ))}
       </div>
@@ -415,7 +425,9 @@ function List({ jobs, onOpen, onNew, saving }) {
         {!jobs && <li className="empty">Loading</li>}
         {jobs && !rows.length && !sending.length && (
           <li className="empty">
-            {q ? 'Nothing by that name.' : stage ? `Nothing at ${STAGES.find((s) => s.id === stage).label.toLowerCase()}.`
+            {q ? 'Nothing by that name.'
+              : filter === 'todo' && jobs.length ? 'Nothing is waiting on you. Tap All to see every job.'
+              : filter !== 'todo' && filter !== 'all' ? `Nothing at ${showing.label.toLowerCase()}.`
               : SIDE === 'shop' ? 'No work orders yet. Tap New order to send the first.' : 'No work orders yet. A new one from the shop shows here by itself.'}
           </li>
         )}
