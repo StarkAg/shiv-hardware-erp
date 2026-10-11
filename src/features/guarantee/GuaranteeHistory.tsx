@@ -264,12 +264,18 @@ export function GuaranteeHistory() {
   const convexReady = Boolean(import.meta.env.VITE_CONVEX_URL)
 
   const needle = q.toLowerCase()
-  const filtered = guarantees.filter(
-    (x) =>
-      x.number.toLowerCase().includes(needle) ||
-      (x.customer?.name ?? '').toLowerCase().includes(needle) ||
-      (x.customer?.mobile ?? '').includes(q),
-  )
+  // Newest day first, and within a day the highest number. By number alone,
+  // Sanjay Kumar's GC-2026-95246 (a real card of 4 Oct that got a runaway
+  // number) sat above every card made since.
+  const day = (x: GuaranteeDocument) => String(x.date ?? '').slice(0, 10)
+  const filtered = guarantees
+    .filter(
+      (x) =>
+        x.number.toLowerCase().includes(needle) ||
+        (x.customer?.name ?? '').toLowerCase().includes(needle) ||
+        (x.customer?.mobile ?? '').includes(q),
+    )
+    .sort((a, b) => day(b).localeCompare(day(a)) || b.number.localeCompare(a.number))
 
   /** A card's buttons; `big` gives each a thumb-sized target on a phone. */
   const actionsFor = (x: GuaranteeDocument, big: boolean) => (
