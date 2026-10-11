@@ -84,6 +84,22 @@ const myTurn = (job) => !finished(job) && stageAt(job).turn === SIDE
 
 const boardsLine = (made, total) => `${made}${total ? ` of ${total}` : ''} ${made === 1 && !total ? 'board' : 'boards'} made`
 const visitLine = (ms) => new Date(ms).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+/**
+ * How far the boards are, as a bar: the work status at a glance, in the list
+ * and at the head of a chat, without reading the thread for the last figure.
+ * Nothing is drawn until the work order has said how many there are to make.
+ */
+function Boards({ made, total, big = false }) {
+  if (!total) return null
+  const done = Math.min(total, made ?? 0)
+  return (
+    <span className={`boards ${big ? 'big' : ''} ${done >= total ? 'full' : ''}`} role="img" aria-label={`${done} of ${total} boards made`}>
+      <span className="track"><i style={{ width: `${Math.round((done / total) * 100)}%` }} /></span>
+      <b>{done}/{total}</b>
+    </span>
+  )
+}
+
 /** A message in a few words: for the list, and for one still on its way. */
 const lineOf = (m, job) => {
   const n = m.photos?.length ?? m.files?.length ?? 0
@@ -425,6 +441,7 @@ function List({ jobs, onOpen, onNew, saving }) {
                   <b>{nameOf(job)}</b>
                   {addressOf(job) && <small className="addr">{addressOf(job)}</small>}
                   <small><em className={`stage ${myTurn(job) ? 'wait' : 'ok'}`}>{standing}</em>{line}</small>
+                  {stageId(job) === 'assemble' && !finished(job) && <Boards made={job.boardsMade} total={job.boardsTotal} />}
                 </span>
                 <span className="side">
                   <time className={news ? 'new' : ''}>{whenOf(job.updatedAt)}</time>
@@ -746,6 +763,35 @@ function Thread({ job, onBack }) {
     setError('')
   }
   const sendBoards = () => { post({ jobId: job.id, step: 'assemble', boards }); setBoardsOpen(false) }
+  /**
+   * The quick way to log the work status, at the foot of the chat while a job
+   * is being assembled: plus for each board made, minus to correct. Nothing
+   * else to tap: the figure is sent by itself a moment after the last tap, so
+   * four boards in a row are one line in the chat, not four.
+   */
+  const [tally, setTally] = useState(null)
+  const tallyTimer = useRef(0)
+  const tallyNow = useRef(null)
+  const sendTally = () => {
+    clearTimeout(tallyTimer.current)
+    const n = tallyNow.current
+    tallyNow.current = null
+    if (n != null && n !== (job.boardsMade ?? 0)) post({ jobId: job.id, step: 'assemble', boards: n })
+  }
+  const bump = (by) => {
+    const next = Math.max(0, Math.min(999, (tally ?? job.boardsMade ?? 0) + by))
+    setTally(next)
+    tallyNow.current = next
+    clearTimeout(tallyTimer.current)
+    tallyTimer.current = setTimeout(sendTally, 1300)
+  }
+  // Once the books say the same figure, the tapped one has landed.
+  useEffect(() => { if (tally != null && tallyNow.current == null && job.boardsMade === tally) setTally(null) }, [job.boardsMade, tally])
+  // Leaving the chat with a figure tapped and not yet sent: it is sent on the way out.
+  const flushTally = useRef(sendTally)
+  flushTally.current = sendTally
+  useEffect(() => () => flushTally.current(), [])
+  const tallied = tally ?? job.boardsMade ?? 0
   const sendComplete = () => { post({ jobId: job.id, step: 'assemble', complete: true }); setCompleting(false) }
   const sendGoAhead = () => {
     const visitAt = new Date(going.when).getTime()
@@ -773,7 +819,7 @@ function Thread({ job, onBack }) {
     : SIDE === 'workshop' ? {
       measurement: 'To measure. Tap the lines, then Measurement',
       quotation: 'With the shop: the work order is being made',
-      assemble: 'Assembling. Tap the lines for work status or Complete',
+      assemble: 'Assembling. Tap + for each board made, and Complete when it is finished',
       goahead: 'Complete. Waiting for the shop\'s go-ahead',
       fitting: 'Go-ahead given. Tap the lines, then Fitting, once fitted',
     }[at] : {
@@ -819,7 +865,8 @@ function Thread({ job, onBack }) {
           </div>
           {(job.boardsTotal != null || job.boardsMade != null || job.visitAt) && (
             <div className="facts">
-              {(job.boardsTotal != null || job.boardsMade != null) && <span>{job.boardsMade != null ? boardsLine(job.boardsMade, job.boardsTotal) : `${job.boardsTotal} boards to make`}</span>}
+              {job.boardsTotal ? <Boards made={job.boardsMade} total={job.boardsTotal} big />
+                : job.boardsMade != null && <span>{boardsLine(job.boardsMade)}</span>}
               {job.visitAt && <span>Visit {visitLine(job.visitAt)}</span>}
               {job.visitAt && job.callPhone && <a href={`tel:${job.callPhone}`}><PhoneIcon size={14} />Call {job.callPhone}</a>}
             </div>
@@ -832,6 +879,18 @@ function Thread({ job, onBack }) {
           if (it.day) return <div key={it.key} className="daytag"><span>{it.day}</span></div>
           const m = it.m
           const mine = m.from === SIDE
+          // The work status, logged many times a job: one slim line each, so
+          // ten of them read as a list and do not push the photos off the screen.
+          if (!m.photos.length && (m.complete || (m.boards != null && m.step !== 'quotation'))) {
+            return (
+              <div key={it.key} className={`statusline holdable ${m.complete ? 'ok' : ''}`} {...holdToDelete(m)}>
+                <span>
+                  {m.complete ? <><TickIcon size={15} /> Assembling complete</> : <><b>{m.boards}</b>{job.boardsTotal ? ` of ${job.boardsTotal}` : ''} boards made</>}
+                  <time>{clock(m.at)}</time>
+                </span>
+              </div>
+            )
+          }
           return (
             <div key={it.key} className={`bubble holdable ${mine ? 'right' : 'left'}`} {...holdToDelete(m)}>
               <div className="kind step">{TAGS[m.step] ?? (m.from === 'workshop' && m.photos.length ? 'Measurement' : SIDE_NAME[m.from])}</div>
@@ -910,6 +969,14 @@ function Thread({ job, onBack }) {
           <div className="row">
             <button type="button" className="tool" onClick={() => setCam(true)} aria-label="Add another photo"><CameraIcon /></button>
             <button type="button" className="go grow" onClick={sendPhotos}><SendIcon /> Send: {TAGS[step] ?? 'photo'}</button>
+          </div>
+        ) : SIDE === 'workshop' && at === 'assemble' && !finished(job) ? (
+          <div className="row tally">
+            <button type="button" className="tool menu" onClick={() => setMenu(true)} aria-label="What to add"><MenuIcon /></button>
+            <button type="button" className="step" onClick={() => bump(-1)} disabled={tallied <= 0} aria-label="One board fewer">−</button>
+            <span className="figure" aria-live="polite"><b>{tallied}</b>{job.boardsTotal ? ` / ${job.boardsTotal}` : ''}<small>boards made</small></span>
+            <button type="button" className="step plus" onClick={() => bump(1)} aria-label="One more board made">+</button>
+            <button type="button" className="go" onClick={() => { sendTally(); setCompleting(true) }}><TickIcon size={18} /> Complete</button>
           </div>
         ) : (
           <div className="row">
