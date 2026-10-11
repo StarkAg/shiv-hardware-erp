@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type MouseEvent, type SyntheticEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, Download, FileText, Maximize2, Minus, Plus, RotateCw, Scan, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Eraser, FileText, Maximize2, Minus, Pencil, Plus, RotateCw, Scan, X } from 'lucide-react'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import { attachmentName, isPdfAttachment, type Attachment } from '../lib/attachments'
 import './AttachmentViewer.css'
@@ -76,6 +76,18 @@ export function AttachmentThumbnail({ file, alt = '' }: { file: Attachment; alt?
   )
 }
 
+/** One pencil stroke on a photo: x, y, x, y… in the photo's own pixels, so it stays put through zoom and rotation. */
+type Stroke = number[]
+
+/**
+ * The pencil's marks, by photo. Kept here rather than in the viewer so they
+ * are still on the photo when it goes full screen and comes back. They are a
+ * scribble for whoever is reading the photo, never part of it: nothing is
+ * saved or downloaded, and a reload wipes them.
+ */
+const pencilMarks = new Map<string, Stroke[]>()
+const NO_MARKS: Stroke[] = []
+
 type Props = {
   attachments: Attachment[]
   title?: string
@@ -116,6 +128,12 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
   const pdf = !!file && isPdfAttachment(file)
   const rendered = usePdfImage(file?.url, pdf, page, attempt)
   const shown = pdf ? rendered.url : file?.url || file?.previewUrl
+  const sheet = useRef<HTMLDivElement>(null)
+  const [drawing, setDrawing] = useState(false)
+  const stroke = useRef<Stroke | null>(null)
+  const [, repaint] = useState(0)
+  const markKey = (file?.storageId || file?.url || file?.previewUrl || '') + '#' + page
+  const marks = pencilMarks.get(markKey) ?? NO_MARKS
 
   useEffect(() => {
     if (docked) return
@@ -189,6 +207,18 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
   // the form is read line by line, not shrunk to a thumbnail.
   const fit = docked ? (area.width - 16) / width : Math.min((area.width - 32) / width, (area.height - 32) / height)
   const scale = Math.max(.01, fit) * zoom
+  /** Where on the photo itself the pointer is, whatever the zoom and rotation. */
+  const pointOnPhoto = (event: PointerEvent) => {
+    const box = sheet.current!.getBoundingClientRect()
+    const dx = event.clientX - (box.left + box.width / 2)
+    const dy = event.clientY - (box.top + box.height / 2)
+    const angle = -rotation * Math.PI / 180
+    return [
+      Math.round((dx * Math.cos(angle) - dy * Math.sin(angle)) / scale + natural.width / 2),
+      Math.round((dx * Math.sin(angle) + dy * Math.cos(angle)) / scale + natural.height / 2),
+    ]
+  }
+  const wipeMarks = () => { pencilMarks.delete(markKey); stroke.current = null; repaint(n => n + 1) }
   const error = !file ? 'No attachments to show.' : !file.url && !file.previewUrl ? 'This attachment is no longer available.' : pdf ? rendered.error : imageError ? 'Could not load this photo. Please try again.' : ''
 
   const tools = (
@@ -199,6 +229,8 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
           <button type="button" onClick={() => changeZoom(.5)} disabled={zoom >= 5 || !shown} aria-label="Zoom in"><Plus size={18} /></button>
           <button type="button" onClick={() => { setZoom(1); stage.current?.scrollTo(0, 0) }} disabled={!shown} aria-label="Fit to window"><Scan size={18} /><span className="attachment-action-label">Fit</span></button>
           <button type="button" onClick={() => setRotation(current => (current + 90) % 360)} disabled={!shown} aria-label="Rotate clockwise"><RotateCw size={18} /></button>
+          <button type="button" onClick={() => setDrawing(on => !on)} disabled={!shown} aria-pressed={drawing} aria-label="Pencil: mark on the photo" title="Pencil: mark on the photo (not saved)"><Pencil size={18} /></button>
+          {marks.length > 0 && <button type="button" onClick={wipeMarks} aria-label="Wipe the pencil marks" title="Wipe the pencil marks"><Eraser size={18} /></button>}
           {!docked && <button type="button" onClick={() => void action('file', download)} disabled={!!busy || !file?.url} aria-label="Download original file"><Download size={18} /><span className="attachment-action-label">{busy === 'file' ? 'Downloading…' : 'Download'}</span></button>}
           {onDownloadPdf && !docked && <button type="button" onClick={() => void action('pdf', onDownloadPdf)} disabled={!!busy}>{busy === 'pdf' ? 'Making PDF…' : 'Photos as PDF'}</button>}
         </div>
@@ -246,12 +278,37 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
           {loading ? <div className="attachment-status" role="status">Loading attachments…</div>
             : error ? <div className="attachment-status" role="alert">{error}{file?.url && <p><button type="button" onClick={() => { setImageError(false); setAttempt(current => current + 1) }}>Try again</button></p>}</div>
             : pdf && rendered.loading ? <div className="attachment-status" role="status">Opening PDF…</div>
-            : shown && <div className="attachment-center"><div className="attachment-sheet" style={{ width: width * scale, height: height * scale }}>
+            : shown && <div className="attachment-center"><div ref={sheet} className="attachment-sheet" style={{ width: width * scale, height: height * scale }}>
               <img key={shown + ':' + attempt} src={shown} alt={file?.label || 'Attachment ' + (at + 1)} draggable={false}
                 onLoad={event => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
                 onError={() => setImageError(true)}
                 onDoubleClick={() => setZoom(current => current === 1 ? 2 : 1)}
                 style={{ width: natural.width * scale, height: natural.height * scale, left: (width - natural.width) * scale / 2, top: (height - natural.height) * scale / 2, transform: 'rotate(' + rotation + 'deg)' }} />
+              {/* The pencil's marks, laid exactly over the photo and turned with it. */}
+              {(drawing || marks.length > 0) && <svg className={'attachment-marks' + (drawing ? ' is-drawing' : '')} aria-hidden="true"
+                viewBox={'0 0 ' + natural.width + ' ' + natural.height}
+                style={{ width: natural.width * scale, height: natural.height * scale, left: (width - natural.width) * scale / 2, top: (height - natural.height) * scale / 2, transform: 'rotate(' + rotation + 'deg)' }}
+                // The cursor stays in the box being typed into while a line is ticked off.
+                onMouseDown={event => event.preventDefault()}
+                onPointerDown={event => {
+                  if (event.button !== 0) return
+                  // The pencil draws; it does not also drag the photo about.
+                  event.stopPropagation()
+                  event.currentTarget.setPointerCapture(event.pointerId)
+                  stroke.current = pointOnPhoto(event)
+                  pencilMarks.set(markKey, [...marks, stroke.current])
+                  repaint(n => n + 1)
+                }}
+                onPointerMove={event => {
+                  if (!stroke.current) return
+                  stroke.current.push(...pointOnPhoto(event))
+                  repaint(n => n + 1)
+                }}
+                onPointerUp={() => { stroke.current = null }}
+                onPointerCancel={() => { stroke.current = null }}>
+                {/* A tap is a stroke of one point: drawn to itself, it shows as a dot. */}
+                {marks.map((line, i) => <path key={i} d={'M' + line[0] + ' ' + line[1] + 'L' + (line.length > 2 ? line.slice(2) : line).join(' ')} />)}
+              </svg>}
             </div></div>}
         </div>
         <footer className="attachment-footer">

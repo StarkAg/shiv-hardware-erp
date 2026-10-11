@@ -49,3 +49,9 @@
 .attachment-docked .attachment-center{padding:8px;}
 .attachment-docked .attachment-header .attachment-tools{flex:1;justify-content:flex-start;padding:0;border:0;}
 .attachment-docked .attachment-header .attachment-tools{flex:1;justify-content:flex-start;padding:0;border:0;}
+/* The pencil: marks drawn over the photo, the same thickness at any zoom. With
+   the pencil down a finger draws rather than scrolls. */
+.attachment-dialog button[aria-pressed='true'],.attachment-dialog button[aria-pressed='true']:hover:not(:disabled){background:#b9924b;border-color:#b9924b;color:#1c1917;}
+.attachment-marks{position:absolute;display:block;transform-origin:center;overflow:visible;pointer-events:none;}
+.attachment-marks.is-drawing{pointer-events:auto;cursor:crosshair;touch-action:none;}
+.attachment-marks path{fill:none;stroke:#e11d48;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;}
