@@ -11,7 +11,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const APPS = ['workshop-web', 'mechanic-web']
+const APPS = ['workshop-web', 'mechanic-web', 'pay-web']
 for (const app of APPS) {
   const to = path.join(root, app, 'src', 'signs')
   rmSync(to, { recursive: true, force: true })

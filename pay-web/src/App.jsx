@@ -16,7 +16,7 @@ const QR = 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h3v3h-3zM20 17v3h-3M20 14v
 const UPLOAD = 'M12 16V4M7 9l5-5 5 5M4 20h16'
 
 /** The camera, looking for a payment QR; any other QR in view is passed over. */
-function Camera({ onPayee, onClose }) {
+function Camera({ onPayee }) {
   const video = useRef(null)
   const [problem, setProblem] = useState(false)
 
@@ -49,14 +49,9 @@ function Camera({ onPayee, onClose }) {
     }
   }, [onPayee])
 
-  return (
-    <>
-      {problem
-        ? <div className="drop bad"><h1>The camera could not be opened</h1><p>Allow the camera for QR Pay in the phone's settings, or use Upload QR.</p></div>
-        : <div className="finder"><video ref={video} playsInline muted /><span>Hold the QR inside the square</span></div>}
-      <div className="choose"><button className="btn" onClick={onClose}>Cancel</button></div>
-    </>
-  )
+  return problem
+    ? <div className="panel bad"><h1>The camera could not be opened</h1><p>Allow the camera for QR Pay in the phone's settings, or go back and use Upload QR.</p></div>
+    : <div className="finder"><video ref={video} playsInline muted /><span>Hold the QR inside the square</span></div>
 }
 
 export default function App() {
@@ -171,15 +166,23 @@ export default function App() {
 
   const fromCamera = useCallback((text) => take({ text }), [take])
 
+  // The other two ways in besides the camera, which is the button at the foot.
   const choose = (
-    <>
-      <button className="btn main" onClick={() => setStage('camera')}><Icon d={PHOTO} /> Scan with camera</button>
-      <div className="choose">
-        <button className="btn" onClick={() => fileInput.current?.click()}><Icon d={UPLOAD} /> Upload QR</button>
-        {navigator.clipboard?.read && <button className="btn" onClick={paste}><Icon d={PASTE} /> Paste</button>}
-      </div>
-    </>
+    <div className="choose">
+      <button className="key ghost" onClick={() => fileInput.current?.click()}><Icon d={UPLOAD} /> Upload QR</button>
+      {navigator.clipboard?.read && <button className="key ghost" onClick={paste}><Icon d={PASTE} /> Paste</button>}
+    </div>
   )
+  const scan = <button className="key must" onClick={() => setStage('camera')}><Icon d={PHOTO} size={26} /> Scan with camera</button>
+  /** The one button at the foot of the screen, for where things stand. */
+  const dock = {
+    start: scan,
+    miss: scan,
+    camera: <button className="key ghost" onClick={() => setStage('start')}>Cancel</button>,
+    payee: links
+      ? <a className="key safe" href={links.any}>Pay with UPI app</a>
+      : <a className="key safe" aria-disabled="true">Pay with UPI app</a>,
+  }[stage]
 
   return (
     <div className="app">
@@ -191,24 +194,26 @@ export default function App() {
       <main className="body">
         {stage === 'start' && (
           <>
-            <div className="drop">
-              <Icon d={QR} size={56} />
+            <div className="panel">
+              <Icon d={QR} size={44} />
               <h1>Pay a QR</h1>
               <p>Scan it, or upload its photo.</p>
             </div>
             {choose}
-            <p className="small">From WhatsApp or Gallery: open the QR photo, tap Share and pick QR Pay. Your UPI app opens on that payee by itself.</p>
-            <p className="small">First time: open this page in Chrome, tap the menu and Add to Home screen. After that QR Pay shows in the Share menu.</p>
+            <div className="rows">
+              <div className="rowline"><span className="label">From a photo</span><p>In WhatsApp or Gallery, open the QR photo, tap Share and pick QR Pay. Your UPI app opens on that payee by itself.</p></div>
+              <div className="rowline"><span className="label">First time</span><p>Open this page in Chrome, tap the menu and Add to Home screen. After that QR Pay shows in the Share menu.</p></div>
+            </div>
           </>
         )}
 
-        {stage === 'camera' && <Camera onPayee={fromCamera} onClose={() => setStage('start')} />}
+        {stage === 'camera' && <Camera onPayee={fromCamera} />}
 
-        {stage === 'reading' && <div className="drop"><div className="spin" /><h1>Reading the QR</h1></div>}
+        {stage === 'reading' && <div className="panel wait"><div className="spin" /><h1>Reading the QR</h1></div>}
 
         {stage === 'miss' && miss && (
           <>
-            <div className="drop bad">
+            <div className="panel bad">
               {picture && <img className="shot" src={picture} alt="" />}
               <h1>{miss.title}</h1>
               <p>{miss.hint}</p>
@@ -220,53 +225,53 @@ export default function App() {
 
         {stage === 'payee' && payee && (
           <>
-            <section className="card payee">
-              {picture && <img className="shot" src={picture} alt="" />}
+            <section className="payee">
               <div className="who">
-                <div className="label">Paying to</div>
+                <span className="label">Paying to</span>
                 <div className="name">{payee.pn || payee.pa}</div>
                 <div className="upi">{payee.pa}</div>
               </div>
+              {picture && <img className="shot" src={picture} alt="" />}
             </section>
 
-            <label className="card amount">
+            <label className="amount">
               <span className="label">Amount</span>
-              <span className="rupee">₹</span>
-              <input
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="type it in the UPI app"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
+              <span className="field">
+                <span className="rupee">₹</span>
+                <input
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="type it in the UPI app"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              </span>
             </label>
             {clean === null && <p className="warn">Type the amount in figures, such as 12500 or 12500.50</p>}
 
-            {links
-              ? <a className="pay" href={links.any}>Pay with UPI app</a>
-              : <button className="pay" disabled>Pay with UPI app</button>}
-
             <div className="choose">
-              <button className="btn" onClick={() => copy('upi', payee.pa)}>
+              <button className="key ghost" onClick={() => copy('upi', payee.pa)}>
                 <Icon d={copied === 'upi' ? DONE : COPY} /> {copied === 'upi' ? 'Copied' : 'Copy UPI ID'}
               </button>
               {links && (
-                <button className="btn" onClick={() => copy('link', links.any)}>
+                <button className="key ghost" onClick={() => copy('link', links.any)}>
                   <Icon d={copied === 'link' ? DONE : COPY} /> {copied === 'link' ? 'Copied' : 'Copy link'}
                 </button>
               )}
             </div>
-            {links && <a className="other" href={links.phonepe}>Open in PhonePe only</a>}
 
             <p className="small">Check the name the UPI app shows before you pay.</p>
             {held
               ? <p className="small">The UPI ID is already copied. If the UPI app refuses the link, or stops at ₹2,000, send money to a UPI ID there and paste it: that way takes any amount.</p>
               : <p className="small">The UPI app may refuse the link, or stop at ₹2,000, for a personal or small-shop QR. Then tap Copy UPI ID, open the app, send money to a UPI ID and paste it there: that way takes any amount.</p>}
 
-            <button className="again" onClick={() => { setPayee(null); setStage('start') }}>Another QR</button>
+            {links && <a className="other" href={links.phonepe}>Open in PhonePe only</a>}
+            <button className="key ghost" onClick={() => { setPayee(null); setStage('start') }}>Another QR</button>
           </>
         )}
       </main>
+
+      {dock && <div className="dock">{dock}</div>}
 
       <input
         ref={fileInput}

@@ -7,7 +7,7 @@
 //     anywhere; the QR is read on the phone.
 //   - The app itself is network-first, so a deploy is picked up immediately;
 //     the last copy is kept only to open with when there is no internet.
-const SW_VERSION = '2026-10-11-qr-pay'
+const SW_VERSION = '2026-10-11b-qr-pay'
 const SHELL = `pay-shell-${SW_VERSION}`
 // Same names as src/shared.js.
 const SHARED = 'pay-shared-v1'
