@@ -82,7 +82,18 @@ function MarkedSales({ kind }: { kind: ListKind }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-xs text-muted">#{b.number}</span>
-          <span className="truncate font-semibold text-stone-900 dark:text-stone-100">{b.customerName || 'Cash sale'}</span>
+          {b.ledgerId ? (
+            <button
+              type="button"
+              onClick={() => navigate(`/ledger/customers/${b.ledgerId}`)}
+              title="Open the customer's account"
+              className="min-w-0 truncate text-left font-semibold text-stone-900 hover:text-shiv-green hover:underline dark:text-stone-100"
+            >
+              {b.customerName || 'Cash sale'}
+            </button>
+          ) : (
+            <span className="truncate font-semibold text-stone-900 dark:text-stone-100">{b.customerName || 'Cash sale'}</span>
+          )}
           {b.customerPhone && <span className="text-xs text-muted">{b.customerPhone}</span>}
         </div>
         <div className="mt-0.5 truncate text-xs text-muted">
