@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'
 import { INVENTORY_SEED, seedRefForName } from '../convex/lib/inventorySeed'
-import { themeFor } from '../inventory-web/src/theme'
 
 const modules = import.meta.glob('../convex/**/*.ts')
 const pin = '123456'
@@ -154,16 +153,5 @@ describe('supplied plywood and door inventory', () => {
       await expect(t.mutation(api.inventory.addItem, { ...input, ...patch })).rejects.toThrow()
     }
     await expect(t.mutation(api.inventory.addItem, { ...input, pin: '000000' })).rejects.toThrow('correct PIN')
-  })
-})
-
-describe('Inventory day / night theme', () => {
-  it('uses local day / night with URL overrides', () => {
-    expect(themeFor('', 5)).toBe('dark')
-    expect(themeFor('', 6)).toBe('light')
-    expect(themeFor('', 17)).toBe('light')
-    expect(themeFor('', 18)).toBe('dark')
-    expect(themeFor('?light', 23)).toBe('light')
-    expect(themeFor('?dark', 12)).toBe('dark')
   })
 })

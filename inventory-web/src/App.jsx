@@ -37,7 +37,7 @@ function StockCard({ item }) {
   return <div className={`stock-card ${low ? 'low' : ''}`}>
     <span className="stock-thumbnail"><ProductIcon category={item.category} /></span>
     <span className="stock-details"><strong>{item.category === 'other' ? item.size : item.size.replace('x', ' × ')}</strong><small>{stockSubtitle(item)}</small></span>
-    <span className="stock-count"><span>α</span><strong>{quantity(item.stock)}</strong></span>
+    <span className="stock-count"><span className="figure"><span>α</span><strong>{quantity(item.stock)}</strong></span>{low && <i className="low-tag">Low</i>}</span>
   </div>
 }
 
@@ -56,6 +56,19 @@ function CloudIcon() {
 
 function SortIcon() {
   return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4" /></svg>
+}
+
+/** A small sheet over the screen; what is under it cannot be tabbed into. */
+function Sheet({ labelledBy, onClose, children }) {
+  const back = useRef(null)
+  useEffect(() => {
+    const under = [...(back.current?.parentElement?.children ?? [])].filter(el => el !== back.current && !el.inert)
+    for (const el of under) el.inert = true
+    return () => { for (const el of under) el.inert = false }
+  }, [])
+  return <div className="sheetback" ref={back} role="presentation" onMouseDown={onClose}>
+    <section className="sheet" role="dialog" aria-modal="true" aria-labelledby={labelledBy} onMouseDown={event => event.stopPropagation()}>{children}</section>
+  </div>
 }
 
 function PinForm({ onUnlock }) {
@@ -78,14 +91,14 @@ function PinForm({ onUnlock }) {
       setBusy(false)
     }
   }
-  return <form className="pin-form" onSubmit={unlock}>
-    <h1>Edit stock</h1>
-    <p>Enter your PIN to change quantities.</p>
-    <label htmlFor="inventory-pin">PIN</label>
-    <input id="inventory-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6}
-      value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} autoFocus required />
-    {error && <p className="error" role="alert">{error}</p>}
-    <button className="primary" disabled={busy || pin.length !== 6}>{busy ? 'Checking…' : 'Unlock'}</button>
+  return <form className="ask-screen" onSubmit={unlock}>
+    <div className="page">
+      <h2>Edit stock</h2>
+      <label>PIN<input className="pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6}
+        value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} autoFocus required /></label>
+      {error && <p className="error" role="alert">{error}</p>}
+    </div>
+    <div className="dock"><button className="key must" disabled={busy || pin.length !== 6}>{busy ? 'Checking…' : 'Unlock'}</button></div>
   </form>
 }
 
@@ -122,7 +135,8 @@ function AddItemForm({ pin, online, initialBrand, brands, onAdded, onCancel }) {
       setBusy(false)
     }
   }
-  return <form className="add-form" onSubmit={submit} aria-labelledby="add-item-title">
+  return <form className="ask-screen" onSubmit={submit} aria-labelledby="add-item-title">
+    <div className="page">
     <h2 id="add-item-title">Add stock item</h2>
     <fieldset disabled={busy}>
       <label>Type<select value={category} onChange={event => setCategory(event.target.value)}><option value="door">Door</option><option value="ply">Plywood</option><option value="other">Other / packaged item</option></select></label>
@@ -144,7 +158,8 @@ function AddItemForm({ pin, online, initialBrand, brands, onAdded, onCancel }) {
     </fieldset>
     {!online && <p className="error" role="status">Connect to the internet to add a new item.</p>}
     {error && <p className="error" role="alert">{error}</p>}
-    <div className="add-actions"><button className="lock" type="button" onClick={onCancel} disabled={busy}>Cancel</button><button className="primary" disabled={busy || !online}>{busy ? 'Adding...' : 'Add item'}</button></div>
+    </div>
+    <div className="dock pair"><button className="key ghost" type="button" onClick={onCancel} disabled={busy}>Cancel</button><button className="key safe" disabled={busy || !online}>{busy ? 'Adding...' : 'Add item'}</button></div>
   </form>
 }
 
@@ -265,15 +280,14 @@ export default function App() {
   }
   return <div className="app">
     <header className="top">
-      <nav className="tabs" aria-label="Sections">
-        <button className={tab === 'stock' ? 'on' : ''} onClick={() => { setTab('stock'); setError('') }}>Stock</button>
-        <button className={tab === 'edit' ? 'on' : ''} onClick={() => { setTab('edit'); setError('') }}>Edit</button>
+      <h1>Inventory</h1>
+      <nav className="seg" aria-label="Sections">
+        <button className={tab === 'stock' ? 'on' : ''} aria-pressed={tab === 'stock'} onClick={() => { setTab('stock'); setError('') }}>Stock</button>
+        <button className={tab === 'edit' ? 'on' : ''} aria-pressed={tab === 'edit'} onClick={() => { setTab('edit'); setError('') }}>Edit</button>
       </nav>
     </header>
-    <main className="page">
-      {locked ? <PinForm onUnlock={nextPin => { setPin(nextPin); setBlocked(false); setError('') }} /> : <>
-        {editing && <div className="edit-toolbar"><button className="primary add-button" aria-expanded={addOpen} onClick={() => setAddOpen(open => !open)}><StepIcon plus />Add</button><button className="lock" onClick={() => { setPin(''); setAddOpen(false); setError('') }}>Lock</button></div>}
-        {editing && addOpen && <AddItemForm pin={pin} online={online} initialBrand={brand} brands={brands} onCancel={() => setAddOpen(false)} onAdded={async item => {
+    {locked ? <PinForm onUnlock={nextPin => { setPin(nextPin); setBlocked(false); setError('') }} />
+      : editing && addOpen ? <AddItemForm pin={pin} online={online} initialBrand={brand} brands={brands} onCancel={() => setAddOpen(false)} onAdded={async item => {
           try { setDevice(await rememberAddedItem(item)) } catch {
             setError('Item saved to inventory, but this browser could not keep an offline copy. Reload when storage is available.')
           }
@@ -281,7 +295,9 @@ export default function App() {
           setThickness(item.mm ?? '')
           setSearch('')
           setAddOpen(false)
-        }} />}
+        }} />
+      : <>
+      <main className="page">
         <div className="filter-stages" aria-label="Product filters">
           <div className="filter-stage" aria-label="Brand"><div className="filter-chips">
             {brands.map(name => <button key={name} className={brand === name ? 'active' : ''} aria-pressed={brand === name} onClick={() => {
@@ -294,9 +310,9 @@ export default function App() {
           </div></div>}
         </div>
         <div className="search-row"><input className="search" type="search" aria-label="Search stock" placeholder="Search brand, product, size"
-          value={search} onChange={e => setSearch(e.target.value)} /><div className="search-actions"><button type="button" className="icon-button" aria-label="Choose stock sort" title="Sort" aria-expanded={sortOpen} onClick={() => setSortOpen(open => !open)}><SortIcon /></button><button type="button" className={`icon-button cloud-status ${queue.length ? 'waiting' : ''}`} aria-label={`Convex sync: ${status}`} title="Convex sync" onClick={openSync}><CloudIcon /></button></div></div>
-        {sortOpen && <div className="sort-menu" role="menu" aria-label="Sort stock">
-          {[['brand', 'Brand'], ['thickness', 'Thickness'], ['stock', 'Low stock first']].map(([value, label]) => <button key={value} role="menuitemradio" aria-checked={sort === value} className={sort === value ? 'active' : ''} onClick={() => { setSort(value); setSortOpen(false) }}>{label}</button>)}
+          value={search} onChange={e => setSearch(e.target.value)} /><div className="search-actions"><button type="button" className="icon-button" aria-label="Choose stock sort" title="Sort" aria-expanded={sortOpen} onClick={() => setSortOpen(open => !open)}><SortIcon /></button><button type="button" className={`icon-button ${queue.length ? 'waiting' : ''}`} aria-label={`Convex sync: ${status}`} title="Convex sync" onClick={openSync}><CloudIcon /></button></div></div>
+        {sortOpen && <div className="seg sorts" role="menu" aria-label="Sort stock">
+          {[['brand', 'Brand'], ['thickness', 'Thickness'], ['stock', 'Low first']].map(([value, label]) => <button key={value} role="menuitemradio" aria-checked={sort === value} className={sort === value ? 'on' : ''} onClick={() => { setSort(value); setSortOpen(false) }}>{label}</button>)}
         </div>}
         {error && <p className="error" role="alert">{error}</p>}
         {!shown.length ? <p className="hint">No matching stock.</p>
@@ -309,14 +325,17 @@ export default function App() {
                 </div></> : <StockCard item={item} />}
               </li>)}
             </ul>}
-        {syncOpen && <div className="sync-backdrop" role="presentation" onMouseDown={() => setSyncOpen(false)}><section className="sync-modal" role="dialog" aria-modal="true" aria-labelledby="sync-title" onMouseDown={event => event.stopPropagation()}>
-          <div className="sync-modal-head"><div><h2 id="sync-title">Convex sync</h2><p>{status}</p></div><button type="button" className="close-modal" aria-label="Close sync status" onClick={() => setSyncOpen(false)}>Close</button></div>
-          <div className="sync-time"><span>Last synced</span><strong>{lastSynced}</strong></div>
-          <div className="pending-uploads"><span>Pending uploads</span><strong>{queue.length}</strong></div>
-          {!pin && queue.length > 0 && <p className="sync-note">Unlock Edit to send saved quantity changes to Convex.</p>}
-          <button type="button" className="primary" onClick={() => void sync()} disabled={syncing || !pin || !online}>{syncing ? 'Syncing…' : 'Sync now'}</button>
-        </section></div>}
-      </>}
-    </main>
+      </main>
+      {editing && <div className="dock pair"><button className="key ghost" onClick={() => { setPin(''); setAddOpen(false); setError('') }}>Lock</button><button className="key must" onClick={() => setAddOpen(true)}><StepIcon plus />Add item</button></div>}
+    </>}
+    {syncOpen && <Sheet labelledBy="sync-title" onClose={() => setSyncOpen(false)}>
+      <h2 className="sheettitle" id="sync-title">Convex sync</h2>
+      <p>{status}</p>
+      <dl className="facts">
+        <div><dt>Last synced</dt><dd>{lastSynced}</dd></div>
+        <div><dt>Pending uploads</dt><dd>{queue.length}</dd></div>
+      </dl>
+      <div className="sheetbtns"><button type="button" className="key ghost" onClick={() => setSyncOpen(false)}>Close</button><button type="button" className="key safe" onClick={() => void sync()} disabled={syncing || !pin || !online}>{syncing ? 'Syncing…' : 'Sync now'}</button></div>
+    </Sheet>}
   </div>
 }
