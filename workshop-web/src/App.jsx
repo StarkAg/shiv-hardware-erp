@@ -699,7 +699,8 @@ function Thread({ job, onBack }) {
    * What this side can add to the thread, from the three-lines button at the
    * foot. Never a typed line: each is photographs tagged with what they are,
    * or a marker (boards made, Complete, the go-ahead). `stage` is the step it
-   * belongs to; one with none (the visit order) can be added at any time.
+   * belongs to, and it is open only while the job stands there: the visit
+   * order until the job is measured, and so on. A step that is done is closed.
    */
   const ACTIONS = SIDE === 'workshop' ? [
     { id: 'measurement', label: 'Measurement', kind: 'photo', stage: 'measurement', say: 'Photograph the measurements' },
@@ -707,7 +708,7 @@ function Thread({ job, onBack }) {
     { id: 'complete', label: 'Complete', kind: 'complete', stage: 'assemble', say: 'Assembling is finished' },
     { id: 'fitting', label: 'Fitting', kind: 'photo', stage: 'fitting', say: 'Photograph it fitted' },
   ] : [
-    { id: 'visit', label: 'Visit order', kind: 'photo', stage: null, say: 'Add a photo of the visit order' },
+    { id: 'visit', label: 'Visit order', kind: 'photo', stage: 'measurement', say: 'Add a photo of the visit order' },
     { id: 'quotation', label: 'Work order', kind: 'photo', stage: 'quotation', say: 'Attach the work order' },
     { id: 'goahead', label: 'Go-ahead', kind: 'goahead', stage: 'goahead', say: 'When to visit and whom to call' },
   ]
@@ -924,14 +925,12 @@ function Thread({ job, onBack }) {
             <b className="sheettitle">What is done?</b>
             <ul className="steps">
               {ACTIONS.map((a) => {
-                // Before its step, at it, or after it. The visit order has no step: any time.
-                const past = a.stage != null && (finished(job) || stageNo(a.stage) < stageNo(at))
-                const current = a.stage != null && !finished(job) && a.stage === at
-                const open = !finished(job) && (a.stage == null || current || (past && a.kind === 'photo') || (a.kind === 'goahead' && at === 'fitting'))
-                const note = current ? a.say
-                  : a.stage == null ? a.say
-                  : past ? (a.kind === 'photo' ? 'Done. Tap to add another photo' : a.kind === 'goahead' && open ? 'Given. Tap to change it' : 'Done')
-                  : `After ${STAGES[stageNo(a.stage) - 1]?.label.toLowerCase() ?? 'the step before'}`
+                // Before its step, at it, or after it. Only the present step is
+                // open: one that is done is closed, with no going back to it.
+                const past = finished(job) || stageNo(a.stage) < stageNo(at)
+                const current = !finished(job) && a.stage === at
+                const open = current
+                const note = current ? a.say : past ? 'Done' : `After ${STAGES[stageNo(a.stage) - 1]?.label.toLowerCase() ?? 'the step before'}`
                 return (
                   <li key={a.id}>
                     <button type="button" className={current ? 'now' : past ? 'done' : ''} disabled={!open} onClick={() => act(a)}>

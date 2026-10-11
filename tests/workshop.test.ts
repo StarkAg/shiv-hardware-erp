@@ -146,7 +146,7 @@ describe('workshop: a work order as a chat in photos', () => {
     void supplier
   })
 
-  it('moves a job through its steps, each done by the side whose turn it is', async () => {
+  it('moves a job through its steps, each done by the side whose turn it is, with no skipping and no going back', async () => {
     const t = convexTest(schema, modules)
     const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
     const id = await t.mutation(api.workshop.create, { photos: [await photo()] })
@@ -154,27 +154,30 @@ describe('workshop: a work order as a chat in photos', () => {
     const send = (args: Record<string, unknown>) => t.mutation(api.workshop.send, { jobId: id, photos: [], ...args } as never)
     const when = Date.parse('2026-10-14T10:30:00+05:30')
 
-    // 1. Measurement, the workshop's. Another visit-order photo from the shop moves nothing.
+    // 1. Measurement, the workshop's. Until it is measured the shop can add to the visit order.
     await send({ from: 'shop', photos: [await photo()] })
     expect(await job()).toMatchObject({ stage: 'measurement', status: 'open' })
     // Nothing from a later step can be done first: no step is skipped.
     await expect(send({ from: 'workshop', photos: [await photo()], step: 'fitting' })).rejects.toThrow('comes later')
-    await expect(send({ from: 'shop', photos: [await photo()], step: 'quotation' })).rejects.toThrow('after the measurements')
+    await expect(send({ from: 'shop', photos: [await photo()], step: 'quotation' })).rejects.toThrow('comes later')
     await expect(send({ from: 'workshop', boards: 2 })).rejects.toThrow('being assembled')
     await expect(send({ from: 'workshop', complete: true })).rejects.toThrow('being assembled')
     await expect(send({ from: 'shop', visitAt: when, callPhone: '8340785465' })).rejects.toThrow('once the work is complete')
     expect(await job()).toMatchObject({ stage: 'measurement' })
     await send({ from: 'workshop', photos: [await photo()], step: 'measurement' })
     expect(await job()).toMatchObject({ stage: 'quotation' })
-    // A second measurement photo is added to the measurement, and moves nothing.
-    await send({ from: 'workshop', photos: [await photo()], step: 'measurement' })
-    expect(await job()).toMatchObject({ stage: 'quotation' })
+
+    // Measured: there is no going back to the measurements or to the visit order.
+    await expect(send({ from: 'workshop', photos: [await photo()], step: 'measurement' })).rejects.toThrow('already done')
+    await expect(send({ from: 'workshop', photos: [await photo()] })).rejects.toThrow('the shop')
+    await expect(send({ from: 'shop', photos: [await photo()], step: 'visit' })).rejects.toThrow('already done')
+    expect((await job()).messages).toHaveLength(3)
 
     // 2. The work order, the shop's, with the boards it asks for.
-    await send({ from: 'shop', photos: [await photo()], step: 'visit' })
-    expect(await job()).toMatchObject({ stage: 'quotation' })
-    await send({ from: 'shop', photos: [await photo()], step: 'quotation', boards: 8 })
+    await send({ from: 'shop', photos: [await photo()], boards: 8 })
     expect(await job()).toMatchObject({ stage: 'assemble', boardsTotal: 8, boardsMade: null })
+    await expect(send({ from: 'shop', photos: [await photo()], step: 'quotation' })).rejects.toThrow('already done')
+    await expect(send({ from: 'shop', photos: [await photo()] })).rejects.toThrow('already done')
 
     // 3. Assembling: the work status as often as wanted, then Complete.
     await send({ from: 'workshop', boards: 3 })
@@ -187,25 +190,27 @@ describe('workshop: a work order as a chat in photos', () => {
     await send({ from: 'workshop', complete: true })
     expect(await job()).toMatchObject({ stage: 'goahead', status: 'open' })
     await expect(send({ from: 'workshop', complete: true })).rejects.toThrow('being assembled')
+    await expect(send({ from: 'workshop', boards: 7 })).rejects.toThrow('being assembled')
 
-    // 4. The go-ahead, the shop's: when to go and whom to ring. Both are needed.
+    // 4. The go-ahead, the shop's: when to go and whom to ring. Both are needed, and it is given once.
     await expect(send({ from: 'shop', visitAt: when, callPhone: '12' })).rejects.toThrow('which number')
     await expect(send({ from: 'shop', visitAt: 0, callPhone: '8340785465' })).rejects.toThrow('when to visit')
     await send({ from: 'shop', visitAt: when, callPhone: '83407 85465' })
     expect(await job()).toMatchObject({ stage: 'fitting', visitAt: when, callPhone: '8340785465' })
-    // Given again, it is a change of plan: the job stays at fitting.
-    await send({ from: 'shop', visitAt: when + 3600_000, callPhone: '+91 90000 00000' })
-    expect(await job()).toMatchObject({ stage: 'fitting', status: 'open', visitAt: when + 3600_000, callPhone: '+919000000000' })
+    await expect(send({ from: 'shop', visitAt: when + 3600_000, callPhone: '9000000000' })).rejects.toThrow('already given')
+    expect(await job()).toMatchObject({ stage: 'fitting', visitAt: when })
 
-    // 5. Fitted: finished.
+    // 5. Fitted: finished, and nothing more is added.
     await send({ from: 'workshop', photos: [await photo()], step: 'fitting' })
     expect(await job()).toMatchObject({ stage: 'fitting', status: 'done' })
+    await expect(send({ from: 'workshop', photos: [await photo()], step: 'fitting' })).rejects.toThrow('finished')
+    await expect(send({ from: 'shop', photos: [await photo()] })).rejects.toThrow('finished')
     expect((await job()).messages.map((m) => [m.step, m.boards, m.complete, m.visitAt ? 'visit' : null])).toEqual([
       ['visit', null, false, null], ['visit', null, false, null],
-      ['measurement', null, false, null], ['measurement', null, false, null],
-      ['visit', null, false, null], ['quotation', 8, false, null],
+      ['measurement', null, false, null],
+      ['quotation', 8, false, null],
       ['assemble', 3, false, null], ['assemble', 6, false, null], ['assemble', null, false, null], ['assemble', null, true, null],
-      ['goahead', null, false, 'visit'], ['goahead', null, false, 'visit'],
+      ['goahead', null, false, 'visit'],
       ['fitting', null, false, null],
     ])
   })

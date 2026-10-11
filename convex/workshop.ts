@@ -43,8 +43,18 @@ const NEXT: Record<Stage, Stage | null> = { measurement: 'quotation', quotation:
 /** Whose each tag is to send. The visit order is the shop's, at any time. */
 const SENDER: Record<Tag, Side> = { visit: 'shop', ...TURN }
 const ORDER: Stage[] = ['measurement', 'quotation', 'assemble', 'goahead', 'fitting']
-/** A step the job has not come to yet: nothing is added to it, so none can be skipped to. */
-const notYet = (step: Tag, at: Stage) => step !== 'visit' && ORDER.indexOf(step) > ORDER.indexOf(at)
+/**
+ * Only the present step can be added to. One not come to yet cannot be
+ * skipped to, and one that is done is closed: once the job is measured there
+ * is no going back to the visit order or the measurements, and so on down the
+ * line. The visit order belongs to the first step, while the job is still to
+ * be measured.
+ */
+function onlyNow(step: Tag, at: Stage) {
+  const of: Stage = step === 'visit' ? 'measurement' : step
+  if (ORDER.indexOf(of) > ORDER.indexOf(at)) throw new ConvexError('That step comes later. The one before it is not done yet.')
+  if (ORDER.indexOf(of) < ORDER.indexOf(at)) throw new ConvexError('That step is already done. It cannot be gone back to.')
+}
 
 /** A count of boards: a whole number nobody could mistype into the thousands. */
 function boardCount(n: number) {
@@ -210,8 +220,8 @@ export const create = mutation({
  *
  * What is the present step's, from the side whose turn it is, moves the job
  * on: the measurements, the work order, Complete, the go-ahead, and the
- * fitted piece, after which the job is finished. A photograph of a step
- * already done is added to it and moves nothing.
+ * fitted piece, after which the job is finished. Only the present step can be
+ * added to: none is skipped, and one that is done is closed (`onlyNow`).
  */
 export const send = mutation({
   args: {
@@ -251,27 +261,32 @@ export const send = mutation({
       marks.boards = facts.boardsMade = boardCount(boards)
     } else if (from === 'workshop') {
       if (!photos.length) throw new ConvexError('Send a photo of the measurements.')
-      // The step named, when it is the workshop's; else the present one, or the measurements.
-      step = named && named !== 'visit' && SENDER[named] === 'workshop' ? named : TURN[at] === 'workshop' ? at : 'measurement'
-      if (notYet(step, at)) throw new ConvexError('That step comes later. The one before it is not done yet.')
+      if (!open) throw new ConvexError('This job is finished.')
+      // The step named, when it is the workshop's; else the present one.
+      step = named && named !== 'visit' && SENDER[named] === 'workshop' ? named : at
+      if (TURN[step as Stage] !== 'workshop') throw new ConvexError('This step is the shop\'s to do.')
+      onlyNow(step, at)
       // Assembling is finished by Complete, not by a photograph of it.
-      moves = open && step === at && step !== 'assemble'
+      moves = step !== 'assemble'
     } else if (visitAt !== undefined) {
-      if (!open || (at !== 'goahead' && at !== 'fitting')) throw new ConvexError('The go-ahead is given once the work is complete.')
+      if (!open || at !== 'goahead') {
+        throw new ConvexError(open && at === 'fitting' ? 'The go-ahead is already given.' : 'The go-ahead is given once the work is complete.')
+      }
       const phone = String(callPhone ?? '').replace(/[^\d+]/g, '')
       if (!Number.isFinite(visitAt) || visitAt <= 0) throw new ConvexError('Say when to visit.')
       if (phone.replace(/\D/g, '').length < 7) throw new ConvexError('Say which number to call.')
       step = 'goahead'
       marks.visitAt = facts.visitAt = visitAt
       marks.callPhone = facts.callPhone = phone
-      // Given again while the fitting is still to do, it is a change of plan, not a new step.
-      moves = at === 'goahead'
+      moves = true
     } else {
       if (!photos.length) throw new ConvexError('Add a photo.')
-      step = named === 'visit' || named === 'quotation' ? named : at === 'quotation' ? 'quotation' : 'visit'
-      if (notYet(step, at)) throw new ConvexError('The work order comes after the measurements.')
+      if (!open) throw new ConvexError('This job is finished.')
+      // The visit order while the job is still to be measured; the work order once it is.
+      step = named === 'visit' || named === 'quotation' ? named : at === 'measurement' ? 'visit' : 'quotation'
+      onlyNow(step, at)
       if (step === 'quotation' && boards !== undefined) marks.boards = facts.boardsTotal = boardCount(boards)
-      moves = open && step === at
+      moves = step === 'quotation'
     }
 
     await ctx.db.patch(jobId, {
