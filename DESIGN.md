@@ -155,6 +155,7 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Stock (the laptop panel) | `stock-web/` | Signs, 11 Oct 2026 |
 | Shiv Accounts | `khata-web/` | Signs, 11 Oct 2026 |
 | Attendance | `attendance-web/` | Signs, 11 Oct 2026 |
+| Orders, and its Workshop panel | `order-web/` | Signs, 11 Oct 2026 (what it prints is unchanged) |
 | Mica Match | `mica-web/` | Signs lettering and shapes on a dark ground, 11 Oct 2026 |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Everything else | | still the older parchment and brass look |

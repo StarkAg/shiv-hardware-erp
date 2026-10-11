@@ -20,7 +20,7 @@ import { fmtSize, sqftOf, inchesOf } from './dims.js'
 import {
   readJobs, writeJobs, queue, flush, pendingCount, mergeJobs, fmtDate, todayKey,
 } from './store.js'
-import { CheckIcon, CloudIcon, MoonIcon, SunIcon } from './icons.jsx'
+import { CheckIcon, CloudIcon } from './icons.jsx'
 
 function daysTo(date) {
   if (!date) return null
@@ -46,9 +46,6 @@ export default function WorkshopApp() {
   const [tab, setTab] = useState('make')          // make | material
   const [screen, setScreen] = useState('queue')   // queue | rack
   const [sync, setSync] = useState({ busy: false, pending: pendingCount(), error: null })
-  const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem('shiv-panel:theme') === 'dark' } catch { return false }
-  })
 
   useEffect(() => { writeJobs(jobs) }, [jobs])
 
@@ -84,13 +81,6 @@ export default function WorkshopApp() {
     })
     setSync((s) => ({ ...s, pending: pendingCount() }))
   }, [])
-
-  const toggleTheme = () => {
-    const next = !dark
-    setDark(next)
-    document.documentElement.classList.toggle('dark', next)
-    try { localStorage.setItem('shiv-panel:theme', next ? 'dark' : 'light') } catch { /* ignore */ }
-  }
 
   const queueJobs = useMemo(() => jobs
     .filter((j) => !j.deleted && (j.status === 'confirmed' || j.status === 'ordered'))
@@ -153,7 +143,6 @@ export default function WorkshopApp() {
             <path d="M3 6h18M3 12h12M3 18h7" />
           </svg>
         </button>
-        <button className="themebtn" onClick={toggleTheme} aria-label="Theme">{dark ? <SunIcon /> : <MoonIcon />}</button>
       </div>
     </header>
   )

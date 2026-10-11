@@ -1,7 +1,7 @@
 // Minimal service worker — enables install; network-first, so a deploy is picked
 // up immediately. The book's own data is in localStorage, not this cache.
 // Bump SW_VERSION on deploys that must force every client onto the newest app shell.
-const SW_VERSION = '2026-09-11-analytics-projection-fix'
+const SW_VERSION = '2026-10-11-signs'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => {

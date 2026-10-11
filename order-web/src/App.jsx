@@ -21,7 +21,7 @@ import {
   readJobs, writeJobs, queue, flush, pendingCount, mergeJobs,
   uid, todayKey, postAdvance, nextNumberFromServer,
 } from './store.js'
-import { CloudIcon, MoonIcon, SunIcon } from './icons.jsx'
+import { CloudIcon } from './icons.jsx'
 
 const STAGE_FOR = {
   estimate: 'estimate',
@@ -40,18 +40,8 @@ export default function App() {
   const [sync, setSync] = useState({ busy: false, pending: pendingCount(), at: null, error: null })
   const [material, setMaterial] = useState(() => readMaterial())
   const [confirm, setConfirm] = useState(null)
-  const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem('shiv-panel:theme') === 'dark' } catch { return false }
-  })
 
   useEffect(() => { writeJobs(jobs) }, [jobs])
-
-  const toggleTheme = () => {
-    const next = !dark
-    setDark(next)
-    document.documentElement.classList.toggle('dark', next)
-    try { localStorage.setItem('shiv-panel:theme', next ? 'dark' : 'light') } catch { /* ignore */ }
-  }
 
   const runSync = useCallback(async () => {
     setSync((s) => ({ ...s, busy: true }))
@@ -266,7 +256,6 @@ export default function App() {
             onClick={() => setScreen(screen === 'rates' ? 'list' : 'rates')}
             aria-label="Rates" title="Rates"
           >₹</button>
-          <button className="themebtn" onClick={toggleTheme} aria-label="Theme">{dark ? <SunIcon /> : <MoonIcon />}</button>
         </div>
       </header>
 
