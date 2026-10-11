@@ -553,6 +553,12 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
   const dim = daysInMonth(y, m0 + 1)
   const days = Array.from({ length: dim }, (_, i) => new Date(y, m0, i + 1))
   const stepM = (n) => setCursor(new Date(y, m0 + n, 1))
+  // A Tuesday the shop was shut is one box down the whole column, with the
+  // day written in it. Tapping the box opens that column, for the Tuesday the
+  // shop did work; a Tuesday with any mark on it is shown as an ordinary day.
+  const [opened, setOpened] = useState(() => new Set())
+  useEffect(() => { setOpened(new Set()) }, [y, m0])
+  const shut = (d) => isTue(d) && !opened.has(dateKey(d)) && staff.every((name) => (statusFor(d, name) || 'C') === 'C')
 
   return (
     <div className="card">
@@ -578,16 +584,33 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
               </tr>
             </thead>
             <tbody>
-              {staff.map((name) => (
+              {staff.map((name, row) => (
                 <tr key={name}>
                   <td className="stick nm">{name}</td>
                   {days.map((d) => {
                     const st = statusFor(d, name)
                     const future = dateKey(d) > todayKey
+                    if (shut(d)) {
+                      if (row > 0) return null
+                      return (
+                        <td key={d.getDate()} rowSpan={staff.length} className="tuecol">
+                          <button
+                            className="tuecell"
+                            style={{ '--rows': staff.length }}
+                            disabled={future}
+                            aria-label={`Tuesday ${d.getDate()} ${MON[m0]}, shop closed${future ? '' : '. Open to mark it'}`}
+                            onClick={() => setOpened((prev) => new Set(prev).add(dateKey(d)))}
+                          >
+                            <span>{staff.length >= 3 ? 'Tuesday' : 'Tue'}</span>
+                          </button>
+                        </td>
+                      )
+                    }
                     return (
                       <td key={d.getDate()}>
                         <button
                           className={`cell ${st ? STATUS[st].cls : ''} ${future ? 'future' : ''}`}
+                          aria-label={`${name}, ${d.getDate()} ${MON[m0]}: ${future ? 'to come' : st ? STATUS[st].label : 'not marked'}`}
                           disabled={future}
                           onClick={() => {
                             if (future) return
