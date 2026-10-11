@@ -136,5 +136,6 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Voucher Bill Shooter | `voucher-web/` | Signs, 11 Oct 2026 |
 | Shiv Print | `print-web/` | Signs, 11 Oct 2026 |
 | Inventory | `inventory-web/` | Signs, 11 Oct 2026 |
+| Stock (the laptop panel) | `stock-web/` | Signs, 11 Oct 2026 |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Everything else | | still the older parchment and brass look |

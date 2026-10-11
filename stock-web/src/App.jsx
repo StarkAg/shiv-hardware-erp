@@ -26,19 +26,20 @@ function Chips({ label, items, onAdd, onRemove, onDropGroup, placeholder }) {
     <div className="chiprow">
       <div className="chiplabel">
         <span>{label}</span>
-        {onDropGroup && <button className="x" onClick={onDropGroup} title="Remove this field">×</button>}
+        {onDropGroup && <button className="x" onClick={onDropGroup} title="Remove this field" aria-label={`Remove the field ${label}`}>×</button>}
       </div>
       <div className="chips">
         {items.map((v) => (
           <span key={v} className="chip">
             {v}
-            <button className="x" onClick={() => onRemove(v)} title="Remove">×</button>
+            <button className="x" onClick={() => onRemove(v)} title="Remove" aria-label={`Remove ${v}`}>×</button>
           </span>
         ))}
         {adding ? (
           <input
             autoFocus
             className="chipinput"
+            aria-label={`Add to ${label}`}
             placeholder={placeholder}
             value={val}
             onChange={(e) => setVal(e.target.value)}
@@ -49,7 +50,7 @@ function Chips({ label, items, onAdd, onRemove, onDropGroup, placeholder }) {
             }}
           />
         ) : (
-          <button className="chipadd" onClick={() => setAdding(true)}>+</button>
+          <button className="chipadd" aria-label={`Add to ${label}`} onClick={() => setAdding(true)}>+</button>
         )}
       </div>
     </div>
@@ -64,6 +65,7 @@ function RateCell({ value, onChange }) {
   return (
     <input
       className="ratecell"
+      aria-label="Rate"
       inputMode="decimal"
       value={shown}
       placeholder="—"
@@ -123,6 +125,7 @@ function RateTable({ cat, brands, onPatch, onDelete, onAdd, query }) {
             <td>
               <input
                 className="namecell"
+                aria-label="Item name"
                 key={b.name}
                 defaultValue={b.name}
                 onBlur={(e) => {
@@ -137,6 +140,7 @@ function RateTable({ cat, brands, onPatch, onDelete, onAdd, query }) {
             <td>
               <select
                 className="pick"
+                aria-label="Cover"
                 value={b.coverage || 'guarantee'}
                 onChange={(e) => onPatch(b.id, { coverage: e.target.value })}
               >
@@ -147,6 +151,7 @@ function RateTable({ cat, brands, onPatch, onDelete, onAdd, query }) {
             <td className="num">
               <select
                 className="pick"
+                aria-label="Years"
                 value={b.guaranteeYears ?? 0}
                 onChange={(e) => onPatch(b.id, { guaranteeYears: Number(e.target.value) })}
               >
@@ -154,7 +159,7 @@ function RateTable({ cat, brands, onPatch, onDelete, onAdd, query }) {
               </select>
             </td>
             <td className="act">
-              <button className="del" title="Remove item" onClick={() => onDelete(b)}>×</button>
+              <button className="del" title="Remove item" aria-label={`Remove ${b.name}`} onClick={() => onDelete(b)}>×</button>
             </td>
           </tr>
         ))}
@@ -164,6 +169,7 @@ function RateTable({ cat, brands, onPatch, onDelete, onAdd, query }) {
             <input
               ref={nameRef}
               className="namecell"
+              aria-label="New item name"
               placeholder={`New item in ${LABEL[cat]}`}
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -173,6 +179,7 @@ function RateTable({ cat, brands, onPatch, onDelete, onAdd, query }) {
           <td className="num">
             <input
               className="ratecell"
+              aria-label="New item rate"
               inputMode="decimal"
               placeholder="rate"
               value={rate}
@@ -181,13 +188,13 @@ function RateTable({ cat, brands, onPatch, onDelete, onAdd, query }) {
             />
           </td>
           <td>
-            <select className="pick" value={coverage} onChange={(e) => setCoverage(e.target.value)}>
+            <select className="pick" aria-label="Cover" value={coverage} onChange={(e) => setCoverage(e.target.value)}>
               <option value="guarantee">Guarantee</option>
               <option value="warranty">Warranty</option>
             </select>
           </td>
           <td className="num">
-            <select className="pick" value={years} onChange={(e) => setYears(e.target.value)}>
+            <select className="pick" aria-label="Years" value={years} onChange={(e) => setYears(e.target.value)}>
               {GUARANTEE_YEARS.map((y) => <option key={y} value={y}>{y || '—'}</option>)}
             </select>
           </td>
@@ -223,6 +230,7 @@ function ItemCard({ entry, onPatch, onRename, onDelete, noSizes }) {
         {onRename ? (
           <input
             className="itemname"
+            aria-label="Item name"
             key={entry.name}
             defaultValue={entry.name}
             onBlur={(e) => {
@@ -272,6 +280,7 @@ function ItemCard({ entry, onPatch, onRename, onDelete, noSizes }) {
 
       <div className="fieldadd">
         <input
+          aria-label="New field"
           placeholder="New field — Colour, Finish…"
           value={field}
           onChange={(e) => setField(e.target.value)}
@@ -293,7 +302,6 @@ export default function App() {
   const [view, setView] = useState({ kind: 'rate', cat: RATE_CATS[0] })
   const [setIdx, setSetIdx] = useState(0)
   const [query, setQuery] = useState('')
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const searchRef = useRef(null)
 
   const load = useCallback(async () => {
@@ -347,13 +355,6 @@ export default function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-
-  function toggleTheme() {
-    const next = !dark
-    setDark(next)
-    document.documentElement.classList.toggle('dark', next)
-    try { localStorage.setItem('shiv-panel:theme', next ? 'dark' : 'light') } catch { /* ignore */ }
-  }
 
   const sets = snap.sets.length ? snap.sets : []
   const activeSet = sets[Math.min(setIdx, Math.max(sets.length - 1, 0))]
@@ -462,6 +463,7 @@ export default function App() {
         <input
           ref={searchRef}
           className="search"
+          aria-label="Search items"
           placeholder="Search items    /"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -470,17 +472,16 @@ export default function App() {
 
         {sets.length > 0 && (
           <div className="setpick">
-            <select value={setIdx} onChange={(e) => setSetIdx(Number(e.target.value))}>
+            <select aria-label="Rate set" value={setIdx} onChange={(e) => setSetIdx(Number(e.target.value))}>
               {sets.map((s, i) => <option key={s.id || i} value={i}>{s.name || `C${i + 1}`}</option>)}
             </select>
-            <button title="Copy this rate set" onClick={addSet}>+</button>
+            <button title="Copy this rate set" aria-label="Copy this rate set" onClick={addSet}>+</button>
           </div>
         )}
 
         <span className={`state ${error ? 'bad' : saving ? 'busy' : 'ok'}`}>
           {error ? 'Not saved' : saving ? 'Saving…' : 'Saved'}
         </span>
-        <button className="theme" onClick={toggleTheme} title="Light / dark">{dark ? <SunIcon /> : <MoonIcon />}</button>
       </header>
 
       {error && <div className="errbar">{error}</div>}
@@ -516,7 +517,7 @@ export default function App() {
 
           <div className="sechead">
             Custom
-            <button className="secadd" onClick={addCustom} title="New item">+</button>
+            <button className="secadd" onClick={addCustom} title="New item" aria-label="New item">+</button>
           </div>
           {snap.customCatalog.map((e) => (
             <button
@@ -574,15 +575,4 @@ export default function App() {
       </div>
     </div>
   )
-}
-
-const THEME_ICON = {
-  viewBox: '0 0 24 24', width: 17, height: 17, fill: 'none', stroke: 'currentColor',
-  strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
-}
-function SunIcon() {
-  return <svg {...THEME_ICON}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
-}
-function MoonIcon() {
-  return <svg {...THEME_ICON}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>
 }
