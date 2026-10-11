@@ -611,9 +611,9 @@ function Thread({ job, onBack }) {
   // This thread's replies still on their way: shown as sent from the moment Send is tapped.
   const outgoing = useOutbox().filter((item) => item.jobId === job.id)
   const [viewer, setViewer] = useState(null)
-  // Who the job is for, in a window of its own. It opens by itself the first
-  // time this side opens a job that names somebody, and from the header after.
-  const [info, setInfo] = useState(() => (job[`${SIDE}SeenAt`] ?? 0) === 0 && !!(job.title || job.phone))
+  // Who the job is for is on a card at the head of the chat (below); the
+  // header opens the fuller window, which also says which box the job is in.
+  const [info, setInfo] = useState(false)
   // The message about to be deleted, once a finger has been held on it.
   const [deleting, setDeleting] = useState(null)
   const holdToDelete = useHold(setDeleting)
@@ -677,12 +677,29 @@ function Thread({ job, onBack }) {
         </button>
         {contactsOf(job.phone)[0] && <a className="call" href={`tel:${contactsOf(job.phone)[0]}`} aria-label={`Call ${titleOf(job)}`}><PhoneIcon /></a>}
       </header>
-      {SIDE === 'shop' && (
-        <div className="actions">
-          <button type="button" onClick={() => setChoosing(job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: job.phone } : job.title ? { name: job.title } : null)}>
-            <PersonIcon size={17} /> Customer
-          </button>
-        </div>
+      {/* Who it is for, always in view at the head of the chat: the name, where
+          they are, every number to ring, and the site on the map once a job
+          carries one. At the counter it is also where the customer is set. */}
+      {(job.title || job.phone || SIDE === 'shop') && (
+        <section className="custcard" aria-label="Customer">
+          {job.title && (
+            <div className="names">
+              <b>{nameOf(job)}</b>
+              {addressOf(job) && <small>{addressOf(job)}</small>}
+            </div>
+          )}
+          <div className="links">
+            {contactsOf(job.phone).map((number) => (
+              <a key={number} href={`tel:${number}`} aria-label={`Call ${number}`}><PhoneIcon size={16} />{number}</a>
+            ))}
+            {mapLinkOf(job) && <a href={mapLinkOf(job)} target="_blank" rel="noreferrer"><PinIcon size={16} />Map</a>}
+            {SIDE === 'shop' && (
+              <button type="button" onClick={() => setChoosing(job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: job.phone } : job.title ? { name: job.title } : null)}>
+                <PersonIcon size={16} />{job.title ? 'Change' : 'Set customer'}
+              </button>
+            )}
+          </div>
+        </section>
       )}
 
       <main className="thread">
