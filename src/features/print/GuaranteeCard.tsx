@@ -232,18 +232,21 @@ export function GuaranteeCardFace({ document }: { document: GuaranteeDocument })
       </div>
 
       {/* Same as print-server/template.mjs CARD_NOTE: red text centred in its band, nudged
-          0.23mm (CARD_NOTE_NUDGE_MM) so the letters have the same gap above and below. */}
-      <div className="absolute bottom-0 left-[3mm] right-[3mm] flex h-[6.5mm] items-center justify-center">
-        <span
-          className="relative top-[0.23mm] inline-block whitespace-nowrap text-[7pt] font-semibold leading-none tracking-[0.2pt]"
-          style={{
-            color: 'var(--shiv-red)',
-            fontFamily: "'Nirmala UI', Mangal, 'Kohinoor Devanagari', 'Devanagari Sangam MN', Arial, sans-serif",
-          }}
-        >
-          दीमक की कोई गारंटी नहीं है
-        </span>
-      </div>
+          0.23mm (CARD_NOTE_NUDGE_MM) so the letters have the same gap above and below.
+          Left off a card made with the line switched off; its band stays, so nothing moves. */}
+      {document.termiteNote !== false && (
+        <div className="absolute bottom-0 left-[3mm] right-[3mm] flex h-[6.5mm] items-center justify-center">
+          <span
+            className="relative top-[0.23mm] inline-block whitespace-nowrap text-[7pt] font-semibold leading-none tracking-[0.2pt]"
+            style={{
+              color: 'var(--shiv-red)',
+              fontFamily: "'Nirmala UI', Mangal, 'Kohinoor Devanagari', 'Devanagari Sangam MN', Arial, sans-serif",
+            }}
+          >
+            दीमक की कोई गारंटी नहीं है
+          </span>
+        </div>
+      )}
     </>
   )
 }

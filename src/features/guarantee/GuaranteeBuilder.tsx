@@ -282,6 +282,7 @@ function cardKey(d: GuaranteeDocument): string {
   return JSON.stringify([
     t(d.customer?.name), String(d.customer?.mobile ?? '').replace(/\D/g, ''), String(d.date ?? '').slice(0, 10),
     (d.items ?? []).map((it) => [t(it.brandName), t(it.thickness), t(it.sizeLabel), dim(it.height), dim(it.width), it.qty ?? '', it.amount ?? '', it.guaranteeYears ?? '']),
+    d.termiteNote !== false,
   ])
 }
 
@@ -312,6 +313,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // On a phone the card preview is folded away until asked for.
   const [previewOpen, setPreviewOpen] = useState(false)
   const [period1, setPeriod1] = useState<GuaranteeYears | ''>('')
+  // The card's red termite line ("दीमक की कोई गारंटी नहीं है"): on unless switched off.
+  const [termite1, setTermite1] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [showWhatsAppLogin, setShowWhatsAppLogin] = useState(false)
 
@@ -324,6 +327,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const [customer2, setCustomer2] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows2, setRows2] = useState<SizeRow[]>(() => [blankRow()])
   const [period2, setPeriod2] = useState<GuaranteeYears | ''>('')
+  const [termite2, setTermite2] = useState(true)
 
   // Editing a saved card (History → Edit): it keeps its number, QR secret and
   // date — the card in the customer's hand must keep opening — so Save never
@@ -453,6 +457,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     }))
     setRows(imported.length ? [...imported, blankRow()] : [blankRow()])
     setPeriod1(g.items[0]?.guaranteeYears ?? '')
+    setTermite1(g.termiteNote !== false)
   }
 
   function importBill(bill: Bill) {
@@ -511,6 +516,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       width: (primary && rowDim(primary.height, primary.heightSoot)) ?? blankDim(),
       qty: primary && primary.qty !== '' ? Number(primary.qty) : 1,
       items: rowsToItems(rows, DEFAULT_BRAND_LABEL, years1),
+      ...(termite1 ? {} : { termiteNote: false }),
     }
   }
 
@@ -529,6 +535,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       width: (primary && rowDim(primary.height, primary.heightSoot)) ?? blankDim(),
       qty: primary && primary.qty !== '' ? Number(primary.qty) : 1,
       items: rowsToItems(rows2, DEFAULT_BRAND_LABEL, years2),
+      ...(termite2 ? {} : { termiteNote: false }),
     }
   }
 
@@ -794,14 +801,30 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 <div>
                   <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Items</h2>
                 </div>
-                <label className="flex items-center gap-2 text-xs font-semibold text-muted">
-                  Guarantee period
-                  <GuaranteeSelect
-                    value={onCard2 ? years2 : years1}
-                    onChange={onCard2 ? setPeriod2 : setPeriod1}
-                    className="min-w-32 rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-shiv-green dark:border-white/15 dark:bg-stone-950"
-                  />
-                </label>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  {layout === 'card' && (
+                    <label
+                      className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-muted"
+                      title="The red line at the foot of the card: दीमक की कोई गारंटी नहीं है (no guarantee against termites)"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={onCard2 ? termite2 : termite1}
+                        onChange={(e) => (onCard2 ? setTermite2 : setTermite1)(e.target.checked)}
+                        className="h-4 w-4 cursor-pointer accent-shiv-green"
+                      />
+                      Termite line
+                    </label>
+                  )}
+                  <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+                    Guarantee period
+                    <GuaranteeSelect
+                      value={onCard2 ? years2 : years1}
+                      onChange={onCard2 ? setPeriod2 : setPeriod1}
+                      className="min-w-32 rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-shiv-green dark:border-white/15 dark:bg-stone-950"
+                    />
+                  </label>
+                </div>
               </div>
               {onCard2
                 ? <SizeTable key="t2" rows={rows2} setRows={setRows2} options={comboOptions} rateFor={rateFor} picks={picks} />

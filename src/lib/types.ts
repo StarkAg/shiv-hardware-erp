@@ -139,6 +139,12 @@ export interface GuaranteeDocument {
   width: Dimension
   qty: number
   items: GuaranteeCardItem[]
+  /**
+   * The red line at the foot of the PVC card, "दीमक की कोई गारंटी नहीं है" (no
+   * guarantee against termites). `false` is a card made with the line switched
+   * off; absent on every other card, which carries it.
+   */
+  termiteNote?: boolean
 }
 
 /**

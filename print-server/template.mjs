@@ -441,9 +441,9 @@ export async function buildGuaranteeHtml(document, layout = 'a4') {
           <div style="position:absolute;right:${CARD_SAFE_MM}mm;top:${(qrLabelTop - 4.75).toFixed(2)}mm;display:inline-block;border-top:1pt solid #000;border-bottom:1pt solid #000;padding:0.8mm 0;font-size:7pt;font-weight:600;line-height:1">${esc(Math.round(totalAmount))}</div>` : ''}
           ${cardQr ? `<div style="position:absolute;left:${CARD_SAFE_MM}mm;top:${qrTop.toFixed(2)}mm">${cardQr}</div>
           <div data-fit style="position:absolute;left:${CARD_SAFE_MM}mm;top:${qrLabelTop.toFixed(2)}mm;width:${CARD_QR_MM}mm;white-space:nowrap;overflow:hidden;text-align:center;font-size:4pt;font-weight:700;letter-spacing:0.2pt;line-height:1">${fitInner('SCAN TO VERIFY')}</div>` : ''}
-          <div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;bottom:0;height:${CARD_NOTE_MM}mm;display:flex;align-items:center;justify-content:center">
+          ${document.termiteNote === false ? '' : `<div style="position:absolute;left:${CARD_SAFE_MM}mm;right:${CARD_SAFE_MM}mm;bottom:0;height:${CARD_NOTE_MM}mm;display:flex;align-items:center;justify-content:center">
             <span style="display:inline-block;position:relative;top:${CARD_NOTE_NUDGE_MM}mm;color:${RED};font-family:${CARD_NOTE_FONT};font-size:7pt;font-weight:600;letter-spacing:0.2pt;line-height:1;white-space:nowrap">${CARD_NOTE}</span>
-          </div>
+          </div>`}
         </div>
       `)
   }

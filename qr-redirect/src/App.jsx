@@ -250,7 +250,8 @@ function CardView({ doc, token, claims, onClaimed }) {
         <span>Terms</span>
         <ul>
           <li>Covers borer and air bubbles only.</li>
-          <li>Termite damage is not covered.</li>
+          {/* Not said of a card made with its termite line switched off. */}
+          {doc.termiteNote === false ? null : <li>Termite damage is not covered.</li>}
           <li>Valid for the years shown, from the date on this card.</li>
           <li>Replacement requires the original card and bill, subject to inspection.</li>
         </ul>
