@@ -3,6 +3,7 @@ import { useConvex, useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import { APP_NAME, ICON, OTHER, SIDE, SIDE_NAME } from './side.js'
 import { BUBBLE, SMALL, savePhotos, sized } from './offline.js'
+import Camera from './Camera.jsx'
 
 /**
  * Shiv Workshop and Shiv Workshop Counter: a work order as a chat, in photos.
@@ -594,6 +595,8 @@ const customerArgs = (c) => (c?.ledgerId ? { ledgerId: c.ledgerId } : c?.name?.t
 function NewOrder({ onClose }) {
   const { picked, add, drop, take } = usePicked()
   const [customer, setCustomer] = useState(null)
+  // The live camera, open over the sheet while photographing.
+  const [cam, setCam] = useState(false)
   const camera = useRef(null)
   const gallery = useRef(null)
 
@@ -611,9 +614,10 @@ function NewOrder({ onClose }) {
         <b className="sheettitle">New visit order</b>
         <p>Photograph the visit order. It goes to the workshop, to visit and measure.</p>
         <PhotoInputs camera={camera} gallery={gallery} onFiles={add} />
+        {cam && <Camera title="Visit order" onUse={add} onClose={() => setCam(false)} onFallback={() => camera.current?.click()} />}
         <Picked picked={picked} onDrop={drop} />
         <div className="pickrow">
-          <button type="button" className="pick" onClick={() => camera.current?.click()}><CameraIcon /> Take photo</button>
+          <button type="button" className="pick" onClick={() => setCam(true)}><CameraIcon /> Take photo</button>
           <button type="button" className="pick" onClick={() => gallery.current?.click()}><PhotosIcon /> Choose</button>
         </div>
         <CustomerPicker value={customer} onChange={setCustomer} />
@@ -684,6 +688,8 @@ function Thread({ job, onBack }) {
     { id: 'goahead', label: 'Go-ahead', kind: 'goahead', stage: 'goahead', say: 'When to visit and whom to call' },
   ]
   const [menu, setMenu] = useState(false)
+  // The live camera, open over the chat while a step is being photographed.
+  const [cam, setCam] = useState(false)
   // The tag of the photos being taken, and the three small sheets.
   const [step, setStep] = useState(null)
   const [boardsOpen, setBoardsOpen] = useState(false)
@@ -694,7 +700,7 @@ function Thread({ job, onBack }) {
   const act = (action) => {
     setMenu(false)
     setError('')
-    if (action.kind === 'photo') { setStep(action.id); camera.current?.click() }
+    if (action.kind === 'photo') { setStep(action.id); setCam(true) }
     else if (action.kind === 'boards') { setBoards(job.boardsMade ?? 0); setBoardsOpen(true) }
     else if (action.kind === 'complete') setCompleting(true)
     else {
@@ -851,6 +857,15 @@ function Thread({ job, onBack }) {
         <div ref={end} />
       </main>
 
+      {/* The camera, live, for whichever step is being photographed. The
+          file input under it is what it falls back to where no live camera
+          can be had and, at the counter, how a picture already on the phone
+          is attached. */}
+      {cam && (
+        <Camera title={TAGS[step] ?? 'Photo'} onUse={add} onClose={() => setCam(false)}
+          onFallback={() => camera.current?.click()}
+          onGallery={SIDE === 'shop' ? () => camera.current?.click() : undefined} />
+      )}
       {/* The foot of the chat: no line to type on either side. The three lines
           open what this side can add; photos being sent wait here with their
           tag. The workshop photographs with the camera, there and then; the
@@ -868,7 +883,7 @@ function Thread({ job, onBack }) {
         {error && <p className="error" role="alert">{error}</p>}
         {picked.length ? (
           <div className="row">
-            <button type="button" className="tool" onClick={() => camera.current?.click()} aria-label="Add another photo"><CameraIcon /></button>
+            <button type="button" className="tool" onClick={() => setCam(true)} aria-label="Add another photo"><CameraIcon /></button>
             <button type="button" className="go grow" onClick={sendPhotos}><SendIcon /> Send: {TAGS[step] ?? 'photo'}</button>
           </div>
         ) : (
