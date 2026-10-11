@@ -190,11 +190,15 @@ export default function App() {
   if (justSent) {
     return (
       <main className="page sent-screen">
-        <div className="sent-mark"><CheckIcon /></div>
-        <h1>Sent to the shop</h1>
-        <p>{justSent.label} · {justSent.how}</p>
-        <p className="muted">{notifications === 'granted' ? 'Your phone will say when it has printed.' : 'Turn on notifications to hear when it has printed.'}</p>
-        <button className="print" onClick={() => setJustSent(null)}>Done</button>
+        <div className="scroll">
+          <div className="sent-panel">
+            <CheckIcon size={44} />
+            <h1>Sent to the shop</h1>
+            <p>{justSent.label} · {justSent.how}</p>
+            <p>{notifications === 'granted' ? 'Your phone will say when it has printed.' : 'Turn on notifications to hear when it has printed.'}</p>
+          </div>
+        </div>
+        <div className="dock"><button className="key ghost" onClick={() => setJustSent(null)}>Done</button></div>
       </main>
     )
   }
@@ -202,10 +206,11 @@ export default function App() {
   return (
     <main className="page">
       <header className="top">
-        <PrinterIcon />
+        <img src="/icon.svg" alt="" />
         <h1>Shiv Print</h1>
       </header>
 
+      <div className="scroll">
       <section className="files">
         {items.map((i) => (
           <div key={i.id} className="file">
@@ -240,18 +245,13 @@ export default function App() {
           ))}
         </div>
         <div className="copies">
-          <button aria-label="Fewer copies" onClick={() => setCopies((n) => Math.max(1, n - 1))}><MinusIcon /></button>
+          <button aria-label="Fewer copies" disabled={copies <= 1} onClick={() => setCopies((n) => Math.max(1, n - 1))}><MinusIcon /></button>
           <span>{copies} {copies === 1 ? 'copy' : 'copies'}</span>
           <button aria-label="More copies" onClick={() => setCopies((n) => Math.min(20, n + 1))}><PlusIcon /></button>
         </div>
       </section>
 
       {error && <p className="error" role="alert">{error}</p>}
-
-      <button className="print" disabled={!items.length || busy} onClick={print}>
-        {busy ? 'Sending' : 'Print'}
-      </button>
-      {detecting && <p className="muted center">Checking for colour…</p>}
 
       <section className="settings">
         <label className="setting">
@@ -263,15 +263,15 @@ export default function App() {
           />
         </label>
         {notifications === 'install-first' && (
-          <p className="muted center">On iPhone: tap Share → Add to Home Screen, open Shiv Print from there, then turn on notifications.</p>
+          <p className="muted">On iPhone: tap Share, then Add to Home Screen, open Shiv Print from there, then turn on notifications.</p>
         )}
         {notifications !== 'granted' && notifications !== 'unsupported' && notifications !== 'install-first' && (
           <button
-            className="setting-button"
+            className="key ghost setting-button"
             disabled={notifications === 'denied'}
             onClick={async () => { await turnOnNotifications(); setNotifications(notificationsState()) }}
           >
-            {notifications === 'denied' ? 'Notifications are blocked in phone settings' : 'Notify me when it has printed'}
+            {notifications === 'denied' ? 'Notifications blocked' : 'Tell me when printed'}
           </button>
         )}
       </section>
@@ -281,6 +281,14 @@ export default function App() {
           {sent.map((job) => <SentJob key={job.id} job={job} />)}
         </section>
       )}
+      </div>
+
+      <div className="dock">
+        {detecting && <p className="muted note">Checking for colour</p>}
+        <button className="key safe" disabled={!items.length || busy} onClick={print}>
+          <PrinterIcon /> {busy ? 'Sending' : 'Print'}
+        </button>
+      </div>
     </main>
   )
 }
@@ -296,9 +304,12 @@ function SentJob({ job }) {
     : ['Waiting for the shop PC', 'wait']
   return (
     <div className={`job ${tone}`}>
-      <div className="label">{job.label}</div>
-      <div className="meta">{job.mode === 'color' ? 'Colour' : 'B/W'} · {job.copies} {job.copies === 1 ? 'copy' : 'copies'}</div>
-      <div className="state">{tone === 'ok' && <CheckIcon />}{text}</div>
+      <span className={`sign ${tone === 'ok' ? 'done' : tone === 'bad' ? 'bad' : 'wait'}`}>{tone === 'ok' ? <CheckIcon size={24} /> : tone === 'bad' ? <XIcon size={24} /> : <ClockIcon />}</span>
+      <div className="what">
+        <div className="label">{job.label}</div>
+        <div className="meta">{job.mode === 'color' ? 'Colour' : 'Black and white'} · {job.copies} {job.copies === 1 ? 'copy' : 'copies'}</div>
+        <div className="state">{text}</div>
+      </div>
     </div>
   )
 }
@@ -306,9 +317,10 @@ function SentJob({ job }) {
 const Svg = ({ children, size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 )
-const PrinterIcon = () => <Svg size={24}><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></Svg>
+const PrinterIcon = () => <Svg size={26}><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></Svg>
 const DocIcon = () => <Svg size={28}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></Svg>
 const PlusIcon = () => <Svg><path d="M12 5v14M5 12h14" /></Svg>
 const MinusIcon = () => <Svg><path d="M5 12h14" /></Svg>
-const XIcon = () => <Svg size={16}><path d="M18 6 6 18M6 6l12 12" /></Svg>
-const CheckIcon = () => <Svg size={16}><path d="M20 6 9 17l-5-5" /></Svg>
+const XIcon = ({ size = 18 }) => <Svg size={size}><path d="M18 6 6 18M6 6l12 12" /></Svg>
+const CheckIcon = ({ size = 16 }) => <Svg size={size}><path d="M20 6 9 17l-5-5" /></Svg>
+const ClockIcon = () => <Svg size={24}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></Svg>

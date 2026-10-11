@@ -134,5 +134,6 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Shiv Mechanic | `mechanic-web/` | Signs, 11 Oct 2026 |
 | QR Pay | `pay-web/` | Signs, 11 Oct 2026 |
 | Voucher Bill Shooter | `voucher-web/` | Signs, 11 Oct 2026 |
+| Shiv Print | `print-web/` | Signs, 11 Oct 2026 |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Everything else | | still the older parchment and brass look |

@@ -1,50 +1,73 @@
-:root {
-  --bg: #f4f1ea; --card: #fff; --ink: #1c1917; --muted: #78716c; --line: #e7e2d8;
-  --brass: #b98f4b; --ok: #15803d; --bad: #dc2626; --wait: #a16207;
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #15140f; --card: #211f1a; --ink: #f5f5f4; --muted: #a8a29e; --line: #34312a; }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-button { font: inherit; color: inherit; cursor: pointer; }
-.page { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; min-height: 100vh; }
-.top { display: flex; align-items: center; gap: 10px; color: var(--brass); }
-.top h1 { margin: 0; font-size: 20px; color: var(--ink); }
-.files { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
-.file { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+/* Shiv Print, in the Signs look (DESIGN.md; the colours, lettering and buttons
+ * come from ./signs/signs.css).
+ *
+ * One screen: the papers to print, colour or black and white, how many
+ * copies, and Print at the foot of the screen, under the thumb. Under them,
+ * what was sent and whether the shop has printed it.
+ */
+@import "./signs/signs.css";
+
+html, body, #root { height: 100%; }
+h1 { margin: 0; }
+.page { display: flex; flex-direction: column; height: 100%; max-width: 520px; margin: 0 auto; background: var(--wall); }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 12px 12px calc(env(safe-area-inset-bottom) + 24px); }
+
+.top { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 4px solid var(--ink); }
+.top img { width: 40px; height: 40px; }
+.top h1 { font: 800 27px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; }
+
+/* The papers, a tile each, and the key that adds one. */
+.files { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.file { position: relative; min-width: 0; box-shadow: inset 0 0 0 2px var(--ink); padding: 2px; }
 .file img, .file .pdf { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; }
-.file .pdf { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 700; }
-.file .name { font-size: 11px; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
-.file .x { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 999px; border: 0; background: rgba(0,0,0,.6); color: #fff; display: grid; place-items: center; }
-.add { aspect-ratio: 3 / 4.6; border: 2px dashed var(--line); border-radius: 12px; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.controls { display: flex; flex-direction: column; gap: 12px; }
-.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
-.seg button { border: 0; background: transparent; padding: 12px; border-radius: 9px; font-weight: 700; font-size: 15px; color: var(--muted); }
-.seg button.on { background: var(--brass); color: #1c1917; }
-.copies { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
-.copies button { width: 48px; height: 44px; border: 0; background: transparent; display: grid; place-items: center; }
-.copies span { font-weight: 700; }
-.error { margin: 0; color: var(--bad); font-size: 14px; }
-.print { margin-top: auto; padding: 16px; border: 0; border-radius: 14px; background: var(--ink); color: var(--bg); font-size: 17px; font-weight: 800; }
-.print:disabled { opacity: .35; }
-.sent { display: flex; flex-direction: column; gap: 8px; }
-.job { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
-.job .label { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.job .meta { grid-column: 1; color: var(--muted); font-size: 12px; }
-.job .state { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; text-align: right; }
-.job.ok .state { color: var(--ok); } .job.bad .state { color: var(--bad); } .job.wait .state { color: var(--wait); } .job.busy .state { color: var(--brass); }
-.muted { color: var(--muted); font-size: 13px; margin: 0; }
-.center { text-align: center; }
-.settings { display: flex; flex-direction: column; gap: 8px; }
-.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 4px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; font-weight: 600; font-size: 14px; }
-.setting input { width: 22px; height: 22px; accent-color: var(--brass); }
-.setting-button { min-height: 48px; border: 1px solid var(--brass); border-radius: 12px; background: transparent; color: var(--brass); font-weight: 700; font-size: 14px; }
-.setting-button:disabled { border-color: var(--line); color: var(--muted); }
-.sent-screen { justify-content: center; align-items: center; text-align: center; gap: 10px; }
-.sent-screen h1 { margin: 0; font-size: 24px; }
-.sent-screen p { margin: 0; }
-.sent-screen .print { margin-top: 24px; width: 100%; }
-.sent-mark { width: 72px; height: 72px; border-radius: 999px; background: var(--ok); color: #fff; display: grid; place-items: center; }
-.sent-mark svg { width: 36px; height: 36px; }
+.file .pdf { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: var(--key); font: 800 20px/1 var(--sign); }
+.file .name { padding: 6px 6px 4px; font-size: 14px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file .x { position: absolute; top: 0; right: 0; width: 36px; height: 36px; background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; }
+.add { min-height: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.add:active { transform: translateY(2px); }
+/* With nothing chosen yet it is the whole row; beside papers it is one more tile. */
+.files:not(:has(.file)) .add { grid-column: 1 / -1; }
+.files:has(.file) .add { min-height: 0; }
+
+.controls { display: flex; flex-direction: column; gap: 8px; }
+/* Black and white, or colour: the key that is on is the black one. */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.seg button { min-height: 56px; padding: 0 8px; background: var(--key); font: 800 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.seg button.on { background: var(--ink); color: #fff; }
+/* How many copies: minus, the figure, plus. */
+.copies { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; }
+.copies button { height: 56px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); display: flex; align-items: center; justify-content: center; }
+.copies button:last-child { background: var(--ink); color: #fff; box-shadow: none; }
+.copies button:active { transform: translateY(2px); }
+.copies span { text-align: center; font: 800 26px/1 var(--sign); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+
+.error { padding: 10px 12px; box-shadow: inset 0 0 0 2px var(--stop); color: var(--stop); font-weight: 700; }
+.muted { font-size: 15px; line-height: 1.35; color: var(--dim); }
+
+/* How it behaves, a line each. */
+.settings { display: flex; flex-direction: column; gap: 8px; border-top: 2px solid var(--ink); }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 17px; font-weight: 600; }
+.setting input { flex: none; width: 30px; height: 30px; accent-color: var(--must); }
+.setting-button { width: 100%; }
+
+/* What was sent, a row each, opening with its sign: yellow while the shop has
+   it, a green tick once printed, red when it was not. */
+.sent { border-top: 2px solid var(--ink); }
+.job { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.sign.bad { background: var(--stop); color: #fff; }
+.job .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.job .label { font: 700 20px/1.15 var(--sign); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job .meta { font-size: 15px; color: var(--dim); }
+.job .state { font: 700 15px/1.2 var(--sign); text-transform: uppercase; letter-spacing: .03em; overflow-wrap: anywhere; }
+.job.ok .state { color: var(--safe); }
+.job.bad .state { color: var(--stop); }
+
+.dock .note { margin-bottom: 8px; text-align: center; }
+
+/* Shared from another app and sent by itself: said in green, large. */
+.sent-screen .scroll { justify-content: center; }
+.sent-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px 14px; background: var(--safe); color: #fff; }
+.sent-panel h1 { font: 800 34px/1 var(--sign); text-transform: uppercase; }
+.sent-panel p { font-size: 17px; overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) { .add:active, .copies button:active { transform: none; } }
