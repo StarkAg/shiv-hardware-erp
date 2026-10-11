@@ -112,9 +112,9 @@ export default function App() {
             <>
               <div className={`score ${v.tone}`}>{similarity(d)}%</div>
               <div className="compare-text">
-                <div className={`verdict ${v.tone}`}>{v.word} <span className="muted">· difference {d.toFixed(1)}</span></div>
+                <div className={`verdict ${v.tone}`}><span>{v.word}</span><span className="muted">difference {d.toFixed(1)}</span></div>
                 <div className="muted">{said.length ? `Live one is ${said.join(', ')}` : 'No difference you would see'}</div>
-                {(!ref.corrected || !live.corrected) && <div className="warn">Keep white paper in the dashed frame for a fair reading</div>}
+                {(!ref.corrected || !live.corrected) && <div className="warn">Keep white paper in the dashed frame</div>}
               </div>
             </>
           )}

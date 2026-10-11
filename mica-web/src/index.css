@@ -1,130 +1,92 @@
-/* One screen, never scrolled. Dark throughout: it sits around a camera
-   picture, and a light frame would throw the eye off the colours. */
+/* Mica Match, in the Signs lettering and shapes (DESIGN.md; ./signs/signs.css)
+ * on a dark ground.
+ *
+ * The one app that is not white: it sits around a camera picture, and a light
+ * frame would throw the eye off the colours being judged. So the wall here is
+ * the black of the print, and the print is white. Everything else is the same
+ * look: square shapes, the same keys, blue for the thing to do, green and
+ * yellow for how alike two sheets are.
+ *
+ * One screen, never scrolled.
+ */
+@import "./signs/signs.css";
+
 :root {
+  --wall: #0e1318;
+  --ink: #f2f4f6;
+  --dim: #aab2ba;         /* small print: 8.6 to 1 on the wall */
+  --line: #3a434c;
+  --key: #232b33;
+  --pin-edge: 2px solid #f2f4f6;
+  --pin-stop: #ff9b9b;
   color-scheme: dark;
-  --bg: #15130f; --card: #1f1c17; --card2: #29251f; --ink: #eee9e0; --muted: #a8a29e;
-  --line: rgba(255, 255, 255, .1); --brass: #c9a45c; --brass-ink: #1a1204;
-  --good: #6cc48f; --fair: #e0a64a; --poor: #ff807a;
-  --glass: rgba(18, 16, 13, .62);
 }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body, #root { height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
-body { background: var(--bg); color: var(--ink); font: 15px/1.35 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-user-select: none; user-select: none; }
-input, select { -webkit-user-select: text; user-select: text; }
-button, input, select { font: inherit; color: inherit; }
-button { cursor: pointer; touch-action: manipulation; min-height: 40px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); font-weight: 700; }
-button.primary { background: var(--brass); color: var(--brass-ink); border-color: transparent; }
-button.glass { background: var(--glass); border-color: rgba(255, 255, 255, .22); color: #fff; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-button.icon { width: 40px; padding: 0; font-size: 18px; }
-button:disabled { opacity: .45; cursor: default; }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
-input, select { width: 100%; min-width: 0; min-height: 40px; padding: 6px 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); }
+html, body, #root { height: 100%; overflow: hidden; overscroll-behavior: none; }
+html { background: var(--wall); }
+body { -webkit-user-select: none; user-select: none; }
+button { touch-action: manipulation; }
 
-.app { height: 100dvh; display: flex; flex-direction: column; max-width: 760px; margin: auto; }
-.top { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(6px + env(safe-area-inset-top)) 12px 6px; }
-.logo { width: 34px; height: 34px; border-radius: 9px; flex: none; }
-.tabs { flex: 1; display: flex; gap: 3px; background: var(--card); padding: 3px; border: 1px solid var(--line); border-radius: 12px; }
-.tabs button { flex: 1; border: 0; background: none; min-height: 34px; padding: 4px 6px; border-radius: 9px; color: var(--muted); font-weight: 750; }
-.tabs button.on { background: var(--brass); color: var(--brass-ink); }
+.app { height: 100dvh; display: flex; flex-direction: column; max-width: 640px; margin: 0 auto; background: var(--wall); }
+.top { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 4px solid var(--ink); }
+.logo { width: 40px; height: 40px; flex: none; }
+.title { font: 800 27px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; }
+.page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px 12px calc(env(safe-area-inset-bottom) + 10px); }
 
-.page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 0 12px calc(8px + env(safe-area-inset-bottom)); }
-
-.hint { margin: 0; color: var(--muted); font-size: 13px; }
-.muted { color: var(--muted); font-size: 12px; font-weight: 500; }
+.muted { color: var(--dim); font-size: 15px; font-weight: 500; line-height: 1.25; }
 .one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ok { color: var(--good); font-size: 12px; font-weight: 650; }
-.warn { color: var(--fair); font-size: 12px; font-weight: 650; }
 
-/* The camera takes whatever room is left. */
-.viewer { flex: 1; min-height: 140px; position: relative; overflow: hidden; border-radius: 16px; background: #000; touch-action: none; }
+/* Two keys: the blue one does it, the grey one is the rest. */
+button.primary, button.glass { flex: none; display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 14px; font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+button.primary { background: var(--must); color: #fff; }
+button.glass { background: var(--key); color: var(--ink); box-shadow: inset 0 -4px 0 var(--line); }
+button.icon { width: 48px; padding: 0; }
+button.primary:active:not(:disabled), button.glass:active:not(:disabled) { transform: translateY(2px); }
+
+/* The reference: what it is, then the two ways to set it. */
+.refcard { flex: none; display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 8px 10px; }
+.refcard > img, .refcard > .nophoto { width: 48px; height: 48px; object-fit: cover; }
+.nophoto { display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 2px var(--line); color: var(--dim); font: 800 24px/1 var(--sign); }
+.ref-text { display: grid; gap: 4px; min-width: 0; }
+.code { font: 700 20px/1.15 var(--sign); text-transform: uppercase; }
+.ref-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+.shades { display: flex; width: 100%; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+.shades span { display: block; }
+
+/* The camera takes whatever room is left. A photo being read is laid over it. */
+.stack { flex: 1; min-height: 140px; position: relative; display: flex; flex-direction: column; }
+.over { position: absolute; inset: 0; display: flex; flex-direction: column; z-index: 2; }
+.viewer { flex: 1; min-height: 140px; position: relative; overflow: hidden; background: #000; touch-action: none; }
 .viewer video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .viewer.photo { display: grid; place-items: center; }
 .stage { position: relative; }
 .stage canvas { display: block; width: 100%; height: 100%; }
-.square { position: absolute; border: 3px solid #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, .7), 0 0 0 9999px rgba(0, 0, 0, .22); border-radius: 4px; pointer-events: none; }
-.square.frozen { border-color: var(--brass); }
-.ring { position: absolute; border: 2px dashed rgba(255, 255, 255, .8); border-radius: 6px; pointer-events: none; }
-.starting { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; color: #fff; font-weight: 650; }
-.viewer-hint { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 16px); padding: 4px 10px; border-radius: 999px; background: var(--glass); color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.square { position: absolute; border: 3px solid #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, .7), 0 0 0 9999px rgba(0, 0, 0, .22); pointer-events: none; }
+/* Held still: the square turns yellow. */
+.square.frozen { border-color: var(--wait); }
+.ring { position: absolute; border: 2px dashed rgba(255, 255, 255, .8); pointer-events: none; }
+.starting { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; text-align: center; color: #fff; font-size: 17px; font-weight: 600; }
+.viewer-hint { position: absolute; top: 0; left: 0; right: 0; padding: 7px 10px; background: rgba(14, 19, 24, .8); color: #fff; font-size: 15px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .viewer-bar { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 8px; }
-.viewer-bar input[type="range"] { flex: 1; min-height: 0; padding: 0; border: 0; background: none; accent-color: var(--brass); }
-.viewer-bar button { flex: none; }
+.viewer-bar input[type="range"] { flex: 1; min-width: 0; height: 44px; margin: 0; accent-color: #fff; }
 
 /* What the square reads. */
-.reading { flex: none; display: flex; align-items: center; gap: 10px; height: 52px; padding: 6px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
-.reading.empty { justify-content: center; color: var(--muted); font-size: 13px; }
-.reading img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex: none; }
+.reading { flex: none; display: flex; align-items: center; gap: 10px; min-height: 52px; }
+.reading.empty { justify-content: center; color: var(--dim); font-size: 15px; }
+.reading img { width: 40px; height: 40px; object-fit: cover; flex: none; }
 .reading-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
-.reading-text > div:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.shades { display: flex; width: 100%; border-radius: 3px; overflow: hidden; border: 1px solid var(--line); }
-.shades span { display: block; }
+.ok { color: var(--dim); font-size: 15px; font-weight: 600; }
 
-/* Find: filters, then the matches as a row to swipe through. */
-.filters { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.results { flex: none; height: 150px; display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; align-items: stretch; }
-.results::-webkit-scrollbar { display: none; }
-.results .hint { align-self: center; margin: auto; }
-.result { flex: none; width: 128px; display: grid; align-content: start; gap: 2px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; scroll-snap-align: start; }
-.pair { display: flex; border-radius: 7px; overflow: hidden; margin-bottom: 3px; }
-.pair img, .pair .nophoto { width: 50%; height: 56px; object-fit: cover; display: block; }
-.nophoto { background: var(--card2); }
-.code { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.verdict { font-weight: 750; font-size: 13px; }
-.verdict.good { color: var(--good); }
-.verdict.fair { color: var(--fair); }
-.verdict.poor { color: var(--poor); }
+/* How alike they are, live: the figure on a plate. Green is a match, yellow
+   is near, an empty plate is a different sheet. */
+.compare-result { flex: none; display: flex; align-items: center; gap: 12px; min-height: 84px; padding-top: 8px; border-top: 4px solid var(--ink); }
+.score { flex: none; min-width: 108px; height: 72px; padding: 0 8px; display: flex; align-items: center; justify-content: center; font: 800 46px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.score.good { background: var(--safe); color: #fff; }
+.score.fair { background: var(--wait); color: #0e1318; }
+.score.poor { box-shadow: inset 0 0 0 2px var(--ink); }
+.compare-text { display: grid; gap: 3px; min-width: 0; }
+.verdict { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; font: 800 24px/1.1 var(--sign); text-transform: uppercase; }
+.verdict .muted { font: 500 15px/1.25 var(--text); text-transform: none; }
+.warn { justify-self: start; padding: 2px 6px; background: var(--wait); color: #0e1318; font-size: 14px; font-weight: 700; }
 
-/* Add: under the camera, what the chip is, its code and Save; a note after saving floats over the camera. */
-.add { flex: none; display: grid; gap: 8px; position: relative; }
-.fields { flex: none; display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 6px; }
-.toast { position: absolute; left: 50%; bottom: calc(100% + 60px); transform: translateX(-50%); max-width: calc(100% - 24px); padding: 8px 14px; border-radius: 12px; background: rgba(12, 11, 9, .9); font-size: 13px; text-align: center; box-shadow: 0 6px 20px rgba(0, 0, 0, .4); pointer-events: none; }
-.save-row { flex: none; display: flex; gap: 8px; }
-.save-row button { min-width: 88px; }
-
-/* Chips: the one list that scrolls, inside its own space. */
-.search { flex: none; }
-.chip-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-.brand h2 { font-size: 14px; margin: 6px 2px; }
-.chip-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
-.chip-list li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
-.chip-list img, .chip-list .nophoto { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; flex: none; }
-.chip-text { display: grid; gap: 3px; min-width: 0; flex: 1; }
-.del { min-height: 34px; width: 34px; padding: 0; border-radius: 10px; color: var(--muted); font-size: 20px; line-height: 1; }
-
-/* Short screens: the matches strip gives up a little room to the camera. */
-@media (max-height: 640px) {
-  .results { height: 132px; }
-  .pair img, .pair .nophoto { height: 44px; }
-}
-
-/* Find's matches open Compare. */
-button.result { text-align: left; font-weight: inherit; color: inherit; min-height: 0; }
-
-/* Compare: the two sides, then how alike they are. */
-.sides { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.side { display: grid; gap: 6px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
-.side-head { display: flex; gap: 8px; align-items: center; min-width: 0; }
-.side-head img, .side-head .nophoto { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex: none; display: grid; place-items: center; color: var(--muted); font-weight: 800; }
-.side-text { display: grid; gap: 3px; min-width: 0; flex: 1; }
-.side-actions { display: grid; grid-template-columns: auto 1fr; gap: 6px; }
-.side-actions button { min-height: 36px; padding: 4px 10px; }
-.side-actions select { min-height: 36px; padding: 4px 6px; font-size: 14px; }
-.compare-result { flex: none; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
-.score { font-size: 30px; font-weight: 850; line-height: 1; flex: none; }
-.score.good { color: var(--good); }
-.score.fair { color: var(--fair); }
-.score.poor { color: var(--poor); }
-.compare-text { display: grid; gap: 2px; min-width: 0; }
-.tabs button { font-size: 14px; }
-
-/* One compare screen: the reference, the camera, the likeness. */
-.title { font-weight: 800; font-size: 17px; }
-.refcard { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
-.refcard > img, .refcard > .nophoto { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; flex: none; display: grid; place-items: center; color: var(--muted); font-weight: 800; }
-.ref-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
-.ref-actions { display: flex; gap: 6px; flex: none; }
-.ref-actions button { min-height: 38px; padding: 4px 10px; font-size: 14px; }
-.compare-result { min-height: 76px; }
-.score { font-size: 38px; }
-.stack { flex: 1; min-height: 140px; position: relative; display: flex; flex-direction: column; }
-.over { position: absolute; inset: 0; display: flex; flex-direction: column; z-index: 2; }
+@media (max-width: 359px) { .score { min-width: 92px; height: 64px; font-size: 40px; } .compare-result { gap: 10px; } }
+@media (prefers-reduced-motion: reduce) { button.primary:active:not(:disabled), button.glass:active:not(:disabled) { transform: none; } }

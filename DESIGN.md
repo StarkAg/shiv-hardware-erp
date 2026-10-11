@@ -38,6 +38,9 @@ Rules:
 - Yellow is a ground, never a text colour. Print on yellow is black.
 - White print only on blue, green, red or black.
 - There is no dark mode. A sign is white. Set `color-scheme: light`.
+- The one exception is Mica Match: it judges colour around a camera picture, and a
+  white frame would throw the eye off. Its wall is the black of the print and its
+  print is white (`mica-web/src/index.css` swaps the tokens); the rest is the same.
 
 ## Shape: two shapes
 
@@ -137,5 +140,6 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Shiv Print | `print-web/` | Signs, 11 Oct 2026 |
 | Inventory | `inventory-web/` | Signs, 11 Oct 2026 |
 | Stock (the laptop panel) | `stock-web/` | Signs, 11 Oct 2026 |
+| Mica Match | `mica-web/` | Signs lettering and shapes on a dark ground, 11 Oct 2026 |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Everything else | | still the older parchment and brass look |
