@@ -354,10 +354,12 @@ function List({ jobs, onOpen, onNew, saving }) {
    * standing at each step.
    */
   const STEP_ICONS = { measurement: RuleIcon, quotation: SheetIcon, assemble: ToolIcon, goahead: PhoneIcon, fitting: DoorIcon }
+  // A box is about a thumb wide, so each step goes by one short word.
+  const STEP_WORDS = { measurement: 'Measure', quotation: 'Order', assemble: 'Assemble', goahead: 'Go-ahead', fitting: 'Fitting' }
   const FILTERS = [
     { id: 'todo', label: 'To do', icon: TodoIcon, test: (j) => myTurn(j) || newIn(j) > 0 },
     { id: 'all', label: 'All', icon: AllIcon, test: () => true },
-    ...STAGES.map((st) => ({ id: st.id, label: st.label, icon: STEP_ICONS[st.id], test: (j) => !finished(j) && stageId(j) === st.id })),
+    ...STAGES.map((st) => ({ id: st.id, label: STEP_WORDS[st.id], full: st.label, icon: STEP_ICONS[st.id], test: (j) => !finished(j) && stageId(j) === st.id })),
   ]
   const [filter, setFilter] = useState('todo')
   const showing = FILTERS.find((f) => f.id === filter) ?? FILTERS[0]
@@ -388,7 +390,7 @@ function List({ jobs, onOpen, onNew, saving }) {
       </div>
       <div className="filters" role="group" aria-label="Which jobs to show">
         {FILTERS.map((f) => (
-          <button key={f.id} type="button" className={`${filter === f.id ? 'on' : ''} ${f.id === 'todo' ? 'todo' : ''}`} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+          <button key={f.id} type="button" className={`${filter === f.id ? 'on' : ''} ${f.id === 'todo' ? 'todo' : ''}`} aria-pressed={filter === f.id} aria-label={f.full ?? f.label} title={f.full ?? f.label} onClick={() => setFilter(f.id)}>
             <f.icon size={19} />
             <span>{f.label}</span>
             {jobs && jobs.filter(f.test).length > 0 && <b>{jobs.filter(f.test).length}</b>}
@@ -437,7 +439,7 @@ function List({ jobs, onOpen, onNew, saving }) {
           <li className="empty">
             {q ? 'Nothing by that name.'
               : filter === 'todo' && jobs.length ? 'Nothing is waiting on you. Tap All to see every job.'
-              : filter !== 'todo' && filter !== 'all' ? `Nothing at ${showing.label.toLowerCase()}.`
+              : filter !== 'todo' && filter !== 'all' ? `Nothing at ${showing.full.toLowerCase()}.`
               : SIDE === 'shop' ? 'No work orders yet. Tap New order to send the first.' : 'No work orders yet. A new one from the shop shows here by itself.'}
           </li>
         )}
