@@ -14,7 +14,7 @@ function OnTrusted({ onTrusted }) {
 import { monthPay, ATTEND_THRESHOLD } from './pay.js'
 
 const api = anyApi
-const EDIT_PASSWORD = '5454'
+const EDIT_PASSWORD = '262003'
 const UNLOCK_MS = 10 * 60 * 60 * 1000 // an unlocked day stays editable for 10 hours
 const UNLOCK_KEY = 'shiv-attendance:unlocked'
 
