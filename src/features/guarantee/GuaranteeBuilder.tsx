@@ -1391,7 +1391,9 @@ function SizeTable({
   }
 
   return (
-    <div>
+    // A brand goes on the card as it is typed: the panel's proper-case rule
+    // (lib/properInputs) took "DDLED" for caps lock and made it "Ddled".
+    <div data-case="raw">
       <div
         className={`hidden gap-1 border-b border-stone-200 bg-stone-100 px-1 py-2 text-xs font-bold uppercase tracking-wide text-muted md:grid dark:border-white/10 dark:bg-white/5 ${gridCols}`}
       >
