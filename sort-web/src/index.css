@@ -1,4 +1,7 @@
 /*
+ * Sort, in the Signs look (DESIGN.md; the colours, lettering and buttons come
+ * from ./signs/signs.css, and the last section of this file sets the look).
+ *
  * Built for a phone held in one hand beside a tray of paper.
  *
  * Everything that gets tapped a thousand times in an afternoon — the picker,
@@ -8,35 +11,7 @@
  * whole of the work.
  */
 
-:root {
-  color-scheme: light;
-  --paper: #f4f1ea;
-  --card: #fffdf8;
-  --ink: #1c1a15;
-  --muted: #7d7669;
-  --line: #ddd7c8;
-  --go: #1a6f4d;
-  --go-ink: #fdfdfb;
-  --warn: #9a3412;
-  --slot: #14532d;
-  --slot-wash: #dcf0e2;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --paper: #15140f;
-    --card: #201e18;
-    --ink: #ece7da;
-    --muted: #8e8879;
-    --line: #37342a;
-    --go: #2e9a6e;
-    --go-ink: #07120d;
-    --warn: #e2724a;
-    --slot: #a7e8c4;
-    --slot-wash: #16301f;
-  }
-}
+@import "./signs/signs.css";
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -44,9 +19,6 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font: 16px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   /* The page itself never scrolls; only the middle panel does. */
   overscroll-behavior: none;
 }
@@ -80,15 +52,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
  * full width in equal parts — and each tab is a real thumb target rather than
  * the 30px sliver that 6px of padding gave.
  */
-.tabs { display: flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--line); }
-.tab { flex: 1; min-height: 40px; padding: 6px 14px; border: 0; border-radius: 999px;
-  background: none; font-size: 14px; color: var(--muted); white-space: nowrap; }
-.tab.on { background: var(--card); color: var(--ink); font-weight: 600; }
+.tabs { display: flex; gap: 2px; padding: 2px; border-radius: 0; background: var(--line); }
+.tab { flex: 1; min-height: 40px; padding: 6px 14px; border: 0; border-radius: 0;
+  background: none; font-size: 16px; color: var(--dim); white-space: nowrap; }
+.tab.on { background: #fff; color: var(--ink); font-weight: 600; }
 
 @media (max-width: 560px) {
   .bar { flex-direction: column; align-items: stretch; gap: 6px; padding-bottom: 8px; }
-  .bar h1 { font-size: 14px; color: var(--muted); font-weight: 600; }
-  .tab { min-height: 44px; font-size: 15px; padding: 6px 8px; }
+  .bar h1 { font-size: 16px; color: var(--dim); font-weight: 600; }
+  .tab { min-height: 44px; font-size: 16px; padding: 6px 8px; }
 }
 
 /* The stack filter. Scrolls sideways rather than wrapping, so the row keeps
@@ -110,14 +82,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
   gap: 6px;
   padding: 7px 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-  font-size: 13px;
+  border-radius: 0;
+  background: #fff;
+  font-size: 15px;
   white-space: nowrap;
 }
-.chip b { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
-.chip.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.chip.on b { color: var(--paper); opacity: 0.7; }
+.chip b { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--dim); }
+.chip.on { background: var(--ink); border-color: var(--ink); color: var(--wall); }
+.chip.on b { color: var(--wall); opacity: 0.7; }
 
 /* ── the slip ───────────────────────────────────────────────────────── */
 
@@ -138,7 +110,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   border: 0;
   border-block: 1px solid var(--line);
   border-radius: 0;
-  background: var(--card);
+  background: #fff;
   overflow: hidden;
 }
 /* Anchored to the top of the sheet, filling the width rather than fitting the
@@ -163,10 +135,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .where, .pages {
   padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(20, 18, 14, 0.78);
   color: #f6f3ec;
-  font-size: 12px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
@@ -186,7 +158,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .who { padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 
-.label { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.label { font-size: 14px; color: var(--dim); letter-spacing: 0.04em; text-transform: uppercase; }
 .label em { font-style: normal; text-transform: none; letter-spacing: 0; }
 
 .field {
@@ -198,30 +170,30 @@ button { font: inherit; color: inherit; cursor: pointer; }
   min-height: 54px;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
+  border-radius: 0;
+  background: #fff;
   font-size: 18px;
   font-weight: 550;
   text-align: left;
 }
-.field.blank { color: var(--muted); font-weight: 400; }
-.field b { color: var(--muted); font-weight: 400; }
+.field.blank { color: var(--dim); font-weight: 400; }
+.field b { color: var(--dim); font-weight: 400; }
 
 /* Enter presses whatever holds focus, so on a keyboard the ring is the only
    thing saying which of the two that is. Matches the search box's own focus.
    :focus-visible, so a thumb tapping through the walk never sees it. */
 .field:focus-visible,
-.btn:focus-visible { outline: 2px solid var(--go); outline-offset: 1px; }
+.btn:focus-visible { outline: 2px solid var(--safe); outline-offset: 1px; }
 
-.hint { margin: 0; font-size: 13px; color: var(--muted); }
-.error { margin: 0; font-size: 13px; color: var(--warn); }
-.muted { color: var(--muted); }
+.hint { margin: 0; font-size: 15px; color: var(--dim); }
+.error { margin: 0; font-size: 15px; color: var(--stop); }
+.muted { color: var(--dim); }
 .pad { padding: 24px 16px; }
 
 .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 32px 24px; text-align: center; }
 .empty .big { margin: 0; font-size: 19px; }
 
-.linkbtn { border: 0; background: none; padding: 6px; color: var(--muted); text-decoration: underline; font-size: 14px; }
+.linkbtn { border: 0; background: none; padding: 6px; color: var(--dim); text-decoration: underline; font-size: 16px; }
 
 /* ── the two buttons ────────────────────────────────────────────────── */
 
@@ -230,20 +202,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
   gap: 10px;
   padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--wall);
 }
 
 .btn {
   flex: 1;
   min-height: 56px;
-  border-radius: 12px;
+  border-radius: 0;
   border: 1px solid var(--line);
-  background: var(--card);
+  background: #fff;
   font-size: 17px;
   font-weight: 600;
 }
-.btn.ghost { flex: 0 0 34%; color: var(--muted); font-weight: 500; }
-.btn.go { background: var(--go); border-color: var(--go); color: var(--go-ink); }
+.btn.ghost { flex: 0 0 34%; color: var(--dim); font-weight: 500; }
+.btn.go { background: var(--safe); border-color: var(--safe); color: #fff; }
 .btn:disabled { opacity: 0.55; }
 
 /* ── the picker, dropped under its own field ────────────────────────── */
@@ -255,17 +227,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-size: 17px;
   font-weight: 500;
   color: var(--ink);
-  background: var(--card);
+  background: #fff;
 }
-.search:focus { outline: 2px solid var(--go); outline-offset: 1px; }
+.search:focus { outline: 2px solid var(--safe); outline-offset: 1px; }
 
 .combo-list {
   max-height: 46vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
+  border-radius: 0;
+  background: #fff;
 }
 
 .row {
@@ -282,10 +254,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .row:last-child { border-bottom: 0; }
 .row-name { font-size: 16px; }
-.row-hint { flex: none; font-size: 12px; color: var(--muted); }
-.row-at { background: var(--slot-wash); }
+.row-hint { flex: none; font-size: 14px; color: var(--dim); }
+.row-at { background: var(--key); }
 .row-on .row-name { font-weight: 650; }
-.row-new .row-name { color: var(--go); font-weight: 600; }
+.row-new .row-name { color: var(--safe); font-weight: 600; }
 
 /* ── placing: the number, and nothing else ──────────────────────────── */
 
@@ -308,26 +280,26 @@ button { font: inherit; color: inherit; cursor: pointer; }
   height: 22vh;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
+  border-radius: 0;
+  background: #fff;
   overflow: hidden;
 }
 .callshot img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
 
-.callwhere { margin: 10px 0 0; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.callwhere { margin: 10px 0 0; font-size: 15px; color: var(--dim); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
 .callwho { margin: 0; font-size: 22px; font-weight: 650; line-height: 1.2; }
 
 .callslot { margin: 6px 0 0; display: flex; flex-direction: column; align-items: center; }
-.callslot span { font-size: 12px; letter-spacing: 0.22em; color: var(--muted); }
+.callslot span { font-size: 14px; letter-spacing: 0.22em; color: var(--dim); }
 .callslot b {
   font-size: clamp(88px, 34vw, 150px);
   line-height: 1;
   font-weight: 700;
-  color: var(--slot);
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 
-.callfull { margin: 12px 0 0; max-width: 22rem; color: var(--warn); font-size: 15px; }
+.callfull { margin: 12px 0 0; max-width: 22rem; color: var(--stop); font-size: 16px; }
 
 /* ── enlarged photo, and the saved-it flash ─────────────────────────── */
 
@@ -353,10 +325,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
   z-index: 45;
   max-width: calc(100vw - 32px);
   padding: 10px 16px;
-  border-radius: 999px;
-  background: var(--slot);
-  color: var(--slot-wash);
-  font-size: 15px;
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--key);
+  font-size: 16px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -463,17 +435,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @keyframes snap{from{opacity: .92} to{opacity: 0}}
 
 .shoot-stack{position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5;
-  padding: 7px 18px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px;
-  background: rgba(0,0,0,.62); color: #fff; font-size: 14px; font-weight: 800;}
+  padding: 7px 18px; border: 1px solid rgba(255,255,255,.28); border-radius: 0;
+  background: rgba(0,0,0,.62); color: #fff; font-size: 16px; font-weight: 800;}
 
 .shoot-bar{flex: 0 0 auto; display: grid; grid-template-columns: 1fr auto 1fr;
   align-items: center; padding: 10px 18px calc(12px + env(safe-area-inset-bottom)); background: #000;}
-.shoot-btn{width: 88px; height: 88px; padding: 0; border-radius: 50%;
+.shoot-btn{width: 88px; height: 88px; padding: 0; border-radius: 0;
   border: 5px solid rgba(255,255,255,.9); background: #fff; transition: transform 60ms ease;}
-.shoot-btn:active{transform: scale(.9); background: var(--brass, #c9a45c);}
+.shoot-btn:active{transform: scale(.9); background: var(--key);}
 .shoot-btn:disabled{opacity: .35;}
 .shoot-count{font-size: 30px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums;}
-.shoot-status{font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+.shoot-status{font-size: 14px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
   color: rgba(255,255,255,.6); text-align: right;}
 .shoot-trouble{position: absolute; inset: 0; z-index: 9; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 14px; padding: 28px; text-align: center;
@@ -490,52 +462,52 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pick{flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 10px; padding: 32px 24px calc(32px + env(safe-area-inset-bottom)); text-align: center;}
 .pick h2{margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.02em;}
-.pick p{margin: 0; max-width: 21rem; font-size: 14px; line-height: 1.6; color: var(--muted);}
+.pick p{margin: 0; max-width: 21rem; font-size: 16px; line-height: 1.6; color: var(--dim);}
 .pick-grid{display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
   width: 100%; max-width: 20rem; margin-top: 14px;}
 .pick-letter{aspect-ratio: 1; display: grid; place-items: center; padding: 0;
-  border: 2px solid var(--line); border-radius: 18px; background: var(--card);
+  border: 2px solid var(--line); border-radius: 0; background: #fff;
   color: var(--ink); font-size: 34px; font-weight: 900; line-height: 1;
   transition: transform 80ms ease, background-color 120ms ease;}
-.pick-letter:active{transform: scale(.95); background: var(--ink); color: var(--paper);
+.pick-letter:active{transform: scale(.95); background: var(--ink); color: var(--wall);
   border-color: var(--ink);}
 .pick-alone{margin-top: 18px; min-height: 44px; border: 0; background: none;
-  color: var(--muted); font-size: 14px; text-decoration: underline; text-underline-offset: 3px;}
+  color: var(--dim); font-size: 16px; text-decoration: underline; text-underline-offset: 3px;}
 @media (prefers-reduced-motion: reduce){ .pick-letter:active{transform: none} }
 
 /* ── The ledger: who has what, and on which bookmark ───────────────────── */
 .lg-head{padding: 12px 14px; border-bottom: 1px solid var(--line);}
-.lg-head .linkbtn{min-height: 44px; padding: 6px 2px; font-size: 15px;}
+.lg-head .linkbtn{min-height: 44px; padding: 6px 2px; font-size: 16px;}
 .lg-addrow{display: flex; align-items: center; gap: 10px; width: calc(100% - 28px); margin: 10px 14px 4px; min-height: 52px;
-  padding: 10px 14px; border: 1.5px dashed var(--go); border-radius: 12px; background: none; color: var(--ink); text-align: left; font-size: 15px;}
-.lg-addrow > b{flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-  background: var(--go); color: var(--go-ink); font-size: 18px;}
+  padding: 10px 14px; border: 1.5px dashed var(--safe); border-radius: 0; background: none; color: var(--ink); text-align: left; font-size: 16px;}
+.lg-addrow > b{flex: none; width: 28px; height: 28px; border-radius: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--safe); color: #fff; font-size: 18px;}
 .lg-addrow:disabled{opacity: .6;}
 .lg-added{text-align: center;}
-.lg-added-slot{margin: 6px 0 4px; font-size: 64px; font-weight: 800; letter-spacing: .02em; line-height: 1.05; color: var(--go);
+.lg-added-slot{margin: 6px 0 4px; font-size: 64px; font-weight: 800; letter-spacing: .02em; line-height: 1.05; color: var(--safe);
   font-variant-numeric: tabular-nums;}
 .lg-list{flex: 1; overflow-y: auto;}
 .lg-row{display: flex; align-items: center; justify-content: space-between; gap: 12px;
   width: 100%; min-height: 62px; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--line);
   background: none; color: var(--ink); text-align: left;}
-.lg-row:active{background: var(--card);}
+.lg-row:active{background: #fff;}
 .lg-row-name{display: flex; flex-direction: column; gap: 3px; min-width: 0;}
-.lg-row-name b{font-size: 15px; overflow-wrap: anywhere;}
+.lg-row-name b{font-size: 16px; overflow-wrap: anywhere;}
 /* The bookmark number, big enough to read from where the table is. */
-.lg-slot{flex: none; min-width: 52px; padding: 7px 10px; border-radius: 10px;
-  background: var(--ink); color: var(--paper);
+.lg-slot{flex: none; min-width: 52px; padding: 7px 10px; border-radius: 0;
+  background: var(--ink); color: var(--wall);
   font-size: 17px; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums;}
-.lg-folder{padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px;
-  font-size: 13px; font-weight: 700;}
+.lg-folder{padding: 6px 10px; border: 1px solid var(--line); border-radius: 0;
+  font-size: 15px; font-weight: 700;}
 .lg-who{padding: 16px 14px; border-bottom: 1px solid var(--line);}
 .lg-who h2{margin: 0 0 4px; font-size: 22px; letter-spacing: -.02em; overflow-wrap: anywhere;}
 .lg-marks{display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0;}
 .lg-bills{flex: 1; overflow-y: auto;}
 .lg-bill{display: flex; gap: 12px; padding: 11px 14px; border-bottom: 1px solid var(--line);}
 .lg-bill img, .lg-nophoto{width: 62px; height: 78px; flex: none; object-fit: cover;
-  border-radius: 8px; border: 1px solid var(--line); background: var(--card);}
+  border-radius: 0; border: 1px solid var(--line); background: #fff;}
 .lg-bill-of{display: flex; flex-direction: column; gap: 3px; min-width: 0;}
-.lg-bill-of b{font-size: 15px;}
+.lg-bill-of b{font-size: 16px;}
 
 /* ── Throwing a photograph away ────────────────────────────────────────── */
 
@@ -546,34 +518,32 @@ button { font: inherit; color: inherit; cursor: pointer; }
    button centres its text on the baseline, which leaves an icon sitting low,
    so these two centre their contents properly instead. */
 .btn.slim, .lg-bin, .lg-undo { display: inline-flex; align-items: center; justify-content: center; }
-.btn.bin { background: var(--warn); border-color: var(--warn); color: #fff; }
+.btn.bin { background: var(--stop); border-color: var(--stop); color: #fff; }
 
 .full.sheet { display: flex; align-items: flex-end; justify-content: center;
   background: rgba(0, 0, 0, 0.55); padding: 0; }
 .ask { width: 100%; max-width: 30rem; padding: 20px 18px calc(20px + env(safe-area-inset-bottom, 0px));
-  border-radius: 18px 18px 0 0; background: var(--paper); }
+  border-radius: 0; background: var(--wall); }
 .ask h3 { margin: 0 0 8px; font-size: 19px; }
 .ask .hint { line-height: 1.6; }
 .ask-acts { display: flex; gap: 10px; margin-top: 18px; }
 .ask-acts .btn { flex: 1; }
 
 /* Phone workflow: a compact header, a scrolling task, then thumb navigation. */
-:root { --muted: #6d665a; }
-@media (prefers-color-scheme: dark) { :root { --muted: #aaa393; } }
 .app { height: var(--app-height, 100dvh); overflow: hidden; }
 .bar { flex: none; flex-direction: row; align-items: center; padding: 10px 16px; gap: 12px; }
 .bar h1 { color: var(--ink); font-size: 16px; }
-.bar-caption { font-size: 12px; color: var(--muted); }
-.step-label { padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; color: var(--muted); }
-.tabs { flex: none; gap: 4px; border-radius: 0; background: var(--card); border-top: 1px solid var(--line);
+.bar-caption { font-size: 14px; color: var(--dim); }
+.step-label { padding: 5px 10px; border: 1px solid var(--line); border-radius: 0; font-size: 14px; color: var(--dim); }
+.tabs { flex: none; gap: 4px; border-radius: 0; background: #fff; border-top: 1px solid var(--line);
   padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px)); }
 .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  min-width: 0; min-height: 56px; padding: 6px; border-radius: 10px; font-size: 12px; }
-.tab.on { color: var(--slot); background: var(--slot-wash); }
+  min-width: 0; min-height: 56px; padding: 6px; border-radius: 0; font-size: 14px; }
+.tab.on { color: var(--ink); background: var(--key); }
 .tab:disabled { opacity: .45; }
 .keyboard-hidden { display: none; }
 button { touch-action: manipulation; }
-button:focus-visible { outline: 2px solid var(--go); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--safe); outline-offset: 2px; }
 button:disabled { cursor: default; }
 .chips { flex: none; padding-top: 2px; }
 .chip, .linkbtn, .shoot-stack { min-height: 44px; }
@@ -586,7 +556,7 @@ button:disabled { cursor: default; }
 .pages button { min-width: 44px; min-height: 44px; }
 .empty p { margin: 0; }
 .empty-actions { width: 100%; max-width: 360px; display: flex; flex-wrap: wrap; gap: 10px; }
-.empty-actions .btn { flex: 1 1 120px; padding: 12px; font-size: 15px; }
+.empty-actions .btn { flex: 1 1 120px; padding: 12px; font-size: 16px; }
 .empty-action { flex: none; padding: 12px 24px; }
 .who { flex-shrink: 0; }
 .is-picking { overflow: hidden; }
@@ -595,14 +565,14 @@ button:disabled { cursor: default; }
 .combo { flex: 1; }
 .combo-search { display: flex; flex: none; align-items: center; gap: 8px; }
 .combo-search .search { flex: 1; font-size: 16px; padding: 10px; min-height: 48px; }
-.picker-close { flex: none; min-height: 48px; border: 0; padding: 8px; background: none; color: var(--go); font-size: 14px; }
+.picker-close { flex: none; min-height: 48px; border: 0; padding: 8px; background: none; color: var(--safe); font-size: 16px; }
 .combo-list { flex: 1; min-height: 48px; max-height: none; overscroll-behavior: contain; }
 .row { min-height: 52px; align-items: center; }
 .row-name { min-width: 0; overflow-wrap: anywhere; }
 .row-hint { max-width: 30%; overflow-wrap: anywhere; }
 .lg-list, .lg-bills { flex: 1 0 auto; overflow: visible; }
 .lg-head { flex: none; }
-.lg-photo { flex: none; border: 0; background: none; padding: 0; border-radius: 8px; height: 78px; }
+.lg-photo { flex: none; border: 0; background: none; padding: 0; border-radius: 0; height: 78px; }
 .lg-photo img { display: block; }
 .lg-bill-of { overflow-wrap: anywhere; }
 .flash { bottom: calc(144px + env(safe-area-inset-bottom, 0px)); }
@@ -618,7 +588,7 @@ button:disabled { cursor: default; }
 .photo-viewer[open] { display: flex; flex-direction: column; }
 .photo-viewer::backdrop { background: #11110e; }
 .photo-toolbar { display: flex; justify-content: space-between; gap: 8px; padding: 8px; flex: none; }
-.photo-toolbar button { min-height: 44px; min-width: 44px; border: 1px solid #494941; border-radius: 9px;
+.photo-toolbar button { min-height: 44px; min-width: 44px; border: 1px solid #494941; border-radius: 0;
   background: #262620; color: #fff; padding: 8px 12px; }
 .photo-toolbar button:disabled { opacity: .4; }
 .photo-zoom { display: flex; gap: 6px; }
@@ -630,23 +600,23 @@ button:disabled { cursor: default; }
    takes a bill off a customer, so it sits on its own with room around it. */
 .photo-foot { flex: none; display: flex; justify-content: center; gap: 10px; padding: 8px 12px 0; }
 .photo-undo { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 44px; padding: 10px 16px; border: 1px solid #494941; border-radius: 11px;
-  background: #262620; color: #fff; font-size: 14px; }
+  min-height: 44px; padding: 10px 16px; border: 1px solid #494941; border-radius: 0;
+  background: #262620; color: #fff; font-size: 16px; }
 .photo-undo:active { background: #3a3a31; }
 
-.photo-help { flex: none; text-align: center; font-size: 12px; color: #c0bdb0; margin: 10px; }
+.photo-help { flex: none; text-align: center; font-size: 14px; color: #c0bdb0; margin: 10px; }
 
 /* Which sheet of whose bill, between Close and the zoom. It is the only thing
    in the viewer that says the picture has changed. */
 .photo-which { align-self: center; min-width: 0; overflow: hidden; white-space: nowrap;
-  text-overflow: ellipsis; font-size: 13px; color: #c0bdb0; }
+  text-overflow: ellipsis; font-size: 15px; color: #c0bdb0; }
 
 /* The two arrows sit over the picture, against the edges, where a thumb
    already is when the phone is held — not in the toolbar, which the other
    hand has to reach for. Half-transparent so they never hide the paper. */
 .photo-turn { position: absolute; top: 50%; transform: translateY(-50%);
   display: flex; align-items: center; justify-content: center;
-  width: 46px; height: 64px; border: 1px solid #494941; border-radius: 12px;
+  width: 46px; height: 64px; border: 1px solid #494941; border-radius: 0;
   background: rgba(17, 17, 14, .55); color: #fff; padding: 0; }
 .photo-turn.back { left: 8px; }
 .photo-turn.on { right: 8px; }
@@ -670,53 +640,158 @@ button:disabled { cursor: default; }
 /* The bin beside a bill. Small and off to the side: the row is read far more
    often than anything in it is deleted. */
 .lg-bin { flex: 0 0 auto; align-self: center; width: 44px; min-height: 44px;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--card);
-  font-size: 17px; color: var(--muted); }
-.lg-bin:active { background: var(--warn); border-color: var(--warn); color: #fff; }
+  border: 1px solid var(--line); border-radius: 0; background: #fff;
+  font-size: 17px; color: var(--dim); }
+.lg-bin:active { background: var(--stop); border-color: var(--stop); color: #fff; }
 
 /* Send-back sits exactly where the bin sat, and is the same size — but it
    presses in the ordinary colour, because it undoes rather than destroys. */
 .lg-undo { flex: 0 0 auto; align-self: center; width: 44px; min-height: 44px;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--card);
-  color: var(--muted); }
-.lg-undo:active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  border: 1px solid var(--line); border-radius: 0; background: #fff;
+  color: var(--dim); }
+.lg-undo:active { background: var(--ink); border-color: var(--ink); color: var(--wall); }
 
 /* How many sheets are behind this one, on the corner of the thumbnail. */
 .lg-photo { position: relative; }
 .lg-sheets { position: absolute; right: 3px; bottom: 3px; min-width: 18px; padding: 0 4px;
-  border-radius: 6px; background: rgba(17, 17, 14, .78); color: #fff;
-  font-size: 11px; line-height: 18px; text-align: center; }
+  border-radius: 0; background: rgba(17, 17, 14, .78); color: #fff;
+  font-size: 14px; line-height: 18px; text-align: center; }
 
 .ask .field { margin-top: 14px; }
 
 /* The new-account row is not another customer in the list — it is the way out
    of the list when the name on the slip belongs to nobody yet. Given its own
    ground so the eye stops on it instead of reading past it. */
-.row-new { background: var(--slot-wash); border-bottom: 1px solid var(--line); }
+.row-new { background: var(--key); border-bottom: 1px solid var(--line); }
 .row-new .row-name b { display: inline-grid; place-items: center;
-  width: 20px; height: 20px; margin-right: 6px; border-radius: 6px;
-  background: var(--go); color: var(--go-ink); font-size: 15px; line-height: 1; }
-.row-new .row-hint { color: var(--go); font-weight: 700; }
+  width: 20px; height: 20px; margin-right: 6px; border-radius: 0;
+  background: var(--safe); color: #fff; font-size: 16px; line-height: 1; }
+.row-new .row-hint { color: var(--safe); font-weight: 700; }
 
 /* Work still on its way to the server, beside the tab name. */
-.sync { font-style: normal; font-size: 12px; font-weight: 600; margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.14); }
+.sync { font-style: normal; font-size: 14px; font-weight: 600; margin-right: 8px; padding: 2px 8px; border-radius: 0; background: rgba(255,255,255,.14); }
 .sync.late { background: #b45309; color: #fff; }
 
 /* Ledger: rename a customer in place. */
 .lg-name { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .lg-edit { display: grid; gap: 8px; }
-.lg-edit input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; }
+.lg-edit input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 0; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; }
 .lg-edit-acts { display: flex; gap: 8px; justify-content: flex-end; }
 .lg-row.pending { opacity: .7; }
 
 /* Ticked off on the Ledger (kept in Convex until Reset). */
-.lg-row.ticked { background: color-mix(in srgb, var(--go) 14%, transparent); }
-.lg-row.ticked .lg-row-name b { color: var(--go); }
-.lg-row.last { background: color-mix(in srgb, var(--go) 30%, transparent); box-shadow: inset 4px 0 0 var(--go); }
-.lg-tick { flex: none; margin-left: auto; color: var(--go); font-weight: 800; font-size: 18px; }
-.lg-ticks { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px; font-size: 13px; color: var(--muted); }
+.lg-row.ticked { background: color-mix(in srgb, var(--safe) 14%, transparent); }
+.lg-row.ticked .lg-row-name b { color: var(--safe); }
+.lg-row.last { background: color-mix(in srgb, var(--safe) 30%, transparent); box-shadow: inset 4px 0 0 var(--safe); }
+.lg-tick { flex: none; margin-left: auto; color: var(--safe); font-weight: 800; font-size: 18px; }
+.lg-ticks { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px; font-size: 15px; color: var(--dim); }
 
 /* The row ticks; the bookmark is the button that opens the customer. */
 .lg-row { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 button.lg-slot { border: 0; font-family: inherit; cursor: pointer; }
 button.lg-slot:active { transform: scale(.94); }
+
+/* ── Signs ─────────────────────────────────────────────────────────────────
+ * The look of every Shiv Hardware app, over the layout above. A choice that is
+ * taken is black; green files or saves; red throws away; blue is the thing to
+ * do next. Nothing is rounded but the shutter and the round "new" marks.
+ */
+.app { background: var(--wall); }
+.bar { border-bottom: 4px solid var(--ink); }
+.bar h1 { font: 800 27px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; }
+.step-label { padding: 6px 8px 5px; border: 0; background: var(--key); color: var(--ink); font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.sync { background: var(--key); color: var(--ink); font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; padding: 4px 7px 3px; }
+.sync.late { background: var(--wait); color: var(--ink); }
+
+/* The four steps, four keys along the foot. The one that is open is black. */
+.tabs { gap: 4px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--wall); border-top: 4px solid var(--ink); }
+.tab { min-height: 52px; background: var(--key); color: var(--ink); font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.tab.on { background: var(--ink); color: #fff; font-weight: 700; }
+
+.chips { gap: 4px; padding: 8px 12px; }
+.chip { padding: 0 12px; border: 0; background: var(--key); font: 700 16px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.chip b { font-weight: 700; }
+.chip.on { background: var(--ink); color: #fff; }
+.chip.on b { color: #fff; opacity: .8; }
+
+.where, .pages { padding: 7px 10px 6px; background: rgba(14, 19, 24, .82); color: #fff; font: 700 15px/1 var(--sign); letter-spacing: .03em; }
+.pages { padding: 0 2px; }
+.label { font: 700 14px/1.1 var(--sign); letter-spacing: .05em; }
+.field { min-height: 56px; border: 2px solid var(--ink); background: #fff; font: 600 19px/1.2 var(--text); }
+.field.blank { font-weight: 500; }
+.hint { font-size: 15px; line-height: 1.35; }
+.error { font-size: 15px; font-weight: 700; }
+.empty .big { font: 800 27px/1.1 var(--sign); text-transform: uppercase; }
+.linkbtn, .picker-close, .pick-alone { color: var(--must); font: 700 16px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+
+.acts { gap: 8px; background: var(--wall); border-top: 4px solid var(--ink); }
+.btn, .acts .btn { border: 0; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 21px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.btn.ghost { color: var(--ink); font-weight: 800; }
+.btn.go { background: var(--safe); color: #fff; box-shadow: none; }
+.btn.bin { background: var(--stop); color: #fff; box-shadow: none; }
+.btn:active:not(:disabled) { transform: translateY(2px); }
+.empty-actions .btn, .shoot-trouble .btn { font-size: 19px; }
+.shoot-trouble .btn { background: var(--must); color: #fff; box-shadow: none; }
+.ask-acts .btn { min-width: 0; padding: 0 6px; font-size: 19px; }
+
+.search, .combo-search .search { border: 2px solid var(--ink); background: #fff; font: 500 18px/1.2 var(--text); }
+.search:focus { outline: 3px solid var(--ink); outline-offset: 2px; }
+.combo-list { border: 0; border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); }
+.row-name { font-size: 18px; font-weight: 600; }
+.row-on .row-name { font-weight: 700; }
+.row-hint { font-size: 14px; }
+/* The way out of the list, when the name on the slip belongs to nobody yet. */
+.row-new { background: var(--wall); }
+.row-new .row-name { color: var(--ink); font-weight: 700; }
+.row-new .row-name b { width: 24px; height: 24px; border-radius: 50%; background: var(--must); color: #fff; font: 700 20px/1 var(--sign); }
+.row-new .row-hint { color: var(--must); }
+
+.callwhere { font: 700 15px/1 var(--sign); text-transform: uppercase; }
+.callwho { font: 800 30px/1.1 var(--sign); text-transform: uppercase; }
+.callslot span { font: 700 15px/1 var(--sign); }
+.callslot b { font-family: var(--sign); font-weight: 800; }
+.callfull { font-size: 17px; font-weight: 700; }
+.flash { padding: 12px 16px 11px; background: var(--safe); color: #fff; font: 700 18px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+
+.shoot-stack { display: inline-flex; align-items: center; border: 0; background: rgba(14, 19, 24, .82); font: 800 18px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+/* The shutter is round: the one thing here to do at once. */
+.shoot-btn { border-radius: 50%; }
+.shoot-count { font: 800 40px/1 var(--sign); }
+.shoot-status { font: 700 14px/1.1 var(--sign); }
+
+.pick h2 { font: 800 34px/1 var(--sign); text-transform: uppercase; letter-spacing: 0; }
+.pick p { font-size: 16px; line-height: 1.4; }
+.pick-letter { border: 0; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 44px/1 var(--sign); }
+.pick-letter:active { background: var(--ink); color: #fff; box-shadow: none; }
+
+/* The ledger: a row a customer, the bookmark a black square at its end. */
+.lg-head { border-bottom: 2px solid var(--ink); }
+.lg-addrow { border: 0; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.lg-addrow > b { border-radius: 50%; background: var(--must); color: #fff; font: 700 22px/1 var(--sign); }
+.lg-added-slot { color: var(--ink); font: 800 72px/.95 var(--sign); }
+.lg-row-name b { font: 700 21px/1.15 var(--sign); text-transform: uppercase; }
+.lg-slot { min-width: 56px; padding: 9px 10px 8px; background: var(--ink); color: #fff; font: 800 24px/1 var(--sign); }
+.lg-folder { padding: 6px 8px 5px; border: 0; background: var(--key); font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.lg-who h2 { font: 800 30px/1.1 var(--sign); text-transform: uppercase; letter-spacing: 0; }
+.lg-bill img, .lg-nophoto { border: 0; outline: 2px solid var(--ink); outline-offset: -2px; }
+.lg-bill-of b { font-size: 17px; }
+.lg-bin, .lg-undo { border: 0; background: var(--key); color: var(--dim); }
+.lg-sheets { min-width: 20px; background: rgba(14, 19, 24, .82); font: 700 14px/20px var(--sign); }
+.lg-edit input { border: 2px solid var(--ink); background: #fff; font: 600 19px/1.2 var(--text); }
+/* Ticked off: a green bar at the edge, and the last one ticked on grey. */
+.lg-row.ticked { background: none; box-shadow: inset 6px 0 0 var(--safe); }
+.lg-row.last { background: var(--key); box-shadow: inset 6px 0 0 var(--safe); }
+.lg-ticks { font-size: 15px; }
+
+.ask { background: var(--wall); border-top: 4px solid var(--ink); }
+.ask h3 { font: 800 27px/1.1 var(--sign); text-transform: uppercase; }
+
+/* The photograph, full screen, on black. */
+.photo-toolbar button, .photo-undo { border: 0; background: #2a3138; font: 700 16px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.photo-turn { border: 0; }
+.photo-which, .photo-help { font-size: 14px; color: #c9cfd5; }
+
+button:focus-visible, .field:focus-visible, .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.photo-viewer :focus-visible, .shoot :focus-visible, .full :focus-visible { outline-color: #fff; }
+.ask :focus-visible { outline-color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .btn:active:not(:disabled) { transform: none; } }
