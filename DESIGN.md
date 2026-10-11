@@ -42,6 +42,13 @@ Rules:
   white frame would throw the eye off. Its wall is the black of the print and its
   print is white (`mica-web/src/index.css` swaps the tokens); the rest is the same.
 
+### Money
+
+In the apps that read money (Accounts, Cashier and the like) a figure keeps the
+colours of every account book: **green is money to come, red is money to pay**.
+On figures and their labels only, never on a button or a ground. Chosen by Tony,
+11 Oct 2026; `khata-web/src/index.css` names them `--in` and `--out`.
+
 ## Shape: two shapes
 
 - **Circle** = do this now (a blue round call button, the blue step that is yours).
@@ -140,6 +147,7 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Shiv Print | `print-web/` | Signs, 11 Oct 2026 |
 | Inventory | `inventory-web/` | Signs, 11 Oct 2026 |
 | Stock (the laptop panel) | `stock-web/` | Signs, 11 Oct 2026 |
+| Shiv Accounts | `khata-web/` | Signs, 11 Oct 2026 |
 | Mica Match | `mica-web/` | Signs lettering and shapes on a dark ground, 11 Oct 2026 |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Everything else | | still the older parchment and brass look |
