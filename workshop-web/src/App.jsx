@@ -644,9 +644,11 @@ function Thread({ job, onBack }) {
 
   // Sent at once: the reply shows in the thread while it goes up behind (the outbox).
   const reply = () => {
-    if (!picked.length && !text.trim()) return
+    // The workshop sends the measurement photo and nothing with it.
+    const line = SIDE === 'workshop' ? '' : text.trim()
+    if (!picked.length && !line) return
     const photos = take()
-    post({ jobId: job.id, text: text.trim(), files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
+    post({ jobId: job.id, text: line, files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
     setText('')
     setError('')
   }
@@ -709,7 +711,7 @@ function Thread({ job, onBack }) {
           const mine = m.from === SIDE
           return (
             <div key={it.key} className={`bubble holdable ${mine ? 'right' : 'left'}`} {...holdToDelete(m)}>
-              {!mine && <div className="kind">{SIDE_NAME[m.from]}</div>}
+              {m.from === 'workshop' && m.photos.length > 0 ? <div className="kind">Measurement</div> : !mine && <div className="kind">{SIDE_NAME[m.from]}</div>}
               {m.photos.length > 0 && (
                 <div className={`shots n${Math.min(m.photos.length, 3)}`}>
                   {m.photos.map((p) => (
@@ -742,10 +744,30 @@ function Thread({ job, onBack }) {
             )}
           </div>
         ))}
-        {waiting && !outgoing.length && <p className="hint">Visit the site, then send a photo of the measurements here.</p>}
+        {waiting && !outgoing.length && <p className="hint">Visit the site and measure. Then tap Mark measured and photograph the measurements.</p>}
         <div ref={end} />
       </main>
 
+      {SIDE === 'workshop' ? (
+        // The workshop's one answer: mark the job measured, which is to
+        // photograph the measurements, with the camera, there and then. No
+        // line to type and no picture from the phone's gallery.
+        <footer className="composer">
+          <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { add(e.target.files); e.target.value = '' }} />
+          <Picked picked={picked} onDrop={drop} />
+          {error && <p className="error" role="alert">{error}</p>}
+          {picked.length ? (
+            <div className="row">
+              <button type="button" className="tool" onClick={() => camera.current?.click()} aria-label="Take another photo"><CameraIcon /></button>
+              <button type="button" className="go grow" onClick={reply}><SendIcon /> Send measurement</button>
+            </div>
+          ) : (
+            <button type="button" className="go full" onClick={() => camera.current?.click()}>
+              <CameraIcon /> {measured(job) ? 'Add a measurement photo' : 'Mark measured'}
+            </button>
+          )}
+        </footer>
+      ) : (
       <footer className="composer">
         <PhotoInputs camera={camera} gallery={gallery} onFiles={add} />
         <Picked picked={picked} onDrop={drop} />
@@ -763,6 +785,7 @@ function Thread({ job, onBack }) {
           )}
         </div>
       </footer>
+      )}
 
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
       {info && (

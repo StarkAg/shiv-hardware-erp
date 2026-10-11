@@ -168,7 +168,10 @@ export const send = mutation({
   handler: async (ctx, { jobId, from, photos, text }) => {
     const job = await ctx.db.get(jobId)
     if (!job) throw new ConvexError('That work order is gone.')
-    const said = clean(text, 500)
+    // The workshop's answer is the photograph of the measurements and nothing
+    // else: no line typed with it, and never a line on its own.
+    if (from === 'workshop' && !photos.length) throw new ConvexError('Send a photo of the measurements.')
+    const said = from === 'workshop' ? undefined : clean(text, 500)
     if (!photos.length && !said) throw new ConvexError('Add a photo or write something.')
     await checkPhotos(ctx, photos)
     const now = Date.now()

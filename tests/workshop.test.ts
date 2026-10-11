@@ -41,7 +41,12 @@ describe('workshop: a work order as a chat in photos', () => {
     const measured = await photo()
     await t.mutation(api.workshop.send, { jobId: first, from: 'workshop', photos: [measured], text: 'Two doors' })
     job = (await t.query(api.workshop.list, {})).find((j) => j.id === first)!
-    expect(job.messages.map((m) => [m.from, m.photos.length, m.text])).toEqual([['shop', 1, ''], ['workshop', 1, 'Two doors']])
+    // What the workshop typed with it is not kept: its answer is the photo.
+    expect(job.messages.map((m) => [m.from, m.photos.length, m.text])).toEqual([['shop', 1, ''], ['workshop', 1, '']])
+    await expect(t.mutation(api.workshop.send, { jobId: first, from: 'workshop', photos: [], text: 'Two doors' })).rejects.toThrow('photo of the measurements')
+    // The counter can still write a line.
+    await t.mutation(api.workshop.send, { jobId: second, from: 'shop', photos: [], text: 'Call before going' })
+    expect((await t.query(api.workshop.list, {})).find((j) => j.id === second)!.messages.at(-1)).toMatchObject({ from: 'shop', text: 'Call before going' })
     expect([newTo(job, 'workshop'), newTo(job, 'shop')]).toEqual([0, 1])
     await t.mutation(api.workshop.seen, { jobId: first, side: 'shop' })
     job = (await t.query(api.workshop.list, {})).find((j) => j.id === first)!
