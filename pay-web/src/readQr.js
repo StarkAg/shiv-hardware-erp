@@ -26,6 +26,33 @@ function* looks(w, h) {
   }
 }
 
+/** A reader for a running camera: give it the <video>, get the text of the QRs in view (none: an empty list). */
+export function frameReader() {
+  let detector = null
+  try {
+    if ('BarcodeDetector' in window) detector = new window.BarcodeDetector({ formats: ['qr_code'] })
+  } catch { /* not on this phone */ }
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  return async (video) => {
+    if (video.readyState < 2 || !video.videoWidth) return []
+    if (detector) {
+      try {
+        const found = await detector.detect(video)
+        if (found.length) return found.map((code) => code.rawValue).filter(Boolean)
+      } catch { detector = null }
+    }
+    const scale = Math.min(1, 800 / Math.max(video.videoWidth, video.videoHeight))
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    // A printed QR is dark on light; looking for the other kind too halves the speed.
+    const code = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'dontInvert' })
+    return code?.data ? [code.data] : []
+  }
+}
+
 /** The text of every QR found in the photo (none: an empty list). Throws when the photo cannot be opened. */
 export async function readQr(blob) {
   const picture = await open(blob)

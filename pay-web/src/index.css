@@ -56,6 +56,14 @@ a { color: inherit; }
 .choose { display: flex; gap: 10px; }
 .btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 0 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); font-weight: 700; font-size: 16px; }
 .btn:active { background: var(--card2); }
+.btn.main { flex: none; min-height: 60px; background: var(--brass); color: var(--brass-ink); border-color: transparent; font-size: 18px; font-weight: 800; }
+.btn.main:active { background: var(--brass); filter: brightness(0.92); }
+
+/* The camera, cut to a square. */
+.finder { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: 18px; background: #000; }
+.finder video { width: 100%; height: 100%; object-fit: cover; }
+.finder::after { content: ''; position: absolute; inset: 14%; border: 3px solid rgba(255, 255, 255, 0.9); border-radius: 16px; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35); }
+.finder span { position: absolute; left: 0; right: 0; bottom: 10px; z-index: 1; text-align: center; font-size: 14px; font-weight: 700; color: #fff; }
 
 .small { margin: 0; font-size: 14px; line-height: 1.4; color: var(--muted); }
 .warn { margin: -4px 2px 0; font-size: 14px; font-weight: 700; color: var(--red); }

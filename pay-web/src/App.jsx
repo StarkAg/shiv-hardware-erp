@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { readQr } from './readQr.js'
+import { frameReader, readQr } from './readQr.js'
 import { takeShared } from './shared.js'
 import { cleanAmount, findPayee, payLinks } from './upi.js'
 
@@ -13,9 +13,54 @@ const PASTE = 'M9 4h6v3H9zM9 5H6v16h12V5h-3'
 const COPY = 'M9 9h11v11H9zM5 15H4V4h11v1'
 const DONE = 'M5 12l5 5 9-10'
 const QR = 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h3v3h-3zM20 17v3h-3M20 14v.01'
+const UPLOAD = 'M12 16V4M7 9l5-5 5 5M4 20h16'
+
+/** The camera, looking for a payment QR; any other QR in view is passed over. */
+function Camera({ onPayee, onClose }) {
+  const video = useRef(null)
+  const [problem, setProblem] = useState(false)
+
+  useEffect(() => {
+    let stream = null, timer = 0, closed = false
+    const read = frameReader()
+    async function look() {
+      if (closed) return
+      const texts = video.current ? await read(video.current) : []
+      const text = texts.find((t) => findPayee([t]))
+      if (closed) return
+      if (text) return onPayee(text)
+      timer = setTimeout(look, 120)
+    }
+    const asked = navigator.mediaDevices?.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    }) ?? Promise.reject(new Error('no camera'))
+    asked.then((got) => {
+      if (closed) return got.getTracks().forEach((track) => track.stop())
+      stream = got
+      video.current.srcObject = got
+      video.current.play().catch(() => {})
+      look()
+    }).catch(() => setProblem(true))
+    return () => {
+      closed = true
+      clearTimeout(timer)
+      stream?.getTracks().forEach((track) => track.stop())
+    }
+  }, [onPayee])
+
+  return (
+    <>
+      {problem
+        ? <div className="drop bad"><h1>The camera could not be opened</h1><p>Allow the camera for QR Pay in the phone's settings, or use Upload QR.</p></div>
+        : <div className="finder"><video ref={video} playsInline muted /><span>Hold the QR inside the square</span></div>}
+      <div className="choose"><button className="btn" onClick={onClose}>Cancel</button></div>
+    </>
+  )
+}
 
 export default function App() {
-  // 'start' | 'reading' | 'payee' | 'miss'
+  // 'start' | 'camera' | 'reading' | 'payee' | 'miss'
   const [stage, setStage] = useState('start')
   const [payee, setPayee] = useState(null)
   const [amount, setAmount] = useState('')
@@ -122,11 +167,16 @@ export default function App() {
   const clean = cleanAmount(amount)
   const links = useMemo(() => (payee && clean !== null ? payLinks(payee, clean) : null), [payee, clean])
 
+  const fromCamera = useCallback((text) => take({ text }), [take])
+
   const choose = (
-    <div className="choose">
-      <button className="btn" onClick={() => fileInput.current?.click()}><Icon d={PHOTO} /> Choose QR photo</button>
-      {navigator.clipboard?.read && <button className="btn" onClick={paste}><Icon d={PASTE} /> Paste</button>}
-    </div>
+    <>
+      <button className="btn main" onClick={() => setStage('camera')}><Icon d={PHOTO} /> Scan with camera</button>
+      <div className="choose">
+        <button className="btn" onClick={() => fileInput.current?.click()}><Icon d={UPLOAD} /> Upload QR</button>
+        {navigator.clipboard?.read && <button className="btn" onClick={paste}><Icon d={PASTE} /> Paste</button>}
+      </div>
+    </>
   )
 
   return (
@@ -141,13 +191,16 @@ export default function App() {
           <>
             <div className="drop">
               <Icon d={QR} size={56} />
-              <h1>Share a QR photo here</h1>
-              <p>In WhatsApp or Gallery open the QR photo, tap Share and pick QR Pay. PhonePe opens on that payee by itself.</p>
+              <h1>Pay a QR</h1>
+              <p>Scan it, or upload its photo.</p>
             </div>
             {choose}
+            <p className="small">From WhatsApp or Gallery: open the QR photo, tap Share and pick QR Pay. PhonePe opens on that payee by itself.</p>
             <p className="small">First time: open this page in Chrome, tap the menu and Add to Home screen. After that QR Pay shows in the Share menu.</p>
           </>
         )}
+
+        {stage === 'camera' && <Camera onPayee={fromCamera} onClose={() => setStage('start')} />}
 
         {stage === 'reading' && <div className="drop"><div className="spin" /><h1>Reading the QR</h1></div>}
 
