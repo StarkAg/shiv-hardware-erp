@@ -49,6 +49,12 @@ colours of every account book: **green is money to come, red is money to pay**.
 On figures and their labels only, never on a button or a ground. Chosen by Tony,
 11 Oct 2026; `khata-web/src/index.css` names them `--in` and `--out`.
 
+### Attendance marks
+
+A mark is a box with its letter: **present green, half a day yellow, absent solid
+black**, closed grey. Red is not used for absent; it stays for delete and for a
+past day that was changed.
+
 ## Shape: two shapes
 
 - **Circle** = do this now (a blue round call button, the blue step that is yours).
@@ -148,6 +154,7 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Inventory | `inventory-web/` | Signs, 11 Oct 2026 |
 | Stock (the laptop panel) | `stock-web/` | Signs, 11 Oct 2026 |
 | Shiv Accounts | `khata-web/` | Signs, 11 Oct 2026 |
+| Attendance | `attendance-web/` | Signs, 11 Oct 2026 |
 | Mica Match | `mica-web/` | Signs lettering and shapes on a dark ground, 11 Oct 2026 |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Everything else | | still the older parchment and brass look |
