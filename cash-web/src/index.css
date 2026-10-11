@@ -1,54 +1,27 @@
+/* Cashier, in the Signs look (DESIGN.md). The colours, lettering and buttons
+ * come from ./signs/signs.css; the names below are what this file calls them,
+ * and its last section sets the look. The register page is a drawn paper page
+ * and is not part of the look.
+ */
+@import "./signs/signs.css";
+
 :root {
-  --bg: #e8e5df;          /* warm parchment (Shiv Panel light) */
-  --card: #f3f0ea;
-  --card2: #ede9e1;
-  --fg: #1c1917;          /* stone-900 */
-  --muted: #78716c;       /* stone-500 */
-  --line: rgba(28, 25, 23, 0.12);
-  --brass: #b9924b;       /* shiv-green (brass) */
-  --brass-ink: #201804;
-  --red: #9f1d20;         /* shiv-red */
-  --amber: #b47016;
-  --glass: rgba(243, 240, 234, 0.72);
-  --sheen: rgba(255, 255, 255, 0.9);
-  --sheen-mid: rgba(255, 255, 255, 0.3);
-  --hairline: rgba(255, 255, 255, 0.95);
-  --glass-edge: rgba(28, 25, 23, 0.12);
-  --grain: 0.03;
-  --navdrop: 0 10px 30px rgba(28, 25, 23, 0.14);
-  --green: #1a7a4a;                       /* note green, and the confirm key */
+  --bg: var(--wall);
+  --card: #ffffff;
+  --card2: var(--key);
+  --fg: var(--ink);
+  --muted: var(--dim);
+  --brass: var(--ink);                    /* what was brass: a choice taken, a field in use */
+  --brass-ink: #ffffff;
+  --red: var(--stop);                     /* money out, delete */
+  --amber: var(--ink);
+  --green: var(--safe);                   /* money in, and the confirm key */
   --green-ink: #ffffff;
-  /* Online is the highlighter, not a brand. Yellow is the fill; the ink on and
-     beside it is a dark amber, because yellow type on parchment cannot be read. */
-  --pe: #9a6f06;                          /* amber ink — text, marks, small bars */
-  --pe-hi: #f0d628;                       /* the highlighter itself */
-  --pe-tint: rgba(240, 214, 40, 0.30);
-  --pe-ink: #2a1f00;                      /* ink on top of a yellow fill */
-}
-:root.dark {
-  --bg: #12110f;
-  --card: #1a1815;
-  --card2: #211e1a;
-  --fg: #eae7e1;
-  --muted: #a8a29e;
-  --line: rgba(255, 255, 255, 0.10);
-  --brass: #c9a45c;
-  --brass-ink: #1a1204;
-  --red: #d3595c;
-  --amber: #d9a441;
-  --glass: rgba(20, 18, 16, 0.62);
-  --sheen: rgba(255, 255, 255, 0.22);
-  --sheen-mid: rgba(255, 255, 255, 0.04);
-  --hairline: rgba(255, 255, 255, 0.12);
-  --glass-edge: rgba(255, 255, 255, 0.09);
-  --grain: 0.05;
-  --navdrop: 0 10px 34px rgba(0, 0, 0, 0.44);
-  --green: #4cb782;
-  --green-ink: #06210f;
-  --pe: #e0bd45;
-  --pe-hi: #d9ba2c;
-  --pe-tint: rgba(224, 189, 69, 0.20);
-  --pe-ink: #1c1500;
+  /* Online is the highlighter: a yellow fill with black print on or over it. */
+  --pe: var(--ink);
+  --pe-hi: #ffcc00;
+  --pe-tint: rgba(255, 204, 0, 0.30);
+  --pe-ink: #0e1318;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { width: 0; height: 0; display: none; }
@@ -57,11 +30,6 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
-:root.dark body {
-  background: linear-gradient(180deg, #12110f 0%, #1a1815 54%, #100f0e 100%);
-  background-attachment: fixed;
 }
 .wrap { max-width: 560px; margin: 0 auto; padding: 16px 14px var(--navclear); }
 /* The screen used all day, one-handed. Reaching the tick must never mean
@@ -102,11 +70,11 @@ body {
 
 .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .brandrow { display: flex; align-items: center; gap: 10px; }
-.logo { width: 40px; height: 40px; object-fit: contain; border-radius: 10px; background: #fff; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+.logo { width: 40px; height: 40px; object-fit: contain; border-radius: 0; background: #fff; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
 .brand { font-weight: 800; letter-spacing: 0.01em; font-size: 20px; line-height: 1.1; }
-.sub { color: var(--muted); font-size: 12px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.2em; }
+.sub { color: var(--muted); font-size: 13px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.2em; }
 .headbtns { display: flex; align-items: center; gap: 8px; }
-.themebtn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); display: inline-flex; align-items: center; justify-content: center; }
+.themebtn { width: 42px; height: 42px; border-radius: 0; border: 1px solid var(--line); background: var(--card); color: var(--fg); display: inline-flex; align-items: center; justify-content: center; }
 .themebtn:active { background: var(--card2); }
 
 /* Sync state, in the header. Grey means the phone is on its own, which is a
@@ -120,106 +88,39 @@ body {
 @keyframes syncpulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
 .syncdot {
   position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px;
-  border-radius: 999px; background: var(--amber); color: #fff;
-  font-size: 11px; font-weight: 900; line-height: 18px; text-align: center;
+  border-radius: 0; background: var(--amber); color: #fff;
+  font-size: 13px; font-weight: 900; line-height: 18px; text-align: center;
   box-shadow: 0 0 0 2px var(--bg);
 }
 @media (prefers-reduced-motion: reduce) { .syncbtn.busy svg { animation: none } }
 
-/* Bottom navigation — the floating glass pill GradeX uses on a phone, in this
-   app's brass palette. The material is four stacked things, not one blur: a
-   translucent tinted base, a backdrop blur + saturate, a specular sheen on the
-   top edge, and a grain layer that stops a large flat blur from banding. */
-:root {
-  --navh: clamp(56px, 15vw, 60px);
-  --navclear: calc(var(--navh) + max(16px, env(safe-area-inset-bottom, 0px)) + 18px);
-}
-.tabbar {
-  position: fixed;
-  bottom: max(16px, env(safe-area-inset-bottom, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;                                  /* under .modal, which is 50 */
-  width: min(calc(var(--navcount, 5) * 84px), calc(100vw - 28px));
-  height: var(--navh);
-  display: grid;
-  grid-template-columns: repeat(var(--navcount, 5), minmax(0, 1fr));
-  align-items: center;
-  border-radius: calc(var(--navh) / 2);
-  background-color: var(--glass);
-  -webkit-backdrop-filter: blur(18px) saturate(180%);
-  backdrop-filter: blur(18px) saturate(180%);
-  border: 1px solid var(--glass-edge);
-  box-shadow: inset 0 1px 0 var(--hairline), var(--navdrop);
-  overflow: hidden;
-  isolation: isolate;
-}
-/* Absolutely positioned so they stay out of flow and never become grid items
-   of the bar they decorate; z-index -1 against the parent's isolation puts them
-   over the bar's background but under every button. */
-.tabbar::before, .tabbar::after {
-  content: ''; position: absolute; inset: 0;
-  pointer-events: none; border-radius: inherit; z-index: -1;
-}
-.tabbar::before { background: linear-gradient(180deg, var(--sheen) 0, var(--sheen-mid) 1px, transparent 58%); }
-.tabbar::after {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
-  background-size: 140px 140px;
-  opacity: var(--grain);
-  mix-blend-mode: overlay;
-}
-/* No backdrop-filter: go opaque rather than ship a washed-out translucent bar. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .tabbar { background-color: var(--card); }
-  .tabbar::before, .tabbar::after { display: none; }
-}
-
-.tabitem {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 3px; width: 100%; height: 100%; min-width: 0;
-  padding: 0; border: none; background: transparent; color: var(--muted);
-  font: inherit; line-height: 1;
-  transition: transform 0.15s ease, color 0.2s ease;
-}
-.tabitem:active { transform: scale(0.92); }
-.tabitem[data-on] { color: var(--brass); }
-/* The whole icon fills, then everything after the silhouette is re-stroked in
-   the ink colour so the detail knocks out of the fill instead of vanishing. */
-.tabitem[data-on] svg { fill: currentColor; }
-.tabitem[data-on] svg > *:not(:first-child) { stroke: var(--brass-ink); }
-.tablabel {
-  font-size: 10.5px; font-weight: 500; letter-spacing: 0.02em; opacity: 0.75;
-  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.tabitem[data-on] .tablabel { font-weight: 700; opacity: 1; }
-
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 0; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 .fitcard { padding: clamp(10px, 1.6dvh, 14px); }
 
 .datenav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .datenav.solo { justify-content: center; }
 /* Holds the arrow's place so the date stays centred when there is none. */
 .navspace { width: 46px; flex: none; }
-.datenav > button { width: 46px; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 26px; line-height: 1; }
+.datenav > button { width: 46px; height: 46px; border-radius: 0; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 26px; line-height: 1; }
 .datenav > button:active { filter: brightness(0.96); }
 .datenav > button:disabled { opacity: 0.28; pointer-events: none; }
 .dcenter { text-align: center; }
 .dbig { font-size: 18px; font-weight: 800; }
-.daysub { color: var(--muted); font-size: 12px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.14em; }
+.daysub { color: var(--muted); font-size: 13px; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.14em; }
 /* Went missing when the entry screen lost its stepper, which left this looking
    like a default grey browser button on the totals page. */
-.todaybtn { margin-top: 4px; background: transparent; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+.todaybtn { margin-top: 4px; background: transparent; border: none; color: var(--muted); font-size: 13px; text-decoration: underline; }
 
 .segb.sel.p { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
 .segb.sel.n { background: var(--red); color: #fff; border-color: var(--red); }
 .segb.sel.h { background: var(--amber); color: #fff; border-color: var(--amber); }
 
-.allbtn { margin-top: 12px; width: 100%; padding: 13px; border-radius: 12px; border: none; background: var(--brass); color: var(--brass-ink); font-weight: 800; font-size: 15px; }
+.allbtn { margin-top: 12px; width: 100%; padding: 13px; border-radius: 0; border: none; background: var(--brass); color: var(--brass-ink); font-weight: 800; font-size: 15px; }
 .allbtn:active { filter: brightness(0.96); }
 .allbtn.ghost { background: transparent; border: 1px solid var(--line); color: var(--fg); }
 .allbtn.danger { background: var(--red); color: #fff; }
 .quickrow .allbtn { flex: 1; }
-.savednote { text-align: center; color: var(--muted); font-size: 12px; margin-top: 10px; }
+.savednote { text-align: center; color: var(--muted); font-size: 13px; margin-top: 10px; }
 
 .muted { color: var(--muted); } .center { text-align: center; padding: 24px; }
 .mgttl { font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 10px; }
@@ -227,11 +128,11 @@ body {
 /* Password modal */
 .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); }
 .modal.top { align-items: flex-start; padding: 12px; }
-.sheet { width: 100%; max-width: 340px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
-.sheetlock { width: 46px; height: 46px; margin: 0 auto 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--card2); color: var(--brass); border: 1px solid var(--line); }
+.sheet { width: 100%; max-width: 340px; background: var(--card); border: 1px solid var(--line); border-radius: 0; padding: 22px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+.sheetlock { width: 46px; height: 46px; margin: 0 auto 12px; border-radius: 0; display: flex; align-items: center; justify-content: center; background: var(--card2); color: var(--brass); border: 1px solid var(--line); }
 .sheettitle { font-weight: 800; font-size: 17px; }
 .sheetsub { color: var(--muted); font-size: 13px; margin: 4px 0 16px; }
-.sheet input { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 18px; text-align: center; letter-spacing: 0.3em; }
+.sheet input { width: 100%; padding: 13px 14px; border-radius: 0; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 18px; text-align: center; letter-spacing: 0.3em; }
 .sheet input:focus { outline: none; border-color: var(--brass); }
 .sheet input.err { border-color: var(--red); }
 .sheet input.plain { letter-spacing: normal; font-size: 17px; }
@@ -250,9 +151,9 @@ body {
 .denom.plain .dv { text-align: left; letter-spacing: 0.01em; }
 .denom .dv { font-size: 15px; font-weight: 800; text-align: right; color: var(--muted); }
 .denom.has .dv { color: var(--fg); }
-.denom .dx { font-size: 12px; color: var(--muted); text-align: center; }
+.denom .dx { font-size: 13px; color: var(--muted); text-align: center; }
 .denom input {
-  width: 100%; padding: 11px 6px; border-radius: 10px; border: 1px solid var(--line);
+  width: 100%; padding: 11px 6px; border-radius: 0; border: 1px solid var(--line);
   background: var(--bg); color: var(--fg); font-size: 17px; font-weight: 800; text-align: center;
 }
 .denom input:focus { outline: none; border-color: var(--brass); }
@@ -268,7 +169,7 @@ body {
 .counttotal b.xs { font-size: 17px; }
 .sheeterr { color: var(--red); font-size: 13px; margin-top: 8px; }
 .sheetbtns { display: flex; gap: 10px; margin-top: 16px; }
-.sheetbtns button { flex: 1; padding: 12px; border-radius: 12px; font-weight: 800; font-size: 15px; border: 1px solid var(--line); }
+.sheetbtns button { flex: 1; padding: 12px; border-radius: 0; font-weight: 800; font-size: 15px; border: 1px solid var(--line); }
 .sheetbtns button:disabled { opacity: 0.55; }
 .ghostbtn { background: transparent; color: var(--fg); }
 .primbtn { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
@@ -276,7 +177,7 @@ body {
 .delbtn { background: var(--red); color: #fff; border-color: var(--red); }
 .lineamt { font-size: 30px; font-weight: 900; letter-spacing: -0.01em; }
 
-.motcard { margin-top: 14px; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: linear-gradient(160deg, var(--card2), var(--card)); text-align: center; }
+.motcard { margin-top: 14px; padding: 16px; border-radius: 0; border: 1px solid var(--line); background: linear-gradient(160deg, var(--card2), var(--card)); text-align: center; }
 .motlabel { font-size: 13px; color: var(--muted); font-weight: 600; }
 .motnet { font-size: 34px; font-weight: 900; letter-spacing: 0.01em; color: var(--brass); margin: 2px 0 10px; white-space: nowrap; }
 .motnet.s { font-size: 28px; }
@@ -285,7 +186,7 @@ body {
 .paygrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 14px; text-align: left; }
 .paygrid > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding-bottom: 4px; }
 .paygrid > div.netrow { grid-column: 1 / -1; border-bottom: none; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
-.pk { font-size: 12px; color: var(--muted); }
+.pk { font-size: 13px; color: var(--muted); }
 .pv { font-size: 14px; font-weight: 700; }
 .pv.neg { color: var(--red); } .pv.strong { color: var(--brass); font-weight: 900; font-size: 16px; }
 /* ── The names written again and again ───────────────────────────────────────
@@ -301,7 +202,7 @@ body {
 .freqrow::-webkit-scrollbar { display: none; }
 .freqchip {
   flex: none; max-width: 42vw;
-  padding: 9px 12px; border-radius: 7px;
+  padding: 9px 12px; border-radius: 0;
   border: 1px solid var(--line); background: var(--card2); color: var(--fg);
   font-size: 13.5px; font-weight: 650; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
@@ -315,7 +216,7 @@ body {
 /* The line just written, held for a moment so the eye finds it. */
 .pentry.justsaved {
   box-shadow: 0 0 0 2px var(--brass);
-  border-radius: 4px;
+  border-radius: 0;
 }
 @media (prefers-reduced-motion: no-preference) {
   .pentry.justsaved { animation: justsaved 2.6s ease-out; }
@@ -331,20 +232,20 @@ body {
 /* The sheet that asks about a key names it, where a line's sheet shows a figure. */
 .lineamt.small { font-size: 22px; }
 .advrow { display: flex; gap: 8px; margin-bottom: 8px; }
-.advrow input { flex: 1; min-width: 0; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 15px; }
+.advrow input { flex: 1; min-width: 0; padding: 11px 12px; border-radius: 0; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 15px; }
 .advrow input:focus { outline: none; border-color: var(--brass); }
 .billphoto-row { margin: 0 0 8px; max-height: 112px; overflow-y: auto; }
-.billphoto-button { width: 100%; min-height: 36px; border: 1px dashed var(--brass); border-radius: 10px; background: var(--card2); color: var(--fg); font-weight: 700; }
-.billphoto-page { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 10px; font-size: 12px; color: var(--muted); }
+.billphoto-button { width: 100%; min-height: 36px; border: 1px dashed var(--brass); border-radius: 0; background: var(--card2); color: var(--fg); font-weight: 700; }
+.billphoto-page { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 10px; font-size: 13px; color: var(--muted); }
 .billphoto-page span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .billphoto-page button { border: 0; background: transparent; color: var(--red); font-size: 20px; }
-.billphoto-error { color: var(--red); font-size: 12px; padding: 4px 8px; }
+.billphoto-error { color: var(--red); font-size: 13px; padding: 4px 8px; }
 /* Centred and bold, so the typed line sits the same way the placeholder does. */
 .noteinput { text-align: center; font-weight: 800; letter-spacing: 0.06em; }
 .noteinput::placeholder { font-weight: 800; letter-spacing: 0.14em; color: var(--muted); opacity: 0.7; }
-.histchip { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
+.histchip { font-size: 13px; padding: 3px 8px; border-radius: 0; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
 
-@media (max-width: 360px) { .tablabel { font-size: 10px; } }
+@media (max-width: 360px) { .tablabel { font-size: 13px; } }
 
 /* Totals and Edit.
    Each colour is declared twice: a flat fallback first, then the mixed version.
@@ -355,7 +256,7 @@ body {
 /* The two figures worth looking up for: what came in, and what is carried into
    tomorrow. Both get the full-width treatment; everything else supports them. */
 .hero {
-  margin-top: 14px; padding: 20px 16px; border-radius: 20px; text-align: center;
+  margin-top: 14px; padding: 20px 16px; border-radius: 0; text-align: center;
   border: 1px solid var(--line);
   background: linear-gradient(165deg, var(--card2), var(--card));
 }
@@ -387,7 +288,7 @@ body {
 }
 .hero.onlinehero .heronum { color: var(--dealer-ink); }
 
-.herolabel { font-size: 11px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.herolabel { font-size: 13px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
 .heronum { font-size: 42px; font-weight: 900; line-height: 1.04; letter-spacing: -0.01em; margin-top: 6px; white-space: nowrap; }
 .heronum.s { font-size: 34px; }
 .heronum.xs { font-size: 27px; letter-spacing: -0.02em; }
@@ -395,8 +296,8 @@ body {
 .hero.gold .heronum { color: var(--brass); }
 
 .herodelta {
-  display: inline-block; margin-top: 10px; padding: 5px 12px; border-radius: 999px;
-  font-size: 12px; font-weight: 800; letter-spacing: 0.01em;
+  display: inline-block; margin-top: 10px; padding: 5px 12px; border-radius: 0;
+  font-size: 13px; font-weight: 800; letter-spacing: 0.01em;
 }
 .herodelta.up { color: var(--green); background: rgba(26,122,74,0.13); background: color-mix(in srgb, var(--green) 14%, transparent); }
 .herodelta.down { color: var(--red); background: rgba(159,29,32,0.11); background: color-mix(in srgb, var(--red) 12%, transparent); }
@@ -408,17 +309,17 @@ body {
 .weekcol { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .weekbarwrap { width: 100%; height: 44px; display: flex; align-items: flex-end; }
 .weekbar {
-  width: 100%; min-height: 3px; border-radius: 5px;
+  width: 100%; min-height: 3px; border-radius: 0;
   background: rgba(26,122,74,0.22); background: color-mix(in srgb, var(--green) 24%, transparent);
   transition: height 0.3s ease;
 }
 .weekbar.today { background: var(--green); }
-.weekcol span { font-size: 10px; font-weight: 700; color: var(--muted); }
+.weekcol span { font-size: 13px; font-weight: 700; color: var(--muted); }
 .weekcol.now span { color: var(--green); font-weight: 900; }
 
-.herosplit { display: flex; justify-content: center; gap: 16px; margin-top: 16px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.herosplit { display: flex; justify-content: center; gap: 16px; margin-top: 16px; font-size: 13px; font-weight: 700; color: var(--muted); }
 .hs { display: inline-flex; align-items: center; gap: 6px; }
-.hs i { width: 8px; height: 8px; border-radius: 50%; }
+.hs i { width: 8px; height: 8px; border-radius: 0; }
 .hs.cash i { background: var(--green); }
 .hs.online i { background: var(--pe-hi); }
 .hs.in i { background: var(--green); }
@@ -426,7 +327,7 @@ body {
 
 .paidline { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; padding: 0 4px; }
 .paidline b { font-size: 15px; font-weight: 900; color: var(--red); }
-.paidline em { font-style: normal; font-size: 11.5px; color: var(--muted); margin-left: auto; }
+.paidline em { font-style: normal; font-size: 13px; color: var(--muted); margin-left: auto; }
 
 /* The one figure a cashier checks all day, so it is the one card that fills
    rather than tints — nothing else on the page competes with it. */
@@ -436,24 +337,24 @@ body {
 .hero.drawer .herofoot { color: var(--green-ink); opacity: 0.66; }
 .drawerrow {
   display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px;
-  font-size: 12.5px; font-weight: 700; color: var(--green-ink); opacity: 0.8;
+  font-size: 13px; font-weight: 700; color: var(--green-ink); opacity: 0.8;
   font-variant-numeric: tabular-nums;
 }
-.drawerrow .off { opacity: 1; padding: 1px 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.16); }
+.drawerrow .off { opacity: 1; padding: 1px 9px; border-radius: 0; background: rgba(0, 0, 0, 0.16); }
 
 .hero .baltiles { margin-top: 16px; }
 .hero.gold .baltile { background: var(--card); }
-.herofoot { margin-top: 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); opacity: 0.8; }
+.herofoot { margin-top: 12px; font-size: 13px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); opacity: 0.8; }
 
 .baltiles { display: flex; gap: 8px; }
 .baltile {
-  flex: 1; min-width: 0; padding: 12px 10px; border-radius: 14px;
+  flex: 1; min-width: 0; padding: 12px 10px; border-radius: 0;
   border: 1px solid var(--line); background: var(--card2); text-align: center;
 }
 .baltile b { display: block; font-size: 22px; font-weight: 900; margin-top: 3px; white-space: nowrap; }
 .baltile b.s { font-size: 18px; }
 .baltile b.xs { font-size: 15px; }
-.baltile i { display: block; font-style: normal; font-size: 10.5px; color: var(--muted); margin-top: 3px; opacity: 0.85; }
+.baltile i { display: block; font-style: normal; font-size: 13px; color: var(--muted); margin-top: 3px; opacity: 0.85; }
 .baltile.cash { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
 .baltile.cash b { color: var(--green); }
 .baltile.online { border-color: color-mix(in srgb, var(--pe) 45%, var(--line)); }
@@ -463,14 +364,14 @@ body {
    on the entry screen so the two read as the same pair of things. */
 .balfield {
   flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px;
-  padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2);
+  padding: 10px 12px; border-radius: 0; border: 1px solid var(--line); background: var(--card2);
 }
 .balfield > span {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
-  font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  font-size: 13px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
 }
 .assistbtn {
-  flex: none; width: 24px; height: 20px; border-radius: 6px; padding: 0;
+  flex: none; width: 24px; height: 20px; border-radius: 0; padding: 0;
   border: 1px solid var(--line); background: var(--card); color: inherit;
   display: inline-flex; align-items: center; justify-content: center;
 }
@@ -485,7 +386,7 @@ body {
 /* The openings already set. Same coloured-dot vocabulary as the totals page,
    so cash and online read the same way wherever they are paired. */
 .openlist { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.openrow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); }
+.openrow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 0; background: var(--card2); }
 .openrow.sel { border-color: var(--brass); }
 .openmain {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
@@ -494,13 +395,13 @@ body {
 .opendate { flex: 0 0 auto; font-size: 14px; font-weight: 800; }
 .openvals { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 14px; }
 .ov { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; white-space: nowrap; }
-.ov i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ov i { width: 8px; height: 8px; border-radius: 0; flex: none; }
 .ov.cash { color: var(--green); }
 .ov.cash i { background: var(--green); }
 .ov.online { color: var(--pe); }
 .ov.online i { background: var(--pe); }
 .openx {
-  flex: none; width: 32px; height: 32px; border-radius: 9px;
+  flex: none; width: 32px; height: 32px; border-radius: 0;
   border: 1px solid var(--line); background: var(--card); color: var(--muted);
   display: inline-flex; align-items: center; justify-content: center;
 }
@@ -516,7 +417,7 @@ body {
    button all the same — touching it takes the pad back when the letters are up. */
 .amtshow {
   display: flex; align-items: baseline; justify-content: center; gap: 6px;
-  width: 100%; padding: 16px 14px; margin-bottom: 12px; border-radius: 14px;
+  width: 100%; padding: 16px 14px; margin-bottom: 12px; border-radius: 0;
   border: 1px solid var(--line); background: var(--card2);
   color: inherit; font: inherit; text-align: center;
 }
@@ -532,7 +433,7 @@ body {
 /* The confirm sits above the pad, full width, right under the note it completes
    — so the thumb never travels past the digits to finish an entry. */
 .tickbar {
-  width: 100%; margin-bottom: 8px; border-radius: 14px; border: 1px solid var(--green);
+  width: 100%; margin-bottom: 8px; border-radius: 0; border: 1px solid var(--green);
   background: var(--green); color: var(--green-ink);
   font-size: 26px; font-weight: 800; line-height: 1;
   height: clamp(42px, 6.4dvh, 52px);
@@ -548,7 +449,7 @@ body {
 .pad { display: flex; flex-direction: column; }
 .padkeys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .padkey {
-  height: 54px; border-radius: 14px; border: 1px solid var(--line);
+  height: 54px; border-radius: 0; border: 1px solid var(--line);
   background: var(--card2); color: var(--fg);
   font-size: 22px; font-weight: 800; line-height: 1;
   display: flex; align-items: center; justify-content: center;
@@ -560,7 +461,7 @@ body {
 .dirrow { display: flex; gap: 8px; margin-bottom: 12px; }
 .dirbtn {
   flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 14px 8px; border-radius: 12px; border: 1px solid var(--line);
+  padding: 14px 8px; border-radius: 0; border: 1px solid var(--line);
   background: var(--card2); color: var(--muted); font-weight: 800; font-size: 15px;
 }
 /* Same idea as the Cash / Online pair below: the arrow carries its colour while
@@ -577,14 +478,14 @@ body {
 .editbanner {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   background: rgba(180,112,22,0.14); color: var(--amber); border: 1px solid rgba(180,112,22,0.34);
-  padding: 8px 8px 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 700; margin-bottom: 12px;
+  padding: 8px 8px 8px 12px; border-radius: 0; font-size: 13px; font-weight: 700; margin-bottom: 12px;
 }
 .editbanner button { border: none; background: transparent; color: var(--amber); font-weight: 800; text-decoration: underline; font-size: 13px; }
 
 .cashtotals { display: flex; gap: 8px; margin: 14px 0 12px; }
 .cashtotals .ct {
   flex: 1; text-align: center; padding: 9px 4px; border: 1px solid var(--line);
-  border-radius: 12px; background: var(--card2);
+  border-radius: 0; background: var(--card2);
 }
 .cashtotals .ct b { display: block; font-size: 15px; font-weight: 900; margin-top: 2px; }
 .cashtotals .ct b.in { color: var(--brass); }
@@ -593,7 +494,7 @@ body {
 .celist { display: flex; flex-direction: column; gap: 8px; }
 .cerow {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 9px 8px 9px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2);
+  padding: 9px 8px 9px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--card2);
   border-left-width: 4px;
 }
 .cerow.in { border-left-color: var(--brass); }
@@ -602,11 +503,11 @@ body {
 .ceamt { font-size: 16px; font-weight: 900; }
 .ceamt.in { color: var(--brass); }
 .ceamt.out { color: var(--red); }
-.cemeta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.cemeta { font-size: 13px; color: var(--muted); margin-top: 2px; }
 .cemeta em { font-style: normal; opacity: 0.8; }
 .cebtns { display: flex; gap: 4px; flex: none; }
 .cebtns button {
-  width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line);
+  width: 34px; height: 34px; border-radius: 0; border: 1px solid var(--line);
   background: var(--card); color: var(--muted); display: inline-flex; align-items: center; justify-content: center;
 }
 .cebtns button:active { filter: brightness(0.96); }
@@ -614,11 +515,11 @@ body {
 .repbtns { display: flex; gap: 8px; margin-top: 14px; }
 .repbtn {
   flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 13px 10px; text-align: left;
-  border: 1px solid var(--line); border-radius: 14px; background: var(--card2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 0; background: var(--card2); color: var(--fg);
 }
-.repbtn .repk { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+.repbtn .repk { font-size: 13px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
 .repbtn .repv { font-size: 21px; font-weight: 900; }
-.repbtn .repn { font-size: 11px; color: var(--muted); }
+.repbtn .repn { font-size: 13px; color: var(--muted); }
 .repbtn.in .repv { color: var(--brass); }
 .repbtn.out .repv { color: var(--red); }
 .repbtn.in.sel { border-color: var(--brass); background: rgba(185,146,75,0.14); }
@@ -626,8 +527,8 @@ body {
 
 .repopen { margin-top: 14px; }
 .repbreak { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.repday { border: 1px solid var(--line); border-radius: 12px; background: var(--card2); padding: 9px 12px; margin-bottom: 8px; }
-.repdayhdr { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; color: var(--muted); border-bottom: 1px dashed var(--line); padding-bottom: 5px; margin-bottom: 5px; }
+.repday { border: 1px solid var(--line); border-radius: 0; background: var(--card2); padding: 9px 12px; margin-bottom: 8px; }
+.repdayhdr { display: flex; justify-content: space-between; font-size: 13px; font-weight: 800; color: var(--muted); border-bottom: 1px dashed var(--line); padding-bottom: 5px; margin-bottom: 5px; }
 .repdayhdr .in { color: var(--brass); }
 .repdayhdr .out { color: var(--red); }
 .reprow { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
@@ -639,7 +540,7 @@ body {
 /* Cash — mode, transfers, day close */
 .modebtn {
   flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 14px 8px; border-radius: 12px; border: 1px solid var(--line);
+  padding: 14px 8px; border-radius: 0; border: 1px solid var(--line);
   background: var(--card2); color: var(--muted); font-weight: 800; font-size: 15px;
 }
 /* The icon keeps its colour even unselected, so the two are told apart at a
@@ -651,18 +552,18 @@ body {
 .modebtn.online.sel { background: var(--pe-hi); color: var(--pe-ink); border-color: var(--pe-hi); }
 .modebtn.sel svg { color: inherit; }
 
-.cashtotals .ct i { display: block; font-style: normal; font-size: 10.5px; color: var(--muted); margin-top: 2px; opacity: 0.85; }
+.cashtotals .ct i { display: block; font-style: normal; font-size: 13px; color: var(--muted); margin-top: 2px; opacity: 0.85; }
 .cashtotals .ct b.on { color: var(--pe); }
 .cashtotals .ct b { white-space: nowrap; }
 .cashtotals .ct b.s { font-size: 17px; }
 .cashtotals .ct b.xs { font-size: 14px; }
-.cashsub { text-align: center; font-size: 12px; color: var(--muted); margin: -4px 0 12px; }
+.cashsub { text-align: center; font-size: 13px; color: var(--muted); margin: -4px 0 12px; }
 .cashsub .in { color: var(--brass); font-weight: 700; }
 .cashsub .out { color: var(--red); font-weight: 700; }
 
 .modebadge {
-  display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
-  text-transform: uppercase; padding: 2px 6px; border-radius: 5px; margin-right: 6px;
+  display: inline-block; font-size: 13px; font-weight: 800; letter-spacing: 0.04em;
+  text-transform: uppercase; padding: 2px 6px; border-radius: 0; margin-right: 6px;
   border: 1px solid var(--line); background: var(--card); color: var(--muted); font-style: normal;
 }
 .modebadge.online { color: var(--pe); border-color: var(--pe-hi); background: var(--pe-tint); }
@@ -675,12 +576,12 @@ body {
 
 .filterrow { display: flex; gap: 6px; margin-bottom: 4px; }
 .filterrow button {
-  flex: 1; padding: 8px; border-radius: 10px; border: 1px solid var(--line);
-  background: var(--card2); color: var(--muted); font-weight: 700; font-size: 12.5px;
+  flex: 1; padding: 8px; border-radius: 0; border: 1px solid var(--line);
+  background: var(--card2); color: var(--muted); font-weight: 700; font-size: 13px;
 }
 .filterrow button.on { border-color: var(--brass); background: rgba(185,146,75,0.18); color: var(--brass); }
 
-.offbox { margin-top: 18px; padding: 12px; border: 1px solid rgba(159,29,32,0.4); border-radius: 14px; background: rgba(159,29,32,0.07); }
+.offbox { margin-top: 18px; padding: 12px; border: 1px solid rgba(159,29,32,0.4); border-radius: 0; background: rgba(159,29,32,0.07); }
 .offbox .mgttl { color: var(--red); margin-bottom: 8px; }
 
 /* ── The register page ──────────────────────────────────────────────────────
@@ -895,13 +796,12 @@ body {
 
 /* W/B goes in so often it is worth a key of its own. */
 .wbbtn {
-  flex: 0 0 auto; padding: 0 14px; border-radius: 10px;
+  flex: 0 0 auto; padding: 0 14px; border-radius: 0;
   border: 1px solid var(--line); background: var(--card2);
   color: var(--muted); font-weight: 800; font-size: 13px; letter-spacing: 0.04em;
 }
 .wbbtn.sel { border-color: var(--brass); background: rgba(185,146,75,0.18); color: var(--brass); }
 .wbbtn.dealerbtn.sel { border-color: #d97316; background: rgba(217,115,22,0.18); color: #b4560c; }
-:root.dark .wbbtn.dealerbtn.sel { color: #f0a45c; }
 
 /* ── Fitting the other screens ──────────────────────────────────────────────
    Same rule as the entry screen: the page itself never scrolls. Where a screen
@@ -958,7 +858,7 @@ body {
   .wrap.fit.totals .herofoot { display: none; }
   .wrap.fit.totals .hero { margin-top: 7px; padding: 9px 14px; }
   .wrap.fit.totals .heronum { font-size: clamp(21px, 4dvh, 28px); }
-  .wrap.fit.totals .herolabel { font-size: 10px; }
+  .wrap.fit.totals .herolabel { font-size: 13px; }
   .wrap.fit.totals .weekbarwrap { height: clamp(18px, 4dvh, 30px); }
   .wrap.fit.totals .paidline { margin-top: 8px; }
 }
@@ -992,7 +892,7 @@ body {
    scrolling while an entry is being edited (its banner takes a row). */
 @media (max-height: 700px) {
   .wrap.fit .padkeys { min-height: 150px; }
-  .wrap.fit .editbanner { padding: 5px 10px; margin-bottom: 6px; font-size: 12px; }
+  .wrap.fit .editbanner { padding: 5px 10px; margin-bottom: 6px; font-size: 13px; }
 }
 @media (max-height: 580px) {
   .wrap.fit .amtshow { padding: 4px 10px; margin-bottom: 6px; }
@@ -1007,7 +907,7 @@ body {
 .histsheet { max-width: 420px; text-align: left; }
 .histsheet .sheettitle, .histsheet .sheetsub { text-align: center; }
 .histlist { max-height: 58vh; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-.histrow { padding: 9px 11px; border-radius: 11px; border: 1px solid var(--line); background: var(--card2); border-left-width: 3px; }
+.histrow { padding: 9px 11px; border-radius: 0; border: 1px solid var(--line); background: var(--card2); border-left-width: 3px; }
 .histrow.add { border-left-color: var(--green); }
 /* An edit is the one change that leaves no trace on the page afterwards — the
    line still looks ordinary, only the figure moved — so it is the one worth
@@ -1023,11 +923,11 @@ body {
 .histrow.close, .histrow.reopen { border-left-color: var(--pe); }
 .histrow.opening, .histrow[class*="opening-off"] { border-left-color: var(--amber); }
 .histtop { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.histkind { font-size: 10.5px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
-.histwhen { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.histkind { font-size: 13px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.histwhen { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .histwhat { font-size: 13.5px; font-weight: 700; margin-top: 3px; }
-.histchange { font-size: 12px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
-.histfoot { display: flex; gap: 8px; justify-content: space-between; margin-top: 6px; font-size: 10.5px; color: var(--muted); opacity: 0.8; }
+.histchange { font-size: 13px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.histfoot { display: flex; gap: 8px; justify-content: space-between; margin-top: 6px; font-size: 13px; color: var(--muted); opacity: 0.8; }
 .histdev { text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Printing ───────────────────────────────────────────────────────────────
@@ -1039,7 +939,6 @@ body {
   /* Written twice, because the dark theme sets its own gradient on body with
      more specificity than a bare element selector. */
   html, body, #root, .wrap, .card { background: #fff !important; }
-  :root.dark body { background: #fff !important; }
   html, body, #root { height: auto !important; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   .wrap { max-width: none; margin: 0; padding: 0; }
@@ -1072,7 +971,7 @@ body {
 /* Entry screen away from the open register */
 .daysub.away { color: var(--amber); font-weight: 800; }
 .backtoday {
-  width: 100%; padding: 9px; margin-bottom: 10px; border-radius: 10px;
+  width: 100%; padding: 9px; margin-bottom: 10px; border-radius: 0;
   border: 1px solid rgba(180,112,22,0.34); background: rgba(180,112,22,0.12);
   color: var(--amber); font-weight: 800; font-size: 13px;
 }
@@ -1088,57 +987,57 @@ body {
 
 .chart {
   display: flex; align-items: flex-end; gap: 2px;
-  height: 108px; padding: 6px 4px; border-radius: 12px;
+  height: 108px; padding: 6px 4px; border-radius: 0;
   background: var(--card2); border: 1px solid var(--line);
 }
 .chart.tall { height: 132px; gap: 6px; padding: 8px 6px; }
 .chcol { flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
 .chbar {
-  flex: 1; min-width: 2px; min-height: 2px; border-radius: 2px 2px 0 0;
+  flex: 1; min-width: 2px; min-height: 2px; border-radius: 0;
   background: var(--brass); transition: height 0.2s ease;
 }
 .chbar.out { background: var(--red); opacity: 0.75; }
 /* A shut day is a gap in the row, not a bar of nothing. */
-.chshut { width: 100%; height: 3px; border-radius: 2px; background: var(--line); }
-.chaxis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 5px; padding: 0 4px; }
+.chshut { width: 100%; height: 3px; border-radius: 0; background: var(--line); }
+.chaxis { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 5px; padding: 0 4px; }
 .chaxis.months span { flex: 1; text-align: center; }
-.chnote { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.chnote { font-size: 13px; color: var(--muted); margin-top: 6px; }
 
-.splitbar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--line); }
+.splitbar { display: flex; height: 14px; border-radius: 0; overflow: hidden; background: var(--line); }
 .splitbar .sp.cash { background: var(--brass); }
 .splitbar .sp.online { background: var(--amber); }
-.splitkeys { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
-.splitkeys .dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
+.splitkeys { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.splitkeys .dot { display: inline-block; width: 9px; height: 9px; border-radius: 0; margin-right: 5px; }
 .splitkeys .dot.cash { background: var(--brass); }
 .splitkeys .dot.online { background: var(--amber); }
 
 /* ── Run rate: pace so far, and the month-end it projects ─────────────────── */
 .paceline{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:6px 0}
 .paceline b{font-size:19px;font-weight:700}
-.aimbtn{background:none;border:1px dashed var(--line,#d7d6ca);border-radius:8px;
+.aimbtn{background:none;border:1px dashed var(--line,#d7d6ca);border-radius: 0;
   padding:4px 10px;font:inherit;font-size:14px;color:inherit;cursor:pointer}
-.aimin{width:120px;border:1px solid var(--line,#d7d6ca);border-radius:8px;
+.aimin{width:120px;border:1px solid var(--line,#d7d6ca);border-radius: 0;
   padding:4px 8px;font:inherit;font-size:14px;background:transparent;color:inherit;text-align:right}
-.pacebar{height:6px;border-radius:99px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0 6px}
-.pacebar .pf{display:block;height:100%;border-radius:99px;background:#c08b3e;transition:width .3s}
+.pacebar{height:6px;border-radius: 0;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0 6px}
+.pacebar .pf{display:block;height:100%;border-radius: 0;background:#c08b3e;transition:width .3s}
 .pacebar .pf.ahead{background:#2e9e6b}
-.pacefoot{font-size:12px;opacity:.6;padding-top:2px}
+.pacefoot{font-size: 13px;opacity:.6;padding-top:2px}
 
 /* What a staff delete is about to take with it, said before it is confirmed. */
 .sheetnote { margin: 10px 0 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
 .sheetnote.bad { color: var(--red, #9a3412); font-weight: 600; }
 
 /* Saved counting detail and search across the complete cash book. */
-.saved-counts { flex: none; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); color: var(--fg); text-align: left; font-size: 13px; }
+.saved-counts { flex: none; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--card2); color: var(--fg); text-align: left; font-size: 13px; }
 .saved-counts summary { cursor: pointer; font-weight: 700; }
 .saved-counts div { margin-top: 5px; font-variant-numeric: tabular-nums; }
 .wrap.fit.edit .card { overflow-y: auto; }
 .cash-search { display: flex; flex-direction: column; flex: 1; min-height: 0; color: var(--fg); }
 .search-heading { flex: none; padding: 6px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .search-heading h2 { margin: 0; font-size: 18px; }
-.cash-search input { flex: none; width: 100%; min-height: 44px; margin: 10px 0; padding: 10px 12px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+.cash-search input { flex: none; width: 100%; min-height: 44px; margin: 10px 0; padding: 10px 12px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 0; font: inherit; }
 .search-filters { flex: none; display: flex; gap: 8px; }
-.search-filters button, .search-more { min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); color: var(--fg); font: inherit; }
+.search-filters button, .search-more { min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--card2); color: var(--fg); font: inherit; }
 .search-filters button[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); }
 .search-summary { flex: none; margin: 12px 0; font-size: 13px; color: var(--muted); }
 .search-results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
@@ -1150,3 +1049,164 @@ body {
 .search-result:hover, .search-result:focus-visible { background: var(--card2); }
 .search-more { display: block; margin: 12px auto; }
 @media print { .cash-search { display: none !important; } }
+
+/* ── Signs ─────────────────────────────────────────────────────────────────
+ * The look of every Shiv Hardware app (DESIGN.md), over the layout above.
+ *
+ * Signs goes round the book, not over it: the register page stays the drawn
+ * paper page it is, in pen blue with its red ink and its highlighter, and it
+ * is what prints. Everything else is white, black and square. Money keeps the
+ * book's colours on figures: green in, red out. Online keeps its yellow
+ * highlighter, always as black print on or over yellow.
+ */
+/* header.top, not .top alone: the tally's top line and a sheet set to the top carry that word too. */
+header.top { margin: -16px -14px 12px; padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px; border-bottom: 4px solid var(--ink); }
+.logo { padding: 0; background: none; box-shadow: none; }
+.brand { font: 800 27px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; }
+.sub { font: 700 13px/1 var(--sign); letter-spacing: .08em; }
+.headbtns { gap: 4px; }
+.themebtn { width: 44px; height: 44px; border: 0; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); }
+.themebtn:active { background: var(--key); transform: translateY(2px); }
+/* Lines still on this phone turn the cloud key yellow; green says all are up. */
+.syncbtn.pending, .syncbtn.busy { background: var(--wait); color: var(--ink); box-shadow: inset 0 -4px 0 #c79f00; }
+.syncdot { top: -6px; right: -4px; background: var(--ink); box-shadow: none; font: 700 13px/18px var(--sign); }
+
+.card { padding: 0; border: 0; background: none; box-shadow: none; }
+.fitcard { padding: 0; }
+/* The paper page keeps the lettering it was set in, on screen and in print. */
+.page { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-weight: 400; line-height: normal; }
+
+/* The sections, as keys along the foot. The one that is open is black. */
+:root { --navh: 52px; --navclear: calc(var(--navh) + env(safe-area-inset-bottom, 0px) + 30px); }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(var(--navcount, 5), minmax(0, 1fr)); gap: 4px; padding: 8px 14px calc(env(safe-area-inset-bottom, 0px) + 8px); background: var(--wall); border-top: 4px solid var(--ink); }
+.tabitem { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; height: var(--navh); padding: 0; border: 0; background: var(--key); color: var(--ink); font: inherit; line-height: 1; }
+.tabitem[data-on] { background: var(--ink); color: #fff; }
+.tabitem:focus-visible { outline-offset: -3px; }
+.tabitem[data-on]:focus-visible { outline-color: #fff; }
+.tablabel { max-width: 100%; font: 700 13px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; }
+@media (max-width: 400px) { .tabbar { gap: 2px; padding-inline: 6px; } .tablabel { font-size: 12px; letter-spacing: 0; } }
+
+.datenav > button { border: 0; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 700 30px/1 var(--sign); }
+.dbig { font: 800 24px/1.1 var(--sign); text-transform: uppercase; }
+.daysub { font: 700 13px/1 var(--sign); letter-spacing: .08em; }
+.daysub.away { display: inline-block; padding: 2px 6px 1px; background: var(--wait); color: var(--ink); }
+.todaybtn { color: var(--must); font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.backtoday, .editbanner { border: 0; background: var(--wait); color: var(--ink); }
+.backtoday { font: 800 16px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.editbanner button { color: var(--ink); }
+
+.printbar { border: 0; border-radius: 0; background: var(--key); color: var(--ink); box-shadow: inset 0 -4px 0 var(--line); font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.printbar:active { background: var(--key); transform: translateY(2px); }
+
+/* Blue does the thing, green confirms a line, grey is the rest, red deletes. */
+.allbtn { border: 0; background: var(--must); color: #fff; font: 800 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.allbtn.ghost { border: 0; background: var(--key); color: var(--ink); box-shadow: inset 0 -4px 0 var(--line); }
+.allbtn.danger { background: var(--stop); color: #fff; }
+.allbtn:disabled { border: 0; background: var(--key); color: var(--dim); box-shadow: none; }
+.mgttl { font: 700 14px/1.1 var(--sign); letter-spacing: .06em; }
+.savednote { font-size: 14px; }
+
+.modal { background: rgba(14, 19, 24, .62); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.sheet { padding: 16px; background: var(--wall); border: 4px solid var(--ink); box-shadow: none; }
+.sheetlock { display: none; }
+.sheettitle { font: 800 24px/1.1 var(--sign); text-transform: uppercase; }
+.sheetsub { font-size: 15px; line-height: 1.35; }
+.sheet input, .denom input, .advrow input, .cash-search input, .aimin { border: 2px solid var(--ink); background: #fff; color: var(--ink); }
+.sheet input { font: 800 22px/1.1 var(--sign); }
+.sheet input.plain { font: 600 18px/1.2 var(--text); }
+.denom input { font: 800 20px/1 var(--sign); }
+.denom .dv { font: 800 18px/1 var(--sign); }
+.denom .dsub { font: 700 17px/1 var(--sign); }
+.counttotal b, .lineamt { font-family: var(--sign); font-weight: 800; }
+.sheeterr { font-size: 15px; font-weight: 700; }
+.sheetbtns { gap: 8px; }
+.sheetbtns button { border: 0; padding: 14px 8px; font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.ghostbtn { background: var(--key); box-shadow: inset 0 -4px 0 var(--line); }
+.primbtn { background: var(--must); color: #fff; }
+.primbtn:disabled { background: var(--key); color: var(--dim); }
+.delbtn { background: var(--stop); color: #fff; }
+
+.motcard { padding: 14px 0 0; border: 0; border-top: 2px solid var(--ink); background: none; }
+.motnet, .pv, .heronum, .baltile b, .amtnum, .amtcur, .cashtotals .ct b, .ceamt, .repbtn .repv, .repamt, .closediff, .opendate, .ov, .paidline b, .paceline b { font-family: var(--sign); font-weight: 800; }
+.pv { font-size: 17px; }
+.pv.strong { font-size: 20px; }
+.paygrid > div, .repdayhdr { border-bottom-style: solid; }
+
+/* The names written again and again: keys, sitting above the keypad. */
+.freqchip { border: 0; background: var(--key); font: 700 16px/1 var(--sign); letter-spacing: .01em; }
+.freqchip.sel, .filterrow button.on, .wbbtn.sel, .search-filters button[aria-pressed="true"], .sp-status.is-on { border: 0; background: var(--ink); color: #fff; box-shadow: none; }
+.filterrow button, .wbbtn, .search-filters button, .search-more, .billphoto-button, .aimbtn { border: 0; background: var(--key); color: var(--ink); font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+/* A dealer's line takes the second highlighter, as it does in the book. */
+.wbbtn.dealerbtn.sel { background: #f7982d; color: var(--ink); }
+.histchip { border: 0; background: var(--key); }
+
+/* The figures of the day. No cards: a rule above each, the figure large. */
+.hero, .hero.green, .hero.gold, .hero.onlinehero { border: 0; border-top: 2px solid var(--ink); background: none; }
+.herolabel, .herofoot { font: 700 13px/1.1 var(--sign); letter-spacing: .1em; }
+.heronum { letter-spacing: 0; }
+.hero.onlinehero .heronum { display: inline-block; padding: 0 .14em; color: var(--ink); box-shadow: inset 0 -.42em 0 var(--pe-hi); }
+.herodelta, .herodelta.up, .herodelta.down, .herodelta.flat { padding-inline: 0; background: none; font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.weekcol span { font: 700 12px/1 var(--sign); }
+.hs i, .ov i { border-radius: 0; }
+.hs.online i, .ov.online i, .splitbar .sp.online, .splitkeys .dot.online { background: var(--pe-hi); box-shadow: inset 0 0 0 1px #8a6d00; }
+/* The one figure a cashier checks all day: the one panel that is filled. */
+.hero.drawer { padding-inline: 12px; border: 0; background: var(--safe); color: #fff; }
+.hero.drawer .herolabel, .hero.drawer .herofoot, .drawerrow, .herofoot { opacity: 1; }
+.baltile, .hero.gold .baltile, .cashtotals .ct, .repbtn, .chart, .saved-counts { border: 0; background: var(--key); }
+.baltile.cash b, .cashtotals .ct b.in, .ceamt.in, .repbtn.in .repv, .repdayhdr .in, .repamt.in, .cashsub .in, .closediff.ok { color: var(--safe); }
+/* Online: black print over the highlighter. */
+.baltile.online b, .cashtotals .ct b.on { color: var(--ink); box-shadow: inset 0 -.42em 0 var(--pe-hi); }
+.balfield { border: 2px solid var(--ink); background: #fff; }
+.balfield.cash { box-shadow: inset 0 -6px 0 var(--safe); }
+.balfield.online { box-shadow: inset 0 -6px 0 var(--pe-hi); }
+.balfield > span, .balfield.online > span { font: 700 13px/1 var(--sign); color: var(--dim); }
+.balfield input { font-family: var(--sign); }
+.assistbtn, .openx, .cebtns button { border: 0; background: var(--key); }
+
+.openrow { padding: 8px 0; border: 0; border-bottom: 1px solid var(--line); background: none; }
+.openrow.sel { padding-left: 10px; box-shadow: inset 4px 0 0 var(--ink); }
+.opendate { font-size: 17px; }
+.ov { font-size: 17px; }
+.ov.online { color: var(--ink); }
+
+/* The amount is a readout in a field; the pad under it types it. */
+.amtshow { border: 2px solid var(--ink); background: #fff; }
+.amtshow.live { border-color: var(--ink); box-shadow: inset 0 -4px 0 var(--ink); }
+.tickbar { border: 0; background: var(--safe); color: #fff; }
+.tickbar:disabled { border: 0; background: var(--key); color: var(--dim); }
+.padkeys { gap: 4px; }
+.padkey { border: 0; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 700 26px/1 var(--sign); }
+.padkey:active { transform: translateY(2px); background: var(--key); }
+.dirrow, .cashtotals, .repbtns, .baltiles { gap: 4px; }
+.dirbtn, .modebtn { border: 0; background: var(--key); color: var(--ink); font: 800 18px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.dirbtn.in.sel, .modebtn.cash.sel { background: var(--safe); color: #fff; }
+.dirbtn.out.sel { background: var(--stop); color: #fff; }
+.modebtn.online.sel { background: var(--pe-hi); color: var(--ink); }
+
+.cerow { border: 0; border-left: 4px solid var(--line); border-bottom: 1px solid var(--line); background: none; }
+.cerow.in { border-left-color: var(--safe); }
+.cerow.out { border-left-color: var(--stop); }
+.ceamt { font-size: 19px; }
+.cemeta, .repbtn .repn, .cashsub, .sheetnote, .search-summary { font-size: 14px; }
+.repbtn .repk { font: 700 13px/1 var(--sign); }
+.repbtn.in.sel, .repbtn.out.sel { border: 0; background: var(--ink); }
+.repbtn.sel .repk, .repbtn.sel .repn, .repbtn.in.sel .repv, .repbtn.out.sel .repv { color: #fff; }
+.repday { padding: 8px 0; border: 0; border-top: 2px solid var(--ink); background: none; }
+.reprow { font-size: 15px; }
+.modebadge { border: 0; background: var(--key); color: var(--ink); font: 700 12px/1.3 var(--sign); }
+.modebadge.online { background: var(--pe-hi); color: var(--ink); }
+.offbox { padding: 4px 0 4px 14px; border: 0; background: none; box-shadow: inset 6px 0 0 var(--stop); }
+
+/* Analytics: money in is green, out red, online the highlighter. */
+.chbar, .splitbar .sp.cash, .splitkeys .dot.cash { background: var(--safe); }
+.chbar.out { background: var(--stop); opacity: 1; }
+.pacebar { background: var(--key); }
+.pacebar .pf { background: var(--wait); box-shadow: inset 0 0 0 1px #8a6d00; }
+.pacebar .pf.ahead { background: var(--safe); box-shadow: none; }
+.chaxis, .chnote, .pacefoot { font-size: 13px; }
+
+.search-heading h2 { font: 800 24px/1.1 var(--sign); text-transform: uppercase; }
+
+.wrap input:focus, .wrap select:focus, .modal input:focus, .modal select:focus { outline: 3px solid var(--ink); outline-offset: 2px; }
+.page input:focus { outline-color: currentColor; }
+@media (prefers-reduced-motion: reduce) { .themebtn:active, .padkey:active { transform: none; } }

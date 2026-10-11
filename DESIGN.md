@@ -46,7 +46,8 @@ Rules:
 
 In the apps that read money (Accounts, Cashier and the like) a figure keeps the
 colours of every account book: **green is money to come, red is money to pay**.
-On figures and their labels only, never on a button or a ground. Chosen by Tony,
+On figures and their labels only (the Cashier's Received and Paid keys, and its
+drawer panel, are the one place a ground takes them). Chosen by Tony,
 11 Oct 2026.
 
 ### Attendance marks
@@ -155,6 +156,7 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Stock (the laptop panel) | `stock-web/` | Signs, 11 Oct 2026 |
 | Attendance | `attendance-web/` | Signs, 11 Oct 2026 |
 | Sort (bill sorting) | `sort-web/` | Signs, 11 Oct 2026 |
+| Cashier | `cash-web/` | Signs round the book, 11 Oct 2026: the register page stays the drawn paper page, and Online keeps its yellow highlighter |
 | Orders, and its Workshop panel | `order-web/` | Signs, 11 Oct 2026 (what it prints is unchanged) |
 | Mica Match | `mica-web/` | Signs lettering and shapes on a dark ground, 11 Oct 2026 |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |

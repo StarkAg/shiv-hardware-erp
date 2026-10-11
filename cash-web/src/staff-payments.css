@@ -6,8 +6,8 @@
 .staff-payments h3 { font-size: 14px; }
 .sp-title, .sp-person, .sp-section-title, .sp-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sp-title > div, .sp-person > div { min-width: 0; }
-.sp-title p, .sp-person p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.sp-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none; min-height: 44px; padding: 10px 14px; border: 1px solid transparent; border-radius: 9px; background: var(--brass); color: var(--brass-ink); font: inherit; font-size: 13px; line-height: 20px; font-weight: 700; cursor: pointer; transition: filter .15s, background-color .15s; }
+.sp-title p, .sp-person p { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.sp-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none; min-height: 44px; padding: 10px 14px; border: 1px solid transparent; border-radius: 0; background: var(--brass); color: var(--brass-ink); font: inherit; font-size: 13px; line-height: 20px; font-weight: 700; cursor: pointer; transition: filter .15s, background-color .15s; }
 .sp-secondary { background: var(--card2); border-color: var(--line); color: var(--fg); }
 .sp-button:hover:enabled { filter: brightness(1.07); }
 .sp-button:active:enabled { filter: brightness(.95); }
@@ -16,48 +16,47 @@
 .sp-text-button { border: none; background: none; padding: 8px 0; font: inherit; font-size: 13px; font-weight: 650; text-align: left; text-decoration: underline; text-underline-offset: 3px; color: var(--fg); cursor: pointer; min-height: 40px; }
 .sp-date { display: flex; gap: 10px; align-items: center; }
 .sp-date > button { width: 44px; padding: 0; font-size: 24px; }
-.sp-date label { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.sp-date label { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
 .sp-date input { flex: 1; min-width: 0; }
-.staff-payments input, .staff-payments select, .sp-modal input, .sp-modal select { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 9px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; color: var(--fg); color-scheme: light; }
-.dark .staff-payments input, .dark .staff-payments select, .dark .sp-modal input, .dark .sp-modal select { color-scheme: dark; }
-.sp-staff-select, .sp-modal form > label { display: grid; gap: 6px; font-size: 12px; font-weight: 650; color: var(--muted); }
-.sp-summary, .sp-balances { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid var(--line); background: var(--card2); border-radius: 12px; }
+.staff-payments input, .staff-payments select, .sp-modal input, .sp-modal select { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 9px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 0; font: inherit; font-size: 16px; color: var(--fg); color-scheme: light; }
+.sp-staff-select, .sp-modal form > label { display: grid; gap: 6px; font-size: 13px; font-weight: 650; color: var(--muted); }
+.sp-summary, .sp-balances { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid var(--line); background: var(--card2); border-radius: 0; }
 .sp-summary > div, .sp-balances > div { display: flex; flex-direction: column; gap: 6px; padding: 14px; min-width: 0; }
 .sp-summary > div + div, .sp-balances > div + div { border-left: 1px solid var(--line); }
-.sp-summary span, .sp-balances span { color: var(--muted); font-size: 12px; }
+.sp-summary span, .sp-balances span { color: var(--muted); font-size: 13px; }
 .sp-summary strong { font-size: 21px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .sp-balances strong { font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .sp-balances > div:first-child strong { color: var(--green); }
-.sp-balances small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.sp-balances small { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .sp-balances { background: transparent; }
 .sp-attendance { border-top: 1px solid var(--line); padding-top: 16px; }
 .sp-section-title { align-items: baseline; }
-.sp-section-title > span { font-size: 11px; color: var(--muted); }
+.sp-section-title > span { font-size: 13px; color: var(--muted); }
 .sp-statuses { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
-.sp-status { flex: 1 1 auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-height: 44px; color: var(--fg); background: var(--card2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.sp-status { flex: 1 1 auto; border: 1px solid var(--line); border-radius: 0; padding: 8px 12px; min-height: 44px; color: var(--fg); background: var(--card2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .sp-status.is-on { border-color: var(--brass); background: var(--brass); color: var(--brass-ink); box-shadow: inset 0 0 0 1px var(--brass); }
-.sp-day-figures { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+.sp-day-figures { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--muted); }
 .sp-day-figures b { color: var(--fg); font-variant-numeric: tabular-nums; margin-left: 3px; }
-.sp-policy { font-size: 12px; line-height: 1.6; margin: 0; color: var(--muted); }
+.sp-policy { font-size: 13px; line-height: 1.6; margin: 0; color: var(--muted); }
 .sp-pay-actions, .sp-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sp-pay-actions > button, .sp-form-actions > button { flex: 1; }
-.sp-month { padding: 14px; background: var(--card2); border-radius: 12px; }
+.sp-month { padding: 14px; background: var(--card2); border-radius: 0; }
 .sp-month > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-.sp-month span { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+.sp-month span { display: grid; gap: 3px; font-size: 13px; color: var(--muted); }
 .sp-month b { color: var(--fg); font-size: 18px; }
-.sp-month p { font-size: 12px; margin-bottom: 0; }
+.sp-month p { font-size: 13px; margin-bottom: 0; }
 .sp-history { border-top: 1px solid var(--line); padding-top: 14px; }
 .sp-history summary { cursor: pointer; min-height: 32px; font-weight: 700; font-size: 14px; }
 .sp-payment { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .sp-payment > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .sp-payment b, .sp-statement b { font-size: 13px; }
-.sp-payment span, .sp-statement span { font-size: 11px; line-height: 1.5; color: var(--muted); }
+.sp-payment span, .sp-statement span { font-size: 13px; line-height: 1.5; color: var(--muted); }
 .sp-payment.is-void { opacity: .65; }
 .sp-payment.is-void b { text-decoration: line-through; }
 .sp-statement > div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .sp-statement > div > div { display: flex; flex-direction: column; gap: 4px; }
 .sp-statement > div > div:last-child { text-align: right; }
-.sp-error, .sp-notice, .sp-pending { padding: 12px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.sp-error, .sp-notice, .sp-pending { padding: 12px; border: 1px solid var(--line); border-radius: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .sp-error { color: var(--red); border-color: var(--red); }
 .sp-notice { color: var(--green); }
 .sp-pending { border-color: var(--amber); }
@@ -68,7 +67,7 @@
 .sp-danger { color: var(--red); }
 .sp-danger-fill { background: #9f1d20; color: #fff; }
 .sp-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
-.sp-modal { width: 420px; max-width: 100%; max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; padding: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 16px 60px rgba(0,0,0,.3); }
+.sp-modal { width: 420px; max-width: 100%; max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; padding: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 0; box-shadow: 0 16px 60px rgba(0,0,0,.3); }
 .sp-modal-head { margin-bottom: 18px; }
 .sp-modal-head button { width: 40px; min-height: 40px; padding: 0; font-size: 22px; }
 .sp-modal form { display: grid; gap: 16px; }
@@ -82,13 +81,13 @@
  * time, so "who is still to be paid" meant clicking through everybody. Dense
  * on purpose: six rows should fit above the fold on the counter's laptop.
  */
-.sp-board { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); }
+.sp-board { border: 1px solid var(--line); border-radius: 0; overflow: hidden; background: var(--card); }
 .sp-board-head, .sp-row {
   display: grid;
   grid-template-columns: minmax(8rem, 1.4fr) auto minmax(5rem, .7fr) minmax(5.5rem, .8fr) minmax(5rem, .7fr) auto;
   gap: 10px; align-items: center; padding: 8px 12px;
 }
-.sp-board-head { background: var(--card2); border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.sp-board-head { background: var(--card2); border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .sp-row { border-top: 1px solid var(--line); cursor: pointer; transition: background-color .15s; }
 .sp-row:first-of-type { border-top: 0; }
 .sp-row:hover { background: var(--card2); }
@@ -96,7 +95,7 @@
 .sp-row:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
 .sp-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sp-who b { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-who small { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sp-who small { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .sp-num { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
 .sp-due { font-weight: 700; }
 .sp-adv { color: var(--red); }
@@ -105,8 +104,8 @@
    board has six of these across and words would push the figures off. */
 .sp-marks { display: flex; gap: 3px; }
 .sp-mark {
-  width: 30px; min-height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 7px;
-  background: var(--card2); color: var(--muted); font: inherit; font-size: 12px; font-weight: 700;
+  width: 30px; min-height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 0;
+  background: var(--card2); color: var(--muted); font: inherit; font-size: 13px; font-weight: 700;
   cursor: pointer; transition: background-color .15s, color .15s, border-color .15s;
 }
 .sp-mark:hover:enabled { border-color: var(--brass); color: var(--fg); }
@@ -117,7 +116,7 @@
 .sp-mark.is-on.m-H { background: var(--amber); border-color: var(--amber); color: #fff; }
 
 .sp-row-acts { display: flex; gap: 6px; justify-content: flex-end; }
-.sp-tiny { min-height: 32px; padding: 6px 10px; font-size: 12px; border-radius: 7px; }
+.sp-tiny { min-height: 32px; padding: 6px 10px; font-size: 13px; border-radius: 0; }
 .sp-detail { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 14px; }
 
 /* Narrow: the figures keep their own line rather than squeezing the name. */
@@ -126,7 +125,7 @@
   .sp-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; padding: 12px; }
   .sp-marks { grid-column: 1 / -1; }
   .sp-num { text-align: left; }
-  .sp-num::before { content: attr(data-label) ' '; color: var(--muted); font-size: 11px; }
+  .sp-num::before { content: attr(data-label) ' '; color: var(--muted); font-size: 13px; }
   .sp-row-acts { grid-column: 1 / -1; justify-content: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) { .sp-row, .sp-mark { transition: none; } }
@@ -135,4 +134,14 @@
    the full day and leave the advance where it is. */
 .sp-cut { display: flex; gap: 6px; }
 .sp-cut .sp-button { flex: 1; }
-.sp-adv small { display: block; font-size: 10px; font-weight: 600; opacity: .75; }
+.sp-adv small { display: block; font-size: 13px; font-weight: 600; opacity: .75; }
+
+/* ── Signs (DESIGN.md) ───────────────────────────────────────────────────── */
+.staff-payments h1, .staff-payments h2, .sp-modal h2 { font-family: var(--sign); font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
+.staff-payments h3 { font: 700 15px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.sp-button { border: 0; background: var(--must); color: #fff; font: 800 18px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.sp-secondary { background: var(--key); color: var(--ink); box-shadow: inset 0 -4px 0 var(--line); }
+.sp-button:hover:enabled, .sp-button:active:enabled { filter: none; }
+.staff-payments input, .staff-payments select, .sp-modal input, .sp-modal select { border: 2px solid var(--ink); background: #fff; }
+.sp-status { border: 0; background: var(--key); font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.sp-summary strong, .sp-balances strong { font-family: var(--sign); font-weight: 800; }
