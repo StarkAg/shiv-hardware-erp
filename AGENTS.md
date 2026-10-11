@@ -20,3 +20,7 @@ copy of the tool there).
   it before committing UI work.
 - Commit and push each finished piece of work. To take one file the other computer
   has: `git checkout refs/wip-others/<computer> -- <file>` (after `npm run sync`).
+- One look for every app: the "Signs" design language in `DESIGN.md` (white, black print,
+  blue = do this, green = done, yellow = wait, red = delete; Barlow lettering; one action
+  at the foot of the screen). New screens follow it; an app still in the older parchment
+  and brass look is brought over whole, not mixed. `workshop-web/` is the working copy.
