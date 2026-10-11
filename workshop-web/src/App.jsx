@@ -19,7 +19,8 @@ import { BUBBLE, SMALL, savePhotos, sized } from './offline.js'
  *
  * Every photo is saved on the phone as the app opens (src/offline.js), so a
  * thread opens at once and can be read on a site with no signal. The counter
- * can take a message out of a thread, with its delete PIN.
+ * can take a message out of a thread by holding a finger on it, with its
+ * delete PIN.
  *
  * Read like a chat app on both sides: a list of jobs with what is new on
  * each, and a thread per job, one's own photos on the right. Everything is a
@@ -191,7 +192,6 @@ const PhotosIcon = (p) => <Icon {...p} d={<><rect x="3" y="4" width="18" height=
 const SendIcon = (p) => <Icon {...p} d={<path d="M4 12l16-8-6 16-3-7z" />} />
 const CloseIcon = (p) => <Icon {...p} d={<path d="M6 6l12 12M18 6L6 18" />} />
 const PlusIcon = (p) => <Icon {...p} d={<path d="M12 5v14M5 12h14" />} />
-const TrashIcon = (p) => <Icon {...p} d={<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />} />
 const PhoneIcon = (p) => <Icon {...p} d={<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />} />
 const PersonIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>} />
 const PinIcon = (p) => <Icon {...p} d={<><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.6" /></>} />
@@ -512,6 +512,29 @@ function Thread({ job, onBack }) {
   const [pinError, setPinError] = useState('')
   const [checking, setChecking] = useState(false)
   const askDelete = (m) => { setDeleting(m); setPin(''); setPinError('') }
+  /**
+   * At the counter, holding a finger on a message (its photo or its text)
+   * for half a second asks to delete it. A finger that moves is scrolling,
+   * not holding; and the tap that ends a hold does not also open the photo.
+   */
+  const press = useRef({ timer: 0, x: 0, y: 0, held: false })
+  const holdToDelete = (m) => (SIDE !== 'shop' ? {} : {
+    onPointerDown: (e) => {
+      const p = press.current
+      clearTimeout(p.timer)
+      p.held = false
+      p.x = e.clientX
+      p.y = e.clientY
+      p.timer = setTimeout(() => { p.held = true; navigator.vibrate?.(15); askDelete(m) }, 550)
+    },
+    onPointerMove: (e) => { const p = press.current; if (Math.abs(e.clientX - p.x) > 10 || Math.abs(e.clientY - p.y) > 10) clearTimeout(p.timer) },
+    onPointerUp: () => clearTimeout(press.current.timer),
+    onPointerCancel: () => clearTimeout(press.current.timer),
+    onPointerLeave: () => clearTimeout(press.current.timer),
+    // The phone's own long-press menu (save image, copy) would come up over the question.
+    onContextMenu: (e) => e.preventDefault(),
+    onClickCapture: (e) => { if (press.current.held) { press.current.held = false; e.stopPropagation(); e.preventDefault() } },
+  })
   const confirmDelete = async () => {
     const code = pinStillGood() ? heldPin.pin : pin.trim()
     if (!code || checking) return
@@ -611,7 +634,7 @@ function Thread({ job, onBack }) {
           const m = it.m
           const mine = m.from === SIDE
           return (
-            <div key={it.key} className={`bubble ${mine ? 'right' : 'left'}`}>
+            <div key={it.key} className={`bubble ${mine ? 'right' : 'left'}${SIDE === 'shop' ? ' holdable' : ''}`} {...holdToDelete(m)}>
               {!mine && <div className="kind">{SIDE_NAME[m.from]}</div>}
               {m.photos.length > 0 && (
                 <div className={`shots n${Math.min(m.photos.length, 3)}`}>
@@ -623,10 +646,7 @@ function Thread({ job, onBack }) {
                 </div>
               )}
               {m.text && <div className="text">{m.text}</div>}
-              <div className="meta">
-                {SIDE === 'shop' && <button type="button" className="unsend" onClick={() => askDelete(m)} aria-label="Delete this message"><TrashIcon size={14} /></button>}
-                {clock(m.at)}
-              </div>
+              <div className="meta">{clock(m.at)}</div>
             </div>
           )
         })}
