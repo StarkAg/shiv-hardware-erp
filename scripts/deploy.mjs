@@ -40,7 +40,8 @@ const SHOP_PC = hostname().toLowerCase() === 'hp'
 const PANEL_SOURCES = ['src', 'public', 'index.html', 'counter.html', 'vite.config.ts', 'tailwind.config.js', 'postcss.config.js', 'package.json', 'package-lock.json', 'convex/_generated', 'tsconfig.json']
 // The desktop app's shell: what only its installer can change. Everything
 // else it shows is screens, which reach the installed app without one.
-const QUOTATION_SHELL = ['electron', 'print-server/template.mjs', 'print-server/tools', 'print-server/data/epson-card.devmode', 'electron-builder.quotation.cjs', 'build']
+const APP_SHELL = ['electron', 'print-server/template.mjs', 'print-server/tools', 'print-server/data/epson-card.devmode', 'build']
+const QUOTATION_SHELL = [...APP_SHELL, 'electron-builder.quotation.cjs']
 const RAILWAY_PROJECT = '3204a621-3a84-4ad0-9960-d9195243d081'
 const RELEASES_REPO = 'StarkAg/shiv-panel-releases'
 
@@ -67,7 +68,9 @@ const TARGETS = [
   { ...site('billshoot', 'billshoot-web', 'billshoot-web', 'shivhardware-billshoot.vercel.app', 'Bill Shoot'), optional: 'not live yet: its page model is still training' },
   { id: 'print-server', kind: 'print-server', label: 'Print server (shop PC)', paths: ['print-server'] },
   { id: 'quotation', kind: 'quotation', label: 'Shiv Counter app (shop PC)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs', 'electron-builder.quotation.cjs'] },
-  { id: 'app', kind: 'release', label: 'Shiv Hardware Panel app (counter PCs)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs'] },
+  // Its screens come to it from the panel website (electron/screens.cjs), so
+  // only a change to the shell is a reason to release an installer.
+  { id: 'app', kind: 'release', label: 'Shiv Hardware Panel app (counter PCs)', paths: APP_SHELL },
 ]
 
 // ── small helpers ──────────────────────────────────────────────────────────

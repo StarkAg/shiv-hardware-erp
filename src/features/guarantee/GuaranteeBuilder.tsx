@@ -239,12 +239,17 @@ function removeSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => voi
   })
 }
 
-/** Default from the first matched brand until staff selects a card period. */
-function cardYears(rows: SizeRow[], brandOptions: Brand[], selected: GuaranteeYears | ''): GuaranteeYears {
+/** The years a Type is known to carry, or undefined when nothing says. */
+type YearsLookup = (type: string) => GuaranteeYears | undefined
+
+/** The card's first Type, as a key: the row that sets the card's period. */
+const firstTypeKey = (rows: SizeRow[]) => brandKey(rows.find((r) => r.type.trim())?.type ?? '')
+
+/** The card's period: the one staff selected, else what its first Type carries. */
+function cardYears(rows: SizeRow[], yearsOf: YearsLookup, selected: GuaranteeYears | ''): GuaranteeYears {
   if (selected !== '') return selected
-  const first = rows.find(isRowFilled)
-  const matched = brandOptions.find((b) => b.name.toLowerCase() === first?.type.trim().toLowerCase())
-  return matched?.guaranteeYears ?? DEFAULT_YEARS
+  const first = rows.find((r) => r.type.trim())
+  return (first ? yearsOf(first.type) : undefined) ?? DEFAULT_YEARS
 }
 
 function rowsToItems(rows: SizeRow[], fallbackBrand: string, years: GuaranteeYears): GuaranteeCardItem[] {
@@ -347,8 +352,38 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const comboOptions = useComboOptions(guarantees, brandOptions)
   const hasRows = rows.some(isRowFilled)
 
-  const years1 = cardYears(rows, brandOptions, period1)
-  const years2 = cardYears(rows2, brandOptions, period2)
+  // What the Type box's list shows beside a name ("10y"): the price list's
+  // years for a brand, else the years it last went out with on a saved card.
+  const yearsOfType = useMemo<YearsLookup>(() => {
+    const known = new Map(comboOptions.types.map((t) => [brandKey(t.name), t.years]))
+    const listed = new Set(brandOptions.map((b) => brandKey(b.name)))
+    return (type) => {
+      const key = brandKey(type)
+      const years = known.get(key)
+      // 0 from the price list is a brand sold without a guarantee; 0 from a card alone says nothing.
+      return years !== undefined && (years > 0 || listed.has(key)) ? (years as GuaranteeYears) : undefined
+    }
+  }, [comboOptions, brandOptions])
+  const years1 = cardYears(rows, yearsOfType, period1)
+  const years2 = cardYears(rows2, yearsOfType, period2)
+
+  // A new Type on the card sets the period to that Type's own years: a period
+  // chosen for the last card, or for the Type typed before, does not stay on.
+  // A saved card being opened keeps the period it was saved with (see importGuarantee).
+  const typeSeen1 = useRef('')
+  const typeSeen2 = useRef('')
+  const type1 = firstTypeKey(rows)
+  const type2 = firstTypeKey(rows2)
+  useEffect(() => {
+    if (typeSeen1.current === type1) return
+    typeSeen1.current = type1
+    if (type1 && yearsOfType(type1) !== undefined) setPeriod1('')
+  }, [type1, yearsOfType])
+  useEffect(() => {
+    if (typeSeen2.current === type2) return
+    typeSeen2.current = type2
+    if (type2 && yearsOfType(type2) !== undefined) setPeriod2('')
+  }, [type2, yearsOfType])
 
   // Mint a new card number from the store sequence. Refreshing on every
   // save/print means each click becomes a permanent record (matching what
@@ -456,6 +491,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       amount: it.amount ?? '',
     }))
     setRows(imported.length ? [...imported, blankRow()] : [blankRow()])
+    // Its Type is not new to it: the period below is the card's own.
+    typeSeen1.current = firstTypeKey(imported)
     setPeriod1(g.items[0]?.guaranteeYears ?? '')
     setTermite1(g.termiteNote !== false)
   }

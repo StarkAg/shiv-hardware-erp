@@ -4,21 +4,25 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { execSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 
 const pkg = createRequire(import.meta.url)('./package.json') as { version: string }
+
+function commitSha() {
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? ''
+  if (sha) return sha
+  try {
+    return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+  } catch {
+    return ''
+  }
+}
 
 // Short commit + build time, shown beside the version so a web deploy can be
 // told apart from the last one (the package version doesn't change per deploy).
 function buildId() {
-  let sha = process.env.VERCEL_GIT_COMMIT_SHA ?? ''
-  if (!sha) {
-    try {
-      sha = execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
-    } catch {
-      sha = ''
-    }
-  }
+  const sha = commitSha()
   const stamp = new Date().toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
   })
@@ -26,9 +30,10 @@ function buildId() {
 }
 
 /**
- * build.json beside the build: when it was made. The desktop app compares it
- * to tell which copy of its screens is the newer one, the installer's or one
- * a deploy has put in since (electron/screens.cjs).
+ * build.json beside the build: when it was made, from which commit, and every
+ * file with its SHA-256. The desktop apps read it (electron/screens.cjs) to
+ * tell which copy of their screens is the newer one, and to take a newer copy
+ * from the panel website file by file, each one checked.
  */
 function buildStamp(): Plugin {
   let outDir = ''
@@ -36,7 +41,21 @@ function buildStamp(): Plugin {
     name: 'shiv-build-stamp',
     apply: 'build',
     configResolved(config) { outDir = path.resolve(config.root, config.build.outDir) },
-    closeBundle() { writeFileSync(path.join(outDir, 'build.json'), JSON.stringify({ builtAt: Date.now(), id: buildId() })) },
+    closeBundle() {
+      const files: { path: string; size: number; sha256: string }[] = []
+      const walk = (dir: string, under: string) => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const rel = under ? `${under}/${entry.name}` : entry.name
+          if (entry.isDirectory()) walk(path.join(dir, entry.name), rel)
+          else if (rel !== 'build.json') {
+            const data = readFileSync(path.join(dir, entry.name))
+            files.push({ path: rel, size: data.length, sha256: createHash('sha256').update(data).digest('hex') })
+          }
+        }
+      }
+      walk(outDir, '')
+      writeFileSync(path.join(outDir, 'build.json'), JSON.stringify({ builtAt: Date.now(), id: buildId(), commit: commitSha(), files }))
+    },
   }
 }
 

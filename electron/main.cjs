@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, shell, net } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -106,7 +106,8 @@ function createWindow() {
     })
     showScreens()
     const stop = screens.watch(app.getPath('userData'), offerNewScreens)
-    mainWindow.on('closed', stop)
+    const stopSite = watchScreensSite()
+    mainWindow.on('closed', () => { stop(); stopSite() })
   }
 }
 
@@ -131,10 +132,44 @@ function showScreens() {
   screens.prune(app.getPath('userData'), [showing.dir])
 }
 
-/** A deploy has put newer screens in: take them now, or when the app next opens. */
+// The panel website serves the same build as these screens, a minute after a push.
+const SCREENS_SITE = 'https://shiv-panel.vercel.app'
+
+/**
+ * Looks at the website for newer screens: soon after opening, then every few
+ * minutes. What it takes is named in current.json, so the watch above offers it.
+ * An installed app only: a build run from the repo shows the repo's own dist.
+ */
+function watchScreensSite() {
+  if (!app.isPackaged) return () => {}
+  let looking = false
+  const look = async () => {
+    if (looking || !showing) return
+    looking = true
+    try {
+      await screens.fetchNewer({
+        site: SCREENS_SITE,
+        userData: app.getPath('userData'),
+        have: newestScreens(),
+        refused: refusedScreens,
+        fetch: (url, init) => net.fetch(url, init),
+      })
+    } catch { /* offline, or the site is mid-deploy: the next look will do */ } finally {
+      looking = false
+    }
+  }
+  const first = setTimeout(look, 5000)
+  const every = setInterval(look, 5 * 60_000)
+  return () => { clearTimeout(first); clearInterval(every) }
+}
+
+/** Newer screens have been put in: take them now, or when the app next opens. */
 async function offerNewScreens() {
   if (askingAboutScreens || !mainWindow || mainWindow.isDestroyed() || !showing) return
-  if (newestScreens().builtAt <= showing.builtAt) return
+  const newest = newestScreens()
+  if (newest.builtAt <= showing.builtAt) return
+  // The same commit built twice (here by a deploy, and by the website) is no update.
+  if (newest.commit && newest.commit === showing.commit) return
   askingAboutScreens = true
   try {
     const { response } = await dialog.showMessageBox(mainWindow, {
