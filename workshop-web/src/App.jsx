@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useConvex, useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import { APP_NAME, ICON, OTHER, SIDE, SIDE_NAME } from './side.js'
@@ -91,6 +91,73 @@ async function upload(convex, files) {
 }
 const said = (err) => (typeof err?.data === 'string' ? err.data : err?.message) || 'Could not send. Try again.'
 
+/**
+ * The outbox: what has been sent from this phone and is still on its way.
+ *
+ * Send shows the photo in the thread at once and returns; the upload and the
+ * post happen behind it, so nobody stands on a site watching a spinner. A
+ * send that fails (no signal) stays in the thread marked Not sent and is tried
+ * again by itself when the phone is back online, or on a tap.
+ *
+ * Kept in memory: a send still on its way when the app is closed is lost, and
+ * is simply sent again.
+ */
+const outbox = { items: [], listeners: new Set(), convex: null }
+const told = () => { outbox.items = [...outbox.items]; for (const fn of outbox.listeners) fn() }
+const watch = (fn) => { outbox.listeners.add(fn); return () => outbox.listeners.delete(fn) }
+const useOutbox = () => useSyncExternalStore(watch, () => outbox.items)
+
+async function deliver(item) {
+  item.state = 'sending'
+  item.error = ''
+  told()
+  try {
+    // Photos that went up before a failed post are not sent up again.
+    item.photoIds ??= await upload(outbox.convex, item.files)
+    if (item.jobId) await outbox.convex.mutation(api.workshop.send, { jobId: item.jobId, from: SIDE, photos: item.photoIds, text: item.text || undefined })
+    else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds })
+    // The live list has it by now, so its stand-in goes.
+    discard(item)
+  } catch (err) {
+    item.state = 'failed'
+    item.error = said(err)
+    told()
+  }
+}
+/**
+ * The rest of what a thread can do (done, reopen, delete, who it is for, and
+ * marking it read) shows on this phone the moment it is tapped: the list here
+ * is changed first and the books a moment later, which then send back the
+ * same thing. If the books refuse, the list goes back to what they hold.
+ */
+const withJob = (store, jobId, change) => {
+  const jobs = store.getQuery(api.workshop.list, {})
+  if (jobs) store.setQuery(api.workshop.list, {}, jobs.flatMap((j) => (j.id !== jobId ? [j] : change(j) ?? [])))
+}
+const atOnce = {
+  seen: (store, { jobId, side }) => withJob(store, jobId, (j) => ({ ...j, [`${side}SeenAt`]: Date.now() })),
+  setStatus: (store, { jobId, status }) => withJob(store, jobId, (j) => ({ ...j, status, updatedAt: Date.now() })),
+  remove: (store, { jobId }) => withJob(store, jobId, () => null),
+  setCustomer: (store, { jobId, ledgerId, title }) => {
+    const account = ledgerId ? store.getQuery(api.workshop.customers, {})?.find((c) => c.id === ledgerId) : null
+    withJob(store, jobId, (j) => ({ ...j, ledgerId: account?.id ?? null, title: account?.name ?? title ?? '', place: account?.place ?? '', phone: account?.phone ?? '', updatedAt: Date.now() }))
+  },
+}
+
+/** Puts a reply (`jobId`) or a new order (`customer`) in the outbox and starts it on its way. */
+function post(item) {
+  const queued = { id: `out-${Date.now()}-${outbox.items.length}`, at: Date.now(), state: 'sending', error: '', ...item }
+  outbox.items.push(queued)
+  told()
+  void deliver(queued)
+}
+function discard(item) {
+  outbox.items = outbox.items.filter((x) => x !== item)
+  for (const url of item.previews) URL.revokeObjectURL(url)
+  told()
+}
+window.addEventListener('online', () => { for (const item of outbox.items) if (item.state === 'failed') void deliver(item) })
+
 const Icon = ({ d, size = 22, ...rest }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}>{d}</svg>
 )
@@ -117,6 +184,8 @@ function LiveLight() {
 }
 
 export default function App() {
+  const convex = useConvex()
+  useEffect(() => { outbox.convex = convex }, [convex])
   const live = useQuery(api.workshop.list, {})
   const [cached] = useState(kept)
   useEffect(() => { if (live) keep(live) }, [live])
@@ -144,7 +213,7 @@ export default function App() {
   return (
     <>
       <List jobs={jobs} onOpen={openJob} onNew={() => setMaking(true)} />
-      {making && <NewOrder onClose={() => setMaking(false)} onMade={(id) => { setMaking(false); openJob(id) }} />}
+      {making && <NewOrder onClose={() => setMaking(false)} />}
     </>
   )
 }
@@ -157,6 +226,8 @@ function List({ jobs, onOpen, onNew }) {
     .filter((j) => !q.trim() || `${titleOf(j)} ${j.number}`.toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) => b.updatedAt - a.updatedAt), [jobs, tab, q])
   const count = (status) => (jobs ?? []).filter((j) => j.status === status).length
+  // New orders still on their way: shown at the head of the list from the moment they are sent.
+  const sending = useOutbox().filter((item) => !item.jobId)
 
   return (
     <div className="app">
@@ -175,6 +246,19 @@ function List({ jobs, onOpen, onNew }) {
         <input type="search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <ul className="chats">
+        {tab === 'open' && sending.map((item) => (
+          <li key={item.id} className="outgoing">
+            <button type="button" onClick={() => { if (item.state === 'failed') void deliver(item) }}>
+              <span className="avatar"><img src={item.previews[0]} alt="" /></span>
+              <span className="who">
+                <b>{item.title || 'New work order'}</b>
+                <small className={item.state === 'failed' ? 'bad' : ''}>{item.state === 'failed' ? `Not sent. Tap to try again. ${item.error}` : `Sending ${item.files.length > 1 ? `${item.files.length} photos` : 'the photo'}`}</small>
+              </span>
+              {item.state === 'failed' ? null : <span className="spin dark" />}
+            </button>
+            {item.state === 'failed' && <button type="button" className="drop" onClick={() => discard(item)} aria-label="Do not send this order"><CloseIcon size={16} /></button>}
+          </li>
+        ))}
         {rows.map((job) => {
           const last = job.messages[job.messages.length - 1]
           const first = job.messages.flatMap((m) => m.photos)[0]
@@ -200,7 +284,7 @@ function List({ jobs, onOpen, onNew }) {
           )
         })}
         {!jobs && <li className="empty">Loading</li>}
-        {jobs && !rows.length && (
+        {jobs && !rows.length && !(tab === 'open' && sending.length) && (
           <li className="empty">
             {q ? 'Nothing by that name.' : tab === 'done' ? 'Nothing finished yet.'
               : SIDE === 'shop' ? 'No work orders yet. Tap New order to send the first.' : 'No work orders yet. A new one from the shop shows here by itself.'}
@@ -219,8 +303,9 @@ function usePicked() {
   const [picked, setPicked] = useState([])
   const add = (files) => setPicked((cur) => [...cur, ...[...files].filter((f) => f.type.startsWith('image/')).map((file) => ({ file, url: URL.createObjectURL(file) }))].slice(0, 10))
   const drop = (url) => setPicked((cur) => { URL.revokeObjectURL(url); return cur.filter((p) => p.url !== url) })
-  const clear = () => setPicked((cur) => { for (const p of cur) URL.revokeObjectURL(p.url); return [] })
-  return { picked, add, drop, clear }
+  /** Hands the photos on to be sent (the outbox keeps their previews) and empties the tray. */
+  const take = () => { setPicked([]); return picked }
+  return { picked, add, drop, take }
 }
 
 /** The two ways to add a photo: the camera, straight away, or ones already on the phone. */
@@ -295,45 +380,35 @@ function CustomerPicker({ value, onChange, disabled }) {
 const customerArgs = (c) => (c?.ledgerId ? { ledgerId: c.ledgerId } : c?.name?.trim() ? { title: c.name.trim() } : {})
 
 /** A new work order: its photo or photos, and who it is for. */
-function NewOrder({ onClose, onMade }) {
-  const convex = useConvex()
-  const create = useMutation(api.workshop.create)
-  const { picked, add, drop } = usePicked()
+function NewOrder({ onClose }) {
+  const { picked, add, drop, take } = usePicked()
   const [customer, setCustomer] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
   const camera = useRef(null)
   const gallery = useRef(null)
 
-  const send = async () => {
-    if (!picked.length || busy) return
-    setBusy(true)
-    setError('')
-    try {
-      const photos = await upload(convex, picked.map((p) => p.file))
-      onMade(await create({ ...customerArgs(customer), photos }))
-    } catch (err) {
-      setError(said(err))
-      setBusy(false)
-    }
+  // Sent at once: the order shows at the head of the list while it goes up behind.
+  const send = () => {
+    if (!picked.length) return
+    const photos = take()
+    post({ customer: customerArgs(customer), title: customer?.name?.trim() ?? '', files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
+    onClose()
   }
 
   return (
-    <div className="sheetback" onClick={busy ? undefined : onClose}>
+    <div className="sheetback" onClick={onClose}>
       <div className="sheet wide" role="dialog" aria-modal="true" aria-label="New work order" onClick={(e) => e.stopPropagation()}>
         <b className="sheettitle">New work order</b>
         <p>Photograph the order. It goes to the workshop as it is.</p>
         <PhotoInputs camera={camera} gallery={gallery} onFiles={add} />
         <Picked picked={picked} onDrop={drop} />
         <div className="pickrow">
-          <button type="button" className="pick" onClick={() => camera.current?.click()} disabled={busy}><CameraIcon /> Take photo</button>
-          <button type="button" className="pick" onClick={() => gallery.current?.click()} disabled={busy}><PhotosIcon /> Choose</button>
+          <button type="button" className="pick" onClick={() => camera.current?.click()}><CameraIcon /> Take photo</button>
+          <button type="button" className="pick" onClick={() => gallery.current?.click()}><PhotosIcon /> Choose</button>
         </div>
-        <CustomerPicker value={customer} onChange={setCustomer} disabled={busy} />
-        {error && <p className="error" role="alert">{error}</p>}
+        <CustomerPicker value={customer} onChange={setCustomer} />
         <div className="sheetbtns">
-          <button type="button" className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" className="solid" onClick={send} disabled={!picked.length || busy}>{busy ? 'Sending' : 'Send to workshop'}</button>
+          <button type="button" className="ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="solid" onClick={send} disabled={!picked.length}>Send to workshop</button>
         </div>
       </div>
     </div>
@@ -341,18 +416,17 @@ function NewOrder({ onClose, onMade }) {
 }
 
 function Thread({ job, onBack }) {
-  const convex = useConvex()
-  const send = useMutation(api.workshop.send)
-  const seen = useMutation(api.workshop.seen)
-  const setStatus = useMutation(api.workshop.setStatus)
-  const remove = useMutation(api.workshop.remove)
-  const setCustomer = useMutation(api.workshop.setCustomer)
+  const seen = useMutation(api.workshop.seen).withOptimisticUpdate(atOnce.seen)
+  const setStatus = useMutation(api.workshop.setStatus).withOptimisticUpdate(atOnce.setStatus)
+  const remove = useMutation(api.workshop.remove).withOptimisticUpdate(atOnce.remove)
+  const setCustomer = useMutation(api.workshop.setCustomer).withOptimisticUpdate(atOnce.setCustomer)
   // The customer being chosen in the "Customer" sheet; undefined while it is shut.
   const [choosing, setChoosing] = useState(undefined)
-  const { picked, add, drop, clear } = usePicked()
+  const { picked, add, drop, take } = usePicked()
   const [text, setText] = useState('')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // This thread's replies still on their way: shown as sent from the moment Send is tapped.
+  const outgoing = useOutbox().filter((item) => item.jobId === job.id)
   const [viewer, setViewer] = useState(null)
   const [asking, setAsking] = useState(false)
   const camera = useRef(null)
@@ -360,7 +434,7 @@ function Thread({ job, onBack }) {
   const end = useRef(null)
 
   // Like a chat: opens at the newest, and follows it.
-  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [job.messages.length, picked.length])
+  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [job.messages.length, picked.length, outgoing.length])
 
   // With the thread on screen, what the other side sent is no longer new.
   const news = newIn(job)
@@ -380,20 +454,13 @@ function Thread({ job, onBack }) {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  const post = async () => {
-    if (busy || (!picked.length && !text.trim())) return
-    setBusy(true)
+  // Sent at once: the reply shows in the thread while it goes up behind (the outbox).
+  const reply = () => {
+    if (!picked.length && !text.trim()) return
+    const photos = take()
+    post({ jobId: job.id, text: text.trim(), files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
+    setText('')
     setError('')
-    try {
-      const ids = await upload(convex, picked.map((p) => p.file))
-      await send({ jobId: job.id, from: SIDE, photos: ids, text: text.trim() || undefined })
-      clear()
-      setText('')
-    } catch (err) {
-      setError(said(err))
-    } finally {
-      setBusy(false)
-    }
   }
 
   const items = useMemo(() => {
@@ -456,7 +523,25 @@ function Thread({ job, onBack }) {
             </div>
           )
         })}
-        {waiting && <p className="hint">Visit the site, then send a photo of the measurements here.</p>}
+        {outgoing.map((item) => (
+          <div key={item.id} className={`bubble right outgoing ${item.state}`}>
+            {item.previews.length > 0 && (
+              <div className={`shots n${Math.min(item.previews.length, 3)}`}>
+                {item.previews.map((url) => <span key={url}><img src={url} alt="" /></span>)}
+              </div>
+            )}
+            {item.text && <div className="text">{item.text}</div>}
+            {item.state === 'failed' ? (
+              <div className="meta bad">
+                <button type="button" onClick={() => void deliver(item)}>Not sent. Tap to try again</button>
+                <button type="button" onClick={() => discard(item)} aria-label="Do not send this"><CloseIcon size={14} /></button>
+              </div>
+            ) : (
+              <div className="meta">Sending <span className="spin dark tiny" /></div>
+            )}
+          </div>
+        ))}
+        {waiting && !outgoing.length && <p className="hint">Visit the site, then send a photo of the measurements here.</p>}
         <div ref={end} />
       </main>
 
@@ -465,13 +550,13 @@ function Thread({ job, onBack }) {
         <Picked picked={picked} onDrop={drop} />
         {error && <p className="error" role="alert">{error}</p>}
         <div className="row">
-          <button type="button" className="tool" onClick={() => gallery.current?.click()} disabled={busy} aria-label="Choose photos from the phone"><PhotosIcon /></button>
-          <input type="text" placeholder="Write a line" value={text} maxLength={500} disabled={busy}
-            onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void post() }} />
+          <button type="button" className="tool" onClick={() => gallery.current?.click()} aria-label="Choose photos from the phone"><PhotosIcon /></button>
+          <input type="text" placeholder="Write a line" value={text} maxLength={500}
+            onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') reply() }} />
           {picked.length || text.trim() ? (
-            <button type="button" className="go" onClick={post} disabled={busy} aria-label="Send">{busy ? <span className="spin" /> : <SendIcon />}</button>
+            <button type="button" className="go" onClick={reply} aria-label="Send"><SendIcon /></button>
           ) : (
-            <button type="button" className={`go ${waiting ? 'wide' : ''}`} onClick={() => camera.current?.click()} disabled={busy} aria-label="Take a photo">
+            <button type="button" className={`go ${waiting ? 'wide' : ''}`} onClick={() => camera.current?.click()} aria-label="Take a photo">
               <CameraIcon />{waiting && ' Measurement photo'}
             </button>
           )}
