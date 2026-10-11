@@ -94,6 +94,8 @@ button.who { text-align: left; }
 .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .who b { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .who small { font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Where the customer is: small, on one line, cut short rather than wrapped. */
+.who small.addr { font-size: 13px; }
 /* Where a job stands: still to be measured, or measured. */
 .stage { font-style: normal; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px; border-radius: 6px; margin-right: 6px; }
 .stage.wait { color: var(--amber); background: rgba(180, 112, 22, .14); }

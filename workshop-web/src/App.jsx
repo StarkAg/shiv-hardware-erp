@@ -34,6 +34,18 @@ const kept = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'
 const keep = (jobs) => { try { localStorage.setItem(KEY, JSON.stringify(jobs)) } catch { /* storage full: it just opens cold */ } }
 
 const titleOf = (job) => job.title || `Work order ${job.number}`
+/**
+ * The books write a customer as "Sanjay Mahto Ji, Korambe": the name, and
+ * after the first comma where they are. The list shows the two apart, the
+ * name and under it the address on one line.
+ */
+const nameOf = (job) => titleOf(job).split(',')[0].trim()
+const addressOf = (job) => {
+  const after = titleOf(job).split(',').slice(1).join(',').replace(/\s+/g, ' ').trim()
+  // The account's own place, when it has one the name does not already say.
+  const place = String(job.place ?? '').trim()
+  return [after, place && !after.toLowerCase().includes(place.toLowerCase()) ? place : ''].filter(Boolean).join(', ')
+}
 /** What the other side has sent since this side last had the thread open. */
 const newIn = (job) => job.messages.filter((m) => m.from === OTHER && m.at > (job[`${SIDE}SeenAt`] ?? 0)).length
 /** The three places a job can stand, in the order the work goes. */
@@ -346,7 +358,8 @@ function List({ jobs, onOpen, onNew, saving }) {
               <button type="button" onClick={() => onOpen(job.id)}>
                 <span className="avatar">{first ? <Shot url={first.url} width={SMALL} alt="" loading="lazy" decoding="async" /> : titleOf(job)[0]?.toUpperCase()}</span>
                 <span className="who">
-                  <b>{titleOf(job)}</b>
+                  <b>{nameOf(job)}</b>
+                  {addressOf(job) && <small className="addr">{addressOf(job)}</small>}
                   <small><em className={`stage ${standing === 'To measure' ? 'wait' : 'ok'}`}>{standing}</em>{line}</small>
                 </span>
                 <span className="side">
