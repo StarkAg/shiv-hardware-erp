@@ -41,7 +41,7 @@ button:disabled { opacity: .5; cursor: default; }
 .app { position: relative; display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; background: var(--bg); }
 
 .top { padding: calc(env(safe-area-inset-top) + 14px) 14px 10px; flex: none; }
-.brandrow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.brandrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .brandrow img { width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
 .brand { font-weight: 800; letter-spacing: 0.01em; font-size: 20px; line-height: 1.1; }
 
@@ -57,9 +57,29 @@ button:disabled { opacity: .5; cursor: default; }
 .tabs button { flex: 1; padding: 10px 0; border-radius: 10px; font-size: 15px; font-weight: 800; color: var(--muted); }
 .tabs button.on { background: var(--brass); color: var(--brass-ink); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
 
+/* How far the saving of photos to the phone has got. */
+.saving { font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.savetext { display: flex; justify-content: space-between; gap: 10px; }
+.savebar { margin-top: 5px; height: 6px; border-radius: 3px; background: var(--card2); border: 1px solid var(--line); overflow: hidden; }
+.savebar i { display: block; height: 100%; background: var(--brass); border-radius: 3px; transition: width .3s; }
+.saving.ok { color: var(--green); }
+.saving.ok .savebar i { background: var(--green); }
+
 .searchbar { padding: 0 14px 10px; flex: none; display: flex; }
 .searchbar input { flex: 1; min-width: 0; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 16px; outline: none; }
 .searchbar input:focus { border-color: var(--brass); }
+
+/* Where the work stands: three boxes under the search, each with how many
+   jobs are there; one picked shows only those. In a thread the same three
+   say, and set, where that job stands. */
+.stages { flex: none; display: flex; gap: 8px; padding: 0 14px 10px; }
+.stages button { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 13px; font-weight: 800; color: var(--muted); }
+.stages button b { font-size: 19px; line-height: 1.1; color: var(--fg); font-variant-numeric: tabular-nums; min-height: 21px; }
+.stages button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+.stages button.on b { color: var(--brass-ink); }
+.stages.inthread { padding: 8px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
+.stages.inthread button { padding: 9px 4px; background: var(--card2); }
+.stages.inthread button.on { background: var(--brass); }
 
 /* The jobs, as chats */
 .chats { list-style: none; margin: 0 14px; padding: 0 0 84px; overflow-y: auto; flex: 1; border-radius: 16px 16px 0 0; background: var(--card); border: 1px solid var(--line); border-bottom: 0; }
@@ -91,7 +111,6 @@ button:disabled { opacity: .5; cursor: default; }
 /* The counter's own row under the header: who it is for, done, delete. */
 .actions { flex: none; display: flex; gap: 8px; padding: 8px 10px; background: var(--card); border-bottom: 1px solid var(--line); }
 .actions button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); font-size: 14px; font-weight: 800; }
-.actions .del { color: var(--red); }
 .thread { flex: 1; overflow-y: auto; padding: 8px 8px 12px; display: flex; flex-direction: column; gap: 5px; }
 .daytag { display: flex; justify-content: center; margin: 6px 0 2px; }
 .daytag span { background: var(--card2); border: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; }
@@ -107,7 +126,10 @@ button:disabled { opacity: .5; cursor: default; }
 .shots.n1 button { width: min(66vw, 320px); min-height: 120px; }
 .shots.n2 img, .shots.n3 img { aspect-ratio: 1; height: 100%; }
 .bubble .text { padding: 5px 6px 0; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
-.bubble .meta { text-align: right; font-size: 11px; color: var(--muted); padding: 2px 5px 0; font-variant-numeric: tabular-nums; }
+.bubble .meta { display: flex; justify-content: flex-end; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 2px 5px 0; font-variant-numeric: tabular-nums; }
+/* The counter's own: take this message out (asks the delete PIN). */
+.bubble .unsend { width: 26px; height: 26px; margin: -2px 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.bubble .unsend:active { color: var(--red); background: var(--card2); }
 .hint { align-self: center; max-width: 320px; margin: 12px 0 4px; padding: 9px 14px; border-radius: 12px; border: 1px dashed var(--brass); color: var(--muted); font-size: 14px; text-align: center; line-height: 1.35; }
 
 /* The foot of a thread: photos, a line of text, send. */
@@ -177,6 +199,7 @@ button:disabled { opacity: .5; cursor: default; }
 .chosen button { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); display: flex; align-items: center; justify-content: center; }
 .field { width: 100%; margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 16px; outline: none; }
 .field:focus { border-color: var(--brass); }
+.field.pin { text-align: center; font-size: 22px; letter-spacing: 6px; }
 .sheetbtns { display: flex; gap: 10px; margin-top: 18px; }
 .sheetbtns button { flex: 1; padding: 13px 0; border-radius: 12px; font-size: 16px; font-weight: 800; }
 .sheetbtns .ghost { border: 1px solid var(--line); background: var(--card2); }

@@ -13,9 +13,14 @@ import type { Id } from './_generated/dataModel'
  * new to it since it last opened the thread.
  *
  * Trusted devices only, like the panel: the shop PIN once on the phone.
+ *
+ * Nothing is taken out of a thread without the counter's delete PIN. It lives
+ * in the deployment's environment, never in source or in the app:
+ *   npx convex env set WORKSHOP_DELETE_PIN <pin>
  */
 
 const side = v.union(v.literal('shop'), v.literal('workshop'))
+const stage = v.union(v.literal('measurement'), v.literal('assemble'), v.literal('fitting'))
 const COUNTER = 'workshop-job'
 const MAX_PHOTOS = 10
 
@@ -25,6 +30,15 @@ const bare = (name: string | undefined) => String(name ?? '').replace(/^m\/s\.?\
 const clean = (text: string | undefined, max: number) => {
   const tidy = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
   return tidy || undefined
+}
+
+/** Compared to the end, whatever differs, so timing says nothing about how close a guess was. */
+function requireDeletePin(pin: string) {
+  const expected = process.env.WORKSHOP_DELETE_PIN
+  if (!expected) throw new ConvexError('No delete PIN is set on this deployment.')
+  let diff = pin.length ^ expected.length
+  for (let i = 0; i < pin.length; i++) diff |= pin.charCodeAt(i) ^ expected.charCodeAt(i % expected.length)
+  if (diff !== 0) throw new ConvexError('Wrong PIN.')
 }
 
 async function checkPhotos(ctx: MutationCtx, photos: Id<'_storage'>[]) {
@@ -52,7 +66,7 @@ export const customers = query({
   },
 })
 
-/** Every open job, and the last sixty finished, each with its photos' links. */
+/** The jobs a phone shows, newest first, each with its photos' links: the last three hundred open, and sixty finished. */
 export const list = query({
   args: {},
   handler: async (ctx) => {
@@ -60,7 +74,7 @@ export const list = query({
       .query('workshopJobs')
       .withIndex('by_status_updated', (q) => q.eq('status', 'open'))
       .order('desc')
-      .collect()
+      .take(300)
     const done = await ctx.db
       .query('workshopJobs')
       .withIndex('by_status_updated', (q) => q.eq('status', 'done'))
@@ -78,6 +92,7 @@ export const list = query({
         place: account?.place ?? '',
         phone: account?.phone ?? '',
         status: job.status,
+        stage: job.stage ?? 'measurement',
         shopSeenAt: job.shopSeenAt,
         workshopSeenAt: job.workshopSeenAt,
         createdAt: job.createdAt,
@@ -189,6 +204,16 @@ export const setCustomer = mutation({
   },
 })
 
+/** Where the work stands: measurement, then assembling, then fitting. Either side moves it. */
+export const setStage = mutation({
+  args: { jobId: v.id('workshopJobs'), stage },
+  handler: async (ctx, { jobId, stage }) => {
+    const job = await ctx.db.get(jobId)
+    if (!job) throw new ConvexError('That work order is gone.')
+    await ctx.db.patch(jobId, { stage, updatedAt: Date.now() })
+  },
+})
+
 /** Finished with, or opened again. The thread and its photographs stay. */
 export const setStatus = mutation({
   args: { jobId: v.id('workshopJobs'), status: v.union(v.literal('open'), v.literal('done')) },
@@ -199,17 +224,23 @@ export const setStatus = mutation({
   },
 })
 
-/** A job made by mistake: it and its photographs are removed for good. */
-export const remove = mutation({
-  args: { jobId: v.id('workshopJobs') },
-  handler: async (ctx, { jobId }) => {
+/**
+ * One message taken out of a thread, with its photographs, for good: the
+ * counter's to do, and only with the delete PIN. A thread left with nothing
+ * in it goes too, so a job sent by mistake is removed by removing what it said.
+ */
+export const removeMessage = mutation({
+  args: { jobId: v.id('workshopJobs'), messageId: v.string(), pin: v.string() },
+  handler: async (ctx, { jobId, messageId, pin }) => {
+    requireDeletePin(pin)
     const job = await ctx.db.get(jobId)
-    if (!job) return
-    for (const m of job.messages) {
-      for (const id of m.photos) {
-        try { await ctx.storage.delete(id) } catch { /* already gone */ }
-      }
+    const gone = job?.messages.find((m) => m.id === messageId)
+    if (!job || !gone) return
+    for (const id of gone.photos) {
+      try { await ctx.storage.delete(id) } catch { /* already gone */ }
     }
-    await ctx.db.delete(jobId)
+    const left = job.messages.filter((m) => m.id !== messageId)
+    if (left.length) await ctx.db.patch(jobId, { messages: left, updatedAt: Date.now() })
+    else await ctx.db.delete(jobId)
   },
 })

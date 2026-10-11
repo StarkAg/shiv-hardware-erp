@@ -1090,6 +1090,9 @@ export default defineSchema({
     ledgerId: v.optional(v.id('ledgers')),
     title: v.optional(v.string()),
     status: v.union(v.literal('open'), v.literal('done')),
+    // Where the work stands: to be measured on site, being put together in the
+    // workshop, or being fitted at the customer's. Absent means measurement.
+    stage: v.optional(v.union(v.literal('measurement'), v.literal('assemble'), v.literal('fitting'))),
     messages: v.array(v.object({
       id: v.string(),
       from: v.union(v.literal('shop'), v.literal('workshop')),

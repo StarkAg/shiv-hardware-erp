@@ -29,6 +29,11 @@ describe('workshop: a work order as a chat in photos', () => {
       j.messages.filter((m) => m.from !== side && m.at > (side === 'shop' ? j.shopSeenAt : j.workshopSeenAt)).length
     expect([newTo(job, 'workshop'), newTo(job, 'shop')]).toEqual([1, 0])
 
+    // A new order is at measurement, and either side moves it on.
+    expect(job.stage).toBe('measurement')
+    await t.mutation(api.workshop.setStage, { jobId: second, stage: 'fitting' })
+    expect((await t.query(api.workshop.list, {})).map((j) => [j.number, j.stage]).sort()).toEqual([[1, 'measurement'], [2, 'fitting']])
+
     // The workshop opens it, then answers with the measurements.
     await t.mutation(api.workshop.seen, { jobId: first, side: 'workshop' })
     await expect(t.mutation(api.workshop.send, { jobId: first, from: 'workshop', photos: [], text: '   ' })).rejects.toThrow('photo')
@@ -47,12 +52,27 @@ describe('workshop: a work order as a chat in photos', () => {
     expect(jobs.find((j) => j.id === first)).toMatchObject({ status: 'done' })
     expect(jobs.find((j) => j.id === first)!.messages).toHaveLength(2)
 
-    // A job made by mistake goes, and its photos with it.
-    await t.mutation(api.workshop.remove, { jobId: first })
+    // A message is taken out only with the counter's delete PIN.
+    const [sent, replied] = jobs.find((j) => j.id === first)!.messages
+    process.env.WORKSHOP_DELETE_PIN = '4321'
+    await expect(t.mutation(api.workshop.removeMessage, { jobId: first, messageId: replied.id, pin: '1234' })).rejects.toThrow('Wrong PIN')
+    await expect(t.mutation(api.workshop.removeMessage, { jobId: first, messageId: replied.id, pin: '' })).rejects.toThrow('Wrong PIN')
+    await expect(t.mutation(api.workshop.removeMessage, { jobId: first, messageId: replied.id, pin: '43210' })).rejects.toThrow('Wrong PIN')
+    expect((await t.query(api.workshop.list, {})).find((j) => j.id === first)!.messages).toHaveLength(2)
+    // With it, the message and its photo go; the rest of the thread stays.
+    await t.mutation(api.workshop.removeMessage, { jobId: first, messageId: replied.id, pin: '4321' })
+    expect((await t.query(api.workshop.list, {})).find((j) => j.id === first)!.messages.map((m) => m.id)).toEqual([sent.id])
+    expect(await t.run((ctx) => ctx.storage.getUrl(measured))).toBeNull()
+    expect(await t.run((ctx) => ctx.storage.getUrl(order))).toBeTruthy()
+    // The last message out takes the thread with it.
+    await t.mutation(api.workshop.removeMessage, { jobId: first, messageId: sent.id, pin: '4321' })
     jobs = await t.query(api.workshop.list, {})
     expect(jobs.map((j) => j.id)).toEqual([second])
     expect(await t.run((ctx) => ctx.storage.getUrl(order))).toBeNull()
-    expect(await t.run((ctx) => ctx.storage.getUrl(measured))).toBeNull()
+    // And with no PIN set on the deployment, nothing can be deleted at all.
+    delete process.env.WORKSHOP_DELETE_PIN
+    const only = jobs[0].messages[0]
+    await expect(t.mutation(api.workshop.removeMessage, { jobId: second, messageId: only.id, pin: '4321' })).rejects.toThrow('No delete PIN')
     // The next order does not take the removed one's number.
     const third = await t.mutation(api.workshop.create, { photos: [await photo()] })
     expect((await t.query(api.workshop.list, {})).find((j) => j.id === third)!.number).toBe(3)
