@@ -19,8 +19,13 @@
 // deploying the same functions again is harmless).
 //
 // Deploys what is committed and pushed: the tree must be clean and on main,
-// and commits not yet on GitHub are pushed first (the panel site deploys from
-// GitHub, and every stamp below names a commit others can see).
+// and commits not yet on GitHub are pushed first (every stamp below names a
+// commit others can see).
+//
+// Nothing deploys by being pushed. The panel site used to, on every push to
+// GitHub, and on a busy day that spent Vercel's 100 deployments a day on
+// pushes that never touched it; vercel.json turns that off, and the panel is
+// sent from here like every other site, when its own files have changed.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync, rmdirSync, cpSync, statSync, symlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -51,7 +56,7 @@ const TARGETS = [
   { id: 'cloud-api', kind: 'railway', service: 'cloud-api', upload: '.', label: 'Cloud API (Railway)', paths: ['cloud-api'] },
   { id: 'backups', kind: 'railway', service: 'backups', upload: 'backup-job', label: 'Nightly backups (Railway)', paths: ['backup-job'] },
   { id: 'bis', kind: 'railway', service: 'bis-lookup', upload: 'bis-lookup', label: 'BIS lookup (Railway)', paths: ['bis-lookup'] },
-  { id: 'panel', kind: 'vercel-git', project: 'shiv-panel', domain: 'shiv-panel.vercel.app', label: 'Panel website', paths: PANEL_SOURCES },
+  { id: 'panel', kind: 'vercel', project: 'shiv-panel', domain: 'shiv-panel.vercel.app', label: 'Panel website', paths: PANEL_SOURCES, build: 'panel' },
   { id: 'counter', kind: 'vercel', project: 'shiv-counter', domain: 'shivhardware-counter.vercel.app', label: 'Counter website', paths: PANEL_SOURCES, build: 'counter' },
   site('cash', 'cash-web', 'cash-web', 'shivhardware-cash.vercel.app', 'Cashier'),
   site('sort', 'sort-web', 'sort-web', 'shivhardware-sort.vercel.app', 'Sort (naming)'),
@@ -228,12 +233,25 @@ function dropCommittedTree() {
   if (existsSync(COMMITTED_TREE) && !existsSync(join(COMMITTED_TREE, 'node_modules'))) tidy(COMMITTED_TREE)
   try { git('worktree', 'prune') } catch { /* nothing to prune */ }
 }
-async function buildCommitted() {
+/** A clean copy of the commit, with nothing built in it. */
+function committedTree() {
   dropCommittedTree()
   git('worktree', 'add', '--detach', COMMITTED_TREE, 'HEAD')
+  return COMMITTED_TREE
+}
+async function buildCommitted() {
+  committedTree()
   symlinkSync(join(ROOT, 'node_modules'), join(COMMITTED_TREE, 'node_modules'), 'junction')
   await run('npm', ['run', 'build'], { cwd: COMMITTED_TREE })
   return COMMITTED_TREE
+}
+// The counter and the panel both use the clean copy, and sites go three at a
+// time: one of them waits for the other.
+let treeQueue = Promise.resolve()
+const withCommittedTree = (work) => {
+  const turn = treeQueue.then(work, work)
+  treeQueue = turn.catch(() => {})
+  return turn
 }
 
 async function deployVercel(t, sha) {
@@ -247,16 +265,26 @@ async function deployVercel(t, sha) {
     // working folder: what goes live is what is on GitHub, whatever somebody
     // has half-edited here.
     const out = join(ROOT, '.counter-dist')
-    const tree = await buildCommitted()
-    try {
-      tidy(out)
-      cpSync(join(tree, 'dist'), out, { recursive: true })
-      cpSync(join(out, 'counter.html'), join(out, 'index.html'))
-      await run('npx', [...deployArgs.slice(0, 2), '.counter-dist', ...deployArgs.slice(2)])
-    } finally {
-      tidy(out)
-      dropCommittedTree()
-    }
+    await withCommittedTree(async () => {
+      const tree = await buildCommitted()
+      try {
+        tidy(out)
+        cpSync(join(tree, 'dist'), out, { recursive: true })
+        cpSync(join(out, 'counter.html'), join(out, 'index.html'))
+        await run('npx', [...deployArgs.slice(0, 2), '.counter-dist', ...deployArgs.slice(2)])
+      } finally {
+        tidy(out)
+        dropCommittedTree()
+      }
+    })
+  } else if (t.build === 'panel') {
+    // The panel is built by Vercel from the commit's own files (vercel.json,
+    // .vercelignore), as it was when it deployed itself from GitHub. They are
+    // uploaded from a clean copy of the commit, not from the working folder.
+    await withCommittedTree(async () => {
+      const tree = committedTree()
+      try { await run('npx', deployArgs, { cwd: tree }) } finally { dropCommittedTree() }
+    })
   } else {
     await run('npx', deployArgs, { cwd: t.dir ? join(ROOT, t.dir) : ROOT })
   }
@@ -266,12 +294,6 @@ async function deployVercel(t, sha) {
   await vercelApi(`/v2/deployments/${d.uid}/aliases`, { method: 'POST', body: JSON.stringify({ alias: t.domain }) })
   await checkUp(t.domain)
   return `https://${t.domain}`
-}
-
-async function verifyVercelGit(t, sha) {
-  const d = await waitForDeployment(t.project, sha)
-  await checkUp(t.domain)
-  return `https://${t.domain} (${d.url})`
 }
 
 // ── Railway ────────────────────────────────────────────────────────────────
@@ -389,7 +411,7 @@ async function baselines() {
   const railwayOnce = async () => (railway ??= await railwayDeployments())
   await Promise.all(TARGETS.map(async (t) => {
     try {
-      if (t.kind === 'vercel' || t.kind === 'vercel-git') {
+      if (t.kind === 'vercel') {
         out.set(t.id, await vercelBaseline(t.project))
       } else if (t.kind === 'railway') {
         const d = (await railwayOnce()).get(t.service)
@@ -444,11 +466,11 @@ async function main() {
   const branch = git('rev-parse', '--abbrev-ref', 'HEAD')
   if (branch !== 'main') throw new Error(`on ${branch}; deploys go from main`)
   // Uncommitted edits hold back only the parts they would go into. A site
-  // uploads its own folder; the panel site and the counter are built from the
-  // commit itself (GitHub, or a clean copy), so nothing here reaches them.
+  // uploads its own folder; the panel site and the counter are built from a
+  // clean copy of the commit itself, so nothing here reaches them.
   const dirtyFiles = git('status', '--porcelain', '--untracked-files=no').split('\n')
     .map((l) => l.slice(3).trim().replace(/^"|"$/g, '')).filter(Boolean)
-  const dirtyFor = (t) => (t.kind === 'vercel-git' || t.build === 'counter' || t.kind === 'print-server'
+  const dirtyFor = (t) => (t.build === 'panel' || t.build === 'counter' || t.kind === 'print-server'
     ? []
     : dirtyFiles.filter((f) => t.paths.some((p) => f === p || f.startsWith(`${p}/`))))
   if (dirtyFiles.length) log(yellow(`(uncommitted here: ${dirtyFiles.join(', ')} — parts they would go into are held back)`))
@@ -475,8 +497,6 @@ async function main() {
     else if (t.optional && !named) action = files === null || files.length ? 'optional' : 'up to date'
     else if (named || ALL || files === null || files.length) action = 'deploy'
     else action = 'up to date'
-    // The panel site deploys itself from GitHub; for it "deploy" means push and wait.
-    if (action === 'deploy' && t.kind === 'vercel-git' && !ahead && !(files === null || files.length)) action = 'up to date'
     return { t, b, files, action }
   })
 
@@ -507,7 +527,7 @@ async function main() {
 
   // Backends first (a site may need a new function), then the sites, then the
   // apps — the desktop release last, as it adds a commit of its own.
-  const order = ['convex', 'railway', 'print-server', 'vercel', 'vercel-git', 'quotation', 'release']
+  const order = ['convex', 'railway', 'print-server', 'vercel', 'quotation', 'release']
   const results = []
   const runOne = async ({ t, b }) => {
     const started = Date.now()
@@ -516,7 +536,6 @@ async function main() {
       if (t.kind === 'convex') { await run('npm', ['run', 'deploy:convex'], { timeout: 15 * 60_000 }); where = 'Convex prod' }
       else if (t.kind === 'railway') where = await deployRailway(t, sha)
       else if (t.kind === 'vercel') where = await deployVercel(t, sha)
-      else if (t.kind === 'vercel-git') where = await verifyVercelGit(t, sha)
       else if (t.kind === 'quotation') where = await deployQuotation(b.quick)
       else if (t.kind === 'release') where = await releaseApp()
       else if (t.kind === 'print-server') where = await checkPrintServer()

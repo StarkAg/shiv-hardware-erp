@@ -12,6 +12,10 @@ copy of the tool there).
   lacks the other computer's files deletes those functions in production. The
   script refuses while anything is uncommitted, unpushed or behind here, or
   while the other computer has uncommitted work.
+- Pushing deploys nothing. The panel website used to redeploy on every push,
+  which spent Vercel's 100 deployments a day; `vercel.json` turns that off.
+  Everything goes live with `npm run deploy` (it sends only the parts that
+  changed; `-- --only panel` for the panel alone).
 - No emojis anywhere in the project: not in any app's screens, printed bills,
   generated HTML, WhatsApp text or log lines. Use an icon: lucide-react in the
   panel (`src/`), the app's own inline SVG icons in cash-web, order-web, sort-web
