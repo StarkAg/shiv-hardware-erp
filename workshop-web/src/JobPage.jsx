@@ -104,9 +104,9 @@ export default function JobPage({ job, onBack }) {
       </div>
     </>
   ) : (
-    <div className="row">
-      <button type="button" className={`btn grow ${quiet ? 'ghost' : 'solid big'}`} onClick={() => shoot(tag)}><CameraIcon /> {label}</button>
-      {gallery && <button type="button" className="btn ghost" onClick={() => fromPhone(tag)}><PhotosIcon size={20} /> From phone</button>}
+    <div className="stack">
+      <button type="button" className={`btn ${quiet ? 'ghost' : 'solid big'}`} onClick={() => shoot(tag)}><CameraIcon /> {label}</button>
+      {gallery && <button type="button" className="btn ghost" onClick={() => fromPhone(tag)}><PhotosIcon size={20} /> Choose from the phone</button>}
     </div>
   ))
 
@@ -220,7 +220,9 @@ export default function JobPage({ job, onBack }) {
             ))}
           </div>
         )}
-        <input className="field" type="tel" inputMode="tel" placeholder="Phone number" value={going.phone} maxLength={16}
+        <input className="field" type="tel" inputMode="tel" maxLength={16}
+          placeholder={contactsOf(job.phone).length ? 'Or another number' : 'Phone number'}
+          value={contactsOf(job.phone).includes(contactsOf(going.phone)[0]) ? '' : going.phone}
           onChange={(e) => setGoing({ ...going, phone: e.target.value.replace(/[^\d+\s-]/g, '') })} />
         <button type="button" className="btn solid big" onClick={sendGoAhead} disabled={!goReady}><SendIcon size={20} /> Send go-ahead</button>
       </>
@@ -252,7 +254,7 @@ export default function JobPage({ job, onBack }) {
       <main className="scroll">
         <StepTracker job={job} />
 
-        <section className={`now ${over ? 'over' : mine ? 'mine' : 'wait'}`} aria-label="What to do now">
+        <section className={`nowpanel ${over ? 'over' : mine ? 'mine' : 'wait'}`} aria-label="What to do now">
           {now}
           {error && <p className="error" role="alert">{error}</p>}
         </section>

@@ -27,7 +27,7 @@ export const STAGES = [
   { id: 'measurement', label: 'Measurement', short: 'Measure', todo: 'To measure', turn: 'workshop' },
   { id: 'quotation', label: 'Work order', short: 'Order', todo: 'Work order to make', turn: 'shop' },
   { id: 'assemble', label: 'Assemble', short: 'Assemble', todo: 'Being assembled', turn: 'workshop' },
-  { id: 'goahead', label: 'Go-ahead', short: 'Go-ahead', todo: 'Complete: go-ahead to give', turn: 'shop' },
+  { id: 'goahead', label: 'Go-ahead', short: 'Go-ahead', todo: 'Go-ahead to give', turn: 'shop' },
   { id: 'fitting', label: 'Fitting', short: 'Fitting', todo: 'To fit', turn: 'workshop' },
 ]
 /**

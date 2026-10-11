@@ -92,7 +92,7 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
                     <time className={news ? 'new' : ''}>{whenOf(job.updatedAt)}</time>
                   </span>
                   <span className="sub">
-                    <small className="addr">{addressOf(job) || `Work order ${job.number}`}</small>
+                    <small className="addr">{addressOf(job) || (job.title ? `Work order ${job.number}` : 'No customer set')}</small>
                     {news > 0 && <i className="badge">{news}</i>}
                   </span>
                   <StepTracker job={job} mini />
