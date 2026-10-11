@@ -15,7 +15,7 @@ import NewOrder from './NewOrder.jsx'
  * Two apps from this one build (src/side.js says which). The counter
  * photographs a visit order and sends it; the workshop, Gopal and Bandhu,
  * measures and photographs the figures; the counter attaches the work order;
- * the workshop assembles, counting the boards, and presses Complete; the
+ * the workshop assembles, counting the pieces, and presses Complete; the
  * counter rings the customer and gives the go-ahead; the workshop fits it.
  * No item list, no money and nothing typed as free text: the paper says it.
  *

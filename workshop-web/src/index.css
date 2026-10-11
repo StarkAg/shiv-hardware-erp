@@ -1,344 +1,354 @@
 /* Shiv Workshop and Workshop Counter.
  *
- * The shop's own look, the same parchment and brass as the accounts and
- * attendance apps. Two screens: the jobs as cards, and one job as a page built
- * around its steps. Used on site, one-handed, often in the sun: big type, and
- * nothing to tap smaller than a thumb.
+ * Read like the signs on a factory floor, by people who use it every day:
+ * white ground, black print, and three colours that mean one thing each.
  *
- * Colour means one thing each: green is done, brass is the step in hand and
- * the button that does it, amber is "waiting on you", grey is still to come,
- * red is delete and nothing else.
+ *   blue    what you must do: the step that is yours, the button that does it
+ *   green   done: a finished step, and the button that finishes one
+ *   yellow  wait: the step is with the other side
+ *   red     delete, and nothing else
+ *
+ * Two shapes say the same without the colour: a circle is "do this", a square
+ * is a state. Nothing is rounded otherwise. The lettering is Barlow, the free
+ * relative of the DIN lettering on such signs: condensed for names, labels and
+ * buttons, semi-condensed for everything read as a line.
+ *
+ * Two screens: the jobs as rows, and one job as a page built around its steps,
+ * with the one action always at the foot of the screen, under the thumb.
+ * There is no dark mode on purpose: a sign is white, and it is read in the sun.
  */
+@font-face { font-family: "Barlow Condensed"; font-weight: 600; font-display: swap; src: url("./fonts/barlow-condensed-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 700; font-display: swap; src: url("./fonts/barlow-condensed-700.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 800; font-display: swap; src: url("./fonts/barlow-condensed-800.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 500; font-display: swap; src: url("./fonts/barlow-semi-condensed-500.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 600; font-display: swap; src: url("./fonts/barlow-semi-condensed-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 700; font-display: swap; src: url("./fonts/barlow-semi-condensed-700.woff2") format("woff2"); }
+/* What stands in until the lettering arrives, cut to the same widths so nothing jumps. */
+@font-face { font-family: "Barlow Condensed Fallback"; src: local("Arial"), local("Liberation Sans"), local("Arimo"), local("Helvetica"); size-adjust: 78.14%; ascent-override: 127.98%; descent-override: 25.6%; line-gap-override: 0%; }
+@font-face { font-family: "Barlow Semi Condensed Fallback"; src: local("Arial"), local("Liberation Sans"), local("Arimo"), local("Helvetica"); size-adjust: 84.39%; ascent-override: 118.49%; descent-override: 23.7%; line-gap-override: 0%; }
+
 :root {
-  --bg: #e8e5df;          /* warm parchment */
-  --card: #f3f0ea;
-  --card2: #ede9e1;
-  --fg: #1c1917;
-  --muted: #78716c;
-  --line: rgba(28, 25, 23, 0.12);
-  --brass: #b9924b;
-  --brass-ink: #201804;
-  --brass-tint: rgba(185, 146, 75, 0.16);
-  --red: #9f1d20;
-  --green: #1a7a4a;
-  --green-tint: rgba(26, 122, 74, 0.12);
-  --amber: #b47016;
-  --amber-tint: rgba(180, 112, 22, 0.14);
-  --lift: 0 1px 2px rgba(28, 25, 23, 0.06), 0 2px 8px rgba(28, 25, 23, 0.05);
-  --r: 16px;              /* a card's corner */
-  --r-in: 12px;           /* a button's, a field's */
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12110f;
-    --card: #1a1815;
-    --card2: #211e1a;
-    --fg: #eae7e1;
-    --muted: #a8a29e;
-    --line: rgba(255, 255, 255, 0.10);
-    --brass: #c9a45c;
-    --brass-ink: #1a1204;
-    --brass-tint: rgba(201, 164, 92, 0.16);
-    --red: #d3595c;
-    --green: #4fbf85;
-    --green-tint: rgba(79, 191, 133, 0.14);
-    --amber: #d9a441;
-    --amber-tint: rgba(217, 164, 65, 0.15);
-    --lift: 0 1px 2px rgba(0, 0, 0, 0.3);
-  }
+  --wall: #ffffff;
+  --ink: #0e1318;
+  --dim: #4c5660;         /* small print: 7.4 to 1 on the wall */
+  --line: #c9cfd5;
+  --key: #edf0f3;         /* a quiet button */
+  --must: #0054b4;        /* blue: do this */
+  --safe: #007a3d;        /* green: done */
+  --wait: #ffcc00;        /* yellow: with the other side */
+  --stop: #b3202a;        /* red: delete */
+  --sign: "Barlow Condensed", "Barlow Condensed Fallback", "Arial Narrow", sans-serif;
+  --text: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", system-ui, sans-serif;
+  color-scheme: light;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body, #root { height: 100%; margin: 0; }
-body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--fg); background: var(--bg); font-size: 17px; line-height: 1.3; }
-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+html { background: #e3e6e9; }
+body { font: 500 16px/1.3 var(--text); color: var(--ink); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; border-radius: 0; cursor: pointer; }
 button:disabled { opacity: .45; cursor: default; }
 p { margin: 0; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.nowpanel.mine :focus-visible, .nowpanel.over :focus-visible { outline-color: #fff; }
+/* On a white plate inside a panel the ring is black again, and inside a field it is drawn within it. */
+.nowpanel[class] .counter :focus-visible, .nowpanel[class] .visit :focus-visible { outline-color: var(--ink); }
+.nowpanel[class] input:focus, .nowpanel[class] input:focus-visible { outline: 3px solid var(--ink); outline-offset: -5px; }
 
-.app { position: relative; display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; background: var(--bg); }
+.app { position: relative; display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; background: var(--wall); }
+
+/* ── buttons ───────────────────────────────────────────────────────────────── */
+/* A key does one thing. Blue does the step, green finishes it, grey is the rest. */
+.key { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; padding: 0 16px; font: 800 22px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; text-decoration: none; white-space: nowrap; }
+.key.must { background: var(--must); color: #fff; }
+.key.safe { background: var(--safe); color: #fff; }
+.key.ghost { background: var(--key); color: var(--ink); box-shadow: inset 0 -4px 0 var(--line); }
+.nowpanel .key.ghost { background: #fff; }
+.key:active:not(:disabled) { transform: translateY(2px); }
+/* The one action of a screen, always at its foot, under the thumb. */
+.dock { flex: none; padding: 10px 12px calc(env(safe-area-inset-bottom) + 12px); background: var(--wall); border-top: 4px solid var(--ink); }
+.dock .key { width: 100%; min-height: 64px; font-size: 26px; }
+/* A round blue button is a thing to do at once: ring this number. */
+.round { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--must); color: #fff; display: flex; align-items: center; justify-content: center; }
 
 /* ── the list ──────────────────────────────────────────────────────────────── */
-.top { flex: none; padding: calc(env(safe-area-inset-top) + 14px) 14px 10px; }
-.brandrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.brandrow img { width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
-.brand { font-weight: 800; letter-spacing: 0.01em; font-size: 20px; line-height: 1.1; }
+.top { flex: none; padding: calc(env(safe-area-inset-top) + 10px) 12px 8px; border-bottom: 4px solid var(--ink); }
+.brandrow { display: flex; align-items: center; gap: 10px; }
+.brandrow img { width: 40px; height: 40px; border-radius: 9px; }
+.brand { font: 800 27px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; }
 
 /* Whether what is on screen is the live list. */
-.live { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-.live i { width: 9px; height: 9px; border-radius: 50%; background: var(--amber); }
-.live.on { color: var(--green); }
-.live.on i { background: var(--green); animation: pulse 2.4s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(26, 122, 74, .45); } 50% { box-shadow: 0 0 0 6px rgba(26, 122, 74, 0); } }
-@media (prefers-reduced-motion: reduce) { .live.on i { animation: none; } }
+.live { margin-left: auto; display: flex; align-items: center; gap: 6px; font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.live i { width: 12px; height: 12px; background: var(--wait); box-shadow: inset 0 0 0 1px #8a6d00; }
+.live.on { color: var(--safe); }
+.live.on i { background: var(--safe); box-shadow: none; }
 
 /* How far the saving of photos to the phone has got. */
-.saving { font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.saving { margin-top: 8px; font-size: 14px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
 .savetext { display: flex; justify-content: space-between; gap: 10px; }
-.savebar { margin-top: 5px; height: 6px; border-radius: 3px; background: var(--card2); border: 1px solid var(--line); overflow: hidden; }
-.savebar i { display: block; height: 100%; background: var(--brass); border-radius: 3px; transition: width .3s; }
-.saving.ok { color: var(--green); }
-.saving.ok .savebar i { background: var(--green); }
+.savebar { margin-top: 4px; height: 6px; background: var(--key); overflow: hidden; }
+.savebar i { display: block; height: 100%; background: var(--must); transition: width .3s; }
+.saving.ok { color: var(--safe); }
+.saving.ok .savebar { display: none; }
 
-.searchbar { flex: none; display: flex; padding: 0 14px 10px; }
-.searchbar input { flex: 1; min-width: 0; padding: 11px 14px; border-radius: var(--r-in); border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 16px; outline: none; }
-.searchbar input:focus { border-color: var(--brass); }
+.searchbar { flex: none; display: flex; padding: 10px 12px 8px; }
+.searchbar input { flex: 1; min-width: 0; min-height: 48px; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); font: 500 18px/1.2 var(--text); outline-offset: 2px; }
 
-/* Which jobs to show: a row of small boxes under the search, an icon and a
-   word each, all in one line with nothing to scroll. The count sits on the
-   box's corner. To do is the one a phone opens on. */
-.filters { flex: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; padding: 0 14px 10px; }
-.filters button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 7px 1px 5px; border-radius: 11px; border: 1px solid var(--line); background: var(--card); color: var(--muted); }
-.filters button span { max-width: 100%; font-size: 9.5px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; white-space: nowrap; overflow: hidden; }
-.filters button b { position: absolute; top: -5px; right: -3px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--fg); color: var(--bg); font-size: 10px; line-height: 17px; text-align: center; font-variant-numeric: tabular-nums; }
-.filters button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
-.filters button.todo b { background: var(--green); color: #fff; }
+/* Which jobs to show: a row of boxes under the search, an icon and a word
+   each, all in one line with nothing to scroll. The count sits on the box's
+   corner. The box that is on is the black one. To do is the one a phone opens on. */
+.filters { flex: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 6px 12px 10px; }
+.filters button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 52px; padding: 6px 0 4px; background: var(--key); color: var(--ink); }
+.filters button span { max-width: 100%; font: 700 12px/1.1 var(--sign); text-transform: uppercase; white-space: nowrap; overflow: hidden; }
+.filters button b { position: absolute; top: -6px; right: -2px; min-width: 19px; height: 19px; padding: 0 4px; background: var(--dim); color: #fff; font: 700 13px/19px var(--sign); text-align: center; font-variant-numeric: tabular-nums; }
+.filters button.on { background: var(--ink); color: #fff; }
+.filters button.todo b { background: var(--must); border-radius: 10px; }
+@media (max-width: 359px) { .filters { gap: 3px; padding-inline: 8px; } .filters button span { font-size: 11px; letter-spacing: -.01em; } }
 
-/* The jobs, a card each. */
-.jobs { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 2px 14px 96px; display: flex; flex-direction: column; gap: 9px; }
-.card { flex: none; position: relative; display: flex; align-items: stretch; border-radius: var(--r); border: 1px solid var(--line); background: var(--card); box-shadow: var(--lift); overflow: hidden; }
-/* Waiting on this side: marked down its edge, so the work in hand stands out of the list. */
-.card.mine { border-left: 4px solid var(--amber); }
-.card.over { opacity: .72; }
-.card .open { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 12px; text-align: left; }
-.card .open:active { background: var(--card2); }
-.thumb { flex: none; width: 58px; height: 58px; border-radius: var(--r-in); overflow: hidden; background: var(--card2); border: 1px solid var(--line); color: var(--brass); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; }
-.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.card .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* The jobs, a row each. */
+.jobs { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0 12px 16px; }
+.card { position: relative; display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+.card .open { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; text-align: left; }
+.card .open:active { background: var(--key); }
+/* Where the job stands, as a sign: a blue circle is yours to do, a yellow
+   square is with the other side, a green square is finished. */
+.sign { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font: 800 25px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.sign.mine { background: var(--must); color: #fff; border-radius: 50%; }
+.sign.wait { background: var(--wait); color: var(--ink); }
+.sign.done { background: var(--safe); color: #fff; }
+.card .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .card .head, .card .sub, .card .foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.card .head b { flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .head time { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.card .head time.new { color: var(--green); font-weight: 800; }
-/* Where the customer is: small, on one line, cut short rather than wrapped. */
-.card .addr { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card small.bad { font-size: 13px; color: var(--red); font-weight: 700; }
+.card .head b { flex: 1; min-width: 0; font: 700 22px/1.15 var(--sign); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .head time { flex: none; font-size: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.card .head time.new { color: var(--must); font-weight: 700; }
+/* Where the customer is: on one line, cut short rather than wrapped. */
+.card .addr { flex: 1; min-width: 0; font-size: 15px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card small.bad { font-size: 15px; color: var(--stop); font-weight: 700; }
 /* How many the other side has sent since this job was last open. */
-.badge { flex: none; font-style: normal; min-width: 21px; height: 21px; padding: 0 6px; border-radius: 11px; background: var(--green); color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
-.card .foot { margin-top: 1px; }
-.card .last { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .foot .boards { flex: 1; }
-/* What is waiting: in amber when it waits on this side. */
-.chip { flex: none; font-style: normal; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 3px 8px; border-radius: 7px; white-space: nowrap; }
-.chip.wait { color: var(--amber); background: var(--amber-tint); }
-.chip.idle { color: var(--muted); background: var(--card2); }
-.chip.done { color: var(--green); background: var(--green-tint); }
+.badge { flex: none; font-style: normal; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--must); color: #fff; font: 700 14px/22px var(--sign); text-align: center; }
+.card .foot { margin-top: 2px; }
+.card .last { flex: 1; min-width: 0; font-size: 15px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .foot .pieces { flex: 1; }
+/* What is waiting, in words: in blue when it waits on this side. */
+.chip { flex: none; font: 700 15px/1.2 var(--sign); font-style: normal; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.chip.mine { color: var(--must); }
+.chip.idle { color: var(--dim); }
+.chip.done { color: var(--safe); }
+.card.over .head b { color: var(--dim); }
+/* The first photo of the job, small, at the end of its row. */
+.thumb { flex: none; width: 44px; height: 58px; overflow: hidden; background: var(--key); box-shadow: inset 0 0 0 2px var(--ink); padding: 2px; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* A new order still on its way. */
 .card.outgoing .open { align-items: center; }
 .card.outgoing.sending { opacity: .8; }
-.card .drop { flex: none; align-self: center; width: 36px; height: 36px; margin-right: 10px; border-radius: 50%; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--red); }
-.jobs .empty { padding: 44px 24px; text-align: center; color: var(--muted); line-height: 1.4; }
-
-.fab { position: absolute; right: 20px; bottom: calc(env(safe-area-inset-bottom) + 18px); display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); font-size: 16px; font-weight: 800; box-shadow: 0 6px 18px rgba(0,0,0,.28); }
+.card .drop { flex: none; align-self: center; width: 44px; height: 44px; background: var(--key); display: flex; align-items: center; justify-content: center; color: var(--stop); }
+.jobs .empty { padding: 44px 24px; text-align: center; color: var(--dim); line-height: 1.4; border: 0; }
 
 /* ── where a job stands ────────────────────────────────────────────────────── */
-/* On a card: five dots joined by a line. Done, the one in hand, still to come. */
-.minitrack { display: flex; align-items: center; gap: 0; height: 12px; }
-.minitrack i { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); margin-right: 22px; }
-.minitrack i:last-child { margin-right: 0; }
-.minitrack i:not(:last-child)::after { content: ''; position: absolute; top: 2px; left: 8px; width: 22px; height: 2px; background: var(--line); }
-.minitrack i.done { border-color: var(--green); background: var(--green); }
-.minitrack i.done:not(:last-child)::after { background: var(--green); }
-.minitrack i.now { border-color: var(--brass); background: var(--brass); box-shadow: 0 0 0 3px var(--brass-tint); }
+/* In a row of the list: five bars. Done, the one in hand, still to come. */
+.minitrack { display: grid; grid-template-columns: repeat(5, 26px); gap: 3px; height: 6px; margin: 3px 0 1px; }
+.minitrack i { background: var(--line); }
+.minitrack i.done { background: var(--safe); }
+.minitrack i.now.mine { background: var(--must); }
+.minitrack i.now.wait { background: var(--wait); box-shadow: inset 0 0 0 1px #8a6d00; }
 
-/* On a job's page: the five steps, numbered and named. */
-.tracker { list-style: none; margin: 0; padding: 14px 6px 4px; display: flex; }
-.tracker li { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.tracker li:not(:first-child)::before { content: ''; position: absolute; top: 14px; right: 50%; width: 100%; height: 3px; background: var(--line); }
-.tracker li.done::before, .tracker li.now::before { background: var(--green); }
-.tracker .dot { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--bg); color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.tracker .word { max-width: 100%; font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tracker li.done .dot { border-color: var(--green); background: var(--green); color: #fff; }
-.tracker li.done .word { color: var(--green); }
-.tracker li.now .dot { border-color: var(--brass); background: var(--brass); color: var(--brass-ink); box-shadow: 0 0 0 4px var(--brass-tint); }
-.tracker li.now .word { color: var(--fg); font-weight: 800; }
+/* On a job's page: the five steps, a sign each. */
+.tracker { flex: none; list-style: none; margin: 0; padding: 12px 0 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.tracker li { min-width: 0; text-align: center; }
+.tracker .dot { display: flex; align-items: center; justify-content: center; height: 44px; font: 800 26px/1 var(--sign); font-variant-numeric: tabular-nums; box-shadow: inset 0 0 0 2px var(--line); color: var(--dim); }
+.tracker .word { display: block; margin-top: 4px; font: 600 14px/1.1 var(--sign); text-transform: uppercase; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tracker li.done .dot { background: var(--safe); color: #fff; box-shadow: none; }
+.tracker li.now.mine .dot { background: var(--must); color: #fff; border-radius: 22px; box-shadow: none; }
+.tracker li.now.wait .dot { background: var(--wait); color: var(--ink); box-shadow: none; }
+.tracker li.done .word, .tracker li.now .word { color: var(--ink); font-weight: 700; }
 
 /* ── a job's page ──────────────────────────────────────────────────────────── */
-.pagehead { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 12px) 12px 12px; background: var(--card); border-bottom: 1px solid var(--line); }
-.pagehead .back, .pagehead .call { flex: none; width: 44px; height: 44px; border-radius: var(--r-in); border: 1px solid var(--line); background: var(--card2); display: flex; align-items: center; justify-content: center; }
-.pagehead .call { color: var(--brass); }
-.pagehead .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.pagehead .who b { font-size: 19px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pagehead .who small { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pagehead { flex: none; display: flex; align-items: center; gap: 4px; padding: calc(env(safe-area-inset-top) + 8px) 12px 10px 2px; border-bottom: 4px solid var(--ink); }
+.pagehead .back { flex: none; width: 48px; height: 52px; display: flex; align-items: center; justify-content: center; }
+.pagehead .round { width: 52px; height: 52px; }
+.pagehead .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pagehead .who b { font: 700 28px/1.15 var(--sign); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Where the site is, in full: it is where the mechanic has to go. */
+.pagehead .who small { font-size: 15px; line-height: 1.25; color: var(--dim); overflow-wrap: anywhere; }
 .page .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px calc(env(safe-area-inset-bottom) + 24px); display: flex; flex-direction: column; gap: 12px; }
 
-/* The one thing to do now. Brass when it is this side's; quiet when it waits on the other. */
-.nowpanel { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--card); box-shadow: var(--lift); }
-.nowpanel.mine { border: 2px solid var(--brass); background: linear-gradient(var(--brass-tint), var(--brass-tint)), var(--card); }
-.nowpanel.over { border-color: var(--green); background: linear-gradient(var(--green-tint), var(--green-tint)), var(--card); }
-.nowhead { display: flex; align-items: flex-start; gap: 12px; }
-.nowhead .num { flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--card2); border: 1px solid var(--line); color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; }
-.nowpanel.mine .nowhead .num { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
-.nowhead .num.done { background: var(--green); border-color: var(--green); color: #fff; }
-.nowhead > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.nowhead small { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.nowpanel.mine .nowhead small { color: var(--amber); }
-.nowhead b { font-size: 22px; line-height: 1.15; }
-.nowhead p { font-size: 15px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+/* The step in hand, as the sign it is: blue when it is this side's to do,
+   yellow when it is with the other side, green once the job is finished. */
+.nowpanel { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.nowpanel.mine { background: var(--must); color: #fff; }
+.nowpanel.wait { background: var(--wait); color: var(--ink); }
+.nowpanel.over { background: var(--safe); color: #fff; }
+.nowhead { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 10px; }
+.nowhead b { min-width: 0; font: 800 34px/1 var(--sign); text-transform: uppercase; }
+.nowhead small { font: 700 16px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.nowhead p { grid-column: 1 / -1; font-size: 16px; line-height: 1.3; }
 
-/* Buttons: the one that does the step is solid brass; the rest are quiet. */
-.row { display: flex; align-items: stretch; gap: 8px; }
-.stack { display: flex; flex-direction: column; gap: 8px; }
-.btn { flex: none; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 16px; border-radius: var(--r-in); font-size: 16px; font-weight: 800; text-decoration: none; white-space: nowrap; }
-.btn.grow { flex: 1; min-width: 0; }
-.btn.big { min-height: 56px; font-size: 17px; }
-.btn.square { width: 52px; padding: 0; }
-.btn.solid { background: var(--brass); color: var(--brass-ink); }
-.btn.good { background: var(--green); color: #fff; }
-.btn.ghost { border: 1px solid var(--line); background: var(--card2); color: var(--fg); }
-.btn:active:not(:disabled) { filter: brightness(.95); }
+/* The count: minus, the figure, plus, on a white plate. */
+.counter { display: grid; grid-template-columns: 76px 1fr 76px; align-items: center; padding: 8px; background: #fff; color: var(--ink); }
+.counter.read { grid-template-columns: 1fr; padding: 10px 8px; }
+.counter button { height: 76px; background: var(--key); font: 700 46px/1 var(--sign); box-shadow: inset 0 -4px 0 var(--line); }
+.counter button.more { background: var(--ink); color: #fff; box-shadow: none; }
+.counter button:active:not(:disabled) { transform: translateY(2px); }
+.counter .figure { display: block; text-align: center; font-variant-numeric: tabular-nums; }
+.counter .figure b { display: block; font: 800 72px/.95 var(--sign); }
+.counter .figure b small { font-size: 36px; font-weight: 700; color: var(--dim); }
+.counter .figure > small { display: block; font: 700 15px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
 
-/* The work status: minus, the figure, plus. */
-.tally { display: flex; align-items: center; gap: 12px; }
-.tally .step { flex: none; width: 64px; min-height: 64px; padding: 0; font-size: 32px; line-height: 1; border-radius: var(--r); }
-.tally .figure { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; font-variant-numeric: tabular-nums; }
-.tally .figure b { font-size: 40px; line-height: 1; }
-.tally .figure small { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 3px; }
-
-/* A question with its answer: the boards to make, when to visit, whom to call. */
-.ask { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.ask input, .field { width: 100%; padding: 12px 14px; border-radius: var(--r-in); border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; font-size: 17px; font-weight: 400; letter-spacing: 0; text-transform: none; outline: none; }
-.ask input:focus, .field:focus { border-color: var(--brass); }
+/* A question with its answer: the pieces to make, when to visit, whom to call. */
+.ask { display: flex; flex-direction: column; gap: 6px; font: 700 16px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.ask input, .field { width: 100%; min-height: 52px; padding: 10px 12px; border: 2px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); font: 600 19px/1.2 var(--text); letter-spacing: 0; text-transform: none; }
 .ask.inline { flex-direction: row; align-items: center; justify-content: space-between; }
-.ask.inline input { width: 104px; text-align: center; font-size: 20px; font-weight: 800; }
+.ask.inline input { width: 104px; text-align: center; font: 800 26px/1 var(--sign); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chips button { padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card2); font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.chips button.on { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+.chips button { min-height: 48px; padding: 0 14px; box-shadow: inset 0 0 0 2px currentColor; font: 700 21px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.chips button.on { background: #fff; color: var(--ink); box-shadow: none; }
 /* When to go and whom to ring, once the go-ahead is given. */
-.visit { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-in); background: var(--bg); border: 1px solid var(--line); }
+.visit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; background: #fff; color: var(--ink); }
 .visit span { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
-.visit b { font-size: 17px; }
-.visit .btn { min-height: 42px; padding: 0 12px; font-size: 15px; color: var(--brass); }
+.visit b { font: 700 23px/1.1 var(--sign); }
+.visit .key { min-height: 48px; padding: 0 14px; font-size: 20px; }
 
-/* Who it is for: every number to ring, the map, and at the counter the customer. */
-.customer { flex: none; display: flex; flex-wrap: wrap; gap: 8px; }
-.customer a, .customer button { display: flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg); text-decoration: none; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.customer a svg { color: var(--brass); }
-.customer button { color: var(--muted); }
+/* Who it is for, a line each: every number to ring, the map, and at the counter the customer. */
+.rows { flex: none; border-top: 2px solid var(--ink); }
+.rowline { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 8px 0; border-bottom: 1px solid var(--line); color: var(--ink); text-align: left; text-decoration: none; }
+.rowline .lbl { flex: none; width: 88px; font: 700 14px/1.15 var(--sign); text-transform: uppercase; letter-spacing: .03em; color: var(--dim); }
+.rowline .val { flex: 1; min-width: 0; font: 600 20px/1.15 var(--text); font-variant-numeric: tabular-nums; }
+.rowline .go { flex: none; width: 44px; height: 44px; background: var(--key); display: flex; align-items: center; justify-content: center; }
 
 /* Everything sent so far, a block for each step, the latest first. */
-.stepsec { flex: none; border-radius: var(--r); border: 1px solid var(--line); background: var(--card); overflow: hidden; }
-.stepsec > header { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line); }
-.stepsec .ico { flex: none; width: 32px; height: 32px; border-radius: 9px; background: var(--card2); color: var(--brass); display: flex; align-items: center; justify-content: center; }
-.stepsec header b { flex: 1; min-width: 0; font-size: 16px; }
-.stepsec header small { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.entry { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-.entry + .entry { border-top: 1px solid var(--line); }
-.shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.shots button, .shots span { display: block; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: var(--card2); border: 1px solid var(--line); }
+.stepsec { flex: none; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.stepsec > header { display: flex; align-items: baseline; gap: 10px; padding: 2px 0 8px; }
+.stepsec header b { flex: 1; min-width: 0; font: 800 20px/1.1 var(--sign); text-transform: uppercase; }
+.stepsec header small { flex: none; font-size: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.entry { display: flex; flex-direction: column; gap: 8px; padding: 6px 0; }
+.shots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.shots button, .shots span { display: block; aspect-ratio: 3 / 4; overflow: hidden; background: var(--key); box-shadow: inset 0 0 0 2px var(--ink); padding: 2px; }
 .shots img { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* A marker: boards made, Complete, the go-ahead. */
-.mark { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 15px; font-weight: 700; color: var(--muted); }
-.mark b { font-size: 17px; color: var(--fg); font-variant-numeric: tabular-nums; }
-.mark time { margin-left: auto; font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
-.mark.ok { align-items: center; color: var(--green); }
-.mark a { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--brass); text-decoration: none; font-weight: 800; }
+/* A marker: pieces made, Complete, the go-ahead. */
+.mark { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 17px; font-weight: 600; }
+.mark b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mark time { margin-left: auto; font-size: 14px; font-weight: 500; color: var(--dim); font-variant-numeric: tabular-nums; }
+.mark.ok { align-items: center; color: var(--safe); font-weight: 700; }
+.mark a { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; min-height: 44px; color: var(--must); text-decoration: none; font-weight: 700; }
 /* Still on its way: a shade lighter until it lands. */
 .entry.pending.sending .shots, .entry.pending.sending .mark { opacity: .65; }
-.state { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
-.state.bad { color: var(--red); }
-.state .x { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; }
+.state { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 15px; font-weight: 700; color: var(--dim); }
+.state.bad { color: var(--stop); }
+.state button { min-height: 44px; }
+.state .x { width: 44px; height: 44px; background: var(--key); display: flex; align-items: center; justify-content: center; }
 
 /* Something sent, or a job in the list, is held to delete it, so holding must
    not select its text or bring up the phone's own menu for the picture. */
 .holdable, .holdable img { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.entry.holdable:active { background: var(--card2); }
+.entry.holdable:active { background: var(--key); }
 
 /* ── shared pieces ─────────────────────────────────────────────────────────── */
-/* How far the boards are, as a bar with its figure. */
-.boards { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.boards .track { flex: 1; height: 6px; min-width: 40px; border-radius: 3px; background: var(--card2); border: 1px solid var(--line); overflow: hidden; }
-.boards .track i { display: block; height: 100%; background: var(--brass); border-radius: 3px; transition: width .3s; }
-.boards b { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.boards.full .track i { background: var(--green); }
-.boards.full b { color: var(--green); }
-.boards.big .track { height: 12px; border-radius: 6px; }
-.boards.big .track i { border-radius: 6px; }
-.boards.big b { font-size: 16px; color: var(--fg); }
+/* How many pieces are made, a cell for each to make, in whatever colour the
+   print around it is. */
+.pieces { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pieces .cells { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.pieces .cells i { height: 10px; box-shadow: inset 0 0 0 2px currentColor; }
+.pieces .cells i.made { background: currentColor; }
+.pieces .track { flex: 1; height: 10px; min-width: 40px; box-shadow: inset 0 0 0 2px currentColor; overflow: hidden; }
+.pieces .track i { display: block; height: 100%; background: currentColor; transition: width .3s; }
+.pieces b { flex: none; font: 700 16px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.pieces.big .cells { gap: 4px; }
+.pieces.big .cells i, .pieces.big .track { height: 18px; }
+.card .pieces { color: var(--dim); }
+.card .pieces b { color: var(--ink); }
 
 /* Photos chosen and not yet sent. */
 .picked { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }
-.picked span { position: relative; flex: none; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+.picked span { position: relative; flex: none; width: 84px; height: 84px; overflow: hidden; background: #fff; box-shadow: inset 0 0 0 2px var(--ink); padding: 2px; }
 .picked img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.picked button { position: absolute; top: 3px; right: 3px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; display: flex; align-items: center; justify-content: center; }
+.picked button { position: absolute; top: 0; right: 0; width: 32px; height: 32px; background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; }
 
-.spin { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--brass); animation: spin .8s linear infinite; }
+.spin { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--must); animation: spin .8s linear infinite; }
 .spin.tiny { display: inline-block; width: 12px; height: 12px; border-width: 2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.error { color: var(--red); font-size: 14px; font-weight: 700; }
+.error { color: var(--stop); font-size: 16px; font-weight: 700; }
+.nowpanel .error { padding: 8px 10px; background: #fff; }
 
 /* A small sheet over the screen: a new order, Complete, the customer, a delete. */
-.sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 20px; }
-.sheet { width: 100%; max-width: 360px; max-height: 100%; overflow-y: auto; padding: 20px; border-radius: 20px; background: var(--card); color: var(--fg); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
-.sheet.wide { max-width: 440px; }
-.sheet p { margin: 8px 0 14px; color: var(--muted); font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
-.sheet p.error { color: var(--red); margin: 10px 0 0; }
+.sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(14, 19, 24, .62); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.sheet { width: 100%; max-width: 380px; max-height: 100%; overflow-y: auto; padding: 16px; background: var(--wall); color: var(--ink); border: 4px solid var(--ink); }
+.sheet.wide { max-width: 460px; }
+.sheet p { margin: 6px 0 14px; color: var(--dim); font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+.sheet p.error { color: var(--stop); margin: 10px 0 0; }
 .sheet .field { margin-top: 12px; }
-.sheettitle { font-size: 20px; }
-.field.pin { text-align: center; font-size: 22px; letter-spacing: 6px; }
-.sheetbtns { display: flex; gap: 10px; margin-top: 18px; }
-.sheetbtns button { flex: 1; min-height: 50px; border-radius: var(--r-in); font-size: 16px; font-weight: 800; }
-.sheetbtns .ghost { border: 1px solid var(--line); background: var(--card2); }
-.sheetbtns .solid { background: var(--brass); color: var(--brass-ink); }
-.sheetbtns .solid.danger { background: var(--red); color: #fff; }
+.sheettitle { display: block; font: 800 27px/1.1 var(--sign); text-transform: uppercase; }
+.field.pin { text-align: center; font-size: 24px; letter-spacing: 6px; }
+.sheetbtns { display: flex; gap: 8px; margin-top: 16px; }
+.sheetbtns button { flex: 1; min-width: 0; min-height: 56px; padding: 0 8px; font: 800 21px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; }
+.sheetbtns .ghost { background: var(--key); box-shadow: inset 0 -4px 0 var(--line); }
+.sheetbtns .solid { flex: 1.7; background: var(--must); color: #fff; }
+.sheetbtns .solid.safe { background: var(--safe); }
+.sheetbtns .solid.danger { background: var(--stop); }
 /* A new visit order: take a photo, or choose one. */
-.pickrow { display: flex; gap: 10px; margin-top: 10px; }
-.pick { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 8px; border-radius: 14px; border: 1px dashed var(--brass); background: var(--card2); color: var(--brass); font-size: 15px; font-weight: 800; }
+.pickrow { display: flex; gap: 8px; margin-top: 10px; }
+.pick { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 84px; padding: 14px 8px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 700 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
 /* Who it is for: the accounts that match what is typed, then the one picked. */
 .picker { margin-top: 12px; }
 .picker .field { margin-top: 0; }
-.found { list-style: none; margin: 6px 0 0; padding: 0; max-height: 236px; overflow-y: auto; border-radius: var(--r-in); border: 1px solid var(--line); background: var(--bg); }
-.found button { display: flex; flex-direction: column; gap: 1px; width: 100%; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+.found { list-style: none; margin: -2px 0 0; padding: 0; max-height: 236px; overflow-y: auto; border: 2px solid var(--ink); background: #fff; }
+.found button { display: flex; flex-direction: column; gap: 1px; width: 100%; min-height: 52px; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); }
 .found li:last-child button { border-bottom: 0; }
-.found b { font-size: 16px; overflow-wrap: anywhere; }
-.found small { font-size: 13px; color: var(--muted); }
-.sheet p.pickhint { margin: 6px 2px 0; font-size: 13px; }
-.chosen { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: var(--r-in); border: 1px solid var(--brass); background: var(--brass-tint); color: var(--fg); }
+.found b { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.found small { font-size: 15px; color: var(--dim); }
+.sheet p.pickhint { margin: 6px 2px 0; font-size: 15px; }
+.chosen { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 8px 8px 8px 12px; border: 2px solid var(--must); color: var(--ink); }
+.chosen > svg { flex: none; color: var(--must); }
 .chosen span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.chosen b { font-size: 16px; overflow-wrap: anywhere; }
-.chosen small { font-size: 13px; color: var(--muted); }
-.chosen button { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); display: flex; align-items: center; justify-content: center; }
+.chosen b { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.chosen small { font-size: 15px; color: var(--dim); }
+.chosen button { flex: none; width: 44px; height: 44px; background: var(--key); display: flex; align-items: center; justify-content: center; }
 
 /* ── over everything: the camera, and a photo full screen ─────────────────── */
 /* The camera, live, over everything: what it sees, the shutter under it, and
    what has been shot so far waiting to be used. */
 .camera { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; display: flex; flex-direction: column; }
 .cambar { flex: none; display: flex; align-items: center; gap: 8px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; }
-.cambar b { flex: 1; text-align: center; font-size: 16px; }
-.cambar button, .cambar .gap { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.cambar button { background: rgba(255,255,255,.15); }
-.cambar button.on { background: var(--brass); color: var(--brass-ink); }
+.cambar b { flex: 1; text-align: center; font: 700 22px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.cambar button, .cambar .gap { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
+.cambar button { background: rgba(255, 255, 255, .16); }
+.cambar button.on { background: var(--wait); color: var(--ink); }
 .camstage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 /* Shown whole, never cropped: what is on the screen is what is photographed. */
 .camstage video { width: 100%; height: 100%; object-fit: contain; display: block; }
 .camstage.snap::after { content: ''; position: absolute; inset: 0; background: #fff; pointer-events: none; animation: camsnap .12s ease-out forwards; }
 @keyframes camsnap { from { opacity: .75; } to { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .camstage.snap::after { animation: none; opacity: 0; } }
-.camnote { position: absolute; left: 20px; right: 20px; margin: 0; text-align: center; font-size: 16px; line-height: 1.4; color: rgba(255,255,255,.85); }
+.camnote { position: absolute; left: 20px; right: 20px; margin: 0; text-align: center; font-size: 17px; line-height: 1.4; color: #fff; }
 .camnote p { margin: 0 0 14px; }
-.camnote button { padding: 12px 18px; border-radius: 12px; background: var(--brass); color: var(--brass-ink); font-size: 16px; font-weight: 800; }
+.camnote button { min-height: 52px; padding: 0 18px; background: #fff; color: var(--ink); font: 800 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
 .camshots { flex: none; display: flex; gap: 8px; overflow-x: auto; padding: 8px 12px 0; }
-.camshots span { position: relative; flex: none; width: 58px; height: 58px; border-radius: 8px; overflow: hidden; border: 2px solid rgba(255,255,255,.7); }
+.camshots span { position: relative; flex: none; width: 58px; height: 58px; overflow: hidden; border: 2px solid #fff; }
 .camshots img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.camshots button { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; }
+.camshots button { position: absolute; top: 0; right: 0; width: 24px; height: 24px; background: rgba(0, 0, 0, .7); display: flex; align-items: center; justify-content: center; }
 .camfoot { flex: none; display: flex; align-items: center; padding: 14px 16px calc(env(safe-area-inset-bottom) + 18px); }
 .camfoot .slot { flex: 1; display: flex; justify-content: center; }
 .camfoot .shutter { flex: none; width: 78px; height: 78px; border-radius: 50%; border: 4px solid #fff; display: flex; align-items: center; justify-content: center; }
 .camfoot .shutter i { width: 60px; height: 60px; border-radius: 50%; background: #fff; }
 .camfoot .shutter:active i { transform: scale(.9); }
-.camfoot .aside { padding: 11px 14px; border-radius: 12px; background: rgba(255,255,255,.15); font-size: 14px; font-weight: 800; }
-.camfoot .use { min-width: 84px; padding: 13px 16px; border-radius: 14px; background: var(--brass); color: var(--brass-ink); font-size: 16px; font-weight: 800; }
+.camfoot .aside { min-height: 48px; padding: 0 14px; background: rgba(255, 255, 255, .16); font: 700 18px/1 var(--sign); text-transform: uppercase; }
+.camfoot .use { min-width: 92px; min-height: 56px; padding: 0 16px; background: var(--safe); color: #fff; font: 800 22px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
 
-/* A thread's photos, full screen: a strip that snaps to a photo at a time. */
+/* A job's photos, full screen: a strip that snaps to a photo at a time. */
 .viewer { position: fixed; inset: 0; background: #000; color: #fff; z-index: 10; display: flex; flex-direction: column; }
 .vbar { flex: none; display: flex; align-items: center; gap: 8px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; }
-.vbar button { height: 42px; min-width: 42px; border-radius: 21px; background: rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center; gap: 7px; }
-.vbar button.text { padding: 0 14px; font-size: 15px; font-weight: 700; }
-.vbar .count { flex: 1; text-align: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.vbar button { height: 48px; min-width: 48px; background: rgba(255, 255, 255, .16); display: flex; align-items: center; justify-content: center; gap: 7px; }
+.vbar button.text { padding: 0 14px; font: 700 18px/1 var(--sign); text-transform: uppercase; }
+.vbar .count { flex: 1; text-align: center; font: 700 20px/1 var(--sign); font-variant-numeric: tabular-nums; }
 .vstrip { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior: contain; }
 .vstrip::-webkit-scrollbar { display: none; }
 .vslide { flex: none; width: 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; display: flex; align-items: center; justify-content: center; }
 .vslide img { max-width: 100%; max-height: 100%; object-fit: contain; touch-action: pan-x pinch-zoom; }
 .vdots { flex: none; display: flex; justify-content: center; gap: 7px; padding: 10px 0 calc(env(safe-area-inset-bottom) + 12px); }
-.vdots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.35); }
+.vdots i { width: 8px; height: 8px; background: rgba(255, 255, 255, .4); }
 .vdots i.on { background: #fff; }
-.vnote { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 34px); margin: 0 auto; max-width: 420px; padding: 11px 14px; border-radius: 12px; background: rgba(40,37,33,.94); border: 1px solid rgba(255,255,255,.18); text-align: center; font-size: 15px; font-weight: 700; }
+.vnote { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 34px); margin: 0 auto; max-width: 420px; padding: 12px 14px; background: #fff; color: var(--ink); text-align: center; font-size: 16px; font-weight: 700; }
 
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation-duration: 2s; }
+  .camstage.snap::after { animation: none; opacity: 0; }
+  .savebar i, .pieces .track i { transition: none; }
+  .key:active:not(:disabled), .counter button:active:not(:disabled) { transform: none; }
+}

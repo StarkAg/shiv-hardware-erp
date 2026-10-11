@@ -56,9 +56,9 @@ function onlyNow(step: Tag, at: Stage) {
   if (ORDER.indexOf(of) < ORDER.indexOf(at)) throw new ConvexError('That step is already done. It cannot be gone back to.')
 }
 
-/** A count of boards: a whole number nobody could mistype into the thousands. */
+/** A count of pieces (the field is still called boards): a whole number nobody could mistype into the thousands. */
 function boardCount(n: number) {
-  if (!Number.isFinite(n) || n < 0 || n > 999) throw new ConvexError('Give the number of boards.')
+  if (!Number.isFinite(n) || n < 0 || n > 999) throw new ConvexError('Give the number of pieces.')
   return Math.trunc(n)
 }
 const COUNTER = 'workshop-job'

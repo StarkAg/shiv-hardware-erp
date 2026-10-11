@@ -30,7 +30,7 @@ export function CustomerPicker({ value, onChange, disabled }) {
   const found = needle ? (customers ?? []).filter((c) => `${c.name} ${c.place} ${c.phone}`.toLowerCase().includes(needle)).slice(0, 8) : []
   return (
     <div className="picker">
-      <input className="field" placeholder="Customer: search the accounts, or type a name" value={q} maxLength={80} disabled={disabled}
+      <input className="field" placeholder="Customer name" aria-label="Customer: search the accounts, or type a name" value={q} maxLength={80} disabled={disabled}
         onChange={(e) => { setQ(e.target.value); onChange(e.target.value.trim() ? { name: e.target.value } : null) }} />
       {found.length > 0 && (
         <ul className="found">
@@ -85,7 +85,7 @@ export default function NewOrder({ onClose }) {
       <CustomerPicker value={customer} onChange={setCustomer} />
       <div className="sheetbtns">
         <button type="button" className="ghost" onClick={onClose}>Cancel</button>
-        <button type="button" className="solid" onClick={send} disabled={!picked.length}>Send to workshop</button>
+        <button type="button" className="solid safe" onClick={send} disabled={!picked.length}>Send to workshop</button>
       </div>
     </Sheet>
   )

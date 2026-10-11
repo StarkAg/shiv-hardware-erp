@@ -8,7 +8,7 @@
 //     the last copy is kept only to open with when there is no internet.
 //
 // Bump SW_VERSION on deploys that must force every client onto the newest app shell.
-const SW_VERSION = '2026-10-11c-shiv-workshop'
+const SW_VERSION = '2026-10-11d-shiv-workshop'
 const SHELL = `workshop-shell-${SW_VERSION}`
 // Not versioned: the photos outlive every deploy.
 const PHOTOS = 'workshop-photos-v1'

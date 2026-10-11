@@ -3,12 +3,12 @@ import { useMutation } from 'convex/react'
 import { SIDE, SIDE_NAME } from './side.js'
 import { BUBBLE } from './offline.js'
 import {
-  STAGES, TAGS, TAG_FROM, addressOf, api, boardsLine, contactsOf, finished, lineOf, mapLinkOf, myTurn, nameOf, newIn,
-  said, stageAt, stageId, stageNo, stampOf, titleOf, visitLine,
+  TAGS, TAG_FROM, addressOf, api, contactsOf, finished, lineOf, mapLinkOf, myTurn, nameOf, newIn,
+  said, stageId, stampOf, titleOf, visitLine,
 } from './flow.js'
 import { atOnce, deliver, discard, post, useOutbox } from './outbox.js'
 import {
-  BackIcon, Boards, CameraIcon, ClockIcon, CloseIcon, DeleteSheet, PersonIcon, PhoneIcon, PhotosIcon, Picked, PinIcon, STEP_ICONS,
+  BackIcon, CameraIcon, ClockIcon, CloseIcon, DeleteSheet, PersonIcon, PhoneIcon, PhotosIcon, Picked, Pieces, PinIcon,
   SendIcon, Sheet, Shot, StepTracker, TickIcon, useHold, usePicked,
 } from './ui.jsx'
 import { CustomerPicker, customerArgs } from './NewOrder.jsx'
@@ -23,12 +23,13 @@ const tagOf = (m) => m.step ?? (m.from === 'workshop' ? 'measurement' : 'visit')
 /**
  * One job, as a page built around its steps.
  *
- * At the head, where the job stands among its five steps. Under it, the one
- * thing to do now: a single panel that is this side's action when the step is
- * its turn (photograph the measurements, attach the work order, count the
- * boards and press Complete, give the go-ahead, photograph it fitted) and says
- * who it is waiting on when it is not. Then who it is for, and everything sent
- * so far, step by step with the latest first.
+ * At the head, where the job stands among its five steps, a sign each. Under
+ * it the step in hand, as one panel: blue with this side's work in it when the
+ * step is its turn (the measurements, the work order, the count of pieces, the
+ * go-ahead, the fitting), yellow and saying who it is with when it is not.
+ * Then who it is for, and everything sent so far, step by step with the latest
+ * first. The one action of the step is a single button at the foot of the
+ * screen, always in the same place under the thumb.
  *
  * Nothing is typed as free text and no step is picked: the books move a job
  * on when its step is done (convex/workshop.ts `send`), and a step that is
@@ -88,32 +89,37 @@ export default function JobPage({ job, onBack }) {
     post({ jobId: job.id, step, files: shots.map((p) => p.file), previews: shots.map((p) => p.url), ...(step === 'quotation' && boardsToMake !== '' && n >= 0 ? { boards: n } : {}) })
     setBoardsToMake('')
   }
-  /** The one photo action of a step: the camera, then what was shot waiting to be sent under its tag. */
-  const photoAction = (tag, label, { gallery = false, quiet = false } = {}) => (picked.length && step === tag ? (
+  /**
+   * A step done with a photo. In the panel: what has been shot, waiting to be
+   * sent under its tag, and at the counter the way to a picture already on the
+   * phone. The camera and the sending are the button at the foot (`dock`).
+   */
+  const tray = (tag, { gallery = false, camera = '' } = {}) => (picked.length && step === tag ? (
     <>
       <Picked picked={picked} onDrop={drop} />
       {tag === 'quotation' && (
         <label className="ask inline">
-          Boards to make
+          Pieces to make
           <input type="number" inputMode="numeric" min={0} max={999} placeholder="0" value={boardsToMake} onChange={(e) => setBoardsToMake(e.target.value)} />
         </label>
       )}
-      <div className="row">
-        <button type="button" className="btn ghost square" onClick={() => setCam(true)} aria-label="Add another photo"><CameraIcon /></button>
-        <button type="button" className="btn solid grow" onClick={sendPhotos}><SendIcon size={20} /> Send {TAGS[tag].toLowerCase()}</button>
-      </div>
+      <button type="button" className="key ghost" onClick={() => setCam(true)}><CameraIcon /> Another photo</button>
     </>
   ) : (
-    <div className="stack">
-      <button type="button" className={`btn ${quiet ? 'ghost' : 'solid big'}`} onClick={() => shoot(tag)}><CameraIcon /> {label}</button>
-      {gallery && <button type="button" className="btn ghost" onClick={() => fromPhone(tag)}><PhotosIcon size={20} /> Choose from the phone</button>}
-    </div>
+    <>
+      {camera && <button type="button" className="key ghost" onClick={() => shoot(tag)}><CameraIcon /> {camera}</button>}
+      {gallery && <button type="button" className="key ghost" onClick={() => fromPhone(tag)}><PhotosIcon /> Choose from the phone</button>}
+    </>
   ))
+  /** The button at the foot for a photo step: the camera, then Send once something is shot. */
+  const photoKey = (tag, label) => (picked.length && step === tag
+    ? { label: `Send ${TAGS[tag].toLowerCase()}`, Icon: SendIcon, run: sendPhotos, tone: 'safe' }
+    : label ? { label, Icon: CameraIcon, run: () => shoot(tag), tone: 'must' } : null)
 
   /* ── the work status, while assembling ──────────────────────────────────── */
   /**
-   * Plus for each board made, minus to correct. Nothing else to tap: the
-   * figure is sent by itself a moment after the last tap, so four boards in a
+   * Plus for each piece made, minus to correct. Nothing else to tap: the
+   * figure is sent by itself a moment after the last tap, so four pieces in a
    * row are one line in the log, not four.
    */
   const [tally, setTally] = useState(null)
@@ -158,57 +164,46 @@ export default function JobPage({ job, onBack }) {
   /** When to go and whom to ring, once the go-ahead is given. */
   const visit = job.visitAt ? (
     <div className="visit">
-      <span><ClockIcon size={18} /><b>{visitLine(job.visitAt)}</b></span>
-      {job.callPhone && <a className="btn ghost" href={`tel:${job.callPhone}`}><PhoneIcon size={18} /> Call {job.callPhone}</a>}
+      <span><ClockIcon size={22} /><b>{visitLine(job.visitAt)}</b></span>
+      {job.callPhone && <a className="key must" href={`tel:${job.callPhone}`}><PhoneIcon size={20} /> {job.callPhone}</a>}
     </div>
   ) : null
 
-  /* ── the one thing to do now ────────────────────────────────────────────── */
-  const stepNo = stageNo(at) + 1
+  /* ── the step in hand ───────────────────────────────────────────────────── */
+  const other = SIDE === 'shop' ? 'workshop' : 'shop'
   const head = (title, lead) => (
     <div className="nowhead">
-      <span className="num">{mine ? stepNo : <ClockIcon size={18} />}</span>
-      <div>
-        <small>{mine ? `Step ${stepNo} of ${STAGES.length}: yours to do` : `Step ${stepNo} of ${STAGES.length}: with the ${SIDE === 'shop' ? 'workshop' : 'shop'}`}</small>
-        <b>{title}</b>
-        {lead && <p>{lead}</p>}
-      </div>
+      <b>{title}</b>
+      <small>{mine ? 'Yours to do' : `With the ${other}`}</small>
+      {lead && <p>{lead}</p>}
     </div>
   )
+  /** The pieces made, as a figure on a plate; with its two keys where it is this side's to count. */
+  const counter = (made, keys) => (
+    <>
+      <div className={`counter ${keys ? '' : 'read'}`}>
+        {keys && <button type="button" className="less" onClick={() => bump(-1)} disabled={made <= 0} aria-label="One piece fewer">−</button>}
+        <span className="figure" aria-live="polite"><b>{made}{job.boardsTotal ? <small>/{job.boardsTotal}</small> : null}</b><small>{made === 1 && !job.boardsTotal ? 'Piece made' : 'Pieces made'}</small></span>
+        {keys && <button type="button" className="more" onClick={() => bump(1)} aria-label="One more piece made">+</button>}
+      </div>
+      <Pieces made={made} total={job.boardsTotal} big />
+    </>
+  )
   const now = over ? (
-    <div className="nowhead">
-      <span className="num done"><TickIcon size={18} /></span>
-      <div><small>All five steps are done</small><b>Finished</b></div>
-    </div>
+    <div className="nowhead"><b>Finished</b><small>All 5 steps done</small></div>
   ) : SIDE === 'workshop' ? {
-    measurement: <>{head('Measure', 'Visit the site and measure. Then photograph the measurements.')}{photoAction('measurement', 'Photograph the measurements')}</>,
+    measurement: <>{head('Measure')}{tray('measurement')}</>,
     quotation: head('Work order', 'The shop is making the work order from your measurements.'),
-    assemble: (
-      <>
-        {head('Assemble', 'Tap + for each board made. Press Complete when it is all assembled.')}
-        <Boards made={tallied} total={job.boardsTotal} big />
-        <div className="tally">
-          <button type="button" className="btn ghost step" onClick={() => bump(-1)} disabled={tallied <= 0} aria-label="One board fewer">−</button>
-          <span className="figure" aria-live="polite"><b>{tallied}</b><small>{job.boardsTotal ? `of ${job.boardsTotal} boards made` : 'boards made'}</small></span>
-          <button type="button" className="btn solid step" onClick={() => bump(1)} aria-label="One more board made">+</button>
-        </div>
-        <button type="button" className="btn good big" onClick={() => { sendTally(); setCompleting(true) }}><TickIcon size={20} /> Complete</button>
-      </>
-    ),
-    goahead: head('Go-ahead', 'Complete. The shop will call the customer and send the go-ahead: when to visit and whom to call.'),
-    fitting: <>{head('Fit it', 'The go-ahead is given. Fit it, then photograph it fitted.')}{visit}{photoAction('fitting', 'Photograph it fitted')}</>,
+    assemble: <>{head('Assemble')}{counter(tallied, true)}</>,
+    goahead: head('Go-ahead', 'Assembled. The shop calls the customer, then sends when to visit and whom to call.'),
+    fitting: <>{head('Fit it')}{visit}{tray('fitting')}</>,
   }[at] : {
-    measurement: <>{head('Measurement', 'The workshop is to visit the site and measure.')}{photoAction('visit', 'Add a visit order photo', { gallery: true, quiet: true })}</>,
-    quotation: <>{head('Work order', 'Measured. Make the work order and attach it: it goes to the workshop to assemble.')}{photoAction('quotation', 'Attach the work order', { gallery: true })}</>,
-    assemble: (
-      <>
-        {head('Being assembled', job.boardsMade == null ? 'No boards logged yet.' : job.boardsTotal ? '' : `${boardsLine(job.boardsMade)}.`)}
-        <Boards made={job.boardsMade} total={job.boardsTotal} big />
-      </>
-    ),
+    measurement: <>{head('Measurement', 'The workshop is to visit the site and measure.')}{tray('visit', { gallery: true, camera: 'Add a visit order photo' })}</>,
+    quotation: <>{head('Work order')}{tray('quotation', { gallery: true })}</>,
+    assemble: <>{head('Being assembled', job.boardsMade == null ? 'Nothing counted yet.' : '')}{job.boardsMade != null && counter(job.boardsMade, false)}</>,
     goahead: (
       <>
-        {head('Give the go-ahead', 'Assembling is complete. Call the customer, then say when to visit and whom to call.')}
+        {head('Go-ahead', 'Assembled. Call the customer, then say when to visit and whom to call.')}
         <label className="ask">When to visit
           <input type="datetime-local" value={going.when} onChange={(e) => setGoing({ ...going, when: e.target.value })} />
         </label>
@@ -216,18 +211,28 @@ export default function JobPage({ job, onBack }) {
         {contactsOf(job.phone).length > 0 && (
           <div className="chips">
             {contactsOf(job.phone).map((number) => (
-              <button key={number} type="button" className={contactsOf(going.phone)[0] === number ? 'on' : ''} onClick={() => setGoing({ ...going, phone: number })}>{number}</button>
+              <button key={number} type="button" className={contactsOf(going.phone)[0] === number ? 'on' : ''} aria-pressed={contactsOf(going.phone)[0] === number} onClick={() => setGoing({ ...going, phone: number })}>{number}</button>
             ))}
           </div>
         )}
-        <input className="field" type="tel" inputMode="tel" maxLength={16}
+        <input className="field" type="tel" inputMode="tel" maxLength={16} aria-label="Another number to call"
           placeholder={contactsOf(job.phone).length ? 'Or another number' : 'Phone number'}
           value={contactsOf(job.phone).includes(contactsOf(going.phone)[0]) ? '' : going.phone}
           onChange={(e) => setGoing({ ...going, phone: e.target.value.replace(/[^\d+\s-]/g, '') })} />
-        <button type="button" className="btn solid big" onClick={sendGoAhead} disabled={!goReady}><SendIcon size={20} /> Send go-ahead</button>
       </>
     ),
     fitting: <>{head('Fitting', 'The workshop is to fit it.')}{visit}</>,
+  }[at]
+
+  /* ── the one button at the foot ─────────────────────────────────────────── */
+  const dock = over ? null : SIDE === 'workshop' ? {
+    measurement: photoKey('measurement', 'Photograph measurements'),
+    assemble: { label: 'Complete', Icon: TickIcon, run: () => { sendTally(); setCompleting(true) }, tone: 'safe' },
+    fitting: photoKey('fitting', 'Photograph it fitted'),
+  }[at] : {
+    measurement: photoKey('visit', ''),
+    quotation: photoKey('quotation', 'Photograph work order'),
+    goahead: { label: 'Send go-ahead', Icon: SendIcon, run: sendGoAhead, tone: 'safe', off: !goReady },
   }[at]
 
   /* ── everything sent so far, step by step ───────────────────────────────── */
@@ -248,7 +253,7 @@ export default function JobPage({ job, onBack }) {
           <b>{nameOf(job)}</b>
           <small>{[addressOf(job), `Work order ${job.number}`].filter(Boolean).join(' · ')}</small>
         </div>
-        {contacts[0] && <a className="call" href={`tel:${contacts[0]}`} aria-label={`Call ${titleOf(job)}`}><PhoneIcon /></a>}
+        {contacts[0] && <a className="round" href={`tel:${contacts[0]}`} aria-label={`Call ${titleOf(job)}`}><PhoneIcon /></a>}
       </header>
 
       <main className="scroll">
@@ -259,27 +264,33 @@ export default function JobPage({ job, onBack }) {
           {error && <p className="error" role="alert">{error}</p>}
         </section>
 
-        {/* Who it is for: every number to ring, the site on the map once a job
-            carries one and, at the counter, where the customer is set. */}
+        {/* Who it is for, a line each: every number to ring, the site on the map
+            once a job carries one and, at the counter, where the customer is set. */}
         {(contacts.length > 0 || mapLinkOf(job) || SIDE === 'shop') && (
-          <section className="customer" aria-label="Customer">
-            {contacts.map((number) => (
-              <a key={number} href={`tel:${number}`} aria-label={`Call ${number}`}><PhoneIcon size={16} />{number}</a>
+          <section className="rows" aria-label="Customer">
+            {contacts.map((number, i) => (
+              <a key={number} className="rowline" href={`tel:${number}`} aria-label={`Call ${number}`}>
+                <span className="lbl">{i === 0 ? 'Customer' : `Number ${i + 1}`}</span><span className="val">{number}</span><span className="round"><PhoneIcon size={20} /></span>
+              </a>
             ))}
-            {mapLinkOf(job) && <a href={mapLinkOf(job)} target="_blank" rel="noreferrer"><PinIcon size={16} />Map</a>}
+            {mapLinkOf(job) && (
+              <a className="rowline" href={mapLinkOf(job)} target="_blank" rel="noreferrer">
+                <span className="lbl">Site</span><span className="val">Open the map</span><span className="round"><PinIcon size={20} /></span>
+              </a>
+            )}
             {SIDE === 'shop' && (
-              <button type="button" onClick={() => setChoosing(customerNow)}><PersonIcon size={16} />{job.title ? 'Change customer' : 'Set customer'}</button>
+              <button type="button" className="rowline" onClick={() => setChoosing(customerNow)}>
+                <span className="lbl">Account</span><span className="val">{job.title ? 'Change customer' : 'Set customer'}</span><span className="go"><PersonIcon size={20} /></span>
+              </button>
             )}
           </section>
         )}
 
         {sections.map(({ tag, items, pending }) => {
-          const StepIcon = STEP_ICONS[tag]
           const latest = items[items.length - 1]
           return (
             <section key={tag} className="stepsec" aria-label={TAGS[tag]}>
               <header>
-                <span className="ico"><StepIcon size={18} /></span>
                 <b>{TAGS[tag]}</b>
                 <small>{SIDE_NAME[TAG_FROM[tag]]}{latest ? ` · ${stampOf(latest.at)}` : ''}</small>
               </header>
@@ -295,8 +306,8 @@ export default function JobPage({ job, onBack }) {
                     </div>
                   )}
                   {m.complete && <p className="mark ok"><TickIcon size={18} /> Assembling complete <time>{stampOf(m.at)}</time></p>}
-                  {m.boards != null && tag === 'quotation' && <p className="mark">{m.boards} boards to make</p>}
-                  {m.boards != null && tag !== 'quotation' && <p className="mark"><b>{m.boards}</b>{job.boardsTotal ? ` of ${job.boardsTotal}` : ''} boards made <time>{stampOf(m.at)}</time></p>}
+                  {m.boards != null && tag === 'quotation' && <p className="mark"><b>{m.boards}</b> {m.boards === 1 ? 'piece' : 'pieces'} to make</p>}
+                  {m.boards != null && tag !== 'quotation' && <p className="mark"><b>{m.boards}</b>{job.boardsTotal ? ` of ${job.boardsTotal}` : ''} {m.boards === 1 && !job.boardsTotal ? 'piece' : 'pieces'} made <time>{stampOf(m.at)}</time></p>}
                   {m.visitAt && (
                     <p className="mark">Visit <b>{visitLine(m.visitAt)}</b>{m.callPhone && <a href={`tel:${m.callPhone}`}><PhoneIcon size={15} /> {m.callPhone}</a>}</p>
                   )}
@@ -325,6 +336,12 @@ export default function JobPage({ job, onBack }) {
         })}
       </main>
 
+      {dock && (
+        <div className="dock">
+          <button type="button" className={`key ${dock.tone}`} onClick={dock.run} disabled={dock.off}><dock.Icon size={26} strokeWidth="2.6" /> {dock.label}</button>
+        </div>
+      )}
+
       <input ref={file} type="file" accept="image/*" hidden multiple={SIDE === 'shop'} {...(SIDE === 'workshop' ? { capture: 'environment' } : {})}
         onChange={(e) => { add(e.target.files); e.target.value = '' }} />
       {cam && (
@@ -336,10 +353,10 @@ export default function JobPage({ job, onBack }) {
       {completing && (
         <Sheet label="Complete" onClose={() => setCompleting(false)}>
           <b className="sheettitle">Assembling complete?</b>
-          <p>The shop is told. It will call the customer and send you the go-ahead: when to visit and whom to call. This step cannot be gone back to.</p>
+          <p>The shop is told, and sends the go-ahead after calling the customer. This step cannot be gone back to.</p>
           <div className="sheetbtns">
             <button type="button" className="ghost" onClick={() => setCompleting(false)}>Not yet</button>
-            <button type="button" className="solid" onClick={sendComplete}>Complete</button>
+            <button type="button" className="solid safe" onClick={sendComplete}>Complete</button>
           </div>
         </Sheet>
       )}

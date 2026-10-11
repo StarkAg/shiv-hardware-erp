@@ -183,7 +183,7 @@ describe('workshop: a work order as a chat in photos', () => {
     await send({ from: 'workshop', boards: 3 })
     await send({ from: 'workshop', boards: 6.9 })
     expect(await job()).toMatchObject({ stage: 'assemble', boardsMade: 6 })
-    await expect(send({ from: 'workshop', boards: -1 })).rejects.toThrow('number of boards')
+    await expect(send({ from: 'workshop', boards: -1 })).rejects.toThrow('number of pieces')
     // A photo of the work in hand is kept as work status; it is Complete that ends the step.
     await send({ from: 'workshop', photos: [await photo()], step: 'assemble' })
     expect(await job()).toMatchObject({ stage: 'assemble' })

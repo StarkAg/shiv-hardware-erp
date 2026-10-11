@@ -16,7 +16,7 @@ export const api = anyApi
  *
  *   measurement  the workshop measures on site and photographs the figures
  *   quotation    the shop makes the work order from them and sends its photo
- *   assemble     the workshop builds it, says how many boards are made, then Complete
+ *   assemble     the workshop builds it, says how many pieces are made, then Complete
  *   goahead      the shop rings the customer and says when to go and whom to ring
  *   fitting      the workshop fits it and photographs it; the job is finished
  *
@@ -64,14 +64,18 @@ export const addressOf = (job) => {
 /** What the other side has sent since this side last had the job open. */
 export const newIn = (job) => job.messages.filter((m) => m.from === OTHER && m.at > (job[`${SIDE}SeenAt`] ?? 0)).length
 
-export const boardsLine = (made, total) => `${made}${total ? ` of ${total}` : ''} ${made === 1 && !total ? 'board' : 'boards'} made`
+/**
+ * What is made is counted in pieces: a job may be boards, an aluminium door,
+ * windows. The books still call the figure `boards`.
+ */
+export const piecesLine = (made, total) => `${made}${total ? ` of ${total}` : ''} ${made === 1 && !total ? 'piece' : 'pieces'} made`
 export const visitLine = (ms) => new Date(ms).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 /** Something sent, in a few words: for the list, and for one still on its way. */
 export const lineOf = (m, job) => {
   const n = m.photos?.length ?? m.files?.length ?? 0
   if (m.complete) return 'Complete'
   if (m.visitAt) return `Go-ahead: ${visitLine(m.visitAt)}`
-  if (m.boards != null && m.step !== 'quotation') return `Work status: ${boardsLine(m.boards, job?.boardsTotal)}`
+  if (m.boards != null && m.step !== 'quotation') return `Work status: ${piecesLine(m.boards, job?.boardsTotal)}`
   if (n) return `${TAGS[m.step] ?? (m.from === 'workshop' ? 'Measurement' : 'Photo')}${n > 1 ? ` · ${n} photos` : ''}`
   return m.text || ''
 }

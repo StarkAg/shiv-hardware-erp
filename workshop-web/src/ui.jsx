@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useConvex } from 'convex/react'
 import { sized } from './offline.js'
-import { STAGES, said, stageAt, stageId, stepState, finished } from './flow.js'
+import { STAGES, said, stageAt, stageId, stepState, finished, myTurn } from './flow.js'
 
 /**
  * The small parts both screens are made of: the icons, a photo at the size it
- * is shown, the step tracker, the boards bar, and the two things a finger
+ * is shown, the step tracker, the pieces made, and the two things a finger
  * does besides tapping (holding to delete, and picking photos to send).
  */
 
@@ -49,16 +49,18 @@ export function Shot({ url, width, ...rest }) {
 /**
  * Where a job stands among its five steps.
  *
- * Full, at the head of a job's page: each step numbered and named, the done
- * ones ticked, the one in hand marked. Small, on a job's card in the list:
- * five dots that say the same at a glance. Not a control: no step is picked.
+ * Full, at the head of a job's page: a sign for each step, named under it.
+ * Small, in a job's row in the list: five bars that say the same at a glance.
+ * A done step is green; the one in hand is blue when it is this side's to do
+ * and yellow when it is with the other side. Not a control: no step is picked.
  */
 export function StepTracker({ job, mini = false }) {
   const label = finished(job) ? 'Finished' : `Step ${STAGES.findIndex((s) => s.id === stageId(job)) + 1} of ${STAGES.length}: ${stageAt(job).label}`
+  const look = (id) => { const state = stepState(job, id); return state === 'now' ? `now ${myTurn(job) ? 'mine' : 'wait'}` : state }
   if (mini) {
     return (
       <span className="minitrack" role="img" aria-label={label}>
-        {STAGES.map((s) => <i key={s.id} className={stepState(job, s.id)} />)}
+        {STAGES.map((s) => <i key={s.id} className={look(s.id)} />)}
       </span>
     )
   }
@@ -67,8 +69,8 @@ export function StepTracker({ job, mini = false }) {
       {STAGES.map((s, i) => {
         const state = stepState(job, s.id)
         return (
-          <li key={s.id} className={state} aria-current={state === 'now' ? 'step' : undefined}>
-            <span className="dot">{state === 'done' ? <TickIcon size={15} /> : i + 1}</span>
+          <li key={s.id} className={look(s.id)} aria-current={state === 'now' ? 'step' : undefined}>
+            <span className="dot">{state === 'done' ? <TickIcon size={22} strokeWidth="3.2" /> : i + 1}</span>
             <span className="word">{s.short}</span>
           </li>
         )
@@ -78,17 +80,19 @@ export function StepTracker({ job, mini = false }) {
 }
 
 /**
- * How far the boards are, as a bar: the work status at a glance, in the list
- * and on a job's page, without reading down for the last figure. Nothing is
- * drawn until the work order has said how many there are to make.
+ * How many pieces are made, a cell for each to make: the work status at a
+ * glance, in the list and on a job's page. A job of many pieces gets a bar
+ * instead. Nothing is drawn until the work order has said how many there are.
  */
-export function Boards({ made, total, big = false }) {
+export function Pieces({ made, total, big = false }) {
   if (!total) return null
   const done = Math.min(total, made ?? 0)
   return (
-    <span className={`boards ${big ? 'big' : ''} ${done >= total ? 'full' : ''}`} role="img" aria-label={`${done} of ${total} boards made`}>
-      <span className="track"><i style={{ width: `${Math.round((done / total) * 100)}%` }} /></span>
-      <b>{done}/{total}</b>
+    <span className={`pieces ${big ? 'big' : ''}`} role="img" aria-label={`${done} of ${total} pieces made`}>
+      {total <= 16
+        ? <span className="cells" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }}>{Array.from({ length: total }, (_, i) => <i key={i} className={i < done ? 'made' : ''} />)}</span>
+        : <span className="track"><i style={{ width: `${Math.round((done / total) * 100)}%` }} /></span>}
+      {!big && <b>{done}/{total}</b>}
     </span>
   )
 }
@@ -117,10 +121,19 @@ export function Saving({ saving }) {
   )
 }
 
-/** A small sheet over the screen. A tap beside it closes it, unless `locked`. */
+/**
+ * A small sheet over the screen. A tap beside it closes it, unless `locked`.
+ * While it is up, the screen under it cannot be tabbed into or tapped.
+ */
 export function Sheet({ label, wide = false, locked = false, onClose, children }) {
+  const back = useRef(null)
+  useEffect(() => {
+    const under = [...(back.current?.parentElement?.children ?? [])].filter((el) => el !== back.current && !el.inert)
+    for (const el of under) el.inert = true
+    return () => { for (const el of under) el.inert = false }
+  }, [])
   return (
-    <div className="sheetback" onClick={locked ? undefined : onClose}>
+    <div className="sheetback" ref={back} onClick={locked ? undefined : onClose}>
       <div className={`sheet ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.stopPropagation()}>
         {children}
       </div>

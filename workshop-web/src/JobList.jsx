@@ -2,17 +2,19 @@ import { useMemo, useState } from 'react'
 import { useMutation } from 'convex/react'
 import { APP_NAME, ICON, SIDE } from './side.js'
 import { SMALL } from './offline.js'
-import { STAGES, addressOf, api, finished, lineOf, myTurn, nameOf, newIn, stageId, stageOf, titleOf, whenOf } from './flow.js'
+import { STAGES, addressOf, api, finished, lineOf, myTurn, nameOf, newIn, stageId, stageNo, stageOf, titleOf, whenOf } from './flow.js'
 import { deliver, discard, useOutbox } from './outbox.js'
-import { AllIcon, Boards, CloseIcon, DeleteSheet, LiveLight, PlusIcon, STEP_ICONS, Saving, Shot, StepTracker, TodoIcon, useHold } from './ui.jsx'
+import { AllIcon, CloseIcon, DeleteSheet, LiveLight, Pieces, PlusIcon, STEP_ICONS, Saving, Shot, StepTracker, TickIcon, TodoIcon, useHold } from './ui.jsx'
 
 /**
- * The jobs, a card each.
+ * The jobs, a row each.
  *
- * A card says who it is for and where, shows where the job stands among its
- * five steps, and what is waiting: in amber when it waits on this side. While
- * a job is being assembled its card carries the boards bar, so the counter
- * reads the progress without opening anything.
+ * A row opens with the job's sign: a blue circle with the step's number when
+ * the step is this side's to do, a yellow square when it is with the other
+ * side, a green tick once it is finished. Then who it is for and where, the
+ * five steps as bars, and what is waiting. While a job is being assembled its
+ * row carries the pieces made, so the counter reads the progress without
+ * opening anything.
  *
  * It opens on To do: the jobs waiting on this side and any with something new
  * from the other, so the list a phone opens on is the work in hand.
@@ -49,12 +51,12 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
         <Saving saving={saving} />
       </header>
       <div className="searchbar">
-        <input type="search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input type="search" placeholder="Search" aria-label="Search the jobs" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="filters" role="group" aria-label="Which jobs to show">
         {FILTERS.map((f) => (
           <button key={f.id} type="button" className={`${filter === f.id ? 'on' : ''} ${f.id === 'todo' ? 'todo' : ''}`} aria-pressed={filter === f.id} aria-label={f.full ?? f.label} title={f.full ?? f.label} onClick={() => setFilter(f.id)}>
-            <f.icon size={19} />
+            <f.icon size={20} />
             <span>{f.label}</span>
             {jobs && jobs.filter(f.test).length > 0 && <b>{jobs.filter(f.test).length}</b>}
           </button>
@@ -65,14 +67,14 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
         {sending.map((item) => (
           <li key={item.id} className={`card outgoing ${item.state}`}>
             <button type="button" className="open" onClick={() => { if (item.state === 'failed') void deliver(item) }}>
-              <span className="thumb"><img src={item.previews[0]} alt="" /></span>
+              <span className="sign wait"><span className="spin" /></span>
               <span className="body">
                 <span className="head"><b>{item.title || 'New work order'}</b></span>
                 <small className={item.state === 'failed' ? 'bad' : 'addr'}>
                   {item.state === 'failed' ? `Not sent. Tap to try again. ${item.error}` : `Sending ${item.files.length > 1 ? `${item.files.length} photos` : 'the photo'}`}
                 </small>
               </span>
-              {item.state !== 'failed' && <span className="spin" />}
+              <span className="thumb"><img src={item.previews[0]} alt="" /></span>
             </button>
             {item.state === 'failed' && <button type="button" className="drop" onClick={() => discard(item)} aria-label="Do not send this order"><CloseIcon size={16} /></button>}
           </li>
@@ -85,7 +87,7 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
           return (
             <li key={job.id} className={`card holdable ${myTurn(job) ? 'mine' : ''} ${finished(job) ? 'over' : ''}`} {...holdToDelete(job)}>
               <button type="button" className="open" onClick={() => onOpen(job.id)}>
-                <span className="thumb">{first ? <Shot url={first.url} width={SMALL} alt="" loading="lazy" decoding="async" /> : nameOf(job)[0]?.toUpperCase()}</span>
+                <span className={`sign ${finished(job) ? 'done' : myTurn(job) ? 'mine' : 'wait'}`}>{finished(job) ? <TickIcon size={24} strokeWidth="3.2" /> : stageNo(stageId(job)) + 1}</span>
                 <span className="body">
                   <span className="head">
                     <b>{nameOf(job)}</b>
@@ -97,12 +99,13 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
                   </span>
                   <StepTracker job={job} mini />
                   <span className="foot">
-                    <em className={`chip ${finished(job) ? 'done' : myTurn(job) ? 'wait' : 'idle'}`}>{stageOf(job)}</em>
+                    <em className={`chip ${finished(job) ? 'done' : myTurn(job) ? 'mine' : 'idle'}`}>{stageOf(job)}</em>
                     {assembling
-                      ? <Boards made={job.boardsMade} total={job.boardsTotal} />
+                      ? <Pieces made={job.boardsMade} total={job.boardsTotal} />
                       : last && <small className="last">{last.from === SIDE ? 'You: ' : ''}{lineOf(last, job)}</small>}
                   </span>
                 </span>
+                {first && <span className="thumb"><Shot url={first.url} width={SMALL} alt="" loading="lazy" decoding="async" /></span>}
               </button>
             </li>
           )
@@ -119,7 +122,7 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
       </ul>
 
       {SIDE === 'shop' && (
-        <button type="button" className="fab" onClick={onNew}><PlusIcon /> New order</button>
+        <div className="dock"><button type="button" className="key must" onClick={onNew}><PlusIcon size={26} strokeWidth="2.6" /> New order</button></div>
       )}
       {deleting && (
         <DeleteSheet title="Delete this work order?" onClose={() => setDeleting(null)} run={(pin) => remove({ jobId: deleting.id, pin })}>
