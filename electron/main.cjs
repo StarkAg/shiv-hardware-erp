@@ -77,8 +77,15 @@ function createWindow() {
   })
 
   // Web links (e.g. a card's "Open online") go to the real browser, not a bare
-  // Electron window.
+  // Electron window. A blank window is the app's own: a bill opened to look at
+  // beside the list (src/lib/billWindow.ts), which the app then writes into.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === 'about:blank') {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: { width: 660, height: 900, minWidth: 0, minHeight: 0, autoHideMenuBar: true, icon: appIconPath(), backgroundColor: '#ddd7cb' },
+      }
+    }
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })

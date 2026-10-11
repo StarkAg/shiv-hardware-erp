@@ -2,7 +2,16 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, ClipboardList, FileText, RotateCcw, ShieldCheck, Truck } from 'lucide-react'
 import { useStore } from '../../lib/store'
+import { openBillWindow } from '../../lib/billWindow'
 import type { Bill } from '../../lib/types'
+import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
+import '../ledger/ledger.css'
+
+/** The bill drawn from its figures, as the ledger opens it; plain JSX. */
+const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
+  bill: Bill
+  onClose: () => void
+}) => JSX.Element
 
 /**
  * The sales marked at the counter for something still to do: a guarantee card
@@ -50,6 +59,8 @@ function MarkedSales({ kind }: { kind: ListKind }) {
   const { bills, saveBill } = useStore()
   const [showDone, setShowDone] = useState(false)
   const [showIgnored, setShowIgnored] = useState(false)
+  // The bill shown over the list, when a window of its own could not be opened.
+  const [viewing, setViewing] = useState<Bill | null>(null)
   // Only the Guarantee list can set a sale aside for now.
   const ignoredAt = (b: Bill) => (kind === 'guarantee' ? b.guaranteeIgnoredAt : undefined)
 
@@ -90,7 +101,9 @@ function MarkedSales({ kind }: { kind: ListKind }) {
         )}
         <button
           type="button"
-          onClick={() => navigate(`/bills/${b.id}`)}
+          // In a window of its own, so the list (or the card being made) stays in view.
+          onClick={() => { if (!openBillWindow(b)) setViewing(b) }}
+          title="Open the bill in its own window"
           className="flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 dark:border-white/10 dark:text-stone-200 dark:hover:bg-white/5"
         >
           <FileText size={14} /> Bill
@@ -156,6 +169,12 @@ function MarkedSales({ kind }: { kind: ListKind }) {
               {done.map((b) => row(b, true))}
             </div>
           )}
+        </div>
+      )}
+
+      {viewing && (
+        <div className="ledger-root">
+          <VoucherBillPreview bill={viewing} onClose={() => setViewing(null)} />
         </div>
       )}
     </div>
