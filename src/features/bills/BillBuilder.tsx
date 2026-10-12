@@ -2639,6 +2639,7 @@ export function BillBuilder() {
       ...d,
       customerName: toProperCase(withoutCourtesy(c.name)),
       customerPhone: c.mobile,
+      customerPhone2: '',
       customerUid: c.uid ?? '',
     }))
     setShowCust(false)
@@ -2798,7 +2799,7 @@ export function BillBuilder() {
         ...(newParty
           ? { customerName: toProperCase(newParty) }
           : crossed
-            ? { customerName: '', customerPhone: '', customerUid: '', ledgerId: undefined }
+            ? { customerName: '', customerPhone: '', customerPhone2: '', customerUid: '', ledgerId: undefined }
             : {}),
       }
     })
@@ -2875,6 +2876,25 @@ export function BillBuilder() {
     if (keepPhoto.current) { keepPhoto.current = false; return }
     setPhotoShown(null); setPhotoFull(false)
   }, [draft.id])
+  // A bill opened from the books comes with its paper: the photo already on
+  // it is docked beside the form at once, without a click on its thumbnail.
+  // Only for a bill that had its photo when it was opened: one being written
+  // gains its photo on Save, and that must not spring the dock open. Once
+  // closed, it stays closed until the bill is opened again.
+  const paperAtOpen = useRef({ id: '', had: false, shown: false })
+  if (paperAtOpen.current.id !== draft.id) {
+    paperAtOpen.current = { id: draft.id, had: (draft.attachments?.length ?? 0) > 0, shown: false }
+  }
+  const paperOnBill = useQuery(
+    api.files.describe,
+    paperAtOpen.current.had && draft.attachments?.length ? { storageIds: draft.attachments.map((a) => a.storageId) as never } : 'skip',
+  )
+  useEffect(() => {
+    const at = paperAtOpen.current
+    if (!at.had || at.shown || at.id !== draft.id || !paperOnBill?.length) return
+    at.shown = true
+    showPhoto({ attachmentUrls: paperOnBill, initialIndex: 0 })
+  }, [paperOnBill, draft.id])
   /** Picking a phone photo for the bill opens it, to type the bill from. */
   const pickPhotos = (next: PickedPhoto[]) => {
     const added = next.filter((p) => p.url && !photoPicked.some((o) => o._id === p._id))
@@ -2932,6 +2952,8 @@ export function BillBuilder() {
     return phone || uid ? { id: account.id, phone, uid } : undefined
   }, [draft.customerName, liveCustomers])
   const [changeContact, setChangeContact] = useState(false)
+  // The box for a second number, opened by its button; a bill that has one shows it anyway.
+  const [secondPhone, setSecondPhone] = useState(false)
   useEffect(() => { setChangeContact(false) }, [contactOnFile?.id])
   // However the voucher was opened — the name typed, picked, or the voucher
   // started from the account itself — an empty box takes the account's
@@ -4144,6 +4166,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                   ...d,
                   customerName: name,
                   customerPhone: match ? match.mobile : someoneElses('mobile', d.customerPhone) ? '' : d.customerPhone,
+                  ...(match ? { customerPhone2: '' } : {}),
                   customerUid: match ? (match.uid ?? '') : someoneElses('uid', d.customerUid) ? '' : d.customerUid,
                 }))
               }}
@@ -4228,6 +4251,62 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               }}
               className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors dark:bg-stone-800 dark:text-white ${
                 (draft.customerPhone ?? '').length === 10
+                  ? 'border-green-500 bg-green-50 dark:border-green-500'
+                  : 'border-stone-200 bg-white dark:border-white/10'
+              }`}
+            />
+          </div>
+          )}
+          {/* Under the phone box, or in its place when the account's own number
+              is already on the bill. */}
+          {!isSupplierVoucher && !secondPhone && !draft.customerPhone2 && (
+            <button
+              type="button"
+              onClick={() => {
+                setSecondPhone(true)
+                requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-bill-phone2]')?.focus())
+              }}
+              className="block text-xs font-semibold text-brass-text hover:underline"
+            >
+              + Another number
+            </button>
+          )}
+          {/* One more number to reach the customer on, for this bill: a son's,
+              the site's. It prints beside the first. */}
+          {!isSupplierVoucher && (secondPhone || !!draft.customerPhone2) && (
+          <div>
+            <label className="mb-1 flex items-center justify-between text-xs font-semibold text-muted">
+              Second phone
+              <button
+                type="button"
+                onClick={() => { setSecondPhone(false); setDraft((d) => ({ ...d, customerPhone2: '' })) }}
+                className="font-semibold text-muted hover:text-red-600 hover:underline"
+              >
+                Remove
+              </button>
+            </label>
+            <input
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={10}
+              placeholder="10-digit mobile"
+              data-bill-phone2="1"
+              data-bill-nav="1"
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { billArrowKeys(e); return }
+                if (e.key !== 'Enter') return
+                e.preventDefault()
+                const uid = document.querySelector<HTMLInputElement>('[data-bill-uid]')
+                ;(uid ?? document.querySelector<HTMLInputElement>('[data-bill-ref]'))?.focus()
+              }}
+              value={draft.customerPhone2 ?? ''}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, '').slice(0, 10)
+                setDraft((d) => ({ ...d, customerPhone2: v }))
+              }}
+              className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors dark:bg-stone-800 dark:text-white ${
+                (draft.customerPhone2 ?? '').length === 10
                   ? 'border-green-500 bg-green-50 dark:border-green-500'
                   : 'border-stone-200 bg-white dark:border-white/10'
               }`}

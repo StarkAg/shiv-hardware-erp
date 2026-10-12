@@ -87,14 +87,14 @@ export function BillPrint({ bill }: { bill: Bill }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '3mm' }}>
               {/* Customer name — page 1 only */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                {pageIdx === 0 && (bill.customerName || bill.customerPhone || bill.customerUid || bill.ref) && (
+                {pageIdx === 0 && (bill.customerName || bill.customerPhone || bill.customerPhone2 || bill.customerUid || bill.ref) && (
                   <>
                     {bill.customerName && (
                       <div style={{ fontWeight: 700, fontSize: '10.5pt' }}>M/s&nbsp;{toProperCase(bill.customerName)}</div>
                     )}
-                    {bill.customerPhone && (
+                    {(bill.customerPhone || bill.customerPhone2) && (
                       <div style={{ fontWeight: 400, fontSize: '9pt', color: '#555', marginTop: '0.5mm' }}>
-                        {bill.customerPhone}
+                        {[bill.customerPhone, bill.customerPhone2].filter(Boolean).join(' / ')}
                       </div>
                     )}
                     {bill.customerUid && (

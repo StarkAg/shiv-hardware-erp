@@ -429,6 +429,8 @@ export interface Bill extends BillCharges {
   date: string          // ISO date
   customerName: string
   customerPhone?: string
+  /** A second number to reach the customer on, for this bill: a son's, the site's. */
+  customerPhone2?: string
   customerUid?: string
   /** Optional free-text reference — PO number, site name, "via Ramesh" … */
   ref?: string

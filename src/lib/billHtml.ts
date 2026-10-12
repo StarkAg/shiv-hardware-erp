@@ -220,7 +220,7 @@ function buildReceiptHtml(bill: Bill): string {
     <div style="margin-top:8mm;font-size:10pt;line-height:1.9">
       <span style="color:#555">${paying ? 'Paid to' : 'Received with thanks from'}</span>
       <div style="font-weight:700;font-size:12.5pt;margin-top:1mm">M/s&nbsp;${esc(toProperCase(withoutCourtesy(bill.customerName) || '—'))}</div>
-      ${bill.customerPhone ? `<div style="font-size:9pt;color:#555">${esc(bill.customerPhone)}</div>` : ''}
+      ${bill.customerPhone || bill.customerPhone2 ? `<div style="font-size:9pt;color:#555">${esc([bill.customerPhone, bill.customerPhone2].filter(Boolean).join(' / '))}</div>` : ''}
     </div>
 
     <div style="margin-top:6mm;padding:4mm 5mm;border:1px solid #111;border-radius:1mm">
@@ -274,11 +274,11 @@ function buildEstimatePages(bill: Bill): string {
 
     // Any one detail is enough to print the block — a bill can carry a ref with
     // no name (site delivery, counter sale against a PO).
-    const hasCustomerInfo = !!(bill.customerName || bill.customerPhone || bill.customerUid || bill.ref)
+    const hasCustomerInfo = !!(bill.customerName || bill.customerPhone || bill.customerPhone2 || bill.customerUid || bill.ref)
     const customerBlock = pageIdx === 0 && hasCustomerInfo
       ? `<div style="flex:1;min-width:0">
           ${bill.customerName ? `<div style="font-weight:700;font-size:10.5pt">M/s&nbsp;${esc(toProperCase(withoutCourtesy(bill.customerName)))}</div>` : ''}
-          ${bill.customerPhone ? `<div style="font-weight:400;font-size:9pt;color:#555;margin-top:0.5mm">${esc(bill.customerPhone)}</div>` : ''}
+          ${bill.customerPhone || bill.customerPhone2 ? `<div style="font-weight:400;font-size:9pt;color:#555;margin-top:0.5mm">${esc([bill.customerPhone, bill.customerPhone2].filter(Boolean).join(' / '))}</div>` : ''}
           ${bill.customerUid ? `<div style="font-weight:400;font-size:8.5pt;color:#777;margin-top:0.5mm">UID - ${esc(bill.customerUid)}</div>` : ''}
           ${bill.ref ? `<div style="font-weight:400;font-size:8.5pt;color:#777;margin-top:0.5mm">Ref - ${esc(bill.ref)}</div>` : ''}
         </div>`

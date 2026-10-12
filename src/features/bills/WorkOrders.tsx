@@ -107,7 +107,7 @@ export function visitSlipHtml(b: Bill, advance: string): string {
     <h1>Site measurement · ${esc(b.number)}</h1>
     <div class="grid">
       <b>Customer</b><span>M/s ${esc(b.customerName)}</span>
-      <b>Phone</b><span>${esc(b.customerPhone) || '—'}</span>
+      <b>Phone</b><span>${esc([b.customerPhone, b.customerPhone2].filter(Boolean).join(' / ')) || '—'}</span>
       <b>Site / ref</b><span>${esc(b.ref) || '&nbsp;'}</span>
       <b>Order date</b><span>${fmtDate(b.date)}</span>
       <b>Advance</b><span>${esc(advance.replace(/^Advance\s*/, '')) || '—'}</span>
