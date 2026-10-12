@@ -96,7 +96,7 @@ export default function Fix({ page, index, count, onClose, onDelete, onMove, onT
       </div>
       <footer className="fix-bar">
         <button type="button" className="glass" onClick={() => setCorners(WHOLE)}>Whole</button>
-        <button type="button" className="glass" disabled={busy} onClick={() => void onTurn()}>↻</button>
+        <button type="button" className="glass" disabled={busy} onClick={() => void onTurn()} aria-label="Turn the page"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 4v5h-5" /></svg></button>
         <button type="button" className="glass" disabled={index === 0} onClick={() => onMove(-1)} aria-label="Move page earlier"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button>
         <button type="button" className="glass" disabled={index === count - 1} onClick={() => onMove(1)} aria-label="Move page later"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button>
         <button type="button" className="glass danger" onClick={onDelete}>Delete</button>

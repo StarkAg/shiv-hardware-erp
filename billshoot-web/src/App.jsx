@@ -246,7 +246,7 @@ export default function App() {
       )}
 
       <footer className="bar">
-        <button type="button" className="glass side" onClick={() => gallery.current?.click()} aria-label="Add from photos">▦</button>
+        <button type="button" className="glass side" onClick={() => gallery.current?.click()} aria-label="Add from photos"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg></button>
         <button type="button" className="shutter" onClick={shoot} disabled={camera !== 'on'} aria-label="Shoot a page" />
         <button type="button" className="primary side share" disabled={!ready || !sheet} onClick={share}>
           {pages.length ? (ready && sheet ? `Share ${pages.length}` : '…') : 'Share'}
