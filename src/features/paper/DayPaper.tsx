@@ -66,17 +66,26 @@ type Line = {
  * Sales with nothing received for them that day.
  *
  * Each sale looks for a receipt of the same amount from the same party, and a
- * receipt answers for one sale only — so two ₹500 sales and one ₹500 receipt
- * leave one of them marked. A credit sale is meant to stay that way; the mark
- * is there so a cash sale whose receipt was never written is seen the same day.
+ * receipt answers for one sale only, so two ₹500 sales and one ₹500 receipt
+ * leave one of them marked. A sale left over is still paid when the party's
+ * other receipts that day add up to it: ₹11,384 sold and paid as ₹3,000 and
+ * ₹8,384 is settled, not unpaid. A credit sale is meant to stay marked; the
+ * mark is there so a cash sale whose receipt was never written is seen the
+ * same day.
  */
 function markUnpaid(sales: Line[] | undefined, receipts: Line[] | undefined) {
   const left = [...(receipts ?? [])]
+  const unmatched: Line[] = []
   for (const sale of sales ?? []) {
     if (!(sale.amount && sale.amount > 0)) continue
     const at = left.findIndex((r) => r.partyId === sale.partyId && Math.abs((r.amount ?? 0) - sale.amount!) < 0.5)
-    if (at === -1) sale.unpaid = true
+    if (at === -1) unmatched.push(sale)
     else left.splice(at, 1)
+  }
+  // What is left, party by party: the receipts against the sales.
+  const sum = (lines: Line[], party?: string) => lines.filter((l) => l.partyId === party).reduce((t, l) => t + (l.amount ?? 0), 0)
+  for (const sale of unmatched) {
+    if (sum(left, sale.partyId) + 0.5 < sum(unmatched, sale.partyId)) sale.unpaid = true
   }
 }
 

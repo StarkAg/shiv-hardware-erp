@@ -2851,7 +2851,10 @@ export function BillBuilder() {
     // The bill photo open beside the form stays open across the switch. Only
     // marked when the switch starts a fresh voucher (a new id); a type changed
     // in place keeps the same id and closes nothing anyway.
-    keepPhoto.current = Boolean(freshBill)
+    // Only a photo opened by hand: one that opened by itself (the account's
+    // last bill, the first phone photo, a posted bill's own) belongs to the
+    // voucher it opened on, and the new voucher opens its own.
+    keepPhoto.current = Boolean(freshBill) && handShownFor.current === draftRef.current.id
     // "New order" on the Work list: the quotation starts with Order on.
     if (pageParams.get('order') === '1') setDraft((d) => ({ ...d, workOrder: true }))
     setView('form')
