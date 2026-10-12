@@ -107,6 +107,9 @@ type Props = {
   toolsBefore?: React.ReactNode
 }
 
+/** How close a photo opens: a little more than the whole page. */
+const OPEN_ZOOM = 1.5
+
 /** What a photo shown among others is on (BillViewer photoStrip). */
 type Entry = { type: string; number: string; date: string; amount: string; refNo: string; party: string; paper: string }
 /** One colour per kind of entry, so a purchase and a sale are told apart at a glance. */
@@ -139,7 +142,9 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
   const [index, setIndex] = useState(Math.max(0, Math.min(initialIndex, attachments.length - 1)))
   const at = Math.min(index, Math.max(0, attachments.length - 1))
   const file = attachments[at]
-  const [zoom, setZoom] = useState(1)
+  // A bill opens a little closer than the whole page, where its lines can be
+  // read without reaching for the zoom; Fit shows the whole page.
+  const [zoom, setZoom] = useState(OPEN_ZOOM)
   const [rotation, setRotation] = useState(0)
   const [natural, setNatural] = useState({ width: 800, height: 1100 })
   const [area, setArea] = useState({ width: 800, height: 600 })
@@ -194,7 +199,9 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
   const findHeld = () => requestAnimationFrame(() => {
     const el = stage.current
     const at = held.current
-    if (!el || !at) return
+    if (!el) return
+    // Not moved on from another bill: the top of the page, across its middle.
+    if (!at) { el.scrollTo((el.scrollWidth - el.clientWidth) / 2, 0); return }
     el.scrollTo(at.x * (el.scrollWidth - el.clientWidth), at.y * (el.scrollHeight - el.clientHeight))
   })
 
