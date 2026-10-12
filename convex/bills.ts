@@ -454,3 +454,58 @@ export const trashLeftVoucher = internalMutation({
     return { done: true, voucherNo: voucher.voucherNo, fy: voucher.fy }
   },
 })
+
+/**
+ * Bills whose entry in the books is gone (deleted to the Trash, or purged),
+ * kept on the counters as "Not posted" and refused on every retry.
+ *
+ * A bill whose sale is still in the books under its BILL-n reference, for the
+ * same customer, only names an old entry: it is pointed at the live one. Any
+ * other is taken off every counter as a bill deleted is (to the bills' Trash,
+ * with a tombstone), leaving the books as they are. `dryRun` says what would
+ * be done and does nothing.
+ *
+ *   npx convex run bills:tidyOrphans '{"dryRun":true}' --prod
+ */
+export const tidyOrphans = internalMutation({
+  args: { dryRun: v.boolean() },
+  handler: async (ctx, { dryRun }) => {
+    const relinked: string[] = []
+    const removed: string[] = []
+    for (const bill of await readBills(ctx)) {
+      if (!bill?.id || bill.kind === 'quotation' || !bill.voucherId) continue
+      const id = ctx.db.normalizeId('vouchers', String(bill.voucherId))
+      if (id && (await ctx.db.get(id))) continue
+      const ref = `BILL-${bill.number}`
+      const live = bill.ledgerId
+        ? await ctx.db.query('vouchers')
+            .withIndex('by_party', (q) => q.eq('partyLedgerId', bill.ledgerId as Id<'ledgers'>))
+            .filter((q) => q.eq(q.field('refNo'), ref)).first()
+        : null
+      const what = `${bill.number} ${bill.customerName ?? ''} ${bill.total ?? ''}`.trim()
+      if (live) {
+        relinked.push(what)
+        if (!dryRun) {
+          const fixed = { ...bill, voucherId: live._id, updatedAt: Date.now() }
+          delete fixed.postError
+          await writeBills(ctx, [fixed])
+        }
+        continue
+      }
+      removed.push(what)
+      if (dryRun) continue
+      const deletedAt = Date.now()
+      if (!(await ctx.db.query('billTombstones').withIndex('by_bill', (q) => q.eq('billId', bill.id)).unique())) {
+        await ctx.db.insert('billTombstones', { billId: bill.id, number: bill.number ? String(bill.number) : undefined, deletedAt })
+      }
+      await ctx.db.insert('billsTrash', { billId: bill.id, bill, deletedAt })
+      await dropBill(ctx, bill.id)
+    }
+    if (!dryRun && (relinked.length || removed.length)) {
+      await record(ctx, 'bill.tidy', `Tidied bills whose entry was gone: ${relinked.length} re-linked to their sale, ${removed.length} removed`, {
+        detail: { relinked, removed },
+      })
+    }
+    return { relinked, removed }
+  },
+})

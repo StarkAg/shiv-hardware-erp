@@ -5009,9 +5009,12 @@ const VCH_ABBR: Record<string, string> = {
   sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR', refund: 'REF', grn: 'GRN', quotation: 'QTN',
 }
 const billLabel = (b: Bill) =>
-  // A voucher opened for editing already carries the books' own label —
-  // prefixing it again gave rows reading "SAL-SAL-0003".
-  b.voucherId ? String(b.number) : `${VCH_ABBR[b.kind ?? 'sale']}-${String(b.number).replace(/^Q-/, '')}`
+  // A voucher opened for editing already carries the books' own label:
+  // prefixing it again gave rows reading "SAL-SAL-0003". Told by the label
+  // itself, not by the bill having a voucher: a bill of the shop's own that
+  // failed to post again still has its voucher and a bare number ("122"),
+  // which then sat in the type filter as a series of its own.
+  /^[A-Z]{2,}-/.test(String(b.number)) ? String(b.number) : `${VCH_ABBR[b.kind ?? 'sale']}-${String(b.number).replace(/^Q-/, '')}`
 
 /**
  * Which tab an account opens on. A sale or a receipt is written against a
