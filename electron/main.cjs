@@ -134,6 +134,17 @@ function showScreens() {
 
 // The panel website serves the same build as these screens, a minute after a push.
 const SCREENS_SITE = 'https://shiv-panel.vercel.app'
+/**
+ * How often the website is looked at for newer screens. Shiv Counter is the
+ * counter's working screen all day, and a push every few minutes put an
+ * "Update ready" box in front of the quotation being written each time; it
+ * looks every three hours, and asks at most once while it is open (taken or
+ * not, the newest screens are there when it next opens). The panel app looks
+ * every five minutes, as before.
+ */
+const SCREENS_EVERY = IS_QUOTATION_APP ? 3 * 60 * 60_000 : 5 * 60_000
+const ASK_ONCE = IS_QUOTATION_APP
+let askedThisRun = false
 
 /**
  * Looks at the website for newer screens: soon after opening, then every few
@@ -159,18 +170,20 @@ function watchScreensSite() {
     }
   }
   const first = setTimeout(look, 5000)
-  const every = setInterval(look, 5 * 60_000)
+  const every = setInterval(look, SCREENS_EVERY)
   return () => { clearTimeout(first); clearInterval(every) }
 }
 
 /** Newer screens have been put in: take them now, or when the app next opens. */
 async function offerNewScreens() {
   if (askingAboutScreens || !mainWindow || mainWindow.isDestroyed() || !showing) return
+  if (ASK_ONCE && askedThisRun) return
   const newest = newestScreens()
   if (newest.builtAt <= showing.builtAt) return
   // The same commit built twice (here by a deploy, and by the website) is no update.
   if (newest.commit && newest.commit === showing.commit) return
   askingAboutScreens = true
+  askedThisRun = true
   try {
     const { response } = await dialog.showMessageBox(mainWindow, {
       type: 'info',

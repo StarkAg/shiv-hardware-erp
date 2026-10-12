@@ -1,6 +1,7 @@
+import type React from 'react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Check, Copy, Eye, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
+import { Camera, Check, Copy, Eye, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card, Input } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
@@ -24,6 +25,10 @@ import { printViaShop } from '../../lib/printViaShop'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
 import { indiaYear } from '../../lib/businessDate'
+import { BillDock, readDockSize, type DockSize } from '../../components/BillDock'
+import BillViewerUntyped from '../ledger/components/BillViewer'
+
+const BillViewer = BillViewerUntyped as unknown as (props: { voucher: unknown; onClose: () => void; docked?: boolean; onExpand?: () => void }) => React.JSX.Element
 
 type GuaranteeLayout = 'card' | 'a4'
 
@@ -746,9 +751,37 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     await notifyCustomers(minted)
   }
 
+  /**
+   * The bill this card is made from, its photo docked beside the form so the
+   * sizes, brand and thickness are read off the paper while the card is
+   * filled in. Opens by itself for a bill with a photo; the Bill photo button
+   * shuts it and opens it again. A card made without a bill shows nothing.
+   */
+  const sourceBill = fromBillId ? bills.find((b) => b.id === fromBillId) : undefined
+  const billPapers = sourceBill?.attachments ?? []
+  const [paperOpen, setPaperOpen] = useState(true)
+  const [paperFull, setPaperFull] = useState(false)
+  const [dockSize, setDockSize] = useState<DockSize>(readDockSize)
+  const docked = billPapers.length > 0 && paperOpen && !paperFull
+  const billShown = sourceBill && {
+    party: sourceBill.customerName,
+    vchLabel: `Bill ${sourceBill.number}`,
+    date: Date.parse(sourceBill.date) || undefined,
+    attachmentUrls: billPapers,
+  }
+
   return (
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4">
+      {docked && billShown && (
+        <BillDock size={dockSize} onResize={setDockSize} besideList={false}>
+          <BillViewer voucher={billShown} docked onExpand={() => setPaperFull(true)} onClose={() => setPaperOpen(false)} />
+        </BillDock>
+      )}
+      {paperFull && billShown && <BillViewer voucher={billShown} onClose={() => setPaperFull(false)} />}
+      <div
+        className={`min-h-0 flex-1 overflow-y-auto p-3 md:p-4 ${docked ? 'pb-[calc(var(--dock-h)+1rem)] md:pb-4 md:pr-[calc(var(--dock-w)+1rem)]' : ''}`}
+        style={{ '--dock-w': dockSize.w + 'px', '--dock-h': dockSize.h + 'px' } as React.CSSProperties}
+      >
         {/* Card layout from 1024px: the form scrolls on the left, the print preview
             (slot 1 above slot 2) stays put on the right. Narrower, it sits below. */}
         <div className={layout === 'card' ? 'flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-4' : 'flex flex-col gap-3'}>
@@ -777,6 +810,11 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 <Button onClick={printCard} disabled={!hasRows || generating} data-enter-submit className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
                   <Printer size={20} /> Print
                 </Button>
+                {billPapers.length > 0 && (
+                  <Button variant="outline" onClick={() => { setPaperOpen((open) => !open); setPaperFull(false) }} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                    <Camera size={20} /> {paperOpen ? 'Hide bill photo' : 'Bill photo'}
+                  </Button>
+                )}
                 {/* No "From a bill" here any more: a sale marked Guarantee card is
                     on the Guarantee list, and its Make card opens this form
                     filled from that bill. */}
@@ -970,13 +1008,13 @@ type CustomerInfo = { id: string; name: string; mobile: string; uid: string; add
 
 /** Name, mobile and UID for one card; the same fields for card 1 and card 2. */
 /** A customer account as the name box offers it: the name without "M/s", with what the account holds. */
-type CustomerAccount = { name: string; phone: string; aadhaar: string }
+export type CustomerAccount = { name: string; phone: string; aadhaar: string }
 
 /**
  * Reads the customer accounts for the name box — mounted only where the cloud
  * is set up, since without it there is no account list (and no Convex client).
  */
-function CustomerAccounts({ onAccounts }: { onAccounts: (list: CustomerAccount[]) => void }) {
+export function CustomerAccounts({ onAccounts }: { onAccounts: (list: CustomerAccount[]) => void }) {
   const masters = useLive(api.masters.all, {}, 'masters') as { ledgers?: { name: string; groupName?: string; phone?: string; aadhaar?: string }[] } | undefined
   useEffect(() => {
     if (!masters?.ledgers) return
@@ -1260,7 +1298,7 @@ const AUTO = -2
  * type, each value once, with a note on the right (a rate, the years). Opens as
  * you type or click; Up/Down move in it, Enter or a click picks, Esc closes.
  */
-function ComboBox({ value, options, note, placeholder, onChange, className }: {
+export function ComboBox({ value, options, note, placeholder, onChange, className }: {
   value: string
   options: string[]
   note?: (option: string) => string

@@ -30,6 +30,8 @@ import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
 import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
+import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/GuaranteeBuilder'
+import { convexEnabled } from '../../lib/convexSync'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -56,6 +58,8 @@ export function QuotationBuilder() {
   const [number] = useState(() => existing?.number ?? nextQuoteNumber())
   const [quoteId] = useState(() => existing?.id ?? uid())
   const [deletingSet, setDeletingSet] = useState(false)
+  // The customer accounts the name box offers (guarantee/GuaranteeBuilder CustomerAccounts).
+  const [accounts, setAccounts] = useState<CustomerAccount[]>([])
   const [customer, setCustomer] = useState(
     existing?.customer ?? { id: uid(), name: '', mobile: '', uid: '', address: '' },
   )
@@ -250,7 +254,27 @@ export function QuotationBuilder() {
           <div className="shrink-0 rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">Customer</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Input label="M/s (Name)" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
+              {/* Picked from the customer accounts, as on the guarantee card: the
+                  mobile comes with it. A name not in the books can still be typed. */}
+              {accounts.length ? (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-muted">M/s (Name)</span>
+                  <ComboBox
+                    value={customer.name}
+                    placeholder="Pick or type a customer"
+                    options={accounts.map((a) => a.name)}
+                    note={(n) => accounts.find((a) => a.name === n)?.phone ?? ''}
+                    onChange={(name) => {
+                      const account = accounts.find((a) => a.name.trim().toLowerCase() === name.trim().toLowerCase())
+                      setCustomer({ ...customer, name, ...(account?.phone ? { mobile: account.phone } : {}) })
+                    }}
+                    className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+                  />
+                </label>
+              ) : (
+                <Input label="M/s (Name)" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
+              )}
+              {convexEnabled() && <CustomerAccounts onAccounts={setAccounts} />}
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>
                 <input
