@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useConvex, useMutation, useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { shortDate } from '../lib/format';
@@ -26,6 +26,7 @@ const TONE = {
   'admin.wipe': ['system', 'del'],
   'chain.begin': ['sealed', 'add'],
   'chain.accept': ['accepted', 'edit'],
+  'chain.bitcoin': ['bitcoin', 'add'],
 };
 
 const clock = (ms) => {
@@ -59,6 +60,39 @@ const stamp = (ms) => {
  * when asked, and lets vouchers the check found changed be accepted as they
  * stand, with the PIN.
  */
+/** Saves a file from the browser. */
+const saveFile = (name, data, type) => {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+/**
+ * Where the night's fingerprint stands in Bitcoin (convex/anchor.ts), and its
+ * proof to download: the fingerprint as a text file and its .ots beside it,
+ * which `ots verify` checks on any computer without this app.
+ */
+function BitcoinLine({ anchor, inBitcoin }) {
+  const convex = useConvex();
+  const download = async (a) => {
+    const got = await convex.query(api.chain.anchorProof, { id: a._id });
+    if (!got) return;
+    const name = `shiv-books-${new Date(got.at).toISOString().slice(0, 10)}.txt`;
+    saveFile(name, got.head, 'text/plain');
+    setTimeout(() => saveFile(`${name}.ots`, got.proof, 'application/octet-stream'), 400);
+  };
+  const written = anchor?.status === 'bitcoin' ? anchor : inBitcoin;
+  return (
+    <p className="chainbar-meta">
+      {written && <>In Bitcoin: the fingerprint of {stamp(written.at)} is in block {written.height.toLocaleString('en-IN')}
+        {written.blockTime ? ` (${stamp(written.blockTime)})` : ''} · <button type="button" className="link" onClick={() => download(written)}>Download proof</button></>}
+      {anchor?.status === 'pending' && <>{written ? ' · ' : ''}The fingerprint of {stamp(anchor.at)} is sent to Bitcoin, waiting for a block (a few hours)</>}
+      {anchor?.status === 'failed' && <>{written ? ' · ' : ''}Bitcoin: {anchor.error}</>}
+    </p>
+  );
+}
+
 function ChainBar() {
   const chain = useQuery(api.chain.latest, {});
   const check = useMutation(api.chain.check);
@@ -95,6 +129,7 @@ function ChainBar() {
             {last.head ? <> · fingerprint <button type="button" className="link mono" title={last.head} onClick={copy}>{copied ? 'copied' : `${last.head.slice(0, 12)}…`}</button></> : null}
           </p>
         )}
+        {(chain.anchor || chain.inBitcoin) && <BitcoinLine anchor={chain.anchor} inBitcoin={chain.inBitcoin} />}
       </div>
       <div className="chainbar-acts">
         {last?.changedCount > 0 && <button type="button" className="link" onClick={() => setAccepting(true)}>Accept as they stand</button>}

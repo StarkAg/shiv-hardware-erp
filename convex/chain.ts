@@ -215,6 +215,12 @@ export const verify = internalAction({
       }
 
       const unsealed: number = await ctx.runQuery(internal.chain.unsealed, {})
+      // The night's fingerprint goes into Bitcoin (convex/anchor.ts), when the
+      // chain is whole and it is not the one sent already.
+      if (by === 'night' && !brokenAt && entries > 0) {
+        const last = await ctx.runQuery(internal.chain.lastAnchorHead, {})
+        if (last !== prev) await ctx.scheduler.runAfter(0, internal.anchor.stamp, { head: prev, headSeq: expect - 1 })
+      }
       await ctx.runMutation(internal.chain.saveCheck, {
         checkId, by,
         found: {
@@ -244,17 +250,82 @@ export const check = mutation({
   },
 })
 
-/** What the History screen shows: the last check that finished, and whether one is running. */
+/** What the History screen shows: the last check that finished, whether one is running, and the Bitcoin proofs. */
 export const latest = query({
   args: {},
   handler: async (ctx) => {
     const recent = await ctx.db.query('chainChecks').withIndex('by_at').order('desc').take(6)
     const head = await chainHead(ctx)
+    const anchors = await ctx.db.query('chainAnchors').withIndex('by_at').order('desc').take(10)
+    const inBitcoin = anchors.find((a) => a.status === 'bitcoin')
+    const shown = (a: (typeof anchors)[number] | undefined) => a && {
+      _id: a._id, at: a.at, head: a.head, headSeq: a.headSeq, status: a.status,
+      height: a.height ?? null, blockTime: a.blockTime ?? null, error: a.error ?? null,
+    }
     return {
       running: !!recent[0]?.running && Date.now() - recent[0].at < 2 * 60_000,
       last: recent.find((row) => !row.running) ?? null,
       sealed: head?.seq ?? 0,
+      // The newest fingerprint sent, and the newest one already in a block.
+      anchor: shown(anchors[0]) ?? null,
+      inBitcoin: inBitcoin && inBitcoin !== anchors[0] ? shown(inBitcoin) : null,
     }
+  },
+})
+
+// ── Into Bitcoin (convex/anchor.ts) ─────────────────────────────────────────
+/** The fingerprint last sent, so the same one is not sent twice. */
+export const lastAnchorHead = internalQuery({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query('chainAnchors').withIndex('by_at').order('desc').first())?.head ?? null,
+})
+
+export const saveAnchor = internalMutation({
+  args: {
+    head: v.string(), headSeq: v.number(),
+    digest: v.optional(v.string()), proof: v.optional(v.bytes()), calendars: v.optional(v.number()),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, { error, ...rest }) => {
+    await ctx.db.insert('chainAnchors', { at: Date.now(), ...rest, status: error ? 'failed' : 'pending', ...(error ? { error } : {}) })
+  },
+})
+
+/** Proofs still waiting for a block, from the last three weeks. */
+export const pendingAnchors = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query('chainAnchors').withIndex('by_status', (q) => q.eq('status', 'pending')).collect()
+    return rows.filter((r) => r.proof && Date.now() - r.at < 21 * 86400_000).map((r) => ({ _id: r._id, proof: r.proof! }))
+  },
+})
+
+export const upgradeAnchor = internalMutation({
+  args: {
+    id: v.id('chainAnchors'), proof: v.optional(v.bytes()),
+    height: v.optional(v.number()), blockTime: v.optional(v.number()), error: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, proof, height, blockTime, error }) => {
+    const anchor = await ctx.db.get(id)
+    if (!anchor) return
+    await ctx.db.patch(id, {
+      checkedAt: Date.now(),
+      ...(proof ? { proof } : {}),
+      ...(error ? { error } : {}),
+      ...(height !== undefined ? { status: 'bitcoin' as const, height, blockTime } : {}),
+    })
+    if (height !== undefined) {
+      await record(ctx, 'chain.bitcoin', `The books' fingerprint of ${new Date(anchor.at).toISOString().slice(0, 10)} is written in Bitcoin block ${height.toLocaleString('en-IN')}`)
+    }
+  },
+})
+
+/** The proof file itself, to download and check with `ots verify`. */
+export const anchorProof = query({
+  args: { id: v.id('chainAnchors') },
+  handler: async (ctx, { id }) => {
+    const anchor = await ctx.db.get(id)
+    return anchor?.proof ? { head: anchor.head, at: anchor.at, proof: anchor.proof } : null
   },
 })
 

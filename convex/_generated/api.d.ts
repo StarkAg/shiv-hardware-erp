@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
+import type * as anchor from "../anchor.js";
 import type * as attendance from "../attendance.js";
 import type * as backups from "../backups.js";
 import type * as billFlow from "../billFlow.js";
@@ -49,6 +50,7 @@ import type * as lib_inventoryPin from "../lib/inventoryPin.js";
 import type * as lib_inventorySeed from "../lib/inventorySeed.js";
 import type * as lib_money from "../lib/money.js";
 import type * as lib_numbering from "../lib/numbering.js";
+import type * as lib_ots from "../lib/ots.js";
 import type * as lib_parties from "../lib/parties.js";
 import type * as lib_pin from "../lib/pin.js";
 import type * as lib_receipts from "../lib/receipts.js";
@@ -91,6 +93,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   ai: typeof ai;
+  anchor: typeof anchor;
   attendance: typeof attendance;
   backups: typeof backups;
   billFlow: typeof billFlow;
@@ -130,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inventorySeed": typeof lib_inventorySeed;
   "lib/money": typeof lib_money;
   "lib/numbering": typeof lib_numbering;
+  "lib/ots": typeof lib_ots;
   "lib/parties": typeof lib_parties;
   "lib/pin": typeof lib_pin;
   "lib/receipts": typeof lib_receipts;

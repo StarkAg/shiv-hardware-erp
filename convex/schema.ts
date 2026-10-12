@@ -690,6 +690,26 @@ export default defineSchema({
   }).index("by_at", ["at"]),
 
   /**
+   * The night's fingerprint of the books, written into Bitcoin through
+   * OpenTimestamps (convex/anchor.ts). `proof` is the .ots file: pending until
+   * a calendar has put it into a block, then `height` names the block. With
+   * the fingerprint saved as a file beside it, `ots verify` checks it anywhere.
+   */
+  chainAnchors: defineTable({
+    at: v.number(),
+    head: v.string(),
+    headSeq: v.number(),
+    digest: v.optional(v.string()),
+    proof: v.optional(v.bytes()),
+    calendars: v.optional(v.number()),
+    status: v.union(v.literal("pending"), v.literal("bitcoin"), v.literal("failed")),
+    height: v.optional(v.number()),
+    blockTime: v.optional(v.number()),
+    checkedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+  }).index("by_at", ["at"]).index("by_status", ["status"]),
+
+  /**
    * Photos taken on the phone that have not been filed against a voucher yet.
    * The phone's whole job is to get the picture into the shop's hands the
    * moment it is taken; deciding which bill it belongs to happens at the

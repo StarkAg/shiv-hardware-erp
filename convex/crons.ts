@@ -30,4 +30,8 @@ crons.daily('clear old wrong PINs', { hourUTC: 21, minuteUTC: 0 }, internal.devi
 // fingerprint out of this database.
 crons.daily('check the sealed history', { hourUTC: 20, minuteUTC: 0 }, internal.chain.verify, { by: 'night' })
 
+// The night's fingerprint, sent to Bitcoin after the check, is asked after
+// every few hours until it is in a block (convex/anchor.ts).
+crons.interval('bring the books fingerprint into bitcoin', { hours: 3 }, internal.anchor.upgrade, {})
+
 export default crons
