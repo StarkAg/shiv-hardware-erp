@@ -10,6 +10,7 @@
 import type { MutationCtx } from '../_generated/server'
 import type { Id } from '../_generated/dataModel'
 import { round2, balanced, signed } from './money'
+import { record } from './history'
 
 export type Line = { ledgerId: Id<'ledgers'>; side: 'Dr' | 'Cr'; amount: number }
 
@@ -35,6 +36,10 @@ export async function writeLines(
       date,
     })
   }
+  // Sealed here, at the one place lines are written, so no way into the books
+  // can change what a voucher posts without the chain taking its fingerprint
+  // (lib/seal.ts). The line that says what was done is written by the caller.
+  await record(ctx, 'voucher.lines', 'Lines written', { entity: 'voucher', entityId: voucherId, quiet: true })
 }
 
 /** Takes a voucher's lines back out, for a rewrite. */

@@ -9,6 +9,8 @@ export const list = query({
       .query("history")
       .withIndex("by_at")
       .order("desc")
+      // Lines written for the seal alone say nothing a person needs to read.
+      .filter((q) => q.neq(q.field("quiet"), true))
       .take(limit ?? 300);
     return rows.map((r) => ({
       _id: r._id,

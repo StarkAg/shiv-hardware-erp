@@ -600,6 +600,16 @@
 .ledger-root .history-day{position: sticky; top: 0; z-index: 1; background: var(--card);
   padding: 10px 20px 6px; font-size: 10.5px; font-weight: 800;
   letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);}
+/* The seal on the history: what the last check found, and the button that checks again. */
+.ledger-root .chainbar{display: flex; align-items: flex-start; gap: 12px; margin: 0 20px 10px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card2); font-size: 13px;}
+.ledger-root .chainbar.ok{border-color: var(--green);}
+.ledger-root .chainbar.bad{border-color: var(--red);}
+.ledger-root .chainbar.bad b{color: var(--red);}
+.ledger-root .chainbar-main{flex: 1; min-width: 0;}
+.ledger-root .chainbar-main p{margin: 4px 0 0; overflow-wrap: anywhere;}
+.ledger-root .chainbar-meta{color: var(--muted); font-size: 12px;}
+.ledger-root .chainbar-acts{flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;}
 .ledger-root .history-row{display: flex; align-items: baseline; gap: 11px; padding: 7px 20px;
   font-size: 13.5px; line-height: 1.45;}
 .ledger-root .history-row:hover{background: var(--card2);}

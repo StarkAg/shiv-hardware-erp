@@ -649,6 +649,44 @@ export default defineSchema({
     entity: v.optional(v.string()),
     entityId: v.optional(v.string()),
     detail: v.optional(v.string()),   // before/after, as JSON
+    // The seal (convex/lib/seal.ts): this line's place in the chain, the
+    // fingerprint of the line before it, and its own fingerprint over
+    // everything above plus that. `state` is the fingerprint of the voucher
+    // the line is about, as it stood when the line was written. A line from
+    // before the chain was begun has none of these until it is sealed.
+    seq: v.optional(v.number()),
+    prev: v.optional(v.string()),
+    hash: v.optional(v.string()),
+    state: v.optional(v.string()),
+    // Written for the seal alone (a voucher's lines rewritten): kept out of
+    // the History screen, where the line that says what was done already is.
+    quiet: v.optional(v.boolean()),
+  }).index("by_at", ["at"]).index("by_seq", ["seq"]).index("by_entity", ["entityId", "seq"]),
+
+  /**
+   * Each time the chain was checked (convex/chain.ts): by hand from the
+   * History screen, or by itself every night. The newest row is what the
+   * screen shows; the fingerprint in it is the one to keep a copy of
+   * somewhere else.
+   */
+  chainChecks: defineTable({
+    at: v.number(),
+    by: v.union(v.literal("hand"), v.literal("night")),
+    running: v.optional(v.boolean()),
+    ok: v.optional(v.boolean()),
+    entries: v.optional(v.number()),          // sealed lines walked
+    unsealed: v.optional(v.number()),         // lines not sealed yet
+    headSeq: v.optional(v.number()),
+    head: v.optional(v.string()),             // the last fingerprint
+    // Where the chain stops fitting, when it does.
+    brokenAt: v.optional(v.object({ seq: v.number(), at: v.number(), summary: v.string(), why: v.string() })),
+    vouchers: v.optional(v.number()),         // vouchers compared with their last sealed line
+    vouchersUnsealed: v.optional(v.number()), // vouchers no sealed line speaks for yet
+    // Vouchers that no longer match the last line written about them.
+    changed: v.optional(v.array(v.object({ voucherId: v.string(), label: v.string() }))),
+    changedCount: v.optional(v.number()),
+    tookMs: v.optional(v.number()),
+    error: v.optional(v.string()),
   }).index("by_at", ["at"]),
 
   /**

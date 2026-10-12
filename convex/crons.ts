@@ -25,4 +25,9 @@ crons.interval(
 // Wrong-PIN marks older than the lockout window are no use to anyone.
 crons.daily('clear old wrong PINs', { hourUTC: 21, minuteUTC: 0 }, internal.devices.sweepAttempts, {})
 
+// The sealed history is walked end to end every night (convex/chain.ts), at
+// 1:30 am in the shop, so the backup that runs at 2 carries that night's
+// fingerprint out of this database.
+crons.daily('check the sealed history', { hourUTC: 20, minuteUTC: 0 }, internal.chain.verify, { by: 'night' })
+
 export default crons
