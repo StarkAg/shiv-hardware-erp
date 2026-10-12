@@ -35,7 +35,7 @@ const queueSummary = (unit) => {
  * straight onto the voucher — and pasting catches a screenshot without it
  * ever becoming a file.
  */
-export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill, attached = [], stepRef, onPosition }) {
+export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill, attached = [], stepRef, onPosition, onWaiting }) {
   const saved = useQuery(api.files.describe, attached.length ? { storageIds: attached.map((file) => file.storageId) } : 'skip');
   // The voucher shooter has its own queue. Keep older unstacked photos from
   // the panel camera; lettered stacks belong to the sorting site.
@@ -115,6 +115,26 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
       contentType: 'image/jpeg',
     }));
 
+  /** A waiting bill as the viewer takes it: its pages, and where it came from. */
+  const shownOf = (unit) => ({
+    party: unit.pages.length > 1 ? `From the phone · ${unit.pages.length} pages` : 'From the phone',
+    date: unit.pages[0].at,
+    vchLabel: '',
+    attachmentUrls: asAttachments(unit.pages),
+  });
+  /**
+   * The first bill photo still waiting to be filed, told to whoever asks
+   * (`onWaiting`) once the phone's queue has loaded and again whenever it is a
+   * different one: null when nothing waits. A new voucher opens it beside the
+   * form, so the entry starts from the paper without a click.
+   */
+  const queueLoaded = voucherPhotosLive !== undefined && legacyPhotosLive !== undefined;
+  const firstWaiting = units[0]?.key ?? '';
+  useEffect(() => {
+    if (!onWaiting || !queueLoaded) return;
+    onWaiting(units[0] ? { key: units[0].key, shown: shownOf(units[0]) } : null);
+  }, [queueLoaded, firstWaiting]);
+
   const [over, setOver] = useState(false);
   const [toDelete, setToDelete] = useState(null);
   const [hovered, setHovered] = useState(null);
@@ -154,14 +174,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
   const openViewer = (unit) => {
     clearHoverClose();
     setHovered(null);
-    const cover = unit.pages[0];
-    const shown = {
-      party: unit.pages.length > 1 ? `From the phone · ${unit.pages.length} pages` : 'From the phone',
-      date: cover.at,
-      vchLabel: '',
-      attachmentUrls: asAttachments(unit.pages),
-    };
-    viewBill(shown);
+    viewBill(shownOf(unit));
   };
 
   const showMagnifier = (event, unit) => {

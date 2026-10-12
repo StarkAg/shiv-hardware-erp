@@ -33,6 +33,7 @@ const BillDrop = BillDropUntyped as unknown as (props: {
   stepRef?: { current: ((dir: number) => boolean) | null }
   /** Where the picked bill sits among the tiles, or null when none is picked. */
   onPosition?: (pos: { index: number; count: number; label: string } | null) => void
+  onWaiting?: (first: { key: string; shown: unknown } | null) => void
 }) => JSX.Element
 
 /** The ledger's full-screen photo viewer, likewise plain JSX. */
@@ -2867,13 +2868,17 @@ export function BillBuilder() {
   // The phone queue's arrows on the docked photo (see BillDrop's stepRef).
   const stepPhoto = useRef<((dir: number) => boolean) | null>(null)
   const [photoPos, setPhotoPos] = useState<{ index: number; count: number; label: string } | null>(null)
-  const showPhoto = (shown: unknown) => { setPhotoShown(shown); setPhotoFull(false); setDockKey((k) => k + 1) }
+  // The voucher a photo was last opened on by hand: what opens by itself never replaces that.
+  const handShownFor = useRef('')
+  const dockPhoto = (shown: unknown) => { setPhotoShown(shown); setPhotoFull(false); setDockKey((k) => k + 1) }
+  const showPhoto = (shown: unknown) => { handShownFor.current = draft.id; dockPhoto(shown) }
   // A different bill closes the photo — except a switch of voucher type
   // (Sale to Receipt…), which starts a fresh voucher from the same paper: the
   // photo being typed from stays open (keepPhoto, set by that switch).
   const keepPhoto = useRef(false)
+  const keptPhotoFor = useRef('')
   useEffect(() => {
-    if (keepPhoto.current) { keepPhoto.current = false; return }
+    if (keepPhoto.current) { keepPhoto.current = false; keptPhotoFor.current = draft.id; return }
     setPhotoShown(null); setPhotoFull(false)
   }, [draft.id])
   // A bill opened from the books comes with its paper: the photo already on
@@ -2893,8 +2898,30 @@ export function BillBuilder() {
     const at = paperAtOpen.current
     if (!at.had || at.shown || at.id !== draft.id || !paperOnBill?.length) return
     at.shown = true
-    showPhoto({ attachmentUrls: paperOnBill, initialIndex: 0 })
+    if (handShownFor.current !== draft.id) dockPhoto({ attachmentUrls: paperOnBill, initialIndex: 0 })
   }, [paperOnBill, draft.id])
+  // A new voucher starts from the paper: the first bill photo still waiting
+  // to be filed (the first tile under "From the phone", told by BillDrop) is
+  // docked beside the form as it opens. It is only shown, not picked: picking
+  // is still a tap on its tile, so no voucher takes a photo it was not typed
+  // from. When that photo is filed or thrown away while it is still the one
+  // on show, the next waiting one takes its place.
+  const [waitingPaper, setWaitingPaper] = useState<{ key: string; shown: unknown } | null | undefined>(undefined)
+  const autoPaper = useRef<{ id: string; key: string; shown: unknown }>({ id: '', key: '', shown: null })
+  useEffect(() => {
+    if (waitingPaper === undefined) return
+    const isNew = !voucherId && !bills.some((b) => b.id === draft.id)
+    if (!isNew || paperAtOpen.current.had || keptPhotoFor.current === draft.id) return
+    if (photoPicked.length || photoFiles.length) return
+    const auto = autoPaper.current
+    const first = auto.id !== draft.id
+    // Only what this put there is ever replaced, never a photo opened by hand.
+    if (handShownFor.current === draft.id) return
+    if (!first && (auto.key === (waitingPaper?.key ?? '') || photoShown !== auto.shown)) return
+    autoPaper.current = { id: draft.id, key: waitingPaper?.key ?? '', shown: waitingPaper?.shown ?? null }
+    if (waitingPaper) dockPhoto(waitingPaper.shown)
+    else if (!first) setPhotoShown(null)
+  }, [waitingPaper, draft.id])
   /** Picking a phone photo for the bill opens it, to type the bill from. */
   const pickPhotos = (next: PickedPhoto[]) => {
     const added = next.filter((p) => p.url && !photoPicked.some((o) => o._id === p._id))
@@ -4778,6 +4805,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               picked={photoPicked}
               onPick={pickPhotos}
               onViewBill={showPhoto}
+              onWaiting={setWaitingPaper}
               stepRef={stepPhoto}
               onPosition={(pos: typeof photoPos) => setPhotoPos((was) =>
                 was?.index === pos?.index && was?.count === pos?.count && was?.label === pos?.label ? was : pos)}
