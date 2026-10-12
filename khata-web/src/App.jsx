@@ -69,7 +69,7 @@ function useSaveToPhone() {
   const customers = useQuery(api.reports.receivables, {})
   const suppliers = useQuery(api.reports.outstanding, {})
   const [progress, setProgress] = useState(null)
-  const state = useRef({ running: false, again: false, rows: [] })
+  const state = useRef({ running: false, again: false, rows: [], runs: 0 })
   useEffect(() => {
     if (!customers || !suppliers) return
     const s = state.current
@@ -85,6 +85,8 @@ function useSaveToPhone() {
             rows: s.rows,
             fetchLedger: (ledgerId) => convex.query(api.reports.ledger, { ledgerId }),
             onProgress: setProgress,
+            // Only the first look says "all saved"; a later one that finds nothing new says nothing.
+            announce: s.runs++ === 0,
           })
         } catch { /* a phone that keeps nothing still reads everything live */ }
       } while (s.again)

@@ -13,7 +13,10 @@
  *     has been opened.
  *
  * `saveEverything` fills both in the background each time the app opens, and
- * after that fetches only what has changed.
+ * again whenever the books change while it is open. After the first time it
+ * fetches only what has changed, and says nothing unless there is something
+ * to fetch: the lists change every few minutes in a working shop, and a bar
+ * counting through photos already kept looked like saving them all over again.
  */
 
 export const PHOTOS = 'khata-photos-v1'
@@ -98,8 +101,12 @@ async function each(items, width, work) {
  * An account is fetched only when the list's line for it has changed since it
  * was saved; a photo only when it is not already kept. So the first run does
  * the work and every later one is a few seconds, or nothing at all.
+ *
+ * Progress is told only while there is something to fetch. A run that finds
+ * everything already kept is silent, but for one 'done' the first time
+ * (`announce`), so the app can say it is all on the phone.
  */
-export async function saveEverything({ rows, fetchLedger, onProgress, cancelled = () => false }) {
+export async function saveEverything({ rows, fetchLedger, onProgress, cancelled = () => false, announce = true }) {
   if (typeof indexedDB === 'undefined' || typeof caches === 'undefined') return
   // The phone is asked not to clear this out when it runs short of space.
   try { await navigator.storage?.persist?.() } catch { /* its call */ }
@@ -107,13 +114,15 @@ export async function saveEverything({ rows, fetchLedger, onProgress, cancelled 
   const parties = rows.filter((r) => r.ledger).sort((a, b) => (b.lastDate ?? 0) - (a.lastDate ?? 0))
   const urls = []
   let n = 0
-  onProgress({ step: 'accounts', done: 0, total: parties.length })
+  // Said only once an account really has to be fetched.
+  let fetching = false
   await each(parties, 3, async (row) => {
     if (cancelled()) return false
     const id = row.ledger._id
     const sig = signature(row)
     let rec = await savedLedger(id)
     if (!rec || rec.sig !== sig) {
+      fetching = true
       try {
         const data = await fetchLedger(id)
         await saveLedger(id, data, sig)
@@ -121,7 +130,8 @@ export async function saveEverything({ rows, fetchLedger, onProgress, cancelled 
       } catch { /* offline, or the books are busy: this one waits for the next run */ }
     }
     if (rec?.data) urls.push(...photosOf(rec.data))
-    onProgress({ step: 'accounts', done: ++n, total: parties.length })
+    n += 1
+    if (fetching) onProgress({ step: 'accounts', done: n, total: parties.length })
     return true
   })
   if (cancelled()) return
@@ -133,10 +143,18 @@ export async function saveEverything({ rows, fetchLedger, onProgress, cancelled 
   const unique = [...new Set(urls)]
   // Thumbnails for every bill first (a few KB each), then the screen-sized copies.
   const wanted = [...unique.map((u) => sized(u, THUMB)), ...unique.map((u) => sized(u, SCREEN))]
-  let kept = 0
+  // What is already kept, asked once: only the rest is fetched, and counted from there.
+  let have = new Set()
+  try { have = new Set((await cache.keys()).map((request) => request.url)) } catch { /* then each is asked for in turn */ }
+  const missing = wanted.filter((url) => !have.has(new URL(url, location.origin).href))
+  if (!missing.length) {
+    if (fetching || announce) onProgress({ step: 'done', done: wanted.length, total: wanted.length })
+    return
+  }
+  let kept = wanted.length - missing.length
   let failed = 0
-  onProgress({ step: 'photos', done: 0, total: wanted.length })
-  const all = await each(wanted, 4, async (url) => {
+  onProgress({ step: 'photos', done: kept, total: wanted.length })
+  const all = await each(missing, 4, async (url) => {
     if (cancelled()) return false
     let ok = false
     try { ok = await keep(cache, url) } catch { ok = false }
@@ -144,8 +162,10 @@ export async function saveEverything({ rows, fetchLedger, onProgress, cancelled 
     // The image service has stopped answering (its allowance, or the line): no
     // point asking for the other thousand. They are picked up on a later run.
     if (failed >= 8) return false
-    onProgress({ step: 'photos', done: ++kept, total: wanted.length })
+    // Only a photo that is really kept is counted.
+    if (ok) onProgress({ step: 'photos', done: ++kept, total: wanted.length })
     return true
   })
-  if (!cancelled()) onProgress({ step: all ? 'done' : 'paused', done: kept, total: wanted.length })
+  // Anything that could not be had waits, unsaid, for a later run.
+  if (!cancelled()) onProgress({ step: all && kept === wanted.length ? 'done' : 'paused', done: kept, total: wanted.length })
 }
