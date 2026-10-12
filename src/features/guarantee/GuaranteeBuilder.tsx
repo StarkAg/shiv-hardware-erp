@@ -1,8 +1,8 @@
 import type React from 'react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Camera, Check, Copy, Eye, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
-import { Button, Card, Input } from '../../components/ui'
+import { Camera, Check, Copy, Eye, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
+import { Button, Card } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
 import {
@@ -17,7 +17,7 @@ import {
 } from '../../lib/types'
 import { GuaranteeCardFace } from '../print/GuaranteeCard'
 import { enqueueGuaranteeSync } from '../../lib/offlineSync'
-import { convexEnabled, fetchLatestGuaranteeSeq } from '../../lib/convexSync'
+import { fetchLatestGuaranteeSeq } from '../../lib/convexSync'
 import { useLive } from '../ledger/lib/cache'
 import { api } from '../../../convex/_generated/api'
 import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, type ServerPrintPayload } from '../../lib/printServer'
@@ -815,9 +815,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                     <Camera size={20} /> {paperOpen ? 'Hide bill photo' : 'Bill photo'}
                   </Button>
                 )}
-                {/* No "From a bill" here any more: a sale marked Guarantee card is
-                    on the Guarantee list, and its Make card opens this form
-                    filled from that bill. */}
+                {/* Any bill: pick it and the card is filled from it, its photo
+                    beside the form. A sale marked Guarantee card is also on the
+                    Guarantee list, whose Make card does the same. */}
+                <Button variant="outline" onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: location.pathname } })} disabled={generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                  <FileText size={20} /> From a bill
+                </Button>
               </div>
             )}
             <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">
@@ -867,7 +870,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
               {onCard2
                 ? <CustomerFields key="c2" value={customer2} onChange={setCustomer2} accounts={accounts} />
                 : <CustomerFields key="c1" value={customer} onChange={setCustomer} accounts={accounts} />}
-              {convexEnabled() && <CustomerAccounts onAccounts={setAccounts} />}
+              <CustomerAccounts onAccounts={setAccounts} />
             </Card>
 
             {/* Not overflow-hidden: a Type/Thickness list opens below its row and may pass the card's edge. */}
@@ -1016,14 +1019,52 @@ export type CustomerAccount = { name: string; phone: string; aadhaar: string }
  */
 export function CustomerAccounts({ onAccounts }: { onAccounts: (list: CustomerAccount[]) => void }) {
   const masters = useLive(api.masters.all, {}, 'masters') as { ledgers?: { name: string; groupName?: string; phone?: string; aadhaar?: string }[] } | undefined
+  const bills = useStore((st) => st.bills)
+  const guarantees = useStore((st) => st.guarantees)
   useEffect(() => {
-    if (!masters?.ledgers) return
-    onAccounts(masters.ledgers
-      .filter((l) => l.groupName === 'Sundry Debtors')
-      .map((l) => ({ name: l.name.replace(/^m\/s\.?\s+/i, '').trim(), phone: l.phone ?? '', aadhaar: l.aadhaar ?? '' }))
-      .filter((a) => a.name))
-  }, [masters, onAccounts])
+    onAccounts(customerNames(masters?.ledgers, bills, guarantees))
+  }, [masters, bills, guarantees, onAccounts])
   return null
+}
+
+/**
+ * Every customer the name box can offer: the accounts in the books, and the
+ * customers on the bills this PC holds. The bills are there even when the
+ * accounts list has not come down (offline, or slow to arrive), so the box
+ * always has names to offer. An account's own phone and Aadhaar win.
+ */
+export function customerNames(
+  ledgers: { name: string; groupName?: string; phone?: string; aadhaar?: string }[] | undefined,
+  bills: { customerName?: string; customerPhone?: string; customerUid?: string; kind?: string }[] = [],
+  cards: { customer?: { name?: string; mobile?: string; uid?: string }; customer2?: { name?: string; mobile?: string; uid?: string } | null }[] = [],
+): CustomerAccount[] {
+  const bare = (name: string) => name.replace(/^m\/s\.?\s+/i, '').trim()
+  const byKey = new Map<string, CustomerAccount>()
+  for (const l of ledgers ?? []) {
+    if (l.groupName !== 'Sundry Debtors') continue
+    const name = bare(l.name)
+    if (name) byKey.set(brandKey(name), { name, phone: l.phone ?? '', aadhaar: l.aadhaar ?? '' })
+  }
+  for (const b of bills) {
+    const name = bare(b.customerName ?? '')
+    if (!name || /^w\/?b$/i.test(name) || ['purchase', 'payment', 'grn'].includes(b.kind ?? '')) continue
+    const key = brandKey(name)
+    const had = byKey.get(key)
+    if (!had) byKey.set(key, { name, phone: b.customerPhone ?? '', aadhaar: b.customerUid ?? '' })
+    else if (!had.phone && b.customerPhone) had.phone = b.customerPhone
+  }
+  // A UID or mobile written on an earlier guarantee card for the same name
+  // fills what the account and the bills do not have.
+  for (const card of cards) {
+    for (const c of [card.customer, card.customer2]) {
+      const name = bare(c?.name ?? '')
+      const had = name ? byKey.get(brandKey(name)) : undefined
+      if (!had) continue
+      if (!had.aadhaar && c?.uid) had.aadhaar = c.uid
+      if (!had.phone && c?.mobile) had.phone = c.mobile
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
 function CustomerFields({ value, onChange, accounts = [] }: { value: CustomerInfo; onChange: (next: CustomerInfo) => void; accounts?: CustomerAccount[] }) {
@@ -1031,7 +1072,7 @@ function CustomerFields({ value, onChange, accounts = [] }: { value: CustomerInf
   const names = useMemo(() => accounts.map((a) => a.name), [accounts])
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-      {accounts.length ? (
+      {(
         // Pick the customer's account and the card takes its mobile and
         // Aadhaar; a name not in the books can still be typed.
         <label className="block">
@@ -1052,8 +1093,6 @@ function CustomerFields({ value, onChange, accounts = [] }: { value: CustomerInf
             className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
           />
         </label>
-      ) : (
-        <Input label="M/s (Name)" value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
       )}
       <label className="block">
         <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>

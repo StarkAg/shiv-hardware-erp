@@ -23,7 +23,7 @@ import {
 import { calcAllUpvcBrands, isUpvc } from '../../lib/upvc'
 import { FIXED_CARDS, FIXED_CARD_META, isFixedCard } from '../../lib/data/fixedCards'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
-import { Button, Input, Toggle } from '../../components/ui'
+import { Button, Toggle } from '../../components/ui'
 import { QuotationPrint, firstSectionRows, hasSections } from '../print/QuotationPrint'
 import { printViaShop } from '../../lib/printViaShop'
 import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
@@ -31,7 +31,6 @@ import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
 import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/GuaranteeBuilder'
-import { convexEnabled } from '../../lib/convexSync'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -256,7 +255,7 @@ export function QuotationBuilder() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {/* Picked from the customer accounts, as on the guarantee card: the
                   mobile comes with it. A name not in the books can still be typed. */}
-              {accounts.length ? (
+              {(
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold text-muted">M/s (Name)</span>
                   <ComboBox
@@ -271,10 +270,8 @@ export function QuotationBuilder() {
                     className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                   />
                 </label>
-              ) : (
-                <Input label="M/s (Name)" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
               )}
-              {convexEnabled() && <CustomerAccounts onAccounts={setAccounts} />}
+              <CustomerAccounts onAccounts={setAccounts} />
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold text-muted">Mobile</span>
                 <input
