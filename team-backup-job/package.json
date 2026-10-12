@@ -1,0 +1,14 @@
+{
+  "name": "convex-team-backups",
+  "private": true,
+  "type": "module",
+  "description": "Nightly copies of every Convex project on the team, kept on a Railway volume.",
+  "scripts": {
+    "start": "node backup.mjs serve",
+    "now": "node backup.mjs run"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "convex": "^1.46.0"
+  }
+}

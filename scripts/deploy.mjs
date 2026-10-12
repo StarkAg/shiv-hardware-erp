@@ -56,6 +56,7 @@ const TARGETS = [
   { id: 'cloud-api', kind: 'railway', service: 'cloud-api', upload: '.', label: 'Cloud API (Railway)', paths: ['cloud-api'] },
   { id: 'backups', kind: 'railway', service: 'backups', upload: 'backup-job', label: 'Nightly backups (Railway)', paths: ['backup-job'] },
   { id: 'bis', kind: 'railway', service: 'bis-lookup', upload: 'bis-lookup', label: 'BIS lookup (Railway)', paths: ['bis-lookup'] },
+  { id: 'team-backups', kind: 'railway', service: 'convex-backups', upload: 'team-backup-job', label: 'Convex team backups (Railway)', paths: ['team-backup-job'] },
   { id: 'panel', kind: 'vercel', project: 'shiv-panel', domain: 'shiv-panel.vercel.app', label: 'Panel website', paths: PANEL_SOURCES, build: 'panel' },
   { id: 'counter', kind: 'vercel', project: 'shiv-counter', domain: 'shivhardware-counter.vercel.app', label: 'Counter website', paths: PANEL_SOURCES, build: 'counter' },
   site('cash', 'cash-web', 'cash-web', 'shivhardware-cash.vercel.app', 'Cashier'),
