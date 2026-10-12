@@ -344,8 +344,8 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
       {toDetach && <Confirm
         title="Detach this from the bill?"
         body={(toDetach.contentType ?? '').startsWith('image/')
-          ? 'The photo goes back under From the phone, to be attached to the right voucher. Save the bill to finish.'
-          : 'This file is not a photo, so it cannot wait in the phone queue: it is removed for good once the bill is saved.'}
+          ? 'The photo comes off this bill now and goes back under From the phone, to be attached to the right voucher.'
+          : 'This file is not a photo, so it cannot wait in the phone queue: it comes off this bill now and is removed for good.'}
         confirmLabel="Detach"
         onConfirm={() => onDetach(toDetach)}
         onClose={() => setToDetach(null)}

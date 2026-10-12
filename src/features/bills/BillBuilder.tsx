@@ -2856,6 +2856,7 @@ export function BillBuilder() {
   const claimFromPhone = useMutation(api.inbox.claim)
   const claimVoucherPhoto = useMutation(api.voucherInbox.claim)
   const requeuePhoto = useMutation(api.voucherInbox.add)
+  const removeFromBooks = useMutation(api.bills.removeImage)
   const upload = useUploader()
   // Chosen here, not yet uploaded — uploading happens once, on save.
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -2942,16 +2943,50 @@ export function BillBuilder() {
    */
   const detachPaper = async (file: { storageId: string; contentType?: string | null }) => {
     const isPhoto = (file.contentType ?? '').startsWith('image/')
+    // In the books already: taken off the bill and its voucher there, at once
+    // (bills.removeImage). Saving alone would not do it: posting only ever
+    // adds to a voucher's papers.
+    const kept = bills.find((b) => b.id === draft.id)
+    const inBooks = draft.voucherId ?? kept?.voucherId ?? voucherId
     try {
-      if (isPhoto) await requeuePhoto({ storageId: file.storageId as never, groupId: `detached-${draft.id}` })
+      if (inBooks) {
+        await removeFromBooks({
+          ...(kept ? { billId: draft.id } : {}),
+          voucherId: String(inBooks) as never,
+          storageId: file.storageId as never,
+        })
+      } else if (isPhoto) {
+        // Not posted yet: only this draft holds it. Back in the queue before
+        // the draft lets go, so the file is never left with nothing holding it.
+        await requeuePhoto({ storageId: file.storageId as never, groupId: `detached-${draft.id}` })
+      }
     } catch (err) {
-      toast(`Could not detach the photo\n${err instanceof Error ? err.message : String(err)}`, 'error')
+      toast(`Could not detach it\n${err instanceof Error ? err.message : String(err)}`, 'error')
       return
     }
-    setDraft((d) => ({ ...d, attachments: (d.attachments ?? []).filter((a) => a.storageId !== file.storageId) }))
+    const without = (docs: Bill['attachments']) => (docs ?? []).filter((a) => a.storageId !== file.storageId)
+    setDraft((d) => ({ ...d, attachments: without(d.attachments) }))
+    // The copy this PC keeps of the bill, so a later sync does not put it back.
+    if (kept) saveBill({ ...kept, attachments: without(kept.attachments) })
     setPhotoShown(null)
-    toast(isPhoto ? 'Detached. The photo is back under From the phone.\nSave the bill to finish.' : 'Taken off the bill.\nSave the bill to finish.', 'info')
+    toast(isPhoto ? 'Detached. The photo is back under From the phone.' : 'Taken off the bill.', 'info')
   }
+  /**
+   * Every paper on this bill: its own, and any that sits on its voucher alone.
+   * The voucher can hold more than the bill does (a photo filed against it
+   * from the ledger side, or one the bill let go of by an older Save), and
+   * the day book counts the voucher's. Shown together, so what is counted
+   * there can be seen here, and detached here.
+   */
+  const voucherOfBill = useQuery(api.vouchers.detail, draft.voucherId ? { id: draft.voucherId as never } : 'skip')
+  const papersOnBill = useMemo(() => {
+    const own = draft.attachments ?? []
+    const seen = new Set(own.map((a) => a.storageId))
+    const extra = ((voucherOfBill?.attachments ?? []) as { storageId: string; kind?: string }[])
+      .filter((a) => !seen.has(a.storageId))
+      .map((a) => ({ storageId: a.storageId, kind: (a.kind ?? 'bill') as NonNullable<Bill['attachments']>[number]['kind'] }))
+    return extra.length ? [...own, ...extra] : own
+  }, [draft.attachments, voucherOfBill])
   /** Picking a phone photo for the bill opens it, to type the bill from. */
   const pickPhotos = (next: PickedPhoto[]) => {
     const added = next.filter((p) => p.url && !photoPicked.some((o) => o._id === p._id))
@@ -4830,7 +4865,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           <div className={`ledger-root mt-2 ${ledgerDark ? 'dark' : ''}`}>
             <BillDrop
               files={photoFiles}
-              attached={draft.attachments ?? []}
+              attached={papersOnBill}
               onChange={setPhotoFiles}
               picked={photoPicked}
               onPick={pickPhotos}

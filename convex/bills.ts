@@ -9,6 +9,7 @@ import { record } from './lib/history'
 import { dropBill, readBill, readBills, storeMeta, writeBills } from './lib/billRows'
 import { attachmentIds, deleteUnreferencedFiles } from './lib/attachmentFiles'
 import { trashVoucher } from './vouchers'
+import { nextVoucherPhotoNo } from './lib/numbering'
 
 /**
  * What the books were written from. On a bill already in the books these
@@ -158,6 +159,69 @@ export const addImages = mutation({
     await record(ctx, 'bill.photo.add', `Added ${added.length} photo${added.length === 1 ? '' : 's'} to bill ${bill.number}`,
       { entity: 'bill', entityId: billId })
     return { added: added.length, total: updated.attachments.length }
+  },
+})
+
+/**
+ * Takes one file off a bill and its voucher, at once.
+ *
+ * Saving the bill again never does this: posting only adds to a voucher's
+ * papers, so that a photo filed against it from the ledger side survives the
+ * bill being re-saved. Detaching is therefore an act of its own. A photo goes
+ * back to the voucher shooter's waiting queue, to be put on the voucher it
+ * belongs to; any other file is let go, and deleted if nothing else holds it.
+ * The bill's figures are untouched, so its revision is not moved on and a
+ * copy of it open on another counter still saves.
+ */
+export const removeImage = mutation({
+  args: {
+    billId: v.optional(v.string()),
+    voucherId: v.optional(v.id('vouchers')),
+    storageId: v.id('_storage'),
+  },
+  handler: async (ctx, { billId, voucherId, storageId }) => {
+    const bill = billId ? await readBill(ctx, billId) : null
+    const linked = voucherId ?? (bill?.voucherId ? ctx.db.normalizeId('vouchers', String(bill.voucherId)) : null)
+    const voucher = linked ? await ctx.db.get(linked) : null
+    if (!bill && !voucher) throw new Error('This bill is not in the books yet.')
+    const idOf = (doc: any) => (typeof doc === 'string' ? doc : doc.storageId)
+    const without = (docs: any[] = []) => docs.filter((doc) => idOf(doc) !== storageId)
+    const now = Date.now()
+    let removed = false
+    if (voucher && (voucher.attachments ?? []).some((doc: any) => idOf(doc) === storageId)) {
+      await ctx.db.patch(voucher._id, { attachments: without(voucher.attachments as any[]), updatedAt: now })
+      removed = true
+    }
+    if (bill && (bill.attachments ?? []).some((doc: any) => idOf(doc) === storageId)) {
+      await writeBills(ctx, [{ ...bill, attachments: without(bill.attachments), updatedAt: now }])
+      removed = true
+    }
+    if (billId) {
+      const flow = await ctx.db.query('billFlows').withIndex('by_bill', q => q.eq('billId', billId)).unique()
+      if (flow?.photos.includes(storageId)) {
+        await ctx.db.patch(flow._id, { photos: flow.photos.filter((id) => id !== storageId), updatedAt: now,
+          history: [...flow.history, { at: now, action: 'Bill photo detached' }] })
+      }
+    }
+    if (!removed) return { removed: false, requeued: false }
+
+    const file = await ctx.db.system.get(storageId)
+    // As the queue itself takes them (voucherInbox.add): a photo unless its type says otherwise.
+    const isPhoto = !!file && (!file.contentType || file.contentType.startsWith('image/'))
+    if (isPhoto) {
+      const waiting = await ctx.db.query('voucherInbox').collect()
+      if (!waiting.some((row) => row.storageId === storageId)) {
+        await ctx.db.insert('voucherInbox', {
+          storageId, groupId: `detached-${billId ?? linked}`, queueNo: await nextVoucherPhotoNo(ctx), at: now,
+        })
+      }
+    } else {
+      await deleteUnreferencedFiles(ctx, [storageId])
+    }
+    const from = bill ? `bill ${bill.number}` : 'a voucher'
+    await record(ctx, 'bill.photo.remove', `Detached a ${isPhoto ? 'photo' : 'file'} from ${from}`,
+      bill ? { entity: 'bill', entityId: billId! } : { entity: 'voucher', entityId: String(linked) })
+    return { removed: true, requeued: isPhoto }
   },
 })
 
