@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronLeft, Paperclip, Pencil, Printer, ReceiptText, Trash2, X } from 'lucide-react'
 import { useStore } from '../../../lib/store'
 import VoucherBillPreview from './VoucherBillPreview'
@@ -7,6 +7,7 @@ import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
 import { useNavigate } from 'react-router-dom';
 import { rupees, shortDate, aadhaarGroups, phoneDisplay, rowType } from '../lib/format';
+import { rememberPapers, warm } from '../../../lib/paperUrls';
 import PriceDialog from './PriceDialog';
 import Confirm from './Confirm';
 import { Bar, TableSkeleton } from './Skeleton';
@@ -118,6 +119,14 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const [deletingParty, setDeletingParty] = useState(false);
   const [purgingParty, setPurgingParty] = useState(null);
   const data = useLive(api.reports.ledger, { ledgerId }, `ledger:${ledgerId}`);
+  // Its bills' photos: their addresses kept for the bill screen, and the
+  // newest downloading in the background, so a bill opens with its photo at once.
+  useEffect(() => {
+    const lines = [...(data?.rows ?? []), ...(data?.pending ?? [])].sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
+    const papers = lines.flatMap((line) => line.attachmentUrls ?? []);
+    rememberPapers(papers);
+    warm(papers);
+  }, [data]);
   const papers = useLive(api.review.papersFor, { ledgerId }, `papers:${ledgerId}`) ?? [];
   // Where this party's paper physically is. The books answer what is owed; only
   // this answers "Raj Kumar ka bill dikhao" with a drawer to open.

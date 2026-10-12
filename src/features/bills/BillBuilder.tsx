@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
+import { useState, useDeferredValue, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { flushLocal, useStore } from '../../lib/store'
@@ -85,6 +85,7 @@ import { convexEnabled } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import { queueBillPhotos } from '../../lib/billPhotoOutbox'
+import { knownPapers } from '../../lib/paperUrls'
 import { postingTrouble, queuePost } from '../../lib/postOutbox'
 import Confirm from '../ledger/components/Confirm'
 import { indiaDate, indiaToday } from '../../lib/businessDate'
@@ -2386,6 +2387,7 @@ const BILL_H_PX = 793
 
 function BillPreview({ bill }: { bill: Bill }) {
   const wrapRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLIFrameElement>(null)
   const [scale, setScale] = useState(1)
 
   useLayoutEffect(() => {
@@ -2398,9 +2400,40 @@ function BillPreview({ bill }: { bill: Bill }) {
     return () => ro.disconnect()
   }, [])
 
-  const numPages = Math.max(1, Math.ceil((bill.items?.length ?? 0) / 14))
+  /**
+   * The bill as it prints, drawn again as it is typed. It used to be drawn on
+   * every key pressed, and each time the frame was thrown away and loaded
+   * afresh: the typing waited on it, and the preview blinked. Now it follows a
+   * moment after the typing stops (useDeferredValue keeps keys first, the
+   * timer lets a burst of keys settle), and the new bill is written into the
+   * frame already there instead of loading a new one.
+   */
+  const settled = useDeferredValue(bill)
+  const [shown, setShown] = useState(settled)
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(settled), 180)
+    return () => clearTimeout(timer)
+  }, [settled])
+  const numPages = Math.max(1, Math.ceil((shown.items?.length ?? 0) / 14))
   const totalH = BILL_H_PX * numPages
-  const srcDoc = useMemo(() => buildBillHtml(bill), [bill])
+  const html = useMemo(() => buildBillHtml(shown), [shown])
+  // The first drawing is the frame's own document; every one after is
+  // written into it.
+  const [srcDoc] = useState(html)
+  const drawn = useRef(html)
+  // What was last written in by hand, so the load that writing fires is not
+  // taken for the first document arriving late.
+  const written = useRef('')
+  useEffect(() => {
+    if (drawn.current === html) return
+    const doc = frameRef.current?.contentDocument
+    if (!doc) return
+    drawn.current = html
+    written.current = html
+    doc.open()
+    doc.write(html)
+    doc.close()
+  }, [html])
 
   return (
     <div>
@@ -2416,7 +2449,16 @@ function BillPreview({ bill }: { bill: Bill }) {
           }}
         >
           <iframe
+            ref={frameRef}
             srcDoc={srcDoc}
+            // Should the first document finish loading after a newer bill was
+            // written in, the newer one is written again over it.
+            onLoad={() => {
+              const doc = frameRef.current?.contentDocument
+              if (!doc || drawn.current === srcDoc || written.current === drawn.current) return
+              written.current = drawn.current
+              doc.open(); doc.write(drawn.current); doc.close()
+            }}
             scrolling="no"
             style={{
               width: BILL_W_PX,
@@ -2900,10 +2942,16 @@ export function BillBuilder() {
     leftPosted.current = paperAtOpen.current.had
     paperAtOpen.current = { id: draft.id, had: (draft.attachments?.length ?? 0) > 0, shown: false }
   }
-  const paperOnBill = useQuery(
+  // Known already when the bill was opened from a ledger (lib/paperUrls):
+  // then there is nothing to ask the books.
+  const paperKnown = paperAtOpen.current.had && draft.attachments?.length
+    ? knownPapers(draft.attachments.map((a) => String(a.storageId)))
+    : null
+  const paperAsked = useQuery(
     api.files.describe,
-    paperAtOpen.current.had && draft.attachments?.length ? { storageIds: draft.attachments.map((a) => a.storageId) as never } : 'skip',
+    paperAtOpen.current.had && draft.attachments?.length && !paperKnown ? { storageIds: draft.attachments.map((a) => a.storageId) as never } : 'skip',
   )
+  const paperOnBill = paperKnown ?? paperAsked
   useEffect(() => {
     const at = paperAtOpen.current
     if (!at.had || at.shown || at.id !== draft.id || !paperOnBill?.length) return

@@ -32,14 +32,17 @@ export default function VoucherEditor({ id, onClose }) {
    * the bill left pointing at lines it no longer matches.
    */
   const ref = detail?.refNo || '';
+  // The bill that names this voucher is on this PC already: opened at once,
+  // without waiting for the books to describe the voucher.
+  const named = bills.find((b) => String(b.voucherId ?? '') === String(id));
   const fromBill =
-    bills.find((b) => String(b.voucherId ?? '') === String(id))
+    named
     ?? (ref.startsWith('BILL-')
       ? bills.find((b) => String(b.number) === ref.slice('BILL-'.length))
       : null);
 
   useEffect(() => {
-    if (!detail) return;
+    if (!detail && !named) return;
     onClose?.();
     navigate(fromBill ? `/bills/${fromBill.id}` : `/bills/voucher/${id}`);
   }, [detail, fromBill, id, navigate, onClose]);
