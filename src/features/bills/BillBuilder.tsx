@@ -2877,8 +2877,14 @@ export function BillBuilder() {
   // photo being typed from stays open (keepPhoto, set by that switch).
   const keepPhoto = useRef(false)
   const keptPhotoFor = useRef('')
+  // Whether the voucher just left was a bill from the books with its own
+  // paper. That paper is the old bill's, not what the new voucher is being
+  // typed from, so it is never carried over, whatever started the new one.
+  const leftPosted = useRef(false)
   useEffect(() => {
-    if (keepPhoto.current) { keepPhoto.current = false; keptPhotoFor.current = draft.id; return }
+    const keep = keepPhoto.current && !leftPosted.current
+    keepPhoto.current = false
+    if (keep) { keptPhotoFor.current = draft.id; return }
     setPhotoShown(null); setPhotoFull(false)
   }, [draft.id])
   // A bill opened from the books comes with its paper: the photo already on
@@ -2888,6 +2894,7 @@ export function BillBuilder() {
   // closed, it stays closed until the bill is opened again.
   const paperAtOpen = useRef({ id: '', had: false, shown: false })
   if (paperAtOpen.current.id !== draft.id) {
+    leftPosted.current = paperAtOpen.current.had
     paperAtOpen.current = { id: draft.id, had: (draft.attachments?.length ?? 0) > 0, shown: false }
   }
   const paperOnBill = useQuery(
