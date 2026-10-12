@@ -13,6 +13,15 @@
 export type Paper = { storageId: string; url: string | null; contentType?: string | null; [k: string]: unknown }
 
 const known = new Map<string, Paper>()
+// Each account's newest bill photo, as its ledger last showed it: null when it
+// has none. A receipt opened from that ledger docks it without asking.
+const partyPapers = new Map<string, unknown>()
+
+export function rememberPartyPaper(ledgerId: string, shown: unknown) {
+  if (ledgerId) partyPapers.set(String(ledgerId), shown)
+}
+/** The account's newest bill photo if its ledger was seen: undefined when not known. */
+export const partyPaperKnown = (ledgerId: string): unknown => partyPapers.get(String(ledgerId))
 const warmed = new Set<string>()
 
 export function rememberPapers(papers: Paper[] | undefined | null) {

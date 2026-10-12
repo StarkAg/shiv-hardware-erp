@@ -8,7 +8,7 @@ import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
 import { useNavigate } from 'react-router-dom';
 import { rupees, shortDate, aadhaarGroups, phoneDisplay, rowType } from '../lib/format';
-import { rememberPapers, warm } from '../../../lib/paperUrls';
+import { rememberPapers, rememberPartyPaper, warm } from '../../../lib/paperUrls';
 import PriceDialog from './PriceDialog';
 import Confirm from './Confirm';
 import { Bar, TableSkeleton } from './Skeleton';
@@ -127,7 +127,16 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
     const papers = lines.flatMap((line) => line.attachmentUrls ?? []);
     rememberPapers(papers);
     warm(papers);
-  }, [data]);
+    // The newest bill (not a receipt or payment slip), for a receipt opened
+    // from here: docked at once, with nothing to ask the books.
+    if (!data) return;
+    const MONEY = new Set(['Receipt', 'Payment', 'Refund', 'Contra', 'Journal']);
+    const bill = lines.find((line) => !MONEY.has(line.vchType) && (line.attachmentUrls ?? []).some((a) => a.kind !== 'receipt'));
+    rememberPartyPaper(ledgerId, bill ? {
+      vchLabel: bill.vchLabel, date: bill.date, initialIndex: 0,
+      attachmentUrls: bill.attachmentUrls.filter((a) => a.kind !== 'receipt'),
+    } : null);
+  }, [data, ledgerId]);
   const papers = useLive(api.review.papersFor, { ledgerId }, `papers:${ledgerId}`) ?? [];
   // Where this party's paper physically is. The books answer what is owed; only
   // this answers "Raj Kumar ka bill dikhao" with a drawer to open.

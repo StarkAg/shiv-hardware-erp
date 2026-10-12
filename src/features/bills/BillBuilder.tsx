@@ -86,7 +86,7 @@ import { convexEnabled } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import { queueBillPhotos } from '../../lib/billPhotoOutbox'
-import { knownPapers } from '../../lib/paperUrls'
+import { knownPapers, partyPaperKnown } from '../../lib/paperUrls'
 import { postingTrouble, queuePost } from '../../lib/postOutbox'
 import Confirm from '../ledger/components/Confirm'
 import { indiaDate, indiaToday } from '../../lib/businessDate'
@@ -2967,12 +2967,15 @@ export function BillBuilder() {
   // on show, the next waiting one takes its place.
   const [waitingPaper, setWaitingPaper] = useState<{ key: string; shown: unknown } | null | undefined>(undefined)
   // The account's newest bill, for a new receipt or payment (see below).
-  const partyPaper = useQuery(
+  // Known at once when the account's ledger was open (lib/paperUrls); asked
+  // of the books only otherwise.
+  const partyWanted = MONEY_KINDS.includes(draft.kind ?? 'sale') && !!partyBalance?.ledgerId && !voucherId && !bills.some((b) => b.id === draft.id)
+  const partyKnown = partyWanted ? partyPaperKnown(partyBalance!.ledgerId) : undefined
+  const partyAsked = useQuery(
     api.vouchers.lastPaper,
-    MONEY_KINDS.includes(draft.kind ?? 'sale') && partyBalance?.ledgerId && !voucherId && !bills.some((b) => b.id === draft.id)
-      ? { ledgerId: partyBalance.ledgerId as never }
-      : 'skip',
+    partyWanted && partyKnown === undefined ? { ledgerId: partyBalance!.ledgerId as never } : 'skip',
   )
+  const partyPaper = (partyKnown !== undefined ? partyKnown : partyAsked) as typeof partyAsked
   /**
    * A receipt or payment opened for an account (from its ledger, or with the
    * name typed) waits for that account's bill rather than showing the first
