@@ -12,8 +12,10 @@ import { api } from '../../../../convex/_generated/api';
  * Each photo says which voucher it is on. A photo on two lines of the list
  * (a sale and the money taken with it) is in the set once.
  *
- * `entries` are { key, vchLabel, date, party?, attachmentUrls }; `clicked` is
- * the key of the one opened.
+ * `entries` are { key, vchLabel, date, party?, vchType?, amount?, refNo?,
+ * attachmentUrls }; `clicked` is the key of the one opened. What the entry is
+ * (type, number, day, amount, reference) heads the viewer while its photo is
+ * on screen.
  */
 export function photoStrip(entries, clicked, title) {
   const seen = new Set();
@@ -25,7 +27,28 @@ export function photoStrip(entries, clicked, title) {
     for (const a of shots) {
       seen.add(a.storageId ?? a.url);
       const where = [entry.vchLabel, entry.date != null ? shortDate(entry.date) : null, entry.party].filter(Boolean).join(' · ');
-      all.push({ ...a, label: [where, a.label].filter(Boolean).join(' · ') });
+      const caption = [
+        [entry.vchType, entry.vchLabel].filter(Boolean).join(' '),
+        entry.date != null ? longDate(entry.date) : null,
+        entry.amount != null ? '₹' + rupees(entry.amount) : 'amount not entered yet',
+        entry.refNo ? 'Ref ' + entry.refNo : null,
+        entry.party,
+      ].filter(Boolean).join(' · ');
+      all.push({
+        ...a,
+        caption,
+        label: [where, a.label].filter(Boolean).join(' · '),
+        // What the viewer's card shows for this photo (AttachmentViewer EntryCard).
+        entry: {
+          type: entry.vchType || '',
+          number: entry.vchLabel || '',
+          date: entry.date != null ? longDate(entry.date) : '',
+          amount: entry.amount != null ? '₹' + rupees(entry.amount) : '',
+          refNo: entry.refNo || '',
+          party: entry.party || '',
+          paper: a.label || '',
+        },
+      });
     }
   }
   return { party: title, attachmentUrls: all, initialIndex: Math.min(initialIndex, Math.max(0, all.length - 1)) };

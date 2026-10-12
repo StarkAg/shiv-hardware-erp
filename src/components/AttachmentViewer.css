@@ -19,8 +19,28 @@
 .attachment-center{display:flex;align-items:center;justify-content:center;min-width:100%;min-height:100%;width:max-content;padding:16px;box-sizing:border-box;}
 .attachment-status{margin:auto;padding:24px;text-align:center;font-size:14px;}
 .attachment-error{padding:8px 16px;color:#9f1d20;font-size:13px;text-align:center;}
-.attachment-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;padding:8px 12px;border-top:1px solid #d4cbbb;font-size:13px;}
-.attachment-footer span{font-variant-numeric:tabular-nums;}
+.attachment-footer{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 12px;border-top:1px solid #d4cbbb;font-size:13px;}
+/* The count sits between the arrows, on one line, whatever its length. */
+.attachment-footer button{flex:none;}
+.attachment-footer span{flex:0 1 auto;min-width:0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;}
+/* The entry a photo is on, as a card in the header: the kind in its colour. */
+.attachment-entry{flex:1;min-width:0;padding:8px 12px;border-radius:10px;border-left:6px solid var(--tone);background:color-mix(in srgb,var(--tone) 10%,#fff);}
+.attachment-entry-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.attachment-entry-type{padding:3px 9px;border-radius:999px;background:var(--tone);color:#fff;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;}
+.attachment-entry-no{font-size:15px;font-variant-numeric:tabular-nums;}
+.attachment-entry-amount{margin-left:auto;font-size:20px;font-weight:800;color:var(--tone);font-variant-numeric:tabular-nums;}
+.attachment-entry-none{margin-left:auto;font-size:13px;font-weight:700;color:#8a6d00;}
+.attachment-entry-meta{margin-top:4px;font-size:13px;color:#4c5660;overflow-wrap:anywhere;}
+.attachment-entry.tone-sale{--tone:#1a7a4a;}
+.attachment-entry.tone-purchase{--tone:#0054b4;}
+.attachment-entry.tone-receipt{--tone:#0f766e;}
+.attachment-entry.tone-payment{--tone:#b45309;}
+.attachment-entry.tone-return{--tone:#b3202a;}
+.attachment-entry.tone-quote{--tone:#6b7280;}
+.attachment-entry.tone-grn{--tone:#7c3aed;}
+.attachment-entry.tone-other{--tone:#4c5660;}
+.dark .attachment-entry{background:color-mix(in srgb,var(--tone) 22%,#1a1815);}
+.dark .attachment-entry-meta{color:#c8c0b2;}
 .attachment-thumb{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-height:50px;gap:6px;color:inherit;font-size:12px;}
 .attachment-thumb img{display:block;width:100%;height:100%;object-fit:cover;}
 .dark .attachment-panel{background:#25231e;color:#f3f0ea;}

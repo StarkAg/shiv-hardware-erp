@@ -107,6 +107,31 @@ type Props = {
   toolsBefore?: React.ReactNode
 }
 
+/** What a photo shown among others is on (BillViewer photoStrip). */
+type Entry = { type: string; number: string; date: string; amount: string; refNo: string; party: string; paper: string }
+/** One colour per kind of entry, so a purchase and a sale are told apart at a glance. */
+const TYPE_TONE: Record<string, string> = {
+  Sale: 'sale', Purchase: 'purchase', Receipt: 'receipt', Payment: 'payment',
+  'Goods Return': 'return', Refund: 'return', Quotation: 'quote', 'Goods Received': 'grn',
+}
+
+/** The entry a photo is on, as a card: its kind in its colour, number, day, amount, reference. */
+function EntryCard({ title, entry }: { title: string; entry: Entry }) {
+  const tone = TYPE_TONE[entry.type] ?? 'other'
+  return (
+    <div className={'attachment-entry tone-' + tone}>
+      <div className="attachment-entry-top">
+        {entry.type && <span className="attachment-entry-type">{entry.type}</span>}
+        <b className="attachment-entry-no">{entry.number}</b>
+        {entry.amount ? <b className="attachment-entry-amount">{entry.amount}</b> : <span className="attachment-entry-none">No amount yet</span>}
+      </div>
+      <div className="attachment-entry-meta">
+        {[entry.date, entry.party || title, entry.refNo && 'Ref ' + entry.refNo, entry.paper].filter(Boolean).join(' · ')}
+      </div>
+    </div>
+  )
+}
+
 export default function AttachmentViewer({ attachments, title = 'Attachments', subtitle, initialIndex = 0, onClose, onDownloadPdf, loading = false, docked = false, onExpand, toolsBefore }: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
@@ -128,6 +153,9 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
   const pdf = !!file && isPdfAttachment(file)
   const rendered = usePdfImage(file?.url, pdf, page, attempt)
   const shown = pdf ? rendered.url : file?.url || file?.previewUrl
+  // A photo shown among others (BillViewer photoStrip) says which entry it is on.
+  const caption = (file as { caption?: string } | undefined)?.caption
+  const entry = (file as { entry?: Entry } | undefined)?.entry
   const sheet = useRef<HTMLDivElement>(null)
   const [drawing, setDrawing] = useState(false)
   const stroke = useRef<Stroke | null>(null)
@@ -150,15 +178,34 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
     }
   }, [])
 
+  /**
+   * Going on to the next bill keeps the zoom and the place zoomed into: bills
+   * of one kind put the total, the date, the party in the same spot, so the
+   * next one is read where the last one was. Where it was is kept as a share
+   * of the page (`held`) and found again once the next photo has its size.
+   */
+  const held = useRef<{ x: number; y: number } | null>(null)
+  const hold = () => {
+    const el = stage.current
+    held.current = el && zoom > 1
+      ? { x: el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth), y: el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight) }
+      : null
+  }
+  const findHeld = () => requestAnimationFrame(() => {
+    const el = stage.current
+    const at = held.current
+    if (!el || !at) return
+    el.scrollTo(at.x * (el.scrollWidth - el.clientWidth), at.y * (el.scrollHeight - el.clientHeight))
+  })
+
   useEffect(() => {
-    setZoom(1); setRotation(0); setPage(1); setImageError(false); setActionError('')
-    setNatural({ width: 800, height: 1100 })
-    stage.current?.scrollTo(0, 0)
+    setPage(1); setImageError(false); setActionError('')
+    if (!held.current) stage.current?.scrollTo(0, 0)
   }, [at, file?.url])
 
   useEffect(() => {
     setImageError(false)
-    stage.current?.scrollTo(0, 0)
+    if (!held.current) stage.current?.scrollTo(0, 0)
   }, [page, shown])
 
   useEffect(() => {
@@ -174,7 +221,8 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
   const turn = (by: number) => {
     if (pdf && page + by >= 1 && page + by <= rendered.pages) setPage(page + by)
     else if (at + by >= 0 && at + by < attachments.length) {
-      setZoom(1); setRotation(0); setPage(1); setImageError(false)
+      hold()
+      setPage(1); setImageError(false)
       setIndex(at + by)
     }
   }
@@ -255,7 +303,7 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
       <section className="attachment-panel">
         <header className="attachment-header">
           {/* Docked there is no room to spare: the controls share the title's row. */}
-          {docked ? tools : <div className="attachment-heading"><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>}
+          {docked ? tools : entry ? <EntryCard title={title} entry={entry} /> : <div className="attachment-heading"><h2>{title}</h2>{(caption || subtitle) && <p>{caption || subtitle}</p>}</div>}
           {onExpand && <button type="button" onClick={onExpand} aria-label="Full screen" title="Full screen"><Maximize2 size={18} /></button>}
           <button ref={closeButton} type="button" onClick={onClose} aria-label="Close preview"><X size={20} /></button>
         </header>
@@ -280,7 +328,7 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
             : pdf && rendered.loading ? <div className="attachment-status" role="status">Opening PDF…</div>
             : shown && <div className="attachment-center"><div ref={sheet} className="attachment-sheet" style={{ width: width * scale, height: height * scale }}>
               <img key={shown + ':' + attempt} src={shown} alt={file?.label || 'Attachment ' + (at + 1)} draggable={false}
-                onLoad={event => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+                onLoad={event => { setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }); findHeld() }}
                 onError={() => setImageError(true)}
                 onDoubleClick={() => setZoom(current => current === 1 ? 2 : 1)}
                 style={{ width: natural.width * scale, height: natural.height * scale, left: (width - natural.width) * scale / 2, top: (height - natural.height) * scale / 2, transform: 'rotate(' + rotation + 'deg)' }} />
@@ -313,7 +361,7 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
         </div>
         <footer className="attachment-footer">
           <button type="button" onClick={() => turn(-1)} disabled={at === 0 && (!pdf || page === 1)} aria-label="Previous page"><ChevronLeft size={18} /></button>
-          <span aria-live="polite">{file?.label ? file.label + ' · ' : ''}Attachment {attachments.length ? at + 1 : 0} of {attachments.length}{pdf && rendered.pages > 1 ? ' · PDF page ' + page + ' of ' + rendered.pages : ''}</span>
+          <span aria-live="polite" title={caption || file?.label || undefined}>{entry ? '' : file?.label ? file.label + ' · ' : ''}{entry ? 'Photo' : 'Attachment'} {attachments.length ? at + 1 : 0} of {attachments.length}{pdf && rendered.pages > 1 ? ' · PDF page ' + page + ' of ' + rendered.pages : ''}</span>
           <button type="button" onClick={() => turn(1)} disabled={at >= attachments.length - 1 && (!pdf || page >= rendered.pages)} aria-label="Next page"><ChevronRight size={18} /></button>
         </footer>
       </section>

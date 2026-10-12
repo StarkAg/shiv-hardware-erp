@@ -240,8 +240,8 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
    */
   const showPhotos = (key) => onViewBill(photoStrip(stream.map((item) => {
     const row = item.r ?? item.p ?? item.g;
-    if (row) return { key: item.key, vchLabel: row.vchLabel, date: row.date, attachmentUrls: row.attachmentUrls };
-    if (item.q) return { key: item.key, vchLabel: item.q.number, date: item.date, attachmentUrls: item.q.attachments };
+    if (row) return { key: item.key, vchLabel: row.vchLabel, vchType: row.vchType ? rowType(row) : row.vchType, date: row.date, amount: row.amount ?? null, refNo: row.refNo, attachmentUrls: row.attachmentUrls };
+    if (item.q) return { key: item.key, vchType: 'Quotation', vchLabel: item.q.number, date: item.date, amount: item.q.total ?? null, attachmentUrls: item.q.attachments };
     return { key: item.key, attachmentUrls: [] };
   }), key, account?.name));
   const groupName = (masters?.ledgers ?? []).find((l) => l._id === ledgerId)?.groupName;

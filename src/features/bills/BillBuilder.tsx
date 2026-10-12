@@ -38,7 +38,7 @@ const BillDrop = BillDropUntyped as unknown as (props: {
 }) => JSX.Element
 
 /** The ledger's full-screen photo viewer, likewise plain JSX. */
-const photoStrip = photoStripUntyped as unknown as (entries: { key: string; vchLabel?: string; date?: number; party?: string; attachmentUrls?: unknown[] }[], clicked: string, title: string) => unknown
+const photoStrip = photoStripUntyped as unknown as (entries: { key: string; vchLabel?: string; vchType?: string; date?: number; party?: string; amount?: number | null; refNo?: string; attachmentUrls?: unknown[] }[], clicked: string, title: string) => unknown
 const BillViewer = BillViewerUntyped as unknown as (props: {
   voucher: unknown
   onClose: () => void
@@ -2966,9 +2966,25 @@ export function BillBuilder() {
   // from. When that photo is filed or thrown away while it is still the one
   // on show, the next waiting one takes its place.
   const [waitingPaper, setWaitingPaper] = useState<{ key: string; shown: unknown } | null | undefined>(undefined)
+  // The account's newest bill, for a new receipt or payment (see below).
+  const partyPaper = useQuery(
+    api.vouchers.lastPaper,
+    MONEY_KINDS.includes(draft.kind ?? 'sale') && partyBalance?.ledgerId && !voucherId && !bills.some((b) => b.id === draft.id)
+      ? { ledgerId: partyBalance.ledgerId as never }
+      : 'skip',
+  )
+  /**
+   * A receipt or payment opened for an account (from its ledger, or with the
+   * name typed) waits for that account's bill rather than showing the first
+   * phone photo for a moment and then swapping it out. Only an account with
+   * no bill photo gets the phone's.
+   */
+  const forParty = MONEY_KINDS.includes(draft.kind ?? 'sale') && !!withoutCourtesy(draft.customerName ?? '').trim()
+  const partyStillComing = forParty && (partyBook === undefined || (!!partyBalance?.ledgerId && partyPaper === undefined))
   const autoPaper = useRef<{ id: string; key: string; shown: unknown }>({ id: '', key: '', shown: null })
   useEffect(() => {
     if (waitingPaper === undefined) return
+    if (partyStillComing || (forParty && partyPaper)) return
     const isNew = !voucherId && !bills.some((b) => b.id === draft.id)
     if (!isNew || paperAtOpen.current.had || keptPhotoFor.current === draft.id) return
     if (photoPicked.length || photoFiles.length) return
@@ -2980,7 +2996,7 @@ export function BillBuilder() {
     autoPaper.current = { id: draft.id, key: waitingPaper?.key ?? '', shown: waitingPaper?.shown ?? null }
     if (waitingPaper) dockPhoto(waitingPaper.shown)
     else if (!first) setPhotoShown(null)
-  }, [waitingPaper, draft.id])
+  }, [waitingPaper, draft.id, partyStillComing, partyPaper])
   /**
    * A new receipt or payment opens on the paper it is most likely written
    * against: the newest bill photo on that account's ledger, docked beside the
@@ -2988,12 +3004,6 @@ export function BillBuilder() {
    * photo docked by itself, never of one opened by hand, and only once per
    * account chosen.
    */
-  const partyPaper = useQuery(
-    api.vouchers.lastPaper,
-    MONEY_KINDS.includes(draft.kind ?? 'sale') && partyBalance?.ledgerId && !voucherId && !bills.some((b) => b.id === draft.id)
-      ? { ledgerId: partyBalance.ledgerId as never }
-      : 'skip',
-  )
   const partyPaperFor = useRef('')
   useEffect(() => {
     if (!partyPaper || !partyBalance?.ledgerId || handShownFor.current === draft.id) return
@@ -5254,7 +5264,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         {/* Every photo of the days shown, in the book's order, opened at the
             row clicked: the arrows go on to the next voucher's. */}
         {viewingPhotos && <BillViewer voucher={photoStrip(
-          days.flatMap((day) => day.rows).map((r) => ({ key: r.key, vchLabel: r.label, date: r.date, party: r.party, attachmentUrls: r.photos })),
+          days.flatMap((day) => day.rows).map((r) => ({ key: r.key, vchLabel: r.label, date: r.date, party: r.party, amount: r.amount, refNo: r.ref, attachmentUrls: r.photos })),
           viewingPhotos.key,
           'Day Book',
         )} onClose={() => setViewingPhotos(null)} />}
