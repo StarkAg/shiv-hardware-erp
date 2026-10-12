@@ -19,6 +19,9 @@
  *
  *   serve                     what the service runs: wait for 03:00, back up, repeat
  *   run [full] [project ...]  back up now (full: with stored files); no project means all
+ *   start [full] [project ...] the same, left running on the service: a large project
+ *                             takes longer than a terminal link stays open. Follow it with `log`.
+ *   log [lines]               the end of what `start` has written
  *   list [project]            every copy on the volume
  *   status                    how the last run went, project by project
  *   verify <file>             open a copy and count its tables and rows
@@ -78,8 +81,10 @@ function convex(args) {
   return new Promise((resolve, reject) => {
     const child = spawn(CONVEX, args, { cwd: HERE, env: process.env })
     let out = ''
-    child.stdout.on('data', (d) => { out += d })
-    child.stderr.on('data', (d) => { out += d })
+    // Kept short: a long download repaints its progress line thousands of times.
+    const keep = (d) => { out = (out + d).slice(-4000) }
+    child.stdout.on('data', keep)
+    child.stderr.on('data', keep)
     child.on('error', reject)
     child.on('close', (code) =>
       code === 0 ? resolve(out) : reject(new Error(`convex ${args[0]} failed (${code}): ${out.trim().slice(-300)}`)))
@@ -264,6 +269,7 @@ async function run({ full = false, only = [] } = {}) {
   for (const project of projects) {
     for (const kind of kinds) {
       const started = Date.now()
+      log(`      ${project.slug} ${kind}: asking Convex for the export`)
       try {
         const got = await copyOne(project, kind, stamp)
         log(`OK    ${project.slug} ${kind}: ${got.tables} tables, ${got.rows} rows${got.storedFiles ? `, ${got.storedFiles} files` : ''}, ${mb(got.bytes)} in ${Math.round((Date.now() - started) / 1000)}s`)
@@ -280,6 +286,26 @@ async function run({ full = false, only = [] } = {}) {
   writeStatus(status)
   log(`done: ${projects.length * kinds.length - failed} copied, ${failed} failed, ${mb(freeBytes())} free`)
   return failed
+}
+
+/**
+ * Start a run that outlives the terminal it was started from.
+ *
+ * `run` over `railway ssh` dies with the link, and the link does not last the
+ * several minutes a large project's export takes: the first GradeX copy was
+ * lost that way, with nothing written to say so.
+ */
+const RUN_LOG = () => path.join(DATA, 'run.log')
+function start(args) {
+  fs.mkdirSync(DATA, { recursive: true })
+  const out = fs.openSync(RUN_LOG(), 'a')
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'run', ...args], { cwd: HERE, env: process.env, detached: true, stdio: ['ignore', out, out] })
+  child.unref()
+  console.log(`started (pid ${child.pid}); follow it with: node backup.mjs log`)
+}
+function showLog(lines = 30) {
+  if (!fs.existsSync(RUN_LOG())) { console.log('nothing has been started yet'); return }
+  console.log(fs.readFileSync(RUN_LOG(), 'utf8').trimEnd().split('\n').slice(-lines).join('\n'))
 }
 
 const STATUS = () => path.join(DATA, 'status.json')
@@ -341,12 +367,14 @@ try {
   else if (command === 'run') {
     const full = rest.includes('full')
     process.exitCode = (await run({ full, only: rest.filter((a) => a !== 'full') })) ? 1 : 0
-  } else if (command === 'list') list(rest[0])
+  } else if (command === 'start') start(rest)
+  else if (command === 'log') showLog(Number(rest[0]) || 30)
+  else if (command === 'list') list(rest[0])
   else if (command === 'status') showStatus()
   else if (command === 'verify') console.log(JSON.stringify(inspect(fs.existsSync(rest[0]) ? rest[0] : inData(rest[0])), null, 2))
   else if (command === 'send') process.stdout.write(fs.readFileSync(inData(rest[0])).toString('base64'))
   else {
-    console.error('usage: node backup.mjs serve | run [full] [project ...] | list [project] | status | verify <file> | send <file>')
+    console.error('usage: node backup.mjs serve | run [full] [project ...] | start [full] [project ...] | log [lines] | list [project] | status | verify <file> | send <file>')
     process.exitCode = 2
   }
 } catch (err) {
