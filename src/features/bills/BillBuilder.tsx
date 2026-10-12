@@ -7,7 +7,7 @@ import { useShortcuts } from '../../lib/useShortcuts'
 // has already sent in. One picker for the whole shop rather than a second one
 // that would drift from it.
 import BillDropUntyped from '../ledger/components/BillDrop'
-import BillViewerUntyped from '../ledger/components/BillViewer'
+import BillViewerUntyped, { photoStrip as photoStripUntyped } from '../ledger/components/BillViewer'
 import type { Attachment } from '../../lib/attachments'
 import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
 import { useUploader } from '../ledger/lib/upload'
@@ -38,6 +38,7 @@ const BillDrop = BillDropUntyped as unknown as (props: {
 }) => JSX.Element
 
 /** The ledger's full-screen photo viewer, likewise plain JSX. */
+const photoStrip = photoStripUntyped as unknown as (entries: { key: string; vchLabel?: string; date?: number; party?: string; attachmentUrls?: unknown[] }[], clicked: string, title: string) => unknown
 const BillViewer = BillViewerUntyped as unknown as (props: {
   voucher: unknown
   onClose: () => void
@@ -5250,10 +5251,13 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
         {previewing && (
           <VoucherBillPreview bill={previewing} onClose={() => setPreviewing(null)} />
         )}
-        {viewingPhotos && <BillViewer voucher={{
-          party: viewingPhotos.party, date: viewingPhotos.date, vchLabel: viewingPhotos.label,
-          refNo: viewingPhotos.ref, amount: viewingPhotos.amount, attachmentUrls: viewingPhotos.photos,
-        }} onClose={() => setViewingPhotos(null)} />}
+        {/* Every photo of the days shown, in the book's order, opened at the
+            row clicked: the arrows go on to the next voucher's. */}
+        {viewingPhotos && <BillViewer voucher={photoStrip(
+          days.flatMap((day) => day.rows).map((r) => ({ key: r.key, vchLabel: r.label, date: r.date, party: r.party, attachmentUrls: r.photos })),
+          viewingPhotos.key,
+          'Day Book',
+        )} onClose={() => setViewingPhotos(null)} />}
         <header className="topbar">
           <h1 className="pagetitle">Day Book</h1>
           <div className="actions">

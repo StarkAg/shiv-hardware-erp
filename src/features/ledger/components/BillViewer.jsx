@@ -1,10 +1,35 @@
 import React from 'react';
 import AttachmentViewer from '../../../components/AttachmentViewer';
 import { isPdfAttachment } from '../../../lib/attachments';
-import { rupees, longDate } from '../lib/format';
+import { rupees, longDate, shortDate } from '../lib/format';
 import { saveBillPdf } from '../lib/pdf';
 import { useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
+
+/**
+ * Every photo of a list of vouchers (a ledger, a day), in the order shown,
+ * as one set to go left and right through, opened at the voucher clicked.
+ * Each photo says which voucher it is on. A photo on two lines of the list
+ * (a sale and the money taken with it) is in the set once.
+ *
+ * `entries` are { key, vchLabel, date, party?, attachmentUrls }; `clicked` is
+ * the key of the one opened.
+ */
+export function photoStrip(entries, clicked, title) {
+  const seen = new Set();
+  const all = [];
+  let initialIndex = 0;
+  for (const entry of entries) {
+    const shots = (entry.attachmentUrls ?? []).filter((a) => (a.url || a.storageId) && !seen.has(a.storageId ?? a.url));
+    if (entry.key === clicked) initialIndex = all.length;
+    for (const a of shots) {
+      seen.add(a.storageId ?? a.url);
+      const where = [entry.vchLabel, entry.date != null ? shortDate(entry.date) : null, entry.party].filter(Boolean).join(' · ');
+      all.push({ ...a, label: [where, a.label].filter(Boolean).join(' · ') });
+    }
+  }
+  return { party: title, attachmentUrls: all, initialIndex: Math.min(initialIndex, Math.max(0, all.length - 1)) };
+}
 
 /** One attachment preview, shared by the books, vouchers, and phone view. */
 export default function BillViewer({ voucher, onClose, initialIndex = 0, docked = false, onExpand = undefined, toolsBefore = undefined }) {

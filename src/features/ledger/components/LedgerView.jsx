@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronLeft, Paperclip, Pencil, Printer, ReceiptText, Trash2, X } from 'lucide-react'
 import { useStore } from '../../../lib/store'
 import VoucherBillPreview from './VoucherBillPreview'
+import { photoStrip } from './BillViewer'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
@@ -233,6 +234,16 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
      */
     .sort((a, b) => a.date - b.date || SAME_DAY[a.kind] - SAME_DAY[b.kind]);
 
+  /**
+   * A row's photos open as part of every photo on this account, oldest to
+   * newest as the rows are shown, so the arrows go on to the next bill.
+   */
+  const showPhotos = (key) => onViewBill(photoStrip(stream.map((item) => {
+    const row = item.r ?? item.p ?? item.g;
+    if (row) return { key: item.key, vchLabel: row.vchLabel, date: row.date, attachmentUrls: row.attachmentUrls };
+    if (item.q) return { key: item.key, vchLabel: item.q.number, date: item.date, attachmentUrls: item.q.attachments };
+    return { key: item.key, attachmentUrls: [] };
+  }), key, account?.name));
   const groupName = (masters?.ledgers ?? []).find((l) => l._id === ledgerId)?.groupName;
   const isCustomer = groupName === 'Sundry Debtors';
   // Staff and rented premises: owed a month at a time and paid like a
@@ -543,7 +554,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       {item.g.attachmentUrls.length > 0 && (
                         <button
                           className="clip"
-                          onClick={() => onViewBill({ ...item.g, party: account?.name })}
+                          onClick={() => showPhotos(item.key)}
                           aria-label="Challan photo"
                         >
                           <Paperclip size={13} aria-hidden="true" /> {item.g.attachmentUrls.length > 1 ? item.g.attachmentUrls.length : ''}
@@ -608,7 +619,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                         <ReceiptText size={13} aria-hidden="true" />
                       </button>
                       {!!item.q.attachments?.length && <button type="button" className="clip" aria-label="Preview quotation photos"
-                        onClick={() => onViewBill({ party: account?.name, vchLabel: item.q.number, date: Date.parse(item.q.date), attachmentUrls: item.q.attachments })}>
+                        onClick={() => showPhotos(item.key)}>
                         <Paperclip size={13} aria-hidden="true" />
                       </button>}
                     </td>
@@ -657,7 +668,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       {item.p.attachmentUrls.length > 0 && (
                         <button
                           className="clip"
-                          onClick={() => onViewBill({ ...item.p, party: account?.name })}
+                          onClick={() => showPhotos(item.key)}
                           aria-label="Bill photo"
                         >
                           <Paperclip size={13} aria-hidden="true" /> {item.p.attachmentUrls.length > 1 ? item.p.attachmentUrls.length : ''}
@@ -730,7 +741,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       {item.r.attachmentUrls.length > 0 && (
                         <button
                           className="clip"
-                          onClick={() => onViewBill({ ...item.r, party: account?.name })}
+                          onClick={() => showPhotos(item.key)}
                           aria-label="Bill photo"
                         >
                           <Paperclip size={13} aria-hidden="true" /> {item.r.attachmentUrls.length > 1 ? item.r.attachmentUrls.length : ''}

@@ -1122,8 +1122,13 @@ export const lastPaper = query({
       .query("vouchers")
       .withIndex("by_party", (q) => q.eq("partyLedgerId", ledgerId))
       .collect();
+    // A bill: a receipt or a payment carries the paper of the money, not of
+    // what it is paid against, so it is passed over.
+    const types = new Map((await ctx.db.query("voucherTypes").collect()).map((t) => [t._id, t.name]));
+    const money = new Set(["Receipt", "Payment", "Refund", "Contra", "Journal"]);
     const newest = vouchers
-      .filter((vch) => (vch.attachments ?? []).length > 0)
+      .filter((vch) => !money.has(types.get(vch.typeId) ?? ""))
+      .filter((vch) => (vch.attachments ?? []).some((a: any) => typeof a === "string" || a.kind !== "receipt"))
       .sort((a, b) => b.date - a.date || b._creationTime - a._creationTime)[0];
     if (!newest) return null;
     const type = await ctx.db.get(newest.typeId);
@@ -1131,7 +1136,7 @@ export const lastPaper = query({
       voucherId: newest._id,
       date: newest.date,
       vchLabel: `${type?.abbr ?? "VCH"}-${String(newest.voucherNo).padStart(4, "0")}`,
-      attachmentUrls: await describeAttachments(ctx, newest.attachments as never),
+      attachmentUrls: await describeAttachments(ctx, (newest.attachments ?? []).filter((a: any) => typeof a === "string" || a.kind !== "receipt") as never),
     };
   },
 });
