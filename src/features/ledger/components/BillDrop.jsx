@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from 'convex/react';
-import { Check, Paperclip, X } from 'lucide-react'
+import { Check, Paperclip, Unlink, X } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { shortDate } from '../lib/format';
@@ -35,7 +35,7 @@ const queueSummary = (unit) => {
  * straight onto the voucher — and pasting catches a screenshot without it
  * ever becoming a file.
  */
-export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill, attached = [], stepRef, onPosition, onWaiting }) {
+export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill, attached = [], stepRef, onPosition, onWaiting, onDetach }) {
   const saved = useQuery(api.files.describe, attached.length ? { storageIds: attached.map((file) => file.storageId) } : 'skip');
   // The voucher shooter has its own queue. Keep older unstacked photos from
   // the panel camera; lettered stacks belong to the sorting site.
@@ -137,6 +137,8 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
 
   const [over, setOver] = useState(false);
   const [toDelete, setToDelete] = useState(null);
+  // A file already on the bill, about to be taken off it.
+  const [toDetach, setToDetach] = useState(null);
   const [hovered, setHovered] = useState(null);
   const [preview, setPreview] = useState(null);
   const input = useRef(null);
@@ -260,6 +262,11 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
               onClick={() => viewBill({ attachmentUrls: saved, initialIndex: index })}>
               <AttachmentThumbnail file={file} />
             </button>
+            {onDetach && <button type="button" className="shot-detach" title="Detach from this bill"
+              aria-label={'Detach attached file ' + (index + 1) + ' from this bill'}
+              onClick={() => setToDetach(file)}>
+              <Unlink size={14} aria-hidden="true" />
+            </button>}
           </div>)}
         </div>}
       </div>}
@@ -333,6 +340,15 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
         requireLabel="Type delete to confirm"
         onConfirm={() => deleteUnit(toDelete)}
         onClose={() => setToDelete(null)}
+      />}
+      {toDetach && <Confirm
+        title="Detach this from the bill?"
+        body={(toDetach.contentType ?? '').startsWith('image/')
+          ? 'The photo goes back under From the phone, to be attached to the right voucher. Save the bill to finish.'
+          : 'This file is not a photo, so it cannot wait in the phone queue: it is removed for good once the bill is saved.'}
+        confirmLabel="Detach"
+        onConfirm={() => onDetach(toDetach)}
+        onClose={() => setToDetach(null)}
       />}
       {preview && <BillViewer voucher={preview} onClose={() => setPreview(null)} />}
 

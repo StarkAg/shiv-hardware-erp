@@ -34,6 +34,7 @@ const BillDrop = BillDropUntyped as unknown as (props: {
   /** Where the picked bill sits among the tiles, or null when none is picked. */
   onPosition?: (pos: { index: number; count: number; label: string } | null) => void
   onWaiting?: (first: { key: string; shown: unknown } | null) => void
+  onDetach?: (file: { storageId: string; contentType?: string | null }) => void
 }) => JSX.Element
 
 /** The ledger's full-screen photo viewer, likewise plain JSX. */
@@ -2854,6 +2855,7 @@ export function BillBuilder() {
   const syncQuote = useMutation(api.bills.save)
   const claimFromPhone = useMutation(api.inbox.claim)
   const claimVoucherPhoto = useMutation(api.voucherInbox.claim)
+  const requeuePhoto = useMutation(api.voucherInbox.add)
   const upload = useUploader()
   // Chosen here, not yet uploaded — uploading happens once, on save.
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -2929,6 +2931,27 @@ export function BillBuilder() {
     if (waitingPaper) dockPhoto(waitingPaper.shown)
     else if (!first) setPhotoShown(null)
   }, [waitingPaper, draft.id])
+  /**
+   * A file taken off the bill it is attached to.
+   *
+   * A photo goes back to the phone's waiting queue first, so it can be put on
+   * the voucher it belongs to: a file that nothing holds is deleted when the
+   * bill is saved without it, and the queue is what holds it. Anything else
+   * (a PDF) has no queue to wait in and is simply let go. The bill itself
+   * changes on Save, like every other edit to it.
+   */
+  const detachPaper = async (file: { storageId: string; contentType?: string | null }) => {
+    const isPhoto = (file.contentType ?? '').startsWith('image/')
+    try {
+      if (isPhoto) await requeuePhoto({ storageId: file.storageId as never, groupId: `detached-${draft.id}` })
+    } catch (err) {
+      toast(`Could not detach the photo\n${err instanceof Error ? err.message : String(err)}`, 'error')
+      return
+    }
+    setDraft((d) => ({ ...d, attachments: (d.attachments ?? []).filter((a) => a.storageId !== file.storageId) }))
+    setPhotoShown(null)
+    toast(isPhoto ? 'Detached. The photo is back under From the phone.\nSave the bill to finish.' : 'Taken off the bill.\nSave the bill to finish.', 'info')
+  }
   /** Picking a phone photo for the bill opens it, to type the bill from. */
   const pickPhotos = (next: PickedPhoto[]) => {
     const added = next.filter((p) => p.url && !photoPicked.some((o) => o._id === p._id))
@@ -4813,6 +4836,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               onPick={pickPhotos}
               onViewBill={showPhoto}
               onWaiting={setWaitingPaper}
+              onDetach={detachPaper}
               stepRef={stepPhoto}
               onPosition={(pos: typeof photoPos) => setPhotoPos((was) =>
                 was?.index === pos?.index && was?.count === pos?.count && was?.label === pos?.label ? was : pos)}

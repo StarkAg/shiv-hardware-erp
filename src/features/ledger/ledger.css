@@ -789,6 +789,13 @@ to{opacity: 0}}
 .ledger-root .fromphone .shot-page{top: 36px; left: 6px;}
 .ledger-root .fromphone .shot-tick{top: 55px; right: 6px; z-index: 3;}
 .ledger-root .fromphone .shot-tile.stack .shot-tick{right: 14px;}
+/* Taking a file off the bill it is attached to: a small button on its corner. */
+.ledger-root .saved-attachments .shot-detach{position: absolute; top: 3px; right: 3px; z-index: 2;
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border: 1px solid rgba(255,255,255,.35); border-radius: 8px;
+  background: rgba(20,18,16,.88); color: #fff; cursor: pointer;}
+.ledger-root .saved-attachments .shot-detach:hover,
+.ledger-root .saved-attachments .shot-detach:focus-visible{background: var(--brass); color: var(--brass-ink);}
 .ledger-root .fromphone .shot-delete{position: absolute; top: 5px; right: 5px; z-index: 4;
   display: grid; place-items: center; width: 44px; height: 44px;
   border: 1px solid rgba(255,255,255,.35); border-radius: 10px;
