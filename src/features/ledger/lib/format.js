@@ -108,3 +108,24 @@ export const phoneDisplay = (raw) => {
 
 /** The href for tapping a number to call it. */
 export const phoneHref = (raw) => `tel:${String(raw).replace(/[^\d+]/g, '')}`;
+
+/** The accounts money sits in: the drawer and the bank. */
+const MONEY_ACCOUNTS = new Set(['Cash', 'Bank']);
+
+/**
+ * What a line on an account's ledger is called.
+ *
+ * A sale paid on the spot is one voucher with two lines on the customer's
+ * account: the sale, and the money taken with it. Both belong to the Sale
+ * voucher, but the money line is a receipt and reads as one; the same for a
+ * purchase paid on the spot, whose money line is a payment. Told apart by the
+ * side the line is on and by what stands against it (Cash or Bank), so the
+ * Sales account's own lines, or the bank's, keep the voucher's name.
+ */
+export const rowType = (row) => {
+  const against = row.contra ?? [];
+  const money = against.length > 0 && against.every((name) => MONEY_ACCOUNTS.has(name));
+  if (money && row.vchType === 'Sale' && row.side === 'Cr') return 'Receipt';
+  if (money && row.vchType === 'Purchase' && row.side === 'Dr') return 'Payment';
+  return row.vchType;
+};

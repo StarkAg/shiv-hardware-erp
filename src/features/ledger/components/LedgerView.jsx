@@ -6,7 +6,7 @@ import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
 import { useNavigate } from 'react-router-dom';
-import { rupees, shortDate, aadhaarGroups, phoneDisplay } from '../lib/format';
+import { rupees, shortDate, aadhaarGroups, phoneDisplay, rowType } from '../lib/format';
 import PriceDialog from './PriceDialog';
 import Confirm from './Confirm';
 import { Bar, TableSkeleton } from './Skeleton';
@@ -680,7 +680,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                   <tr key={item.key}>
                     <td className="mono" data-label="Date">{shortDate(item.r.date)}</td>
                     <td className="mono entryno" data-label="Vch">{item.r.vchLabel}</td>
-                    <td className="vchtype" data-label="Type">{item.r.vchType}</td>
+                    <td className="vchtype" data-label="Type">{rowType(item.r)}</td>
                     <td className="ref mono" data-label="Ref">{item.r.refNo || '—'}</td>
                     <td className="particulars" data-label="Particulars">
                       {(item.r.contra ?? []).join(', ') || '—'}

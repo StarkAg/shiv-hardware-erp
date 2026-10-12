@@ -1,7 +1,7 @@
 import React from 'react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
-import { rupees, rupeesInWords, shortDate, longDate, aadhaarMasked, phoneDisplay } from '../lib/format';
+import { rupees, rupeesInWords, shortDate, longDate, aadhaarMasked, phoneDisplay, rowType } from '../lib/format';
 
 const SHOP = 'Shiv Hardware Store';
 
@@ -137,7 +137,7 @@ function PartyPacket({ ledgerId }) {
               <tr key={`${r.voucherId}-${i}`}>
                 <td>{shortDate(r.date)}</td>
                 <td>{r.vchLabel}</td>
-                <td>{r.side === 'Dr' ? 'To' : 'By'} {r.vchType}</td>
+                <td>{r.side === 'Dr' ? 'To' : 'By'} {rowType(r)}</td>
                 <td>{r.refNo || '—'}</td>
                 <td>
                   {(r.contra ?? []).join(', ') || '—'}

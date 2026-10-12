@@ -7,7 +7,7 @@ import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { useStore } from '../../lib/store'
 import type { Bill } from '../../lib/types'
-import { rupees, shortDate } from '../ledger/lib/format'
+import { rupees, rowType, shortDate } from '../ledger/lib/format'
 import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
 import AttachmentViewer from '../../components/AttachmentViewer'
 import type { Attachment } from '../../lib/attachments'
@@ -473,7 +473,7 @@ function LedgerScreen({ id, bills, onBill }: { id: string; bills: Bill[]; onBill
                     <div className="min-w-0 text-xs text-stone-500">
                       <div>
                         <span className="font-mono font-semibold text-stone-700 dark:text-stone-300">{r.vchLabel}</span>
-                        {' · '}{r.vchType}{' · '}{shortDate(r.date)}
+                        {' · '}{rowType(r)}{' · '}{shortDate(r.date)}
                       </div>
                       <div className="mt-0.5 text-stone-600 dark:text-stone-400">
                         {[r.contra.join(', '), r.refNo && `Ref ${r.refNo}`, r.narration !== r.vchType && r.narration]
