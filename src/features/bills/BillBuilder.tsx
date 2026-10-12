@@ -2678,7 +2678,7 @@ export function BillBuilder() {
       (r: any) => withoutCourtesy(String(r.ledger?.name ?? '')).toLowerCase() === name,
     )
     if (!row) return null
-    return { amount: Number(row.closing) || 0, side: String(row.closingSide ?? 'Dr') }
+    return { amount: Number(row.closing) || 0, side: String(row.closingSide ?? 'Dr'), ledgerId: row.ledger?._id ? String(row.ledger._id) : '' }
   }, [partyBook, draft.customerName])
 
   /**
@@ -2932,6 +2932,29 @@ export function BillBuilder() {
     if (waitingPaper) dockPhoto(waitingPaper.shown)
     else if (!first) setPhotoShown(null)
   }, [waitingPaper, draft.id])
+  /**
+   * A new receipt or payment opens on the paper it is most likely written
+   * against: the newest bill photo on that account's ledger, docked beside the
+   * form once the account is chosen. It takes the place of a waiting phone
+   * photo docked by itself, never of one opened by hand, and only once per
+   * account chosen.
+   */
+  const partyPaper = useQuery(
+    api.vouchers.lastPaper,
+    MONEY_KINDS.includes(draft.kind ?? 'sale') && partyBalance?.ledgerId && !voucherId && !bills.some((b) => b.id === draft.id)
+      ? { ledgerId: partyBalance.ledgerId as never }
+      : 'skip',
+  )
+  const partyPaperFor = useRef('')
+  useEffect(() => {
+    if (!partyPaper || !partyBalance?.ledgerId || handShownFor.current === draft.id) return
+    const key = `${draft.id}:${partyBalance.ledgerId}`
+    if (partyPaperFor.current === key) return
+    partyPaperFor.current = key
+    // The waiting phone photo, if it was docked by itself, gives way to this.
+    autoPaper.current = { id: draft.id, key: autoPaper.current.key, shown: null }
+    dockPhoto({ ...partyPaper, party: draft.customerName, initialIndex: 0 })
+  }, [partyPaper, partyBalance?.ledgerId, draft.id])
   /**
    * A file taken off the bill it is attached to.
    *

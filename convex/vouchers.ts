@@ -7,7 +7,7 @@ import { record, money, day } from "./lib/history";
 import { nextVoucherNo, voucherCounterName } from "./lib/numbering";
 import { writeLines, clearLines } from "./lib/entries";
 import { requirePin } from "./lib/pin";
-import { attachmentIds, deleteUnreferencedFiles } from './lib/attachmentFiles';
+import { attachmentIds, deleteUnreferencedFiles, describeAttachments } from './lib/attachmentFiles';
 import { GRN_ABBR, GRN_TYPE } from './lib/receipts';
 import { readBills, writeBills } from './lib/billRows';
 import { ensureVoucherFlow } from './lib/billFlow';
@@ -1106,5 +1106,32 @@ export const renumberSeries = mutation({
     else await ctx.db.insert("counters", { name, value: no });
 
     return { renumbered: rows.length, nextIs: no + 1 };
+  },
+});
+
+/**
+ * The paper on an account's newest voucher that has any: what a receipt or a
+ * payment is most likely written against. Shown beside the form as the
+ * voucher for that account opens. Null when no voucher of the account has a
+ * photo or a file.
+ */
+export const lastPaper = query({
+  args: { ledgerId: v.id("ledgers") },
+  handler: async (ctx, { ledgerId }) => {
+    const vouchers = await ctx.db
+      .query("vouchers")
+      .withIndex("by_party", (q) => q.eq("partyLedgerId", ledgerId))
+      .collect();
+    const newest = vouchers
+      .filter((vch) => (vch.attachments ?? []).length > 0)
+      .sort((a, b) => b.date - a.date || b._creationTime - a._creationTime)[0];
+    if (!newest) return null;
+    const type = await ctx.db.get(newest.typeId);
+    return {
+      voucherId: newest._id,
+      date: newest.date,
+      vchLabel: `${type?.abbr ?? "VCH"}-${String(newest.voucherNo).padStart(4, "0")}`,
+      attachmentUrls: await describeAttachments(ctx, newest.attachments as never),
+    };
   },
 });
