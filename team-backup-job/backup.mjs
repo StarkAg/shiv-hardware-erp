@@ -50,10 +50,11 @@ const KEEP = { daily: 7, weekly: 2, monthly: 6 }
 /**
  * Every project on the team. `ref` is the deployment copied (prod unless the
  * project only has a dev one). GradeX is by far the largest, so it keeps
- * fewer copies; the rest are a few megabytes each.
+ * fewer copies; the rest are a megabyte or two each at most.
  */
 const PROJECTS = [
-  { slug: 'gradex', keep: { daily: 2, weekly: 2, monthly: 2 } },
+  // Measured 12 Oct 2026: 141 MB a night for its tables.
+  { slug: 'gradex', keep: { daily: 5, weekly: 2, monthly: 3 } },
   { slug: 'shiv-hardware-panel' },
   { slug: 'shiv-ledger' },
   { slug: 'gridee-tokens-7e3ec' },
