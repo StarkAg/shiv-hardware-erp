@@ -4,6 +4,7 @@ import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { round2, signed, sideOf } from "./lib/money";
 import { GRN_TYPE, allBills, billOf, isGoods } from "./lib/receipts";
+import { sentAt } from "./billWhatsApp";
 
 /**
  * What happened first, when several vouchers share a date.
@@ -299,13 +300,16 @@ export const ledger = query({
       });
     }
 
+    // When each sale went to the customer's WhatsApp (convex/billWhatsApp.ts).
+    const onWhatsApp = await sentAt(ctx, rows.map((r) => r.voucherId));
+
     return {
       account,
       received,
       opening: Math.abs(openingForWindow),
       openingSide: sideOf(openingForWindow),
       openingAsOf: account.openingAsOf,
-      rows,
+      rows: rows.map((r) => ({ ...r, whatsappAt: onWhatsApp.get(String(r.voucherId)) ?? null })),
       totals: { debit: round2(debit), credit: round2(credit) },
       closing: Math.abs(running),
       closingSide: sideOf(running),

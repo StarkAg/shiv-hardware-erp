@@ -118,6 +118,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .money { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .narr { font-size: 13px; color: var(--muted); margin-top: 1px; }
+/* A sale that has gone to the customer's WhatsApp chat (convex/billWhatsApp.ts). */
+.wa { display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--green); }
 .bal { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .photos { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .photos button, .photos .pdf { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--card2); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; }

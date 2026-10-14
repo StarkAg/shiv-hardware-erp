@@ -487,6 +487,12 @@ function Party({ party, onBack }) {
                 <span className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</span>
               </div>
               {r.narration && <div className="narr">{r.narration}</div>}
+              {r.whatsappAt && (
+                <div className="wa">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12.5l4.5 4.5L15 8.5M10 16l1 1 9.5-9.5" /></svg>
+                  Sent on WhatsApp
+                </div>
+              )}
               <Photos shots={shots} onOpen={(page) => openPhotos(it.key, page)} />
             </div>
           )

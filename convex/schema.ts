@@ -763,8 +763,27 @@ export default defineSchema({
     key: v.string(),
     tagNames: v.optional(v.array(v.object({ id: v.string(), name: v.string() }))),
     autoTag: v.optional(v.string()),
+    // Sale bills to the customer's WhatsApp chat (convex/billWhatsApp.ts):
+    // on or off, and from when, since bills made before it are not sent.
+    billWhatsAppOn: v.optional(v.boolean()),
+    billWhatsAppFrom: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
+
+  /**
+   * Each sale bill sent to the customer's WhatsApp, or why it was not: one
+   * row per bill (convex/billWhatsApp.ts). `to` is the chat it went to.
+   */
+  billWhatsApp: defineTable({
+    voucherId: v.id("vouchers"),
+    status: v.union(v.literal("sent"), v.literal("skipped"), v.literal("failed")),
+    to: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    attempts: v.number(),
+    at: v.number(),
+  })
+    .index("by_voucher", ["voucherId"])
+    .index("by_at", ["at"]),
 
   /**
    * Papers that are not vouchers.
