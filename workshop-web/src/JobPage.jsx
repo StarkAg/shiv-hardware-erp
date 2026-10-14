@@ -8,7 +8,7 @@ import {
 } from './flow.js'
 import { atOnce, deliver, discard, post, useOutbox } from './outbox.js'
 import {
-  BackIcon, CameraIcon, ClockIcon, CloseIcon, DeleteSheet, FlagIcon, PersonIcon, PhoneIcon, PhotosIcon, Picked, Pieces, PinIcon,
+  BackIcon, BoxIcon, CameraIcon, ClockIcon, CloseIcon, DeleteSheet, FlagIcon, PersonIcon, PhoneIcon, PhotosIcon, Picked, Pieces, PinIcon,
   SendIcon, Sheet, Shot, StepTracker, TickIcon, useHold, usePicked,
 } from './ui.jsx'
 import { CustomerPicker, customerArgs } from './NewOrder.jsx'
@@ -45,6 +45,7 @@ export default function JobPage({ job, onBack }) {
   const removeMessage = useMutation(api.workshop.removeMessage)
   const setCustomer = useMutation(api.workshop.setCustomer).withOptimisticUpdate(atOnce.setCustomer)
   const setPriority = useMutation(api.workshop.setPriority).withOptimisticUpdate(atOnce.setPriority)
+  const setNeeds = useMutation(api.workshop.setNeeds).withOptimisticUpdate(atOnce.setNeeds)
   const { picked, add, drop, take } = usePicked()
   const [error, setError] = useState('')
   // What this phone has sent for the job and is still on its way: shown in its step at once.
@@ -348,6 +349,15 @@ export default function JobPage({ job, onBack }) {
             {SIDE === 'shop' && !over && (
               <button type="button" className="rowline" aria-pressed={job.priority} onClick={() => setPriority({ jobId: job.id, priority: !job.priority }).catch((err) => setError(said(err)))}>
                 <span className="lbl">Priority</span><span className="val">{job.priority ? 'On' : 'Off'}</span><span className={`go ${job.priority ? 'on' : ''}`}><FlagIcon size={20} /></span>
+              </button>
+            )}
+            {/* An assembly that turns out to need something bought in (a Sunmica
+                sheet): Order in, switched on until the go-ahead, and off again
+                until it is ordered. */}
+            {SIDE === 'shop' && !over && ['measurement', 'quotation', 'assemble'].includes(at) && needs.assemble && (
+              <button type="button" className="rowline" aria-pressed={needs.order} disabled={job.ordered}
+                onClick={() => setNeeds({ jobId: job.id, assemble: true, order: !needs.order }).catch((err) => setError(said(err)))}>
+                <span className="lbl">Order in</span><span className="val">{job.ordered ? 'Ordered' : needs.order ? 'On' : 'Off'}</span><span className={`go ${needs.order ? 'on' : ''}`}><BoxIcon size={20} /></span>
               </button>
             )}
             {SIDE === 'shop' && (

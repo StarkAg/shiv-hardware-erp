@@ -390,24 +390,28 @@ export const send = mutation({
 })
 
 /**
- * What a job asks for, corrected while it is being assembled or ordered. Not
- * in the apps, where it is chosen once, when the job is made: for a
- * correction made from the computer. What is already done stays done, and a
- * job left with everything asked for done moves on to the go-ahead.
+ * What a job asks for, changed after it was made: at the counter, Order in
+ * switched on when an assembly turns out to need something bought in (a
+ * Sunmica sheet), or off again before it is ordered; from the computer,
+ * either. Any time before the go-ahead. What is already done stays done, and
+ * a job being assembled that is left with everything asked for done moves on
+ * to the go-ahead.
  */
 export const setNeeds = mutation({
   args: { jobId: v.id('workshopJobs'), assemble: v.boolean(), order: v.boolean() },
   handler: async (ctx, { jobId, assemble, order }) => {
     const job = await ctx.db.get(jobId)
     if (!job) throw new ConvexError('That work order is gone.')
-    if (job.status === 'done' || (job.stage ?? 'measurement') !== 'assemble') throw new ConvexError('That can be changed only while the job is being assembled or ordered.')
+    const at = job.stage ?? 'measurement'
+    if (job.status === 'done' || ORDER.indexOf(at) > ORDER.indexOf('assemble')) throw new ConvexError('That can be changed only before the go-ahead.')
     checkNeeds(assemble, order)
+    if (!order && job.ordered) throw new ConvexError('It is already ordered.')
     const next = { ...job, needsAssemble: assemble, needsOrder: order }
     await ctx.db.patch(jobId, {
       needsAssemble: assemble,
       needsOrder: order,
       updatedAt: Date.now(),
-      ...(workDone(next) ? { stage: 'goahead' as const } : {}),
+      ...(at === 'assemble' && workDone(next) ? { stage: 'goahead' as const } : {}),
       shopSeenAt: Date.now(),
     })
   },

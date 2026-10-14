@@ -23,6 +23,7 @@ export const PersonIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="8" r="4" 
 export const PinIcon = (p) => <Icon {...p} d={<><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.6" /></>} />
 export const FlagIcon = (p) => <Icon {...p} d={<path d="M5 21V4M5 4h11l-2 4 2 4H5" />} />
 export const TickIcon = (p) => <Icon {...p} d={<path d="M5 12.5l4.5 4.5L19 7.5" />} />
+export const BoxIcon = (p) => <Icon {...p} d={<><path d="M21 8l-9-5-9 5v8l9 5 9-5z" /><path d="M3 8l9 5 9-5M12 13v8" /></>} />
 export const ClockIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>} />
 export const ShareIcon = (p) => <Icon {...p} d={<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></>} />
 // What is to do, everything, and one for each step.

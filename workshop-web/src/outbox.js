@@ -108,6 +108,7 @@ const withJob = (store, jobId, change) => {
 }
 export const atOnce = {
   setPriority: (store, { jobId, priority }) => withJob(store, jobId, (j) => ({ ...j, priority, updatedAt: Date.now() })),
+  setNeeds: (store, { jobId, assemble, order }) => withJob(store, jobId, (j) => ({ ...j, needsAssemble: assemble, needsOrder: order, updatedAt: Date.now() })),
   seen: (store, { jobId, side }) => withJob(store, jobId, (j) => ({ ...j, [`${side}SeenAt`]: Date.now() })),
   setCustomer: (store, { jobId, ledgerId, title, phones }) => {
     const account = ledgerId ? store.getQuery(api.workshop.customers, {})?.find((c) => c.id === ledgerId) : null
