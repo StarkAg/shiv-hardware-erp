@@ -1,6 +1,6 @@
 import { useLive } from '../ledger/lib/cache'
 import { useMemo, useState } from 'react'
-import { Paperclip, X } from 'lucide-react'
+import { Images, List, Paperclip, X } from 'lucide-react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { rupees, shortDate } from '../ledger/lib/format'
@@ -25,6 +25,8 @@ export function BillTrash() {
   const [viewing, setViewing] = useState<TrashRow | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
+  // Every deleted bill's photos at once, to find one deleted by mistake by its look.
+  const [allPhotos, setAllPhotos] = useState(false)
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase()
     return (rows ?? []).filter(row => [row.label, row.party, row.refNo, row.type]
@@ -39,10 +41,17 @@ export function BillTrash() {
         <div className="toolbar">
           <input aria-label="Search trash" placeholder="Search party, bill or voucher" value={search} onChange={e => setSearch(e.target.value)} />
           <div className="count">{rows === undefined ? 'Loading…' : `${filtered.length} deleted entries`}</div>
+          <div className="actions">
+            <button className="btn ghost" onClick={() => setAllPhotos(!allPhotos)}>
+              {allPhotos ? <><List aria-hidden="true" /> List</> : <><Images aria-hidden="true" /> All photos</>}
+            </button>
+          </div>
         </div>
         {error && <p className="error" role="alert">{error}</p>}
         {rows === undefined ? <TableSkeleton cols={7} rows={5} wide={3} /> : !filtered.length ? (
           <div className="empty">{search ? 'No deleted entries match.' : 'Nothing has been deleted.'}</div>
+        ) : allPhotos ? (
+          <TrashPhotos rows={filtered} busy={busy !== null} onOpen={setViewing} onRestore={setRestoring} />
         ) : (
           <div className="table-wrap"><div className="scroller">
             <table className="ledger">
@@ -95,6 +104,45 @@ export function BillTrash() {
         />}
         {viewing && <BillViewer voucher={{ ...viewing, vchLabel: viewing.label }} onClose={() => setViewing(null)} />}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Every deleted bill with photos, as cards of its pictures: the way to find
+ * the one deleted by mistake is usually to recognise the paper. A card opens
+ * the bill's photos full size, and restores it.
+ */
+function TrashPhotos({ rows, busy, onOpen, onRestore }: {
+  rows: TrashRow[]
+  busy: boolean
+  onOpen: (row: TrashRow) => void
+  onRestore: (row: TrashRow) => void
+}) {
+  const withPhotos = rows.filter((row) => row.attachmentUrls.some((a) => a.url || a.previewUrl))
+  if (!withPhotos.length) return <div className="empty">No deleted entry has a photo.</div>
+  return (
+    <div className="trash-photos">
+      {withPhotos.map((row) => (
+        <div key={row._id} className="trash-card">
+          <button className="trash-shots" onClick={() => onOpen(row)} aria-label={`View photos for ${row.label}`}>
+            {row.attachmentUrls.slice(0, 4).map((a, i) => {
+              const src = a.previewUrl || (/pdf/i.test(a.contentType ?? '') ? null : a.url)
+              return src
+                ? <img key={i} src={src} alt="" loading="lazy" decoding="async" />
+                : <span key={i} className="trash-pdf">PDF</span>
+            })}
+            {row.attachmentUrls.length > 4 && <span className="trash-more">+{row.attachmentUrls.length - 4}</span>}
+          </button>
+          <div className="trash-meta">
+            <b className="mono">{row.label}</b>
+            <span>{row.party}</span>
+            <span className="ref">{shortDate(row.date)} · {row.status === 'pending' ? 'Unpriced' : rupees(row.amount ?? 0)}</span>
+            <span className="ref">Deleted {new Date(row.deletedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+          <button className="btn small" disabled={busy} onClick={() => onRestore(row)}>Restore</button>
+        </div>
+      ))}
     </div>
   )
 }

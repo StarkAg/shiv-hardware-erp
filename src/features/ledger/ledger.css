@@ -1417,3 +1417,15 @@ to{transform: scale(1); color: #fff}}
 
 /* A heading between two tables on one page (the WhatsApp bills page). */
 .ledger-root .sectiontitle{margin: 22px 0 8px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--muted, #78716c);}
+
+/* Trash, All photos: each deleted bill as a card of its pictures. */
+.ledger-root .trash-photos{display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;}
+.ledger-root .trash-card{display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);}
+.ledger-root .trash-shots{position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 0; border: 0; background: none; cursor: pointer;}
+.ledger-root .trash-shots img, .ledger-root .trash-pdf{width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; background: var(--card2); border: 1px solid var(--line);}
+.ledger-root .trash-shots img:only-child{grid-column: 1 / -1; aspect-ratio: 4 / 5;}
+.ledger-root .trash-pdf{display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--brass);}
+.ledger-root .trash-more{position: absolute; right: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,.7); color: #fff; font-size: 12px; font-weight: 700;}
+.ledger-root .trash-meta{display: flex; flex-direction: column; gap: 2px; min-width: 0;}
+.ledger-root .trash-meta span{overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+.ledger-root .trash-card .btn.small{align-self: flex-start;}
