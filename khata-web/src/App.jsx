@@ -355,6 +355,7 @@ function Party({ party, onBack }) {
   const data = useLedger(party.id)
   const [viewer, setViewer] = useState(null)
   const [profile, setProfile] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const end = useRef(null)
   const thread = useRef(null)
   useEffect(() => {
@@ -451,6 +452,9 @@ function Party({ party, onBack }) {
           <b>{party.name}</b>
           <small>{closing}</small>
         </span>
+        {bills.length > 0 && (
+          <button type="button" className="call" onClick={() => setSharing(true)} aria-label="Share all bills"><ShareIcon /></button>
+        )}
         {party.phone && (
           <a className="call" href={`tel:${party.phone}`} aria-label={`Call ${party.name}`}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -496,6 +500,7 @@ function Party({ party, onBack }) {
           {data.pendingCount > 0 && <span>+ {data.pendingCount} bill{data.pendingCount === 1 ? '' : 's'} with no amount</span>}
         </footer>
       )}
+      {sharing && <ShareAll party={party} bills={bills} onClose={() => setSharing(false)} />}
       {viewer && <Viewer key={viewer.opened} bills={viewer.bills} bill={viewer.bill} page={viewer.page} onBill={showBubble} onClose={() => window.history.back()} />}
       {profile && (
         <Profile
@@ -723,6 +728,105 @@ function Viewer({ bills, bill: startBill, page: startPage, onBill, onClose }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Every bill in an account, shared at once: each photo as a JPG, named so the
+ * files fall in the account's order (number, date, bill), oldest first.
+ *
+ * The photos are fetched first, with how far it has got, and Share is a
+ * second tap: a phone only opens its share sheet straight after a tap, and
+ * fetching a long account takes longer than that allows.
+ */
+function ShareAll({ party, bills, onClose }) {
+  const list = useMemo(() => {
+    const width = String(bills.length).length
+    const ymd = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+    return bills.flatMap((b, bi) => b.shots.map((shot, pi) => {
+      const name = `${String(bi + 1).padStart(width, '0')} ${ymd(b.date)} ${b.label}${b.shots.length > 1 ? ` page ${pi + 1}` : ''}`
+      return { shot, name: `${name.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim()}.jpg` }
+    }))
+  }, [bills])
+  const got = useRef(new Map())
+  const [done, setDone] = useState(0)
+  const [failed, setFailed] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const open = useRef(true)
+  useEffect(() => () => { open.current = false }, [])
+
+  const fetchAll = async () => {
+    setBusy(true)
+    setFailed(0)
+    const left = list.filter((it) => !got.current.has(it.name))
+    let missed = 0
+    // A few at a time: quick on a good line, and no flood on a weak one.
+    const next = async () => {
+      for (let it = left.shift(); it && open.current; it = left.shift()) {
+        try {
+          const res = await fetch(it.shot.url)
+          if (!res.ok) throw new Error('fetch')
+          const file = new File([await asJpeg(await res.blob())], it.name, { type: 'image/jpeg' })
+          got.current.set(it.name, file)
+          if (open.current) setDone(got.current.size)
+        } catch {
+          missed++
+        }
+      }
+    }
+    await Promise.all([next(), next(), next(), next()])
+    if (open.current) { setFailed(missed); setBusy(false) }
+  }
+  useEffect(() => { void fetchAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ready = done === list.length
+  const share = async () => {
+    setNote('')
+    const files = list.map((it) => got.current.get(it.name))
+    try {
+      if (navigator.canShare?.({ files })) {
+        await navigator.share({ files, title: party.name })
+        onClose()
+        return
+      }
+      // No share sheet here (a computer): the photos are saved instead, in order.
+      for (const file of files) {
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(file)
+        link.download = file.name
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+      }
+      setNote(`Saved ${files.length} photos to this device.`)
+    } catch (err) {
+      if (err?.name !== 'AbortError') setNote('Could not share. Try again.')
+    }
+  }
+
+  const percent = list.length ? Math.round((done / list.length) * 100) : 100
+  return (
+    <div className="sheetback" onClick={onClose}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Share all bills" onClick={(e) => e.stopPropagation()}>
+        <b className="sheettitle">Share all bills</b>
+        <p>{party.name}<br />{bills.length} {bills.length === 1 ? 'bill' : 'bills'}, {list.length} {list.length === 1 ? 'photo' : 'photos'}, oldest first.</p>
+        {!ready && (
+          <div className="saving" role="status">
+            <div className="savetext"><span>{failed && !busy ? `${failed} could not be got` : `Getting photos: ${done} of ${list.length}`}</span><b>{percent}%</b></div>
+            <div className="savebar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><i style={{ width: `${percent}%` }} /></div>
+          </div>
+        )}
+        {note && <p>{note}</p>}
+        <div className="sheetbtns">
+          <button type="button" className="ghost" onClick={onClose}>Close</button>
+          {!ready && failed > 0 && !busy
+            ? <button type="button" className="solid" onClick={() => void fetchAll()}>Try again</button>
+            : <button type="button" className="solid" onClick={share} disabled={!ready}>Share</button>}
+        </div>
+      </div>
     </div>
   )
 }
