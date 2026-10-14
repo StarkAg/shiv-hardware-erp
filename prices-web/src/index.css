@@ -37,6 +37,8 @@ h1, h2 { margin: 0; }
 .group { margin-top: 10px; }
 .group h2 { padding: 10px 0 8px; border-bottom: 2px solid var(--ink); font: 800 22px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
 .group ul { list-style: none; margin: 0; padding: 0; }
+/* An item's subtitle: Plain, Thali, Cutlery — its sizes follow. */
+.part h3 { margin: 14px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); color: var(--dim); font: 800 17px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; }
 .group li + li { border-top: 1px solid var(--line); }
 
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 56px; padding: 10px 0; text-align: left; }

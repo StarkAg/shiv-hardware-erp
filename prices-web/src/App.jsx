@@ -36,19 +36,17 @@ const haystack = (it) => fold([
   it.brand, it.grade && `grade ${it.grade} ss${it.grade}`, it.code, it.product, it.size, it.wire, it.finish, it.netLabel,
 ].filter(Boolean).join(' '))
 
-const byName = (values) => [...values].sort((a, b) => String(a).localeCompare(String(b)))
-const bySize = (values) => [...values].sort((a, b) => sizeKey(a).localeCompare(sizeKey(b)))
-
-/** The filter stages, top to bottom: what each narrows by, and how its keys read. */
+/**
+ * The keys at the top: a brand, and for Godrej its grade. Nothing finer — a
+ * key for every item, size and wire came to fifty keys for Silver Shine; the
+ * items are the list's subtitles instead, and a size is typed in the search.
+ */
 const STAGES = [
   { key: 'brand', label: 'Brand', show: (v) => v, order: (values) => [...values].sort((a, b) => {
     const ra = BRAND_ORDER.indexOf(a), rb = BRAND_ORDER.indexOf(b)
     return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb) || a.localeCompare(b)
   }) },
-  { key: 'grade', label: 'Grade', show: (v) => `Grade ${v}`, order: byName },
-  { key: 'product', label: 'Item', show: (v) => v, order: byName },
-  { key: 'size', label: 'Size', show: (v) => v, order: (values) => bySize(values) },
-  { key: 'wire', label: 'Wire', show: (v) => v, order: byName },
+  { key: 'grade', label: 'Grade', show: (v) => `Grade ${v}`, order: (values) => [...values].sort() },
 ]
 
 /** The numbers in a size, for ordering 15×20 before 17×20 and 4″ before 6″. */
@@ -74,10 +72,9 @@ export default function App() {
   const [editing, setEditing] = useState(null)
 
   /*
-   * Filters in stages, as the Inventory app has them: the brands first, and
-   * once one is chosen, rows of keys for its grades, items, sizes and wires —
-   * each row showing only what the other choices leave. A key pressed again
-   * lets go; choosing another brand starts the rest afresh.
+   * Filters as the Inventory app has them: the brands first, and once one is
+   * chosen, its grades if it has more than one. A key pressed again lets go;
+   * choosing another brand starts afresh.
    */
   const [picked, setPicked] = useState({})
   const pick = (stage, value) => setPicked((was) => {
@@ -104,14 +101,17 @@ export default function App() {
       words.every((w) => it.hay.includes(w)))
   }, [sorted, search, picked])
 
-  // Grouped as the makers' lists are: a brand (and grade), then each product.
+  // Grouped as the makers' lists are: a brand (and grade), then under it a
+  // subtitle for each item — Plain, Thali, Cutlery — with its sizes beneath.
   const groups = useMemo(() => {
     const out = []
     for (const it of shown) {
       const head = it.grade ? `${it.brand} · Grade ${it.grade}` : it.brand
-      const last = out[out.length - 1]
-      if (last?.head === head) last.items.push(it)
-      else out.push({ head, items: [it] })
+      let group = out[out.length - 1]
+      if (group?.head !== head) { group = { head, parts: [] }; out.push(group) }
+      let part = group.parts[group.parts.length - 1]
+      if (part?.product !== it.product) { part = { product: it.product, items: [] }; group.parts.push(part) }
+      part.items.push(it)
     }
     return out
   }, [shown])
@@ -163,9 +163,14 @@ export default function App() {
         {groups.map((g) => (
           <section key={g.head} className="group">
             <h2>{g.head}</h2>
-            <ul>
-              {g.items.map((it) => <Row key={it._id} it={it} onOpen={() => setEditing(it)} />)}
-            </ul>
+            {g.parts.map((part) => (
+              <div key={part.product} className="part">
+                <h3>{part.product}</h3>
+                <ul>
+                  {part.items.map((it) => <Row key={it._id} it={it} onOpen={() => setEditing(it)} />)}
+                </ul>
+              </div>
+            ))}
           </section>
         ))}
       </main>
@@ -182,7 +187,7 @@ function Row({ it, onOpen }) {
     <li>
       <button type="button" className="row" onClick={onOpen}>
         <span className="what">
-          <span className="name">{it.product} <span className="size">{it.size}</span></span>
+          <span className="name size">{it.size || it.product}</span>
           {facts.length > 0 && <span className="facts">{facts.join(' · ')}</span>}
         </span>
         {noRate ? (
