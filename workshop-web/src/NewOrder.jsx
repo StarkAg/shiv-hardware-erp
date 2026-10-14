@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from './flow.js'
 import { post } from './outbox.js'
-import { CameraIcon, CloseIcon, PersonIcon, PhotosIcon, Picked, Sheet, usePicked } from './ui.jsx'
+import { CameraIcon, CloseIcon, FlagIcon, PersonIcon, PhotosIcon, Picked, Sheet, usePicked } from './ui.jsx'
 import Camera from './Camera.jsx'
 
 /**
@@ -55,6 +55,7 @@ export const customerArgs = (c) => (c?.ledgerId ? { ledgerId: c.ledgerId } : c?.
 export default function NewOrder({ onClose }) {
   const { picked, add, drop, take } = usePicked()
   const [customer, setCustomer] = useState(null)
+  const [priority, setPriority] = useState(false)
   // The live camera, open over the sheet while photographing.
   const [cam, setCam] = useState(false)
   const camera = useRef(null)
@@ -65,7 +66,7 @@ export default function NewOrder({ onClose }) {
   const send = () => {
     if (!picked.length) return
     const photos = take()
-    post({ customer: customerArgs(customer), title: customer?.name?.trim() ?? '', files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
+    post({ customer: customerArgs(customer), title: customer?.name?.trim() ?? '', priority, files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
     onClose()
   }
 
@@ -83,6 +84,9 @@ export default function NewOrder({ onClose }) {
         <button type="button" className="pick" onClick={() => gallery.current?.click()}><PhotosIcon /> Choose</button>
       </div>
       <CustomerPicker value={customer} onChange={setCustomer} />
+      <button type="button" className={`priority ${priority ? 'on' : ''}`} aria-pressed={priority} onClick={() => setPriority(!priority)}>
+        <FlagIcon size={20} strokeWidth="2.6" /> Priority
+      </button>
       <div className="sheetbtns">
         <button type="button" className="ghost" onClick={onClose}>Cancel</button>
         <button type="button" className="solid safe" onClick={send} disabled={!picked.length}>Send to workshop</button>

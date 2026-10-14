@@ -14,13 +14,16 @@ export const api = anyApi
 /**
  * The steps a job goes through, in order, and whose turn each is:
  *
- *   measurement  the workshop measures on site and photographs the figures
+ *   measurement  the workshop measures on site and photographs the figures, a
+ *                visit at a time, as many as it needs, then Measuring done
  *   quotation    the shop makes the work order from them and sends its photo
  *   assemble     the workshop builds it, says how many pieces are made, then Complete;
- *                or, where the work order asks for it, the shop orders it in and
- *                says Arrived; or both, side by side (`needsOf`)
+ *                or, where the work order asks for it, the shop orders it in
+ *                (Ordered, with the WhatsApp screenshot) and says Arrived (with
+ *                the bill or challan); or both, side by side (`needsOf`)
  *   goahead      the shop rings the customer and says when to go and whom to ring
- *   fitting      the workshop fits it and photographs it; the job is finished
+ *   fitting      the workshop fits it and photographs it, over as many visits
+ *                as it needs, then Fitting done; the job is finished
  *
  * `todo` is what the list says while a step waits; `short` is the one word a
  * narrow box or the tracker has room for.
@@ -36,9 +39,28 @@ export const STAGES = [
  * Nothing in a job is free text: everything sent is tagged with what it is,
  * and this is what each tag is called.
  */
-export const TAGS = { visit: 'Visit order', measurement: 'Measurement', quotation: 'Work order', assemble: 'Work status', arrived: 'Arrived', goahead: 'Go-ahead', fitting: 'Fitted' }
+export const TAGS = { visit: 'Visit order', measurement: 'Measurement', quotation: 'Work order', assemble: 'Work status', ordered: 'Ordered', arrived: 'Arrived', goahead: 'Go-ahead', fitting: 'Fitted' }
 /** The side that sends each tag. */
-export const TAG_FROM = { visit: 'shop', measurement: 'workshop', quotation: 'shop', assemble: 'workshop', arrived: 'shop', goahead: 'shop', fitting: 'workshop' }
+export const TAG_FROM = { visit: 'shop', measurement: 'workshop', quotation: 'shop', assemble: 'workshop', ordered: 'shop', arrived: 'shop', goahead: 'shop', fitting: 'workshop' }
+/** What the workshop's Complete is called at each of its steps. */
+export const DONE = { measurement: 'Measuring done', assemble: 'Assembling complete', fitting: 'Fitting done' }
+
+/**
+ * The visits a step has taken: the workshop's photographs of it, a visit to
+ * each day they were sent on. Returns the visit number of each message (by
+ * id) and how many visits there have been.
+ */
+export const visitsOf = (job, tag) => {
+  const days = []
+  const of = {}
+  for (const m of job.messages) {
+    if (m.from !== 'workshop' || (m.step ?? 'measurement') !== tag || !m.photos?.length) continue
+    const day = new Date(m.at).toDateString()
+    if (!days.includes(day)) days.push(day)
+    of[m.id] = days.indexOf(day) + 1
+  }
+  return { of, count: days.length }
+}
 
 /**
  * What a job's work order asks for: the workshop to assemble it, the shop to
@@ -48,7 +70,7 @@ export const TAG_FROM = { visit: 'shop', measurement: 'workshop', quotation: 'sh
 export const needsOf = (job) => {
   const assemble = job.needsAssemble !== false
   const order = job.needsOrder === true
-  return { assemble, order, assembling: assemble && !job.assembled, ordering: order && !job.arrived }
+  return { assemble, order, assembling: assemble && !job.assembled, ordering: order && !job.arrived, toOrder: order && !job.ordered }
 }
 /** The third step, named for what the work order asks for. */
 const WORK = {
@@ -68,8 +90,9 @@ export const stageOf = (job) => {
   if (finished(job)) return 'Done'
   if (stageId(job) !== 'assemble') return stageAt(job).todo
   const n = needsOf(job)
-  return n.assembling && n.ordering ? 'Assembling, ordered in'
-    : n.ordering ? 'Ordered, to arrive'
+  const buying = n.toOrder ? 'to order' : 'ordered, to arrive'
+  return n.assembling && n.ordering ? `Assembling, ${buying}`
+    : n.ordering ? (n.toOrder ? 'To order' : 'Ordered, to arrive')
     : 'Being assembled'
 }
 /**
@@ -111,7 +134,8 @@ export const visitLine = (ms) => new Date(ms).toLocaleString('en-IN', { weekday:
 /** Something sent, in a few words: for the list, and for one still on its way. */
 export const lineOf = (m, job) => {
   const n = m.photos?.length ?? m.files?.length ?? 0
-  if (m.complete) return 'Complete'
+  if (m.complete) return DONE[m.step] ?? 'Complete'
+  if (m.ordered) return 'Ordered'
   if (m.arrived) return 'Ordered items arrived'
   if (m.visitAt) return `Go-ahead: ${visitLine(m.visitAt)}`
   if (m.boards != null && m.step !== 'quotation') return `Work status: ${piecesLine(m.boards, job?.boardsTotal)}`

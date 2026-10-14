@@ -161,17 +161,22 @@ describe('workshop: a work order as a chat in photos', () => {
     await expect(send({ from: 'workshop', photos: [await photo()], step: 'fitting' })).rejects.toThrow('comes later')
     await expect(send({ from: 'shop', photos: [await photo()], step: 'quotation' })).rejects.toThrow('comes later')
     await expect(send({ from: 'workshop', boards: 2 })).rejects.toThrow('being assembled')
-    await expect(send({ from: 'workshop', complete: true })).rejects.toThrow('being assembled')
+    // Measuring is done once there is something measured to show.
+    await expect(send({ from: 'workshop', complete: true })).rejects.toThrow('photo of the measurements first')
     await expect(send({ from: 'shop', visitAt: when, callPhone: '8340785465' })).rejects.toThrow('once the work is complete')
     expect(await job()).toMatchObject({ stage: 'measurement' })
+    // Measuring can take more than one visit: each visit's photos, then Complete.
     await send({ from: 'workshop', photos: [await photo()], step: 'measurement' })
+    expect(await job()).toMatchObject({ stage: 'measurement' })
+    await send({ from: 'workshop', photos: [await photo()], step: 'measurement' })
+    await send({ from: 'workshop', complete: true })
     expect(await job()).toMatchObject({ stage: 'quotation' })
 
     // Measured: there is no going back to the measurements or to the visit order.
     await expect(send({ from: 'workshop', photos: [await photo()], step: 'measurement' })).rejects.toThrow('already done')
     await expect(send({ from: 'workshop', photos: [await photo()] })).rejects.toThrow('the shop')
     await expect(send({ from: 'shop', photos: [await photo()], step: 'visit' })).rejects.toThrow('already done')
-    expect((await job()).messages).toHaveLength(3)
+    expect((await job()).messages).toHaveLength(5)
 
     // 2. The work order, the shop's, with the boards it asks for.
     await send({ from: 'shop', photos: [await photo()], boards: 8 })
@@ -197,21 +202,27 @@ describe('workshop: a work order as a chat in photos', () => {
     await expect(send({ from: 'shop', visitAt: 0, callPhone: '8340785465' })).rejects.toThrow('when to visit')
     await send({ from: 'shop', visitAt: when, callPhone: '83407 85465' })
     expect(await job()).toMatchObject({ stage: 'fitting', visitAt: when, callPhone: '8340785465' })
-    await expect(send({ from: 'shop', visitAt: when + 3600_000, callPhone: '9000000000' })).rejects.toThrow('already given')
-    expect(await job()).toMatchObject({ stage: 'fitting', visitAt: when })
 
-    // 5. Fitted: finished, and nothing more is added.
+    await expect(send({ from: 'shop', visitAt: when + 3600_000, callPhone: '9000000000' })).rejects.toThrow('already given')
+
+    // 5. Fitting, over as many visits as the workshop needs: each visit's
+    // photos, and its Complete after a photo finishes the job.
+    await expect(send({ from: 'workshop', complete: true })).rejects.toThrow('photo of it fitted first')
     await send({ from: 'workshop', photos: [await photo()], step: 'fitting' })
+    expect(await job()).toMatchObject({ stage: 'fitting', status: 'open', visitAt: when })
+    await send({ from: 'workshop', photos: [await photo()], step: 'fitting' })
+    await send({ from: 'workshop', complete: true })
     expect(await job()).toMatchObject({ stage: 'fitting', status: 'done' })
+    await expect(send({ from: 'shop', visitAt: when, callPhone: '9000000000' })).rejects.toThrow('once the work is complete')
     await expect(send({ from: 'workshop', photos: [await photo()], step: 'fitting' })).rejects.toThrow('finished')
     await expect(send({ from: 'shop', photos: [await photo()] })).rejects.toThrow('finished')
     expect((await job()).messages.map((m) => [m.step, m.boards, m.complete, m.visitAt ? 'visit' : null])).toEqual([
       ['visit', null, false, null], ['visit', null, false, null],
-      ['measurement', null, false, null],
+      ['measurement', null, false, null], ['measurement', null, false, null], ['measurement', null, true, null],
       ['quotation', 8, false, null],
       ['assemble', 3, false, null], ['assemble', 6, false, null], ['assemble', null, false, null], ['assemble', null, true, null],
       ['goahead', null, false, 'visit'],
-      ['fitting', null, false, null],
+      ['fitting', null, false, null], ['fitting', null, false, null], ['fitting', null, true, null],
     ])
   })
 
@@ -222,6 +233,7 @@ describe('workshop: a work order as a chat in photos', () => {
     const toWorkOrder = async () => {
       const id = await t.mutation(api.workshop.create, { photos: [await photo()] })
       await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'measurement' })
+      await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [], complete: true })
       return id
     }
     const job = async (id: string) => (await t.query(api.workshop.list, {})).find((j) => j.id === id)!
@@ -239,14 +251,20 @@ describe('workshop: a work order as a chat in photos', () => {
     await expect(send(order, { from: 'workshop', complete: true })).rejects.toThrow('being assembled')
     await expect(send(order, { from: 'workshop', photos: [await photo()], step: 'assemble' })).rejects.toThrow('not to be assembled')
     await expect(send(order, { from: 'shop', visitAt: when, callPhone: '8340785465' })).rejects.toThrow('once the work is complete')
+    // Ordered first, with its proof: the screenshot of the order to the supplier.
+    await expect(send(order, { from: 'shop', photos: [await photo()], arrived: true })).rejects.toThrow('screenshot of the order first')
+    await expect(send(order, { from: 'shop', ordered: true })).rejects.toThrow('screenshot of the order')
+    await send(order, { from: 'shop', photos: [await photo()], ordered: true })
+    expect(await job(order)).toMatchObject({ stage: 'assemble', ordered: true, arrived: false })
+    await expect(send(order, { from: 'shop', photos: [await photo()], ordered: true })).rejects.toThrow('already sent')
     // Arrived needs its proof: the bill or challan, photographed.
     await expect(send(order, { from: 'shop', arrived: true })).rejects.toThrow('Photograph the bill or challan')
     expect(await job(order)).toMatchObject({ arrived: false })
     await send(order, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(order)).toMatchObject({ stage: 'goahead', arrived: true })
     await expect(send(order, { from: 'shop', photos: [await photo()], arrived: true })).rejects.toThrow('Nothing is being ordered')
-    expect((await job(order)).messages.slice(-2).map((m) => [m.step, m.assemble, m.order, m.arrived, m.photos.length])).toEqual([
-      ['quotation', false, true, false, 1], ['arrived', null, null, true, 1],
+    expect((await job(order)).messages.slice(-3).map((m) => [m.step, m.assemble, m.order, m.ordered, m.arrived, m.photos.length])).toEqual([
+      ['quotation', false, true, false, false, 1], ['ordered', null, null, true, false, 1], ['arrived', null, null, false, true, 1],
     ])
 
     // Both, side by side: Complete first waits for Arrived.
@@ -258,12 +276,14 @@ describe('workshop: a work order as a chat in photos', () => {
     expect(await job(both)).toMatchObject({ stage: 'assemble', assembled: true, arrived: false })
     await expect(send(both, { from: 'workshop', complete: true })).rejects.toThrow('already complete')
     await expect(send(both, { from: 'workshop', boards: 5 })).rejects.toThrow('being assembled')
+    await send(both, { from: 'shop', photos: [await photo()], ordered: true })
     await send(both, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(both)).toMatchObject({ stage: 'goahead' })
 
     // And Arrived first waits for Complete.
     const other = await toWorkOrder()
     await send(other, { from: 'shop', photos: [await photo()], assemble: true, order: true })
+    await send(other, { from: 'shop', photos: [await photo()], ordered: true })
     await send(other, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(other)).toMatchObject({ stage: 'assemble', arrived: true, assembled: false })
     await send(other, { from: 'workshop', complete: true })
@@ -279,11 +299,24 @@ describe('workshop: a work order as a chat in photos', () => {
     await t.mutation(api.workshop.setNeeds, { jobId: old, assemble: true, order: true })
     expect(await job(old)).toMatchObject({ stage: 'assemble', needsOrder: true })
     await expect(t.mutation(api.workshop.setNeeds, { jobId: old, assemble: false, order: false })).rejects.toThrow('Tick')
+    await send(old, { from: 'shop', photos: [await photo()], ordered: true })
     await send(old, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(old)).toMatchObject({ stage: 'assemble' })
     await t.mutation(api.workshop.setNeeds, { jobId: old, assemble: false, order: true })
     expect(await job(old)).toMatchObject({ stage: 'goahead' })
     await expect(t.mutation(api.workshop.setNeeds, { jobId: old, assemble: true, order: true })).rejects.toThrow('only while')
+  })
+
+  it('puts a priority job first, set when it is sent or later', async () => {
+    const t = convexTest(schema, modules)
+    const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
+    const urgent = await t.mutation(api.workshop.create, { photos: [await photo()], priority: true })
+    const plain = await t.mutation(api.workshop.create, { photos: [await photo()] })
+    const of = async (id: string) => (await t.query(api.workshop.list, {})).find((j) => j.id === id)!
+    expect([(await of(urgent)).priority, (await of(plain)).priority]).toEqual([true, false])
+    await t.mutation(api.workshop.setPriority, { jobId: plain, priority: true })
+    await t.mutation(api.workshop.setPriority, { jobId: urgent, priority: false })
+    expect([(await of(urgent)).priority, (await of(plain)).priority]).toEqual([false, true])
   })
 
   it('refuses a photo that never uploaded', async () => {

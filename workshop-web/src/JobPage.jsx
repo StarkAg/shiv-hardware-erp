@@ -3,12 +3,12 @@ import { useMutation } from 'convex/react'
 import { SIDE, SIDE_NAME } from './side.js'
 import { BUBBLE } from './offline.js'
 import {
-  TAGS, TAG_FROM, addressOf, api, contactsOf, finished, lineOf, mapLinkOf, myTurn, nameOf, needsOf, newIn,
-  said, stageAt, stageId, stampOf, titleOf, visitLine,
+  DONE, TAGS, TAG_FROM, addressOf, api, contactsOf, finished, lineOf, mapLinkOf, myTurn, nameOf, needsOf, newIn,
+  said, stageAt, stageId, stampOf, titleOf, visitLine, visitsOf,
 } from './flow.js'
 import { atOnce, deliver, discard, post, useOutbox } from './outbox.js'
 import {
-  BackIcon, CameraIcon, ClockIcon, CloseIcon, DeleteSheet, PersonIcon, PhoneIcon, PhotosIcon, Picked, Pieces, PinIcon,
+  BackIcon, CameraIcon, ClockIcon, CloseIcon, DeleteSheet, FlagIcon, PersonIcon, PhoneIcon, PhotosIcon, Picked, Pieces, PinIcon,
   SendIcon, Sheet, Shot, StepTracker, TickIcon, useHold, usePicked,
 } from './ui.jsx'
 import { CustomerPicker, customerArgs } from './NewOrder.jsx'
@@ -16,10 +16,11 @@ import Camera from './Camera.jsx'
 import Viewer from './Viewer.jsx'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
-const DOWN = ['fitting', 'goahead', 'arrived', 'assemble', 'quotation', 'measurement', 'visit']
+const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation', 'measurement', 'visit']
 /** What a work order can ask for, a tick each; either or both. */
 const NEEDS = [['assemble', 'Assemble'], ['order', 'Order in']]
 /** Something sent before everything was tagged: read by who sent it. */
+const whenDay = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 const tagOf = (m) => m.step ?? (m.from === 'workshop' ? 'measurement' : 'visit')
 
 /**
@@ -46,6 +47,7 @@ export default function JobPage({ job, onBack }) {
   const removeMessage = useMutation(api.workshop.removeMessage)
   const setCustomer = useMutation(api.workshop.setCustomer).withOptimisticUpdate(atOnce.setCustomer)
   const setNeeds = useMutation(api.workshop.setNeeds).withOptimisticUpdate(atOnce.setNeeds)
+  const setPriority = useMutation(api.workshop.setPriority).withOptimisticUpdate(atOnce.setPriority)
   const { picked, add, drop, take } = usePicked()
   const [error, setError] = useState('')
   // What this phone has sent for the job and is still on its way: shown in its step at once.
@@ -172,9 +174,28 @@ export default function JobPage({ job, onBack }) {
   useEffect(() => () => flushTally.current(), [])
   const tallied = tally ?? job.boardsMade ?? 0
   const [completing, setCompleting] = useState(false)
-  const sendComplete = () => { post({ jobId: job.id, step: 'assemble', complete: true }); setCompleting(false) }
+  // Complete ends the workshop's step in hand: measuring, assembling or fitting.
+  const sendComplete = () => { post({ jobId: job.id, step: at, complete: true }); setCompleting(false) }
+
+  /* ── visits ─────────────────────────────────────────────────────────────── */
+  // Measuring and fitting can take more than one visit, as many as the
+  // workshop needs: each visit's photos, then Measuring done or Fitting done.
+  const measured = visitsOf(job, 'measurement')
+  const fitted = visitsOf(job, 'fitting')
+  const visitsLine = (n) => (n ? `${n} ${n === 1 ? 'visit' : 'visits'} so far.` : '')
+  /** The workshop's key at a visit step: the camera, Send once shot, and Done once a visit is in. */
+  const visitKey = (tag, label, count) => (picked.length && step === tag ? photoKey(tag, '')
+    : count ? { label: DONE[tag], Icon: TickIcon, run: () => setCompleting(true), tone: 'safe' }
+    : photoKey(tag, label))
 
   /* ── what was ordered in, at the counter ────────────────────────────────── */
+  // Ordered, with its proof: the screenshot of the order sent to the supplier.
+  const orderProof = picked.length > 0 && step === 'ordered'
+  const sendOrdered = () => {
+    if (!orderProof) return
+    const shots = take()
+    post({ jobId: job.id, step: 'ordered', ordered: true, files: shots.map((p) => p.file), previews: shots.map((p) => p.url) })
+  }
   // Arrived, with its proof: the supplier's bill or challan, photographed.
   const [arriving, setArriving] = useState(false)
   const proof = picked.length > 0 && step === 'arrived'
@@ -239,7 +260,7 @@ export default function JobPage({ job, onBack }) {
   const now = over ? (
     <div className="nowhead"><b>Finished</b><small>All 5 steps done</small></div>
   ) : SIDE === 'workshop' ? {
-    measurement: <>{head('Measure')}{tray('measurement')}</>,
+    measurement: <>{head('Measure', visitsLine(measured.count))}{tray('measurement', { camera: measured.count ? 'Photograph another visit' : '' })}</>,
     quotation: head('Work order', 'The shop is making the work order from your measurements.'),
     assemble: needs.assembling
       ? <>{head('Assemble', needs.order ? (job.arrived ? 'The ordered items are in at the shop.' : 'The shop is ordering items for this job too.') : '')}{counter(tallied, true)}</>
@@ -247,18 +268,20 @@ export default function JobPage({ job, onBack }) {
         ? <>{head('Assembled', 'The shop is waiting for the ordered items. The go-ahead comes once they are in.')}{counter(job.boardsMade ?? 0, false)}</>
         : head('Order in', 'Nothing to assemble. The shop is ordering it in; it comes to you to fit.'),
     goahead: head('Go-ahead', `${ready} The shop calls the customer, then sends when to visit and whom to call.`),
-    fitting: <>{head('Fit it')}{visit}{tray('fitting')}</>,
+    fitting: <>{head('Fit it', visitsLine(fitted.count))}{visit}{tray('fitting', { camera: fitted.count ? 'Photograph another visit' : '' })}</>,
   }[at] : {
-    measurement: <>{head('Measurement', 'The workshop is to visit the site and measure.')}{tray('visit', { gallery: true, camera: 'Add a visit order photo' })}</>,
+    measurement: <>{head('Measurement', visitsLine(measured.count) || 'The workshop is to visit the site and measure.')}{tray('visit', { gallery: true, camera: 'Add a visit order photo' })}</>,
     quotation: <>{head('Work order')}{tray('quotation', { gallery: true })}</>,
     assemble: (
       <>
-        {head(stageAt(job).label, needs.ordering ? 'Order it from the supplier. When it comes in, photograph its bill or challan.' : '')}
+        {head(stageAt(job).label, needs.toOrder ? 'Order it from the supplier on WhatsApp, then send the screenshot of the order.'
+          : needs.ordering ? 'Ordered. When it comes in, photograph its bill or challan.' : '')}
         {needs.assemble && (job.assembled
           ? <p className="mark ok"><TickIcon size={18} /> Assembling complete</p>
           : job.boardsMade != null ? counter(job.boardsMade, false) : <p className="mark">Assembling: nothing counted yet.</p>)}
+        {needs.order && job.ordered && <p className="mark ok"><TickIcon size={18} /> Ordered</p>}
         {needs.order && !needs.ordering && <p className="mark ok"><TickIcon size={18} /> Ordered items arrived</p>}
-        {needs.ordering && tray('arrived', { gallery: true })}
+        {needs.toOrder ? tray('ordered', { camera: '' }) : needs.ordering && tray('arrived', { gallery: true })}
         <span className="ask">This job</span>
         {tickNeeds(needs, (next) => setChanging(next))}
       </>
@@ -283,18 +306,21 @@ export default function JobPage({ job, onBack }) {
           onChange={(e) => setGoing({ ...going, phone: e.target.value.replace(/[^\d+\s-]/g, '') })} />
       </>
     ),
-    fitting: <>{head('Fitting', 'The workshop is to fit it.')}{visit}</>,
+    fitting: <>{head('Fitting', visitsLine(fitted.count) || 'The workshop is to fit it.')}{visit}</>,
   }[at]
 
   /* ── the one button at the foot ─────────────────────────────────────────── */
   const dock = over ? null : SIDE === 'workshop' ? {
-    measurement: photoKey('measurement', 'Photograph measurements'),
+    measurement: visitKey('measurement', 'Photograph measurements', measured.count),
     assemble: needs.assembling ? { label: 'Complete', Icon: TickIcon, run: () => { sendTally(); setCompleting(true) }, tone: 'safe' } : null,
-    fitting: photoKey('fitting', 'Photograph it fitted'),
+    fitting: visitKey('fitting', 'Photograph it fitted', fitted.count),
   }[at] : {
     measurement: photoKey('visit', ''),
     quotation: photoKey('quotation', 'Photograph work order'),
     assemble: !needs.ordering ? null
+      : needs.toOrder ? (orderProof
+        ? { label: 'Send ordered', Icon: SendIcon, run: sendOrdered, tone: 'safe' }
+        : { label: 'Choose WhatsApp screenshot', Icon: PhotosIcon, run: () => fromPhone('ordered'), tone: 'must' })
       : proof ? { label: 'Arrived', Icon: TickIcon, run: () => setArriving(true), tone: 'safe' }
       : { label: 'Photograph bill or challan', Icon: CameraIcon, run: () => shoot('arrived'), tone: 'must' },
     goahead: { label: 'Send go-ahead', Icon: SendIcon, run: sendGoAhead, tone: 'safe', off: !goReady },
@@ -323,6 +349,7 @@ export default function JobPage({ job, onBack }) {
 
       <main className="scroll">
         <StepTracker job={job} />
+        {job.priority && !over && <p className="prio big"><FlagIcon size={20} strokeWidth="3" /> Priority</p>}
 
         <section className={`nowpanel ${over ? 'over' : mine ? 'mine' : 'wait'}`} aria-label="What to do now">
           {now}
@@ -343,6 +370,11 @@ export default function JobPage({ job, onBack }) {
                 <span className="lbl">Site</span><span className="val">Open the map</span><span className="round"><PinIcon size={20} /></span>
               </a>
             )}
+            {SIDE === 'shop' && !over && (
+              <button type="button" className="rowline" aria-pressed={job.priority} onClick={() => setPriority({ jobId: job.id, priority: !job.priority }).catch((err) => setError(said(err)))}>
+                <span className="lbl">Priority</span><span className="val">{job.priority ? 'On' : 'Off'}</span><span className={`go ${job.priority ? 'on' : ''}`}><FlagIcon size={20} /></span>
+              </button>
+            )}
             {SIDE === 'shop' && (
               <button type="button" className="rowline" onClick={() => setChoosing(customerNow)}>
                 <span className="lbl">Account</span><span className="val">{job.title ? 'Change customer' : 'Set customer'}</span><span className="go"><PersonIcon size={20} /></span>
@@ -353,14 +385,19 @@ export default function JobPage({ job, onBack }) {
 
         {sections.map(({ tag, items, pending }) => {
           const latest = items[items.length - 1]
+          const visits = visitsOf(job, tag)
           return (
             <section key={tag} className="stepsec" aria-label={TAGS[tag]}>
               <header>
                 <b>{TAGS[tag]}</b>
                 <small>{SIDE_NAME[TAG_FROM[tag]]}{latest ? ` · ${stampOf(latest.at)}` : ''}</small>
               </header>
-              {items.map((m) => (
+              {items.map((m, i) => (
                 <div key={m.id} className="entry holdable" {...holdToDelete(m)}>
+                  {/* Where a step took more than one visit, each visit's photos under its number. */}
+                  {visits.count > 1 && visits.of[m.id] && visits.of[m.id] !== visits.of[items[i - 1]?.id] && (
+                    <p className="mark visitno">Visit {visits.of[m.id]} <time>{whenDay(m.at)}</time></p>
+                  )}
                   {m.photos.length > 0 && (
                     <div className="shots">
                       {m.photos.map((p) => (
@@ -370,7 +407,8 @@ export default function JobPage({ job, onBack }) {
                       ))}
                     </div>
                   )}
-                  {m.complete && <p className="mark ok"><TickIcon size={18} /> Assembling complete <time>{stampOf(m.at)}</time></p>}
+                  {m.complete && <p className="mark ok"><TickIcon size={18} /> {DONE[tag] ?? 'Complete'} <time>{stampOf(m.at)}</time></p>}
+                  {m.ordered && <p className="mark ok"><TickIcon size={18} /> Ordered <time>{stampOf(m.at)}</time></p>}
                   {tag === 'quotation' && (m.assemble != null || m.order != null) && (
                     <p className="mark">{[m.assemble && 'Assemble', m.order && 'Order in'].filter(Boolean).join(' + ')}</p>
                   )}
@@ -421,13 +459,14 @@ export default function JobPage({ job, onBack }) {
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
       {completing && (
         <Sheet label="Complete" onClose={() => setCompleting(false)}>
-          <b className="sheettitle">Assembling complete?</b>
-          <p>{needs.ordering
-            ? 'The shop is told. The go-ahead waits for the ordered items to come in. This step cannot be gone back to.'
+          <b className="sheettitle">{DONE[at] ?? 'Complete'}?</b>
+          <p>{at === 'measurement' ? `${visitsLine(measured.count)} The shop makes the work order from the measurements. No more visits to measure after this.`
+            : at === 'fitting' ? `${visitsLine(fitted.count)} The job is finished. No more visits after this.`
+            : needs.ordering ? 'The shop is told. The go-ahead waits for the ordered items to come in. This step cannot be gone back to.'
             : 'The shop is told, and sends the go-ahead after calling the customer. This step cannot be gone back to.'}</p>
           <div className="sheetbtns">
             <button type="button" className="ghost" onClick={() => setCompleting(false)}>Not yet</button>
-            <button type="button" className="solid safe" onClick={sendComplete}>Complete</button>
+            <button type="button" className="solid safe" onClick={sendComplete}>{DONE[at] ?? 'Complete'}</button>
           </div>
         </Sheet>
       )}

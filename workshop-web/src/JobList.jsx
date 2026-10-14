@@ -4,7 +4,7 @@ import { APP_NAME, ICON, SIDE } from './side.js'
 import { SMALL } from './offline.js'
 import { STAGES, addressOf, api, finished, lineOf, myTurn, nameOf, newIn, stageId, stageNo, stageOf, titleOf, whenOf } from './flow.js'
 import { deliver, discard, useOutbox } from './outbox.js'
-import { AllIcon, CloseIcon, DeleteSheet, LiveLight, Pieces, PlusIcon, STEP_ICONS, Saving, Shot, StepTracker, TickIcon, TodoIcon, useHold } from './ui.jsx'
+import { AllIcon, CloseIcon, DeleteSheet, FlagIcon, LiveLight, Pieces, PlusIcon, STEP_ICONS, Saving, Shot, StepTracker, TickIcon, TodoIcon, useHold } from './ui.jsx'
 
 /**
  * The jobs, a row each.
@@ -31,7 +31,8 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
   const rows = useMemo(() => (jobs ?? [])
     .filter((j) => showing.test(j))
     .filter((j) => !q.trim() || `${titleOf(j)} ${j.number}`.toLowerCase().includes(q.trim().toLowerCase()))
-    .sort((a, b) => b.updatedAt - a.updatedAt), [jobs, q, filter])
+    // Open priority jobs first, then the latest first.
+    .sort((a, b) => Number(!!b.priority && !finished(b)) - Number(!!a.priority && !finished(a)) || b.updatedAt - a.updatedAt), [jobs, q, filter])
   // New orders still on their way: shown at the head of the list from the moment they are sent.
   const sending = useOutbox().filter((item) => !item.jobId)
   const remove = useMutation(api.workshop.remove)
@@ -91,6 +92,7 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
                 <span className="body">
                   <span className="head">
                     <b>{nameOf(job)}</b>
+                    {job.priority && !finished(job) && <i className="prio" aria-label="Priority"><FlagIcon size={14} strokeWidth="3" /> Priority</i>}
                     <time className={news ? 'new' : ''}>{whenOf(job.updatedAt)}</time>
                   </span>
                   <span className="sub">

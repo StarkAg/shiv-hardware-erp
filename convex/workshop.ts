@@ -22,21 +22,25 @@ import type { Id } from './_generated/dataModel'
 
 const side = v.union(v.literal('shop'), v.literal('workshop'))
 const stage = v.union(v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('goahead'), v.literal('fitting'))
-const tag = v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('arrived'), v.literal('goahead'), v.literal('fitting'))
+const tag = v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('ordered'), v.literal('arrived'), v.literal('goahead'), v.literal('fitting'))
 type Stage = 'measurement' | 'quotation' | 'assemble' | 'goahead' | 'fitting'
-type Tag = 'visit' | 'arrived' | Stage
+type Tag = 'visit' | 'ordered' | 'arrived' | Stage
 type Side = 'shop' | 'workshop'
 /**
  * The order the work goes in, and whose turn each step is:
  *
- *   measurement  the workshop measures on site and photographs the figures
+ *   measurement  the workshop measures on site and photographs the figures, over
+ *                one visit or several, then says Complete (measuring done)
  *   quotation    the shop makes the work order from them and sends its photograph
  *   assemble     the workshop builds it, saying how many boards are made, then Complete;
  *                and where the work order asks for it, the shop orders it in from a
- *                supplier and says Arrived. A work order asks for either or both
+ *                supplier, sends the screenshot of the order (Ordered), and says
+ *                Arrived with the goods' bill or challan. A work order asks for either or both
  *                (`needsOf`), and both go on side by side
  *   goahead      the shop rings the customer and says when to go and whom to ring
- *   fitting      the workshop fits it and photographs it; the job is finished
+ *   fitting      the workshop fits it and photographs it, over one visit or
+ *                several (the workshop's to arrange), then Complete;
+ *                the job is finished
  *
  * Each step is done by the side whose turn it is, and that moves the job on.
  * Nothing in a thread is free text: every message is tagged with what it is.
@@ -44,7 +48,7 @@ type Side = 'shop' | 'workshop'
 const TURN: Record<Stage, Side> = { measurement: 'workshop', quotation: 'shop', assemble: 'workshop', goahead: 'shop', fitting: 'workshop' }
 const NEXT: Record<Stage, Stage | null> = { measurement: 'quotation', quotation: 'assemble', assemble: 'goahead', goahead: 'fitting', fitting: null }
 /** Whose each tag is to send. The visit order is the shop's, at any time; the ordered items' arrival is the shop's, while assembling. */
-const SENDER: Record<Tag, Side> = { visit: 'shop', arrived: 'shop', ...TURN }
+const SENDER: Record<Tag, Side> = { visit: 'shop', ordered: 'shop', arrived: 'shop', ...TURN }
 const ORDER: Stage[] = ['measurement', 'quotation', 'assemble', 'goahead', 'fitting']
 /**
  * Only the present step can be added to. One not come to yet cannot be
@@ -54,7 +58,7 @@ const ORDER: Stage[] = ['measurement', 'quotation', 'assemble', 'goahead', 'fitt
  * be measured.
  */
 function onlyNow(step: Tag, at: Stage) {
-  const of: Stage = step === 'visit' ? 'measurement' : step === 'arrived' ? 'assemble' : step
+  const of: Stage = step === 'visit' ? 'measurement' : step === 'ordered' || step === 'arrived' ? 'assemble' : step
   if (ORDER.indexOf(of) > ORDER.indexOf(at)) throw new ConvexError('That step comes later. The one before it is not done yet.')
   if (ORDER.indexOf(of) < ORDER.indexOf(at)) throw new ConvexError('That step is already done. It cannot be gone back to.')
 }
@@ -68,7 +72,7 @@ function boardCount(n: number) {
  * What a job's work order asks for. A job from before a work order could ask
  * to order anything in is to be assembled, as every job then was.
  */
-type Needs = { needsAssemble?: boolean; needsOrder?: boolean; assembled?: boolean; arrived?: boolean }
+type Needs = { needsAssemble?: boolean; needsOrder?: boolean; assembled?: boolean; ordered?: boolean; arrived?: boolean }
 const needsOf = (job: Needs) => ({ assemble: job.needsAssemble !== false, order: job.needsOrder === true })
 /** Whether everything the work order asks for is done, so the go-ahead can be given. */
 const workDone = (job: Needs) => {
@@ -156,7 +160,9 @@ export const list = query({
         needsAssemble: needsOf(job).assemble,
         needsOrder: needsOf(job).order,
         assembled: job.assembled === true,
+        ordered: job.ordered === true,
         arrived: job.arrived === true,
+        priority: job.priority === true,
         visitAt: job.visitAt ?? null,
         callPhone: job.callPhone ?? '',
         shopSeenAt: job.shopSeenAt,
@@ -172,6 +178,7 @@ export const list = query({
             assemble: m.assemble ?? null,
             order: m.order ?? null,
             complete: m.complete === true,
+            ordered: m.ordered === true,
             arrived: m.arrived === true,
             visitAt: m.visitAt ?? null,
             callPhone: m.callPhone ?? '',
@@ -203,8 +210,9 @@ export const create = mutation({
     stage: v.optional(stage),
     photos: v.array(v.id('_storage')),
     text: v.optional(v.string()),
+    priority: v.optional(v.boolean()),
   },
-  handler: async (ctx, { ledgerId, title, photos }) => {
+  handler: async (ctx, { ledgerId, title, photos, priority }) => {
     if (!photos.length) throw new ConvexError('Add a photo of the work order.')
     await checkPhotos(ctx, photos)
     const account = ledgerId ? await ctx.db.get(ledgerId) : null
@@ -221,6 +229,7 @@ export const create = mutation({
       // Kept beside the account too, so the job still has a name if the account is ever removed.
       title: clean(account ? bare(account.name) : title, 80),
       status: 'open',
+      ...(priority ? { priority: true } : {}),
       messages: [{ id: `${now}-0`, from: 'shop', photos, step: 'visit', by: device?.name, at: now }],
       shopSeenAt: now,
       workshopSeenAt: 0,
@@ -235,20 +244,26 @@ export const create = mutation({
  * tagged with what they are, or a marker.
  *
  * From the workshop:
- *   - photographs of the measurements or of the fitted piece (`step`);
+ *   - photographs of the measurements or of the fitted piece (`step`), a
+ *     visit at a time: as many visits as it takes;
  *   - the work status while assembling: `boards` made so far;
- *   - `complete`: assembling is finished.
+ *   - `complete`: the step in hand is done, measuring, assembling or fitting.
+ *     Measuring and fitting need a photograph first.
  * From the shop:
  *   - photographs of the visit order (any time) or of the work order, with
  *     the `boards` it asks for and whether it is to be assembled (`assemble`),
  *     ordered in (`order`), or both;
+ *   - `ordered`: the order is sent to the supplier, with the screenshot of
+ *     it as proof (needed);
  *   - `arrived`: what was ordered has come in, with photographs of the
  *     supplier's bill or challan as proof (needed);
  *   - the go-ahead: `visitAt` and `callPhone`, once the work is complete.
+ *     Any visits after the first are the workshop's own to arrange.
  *
- * What is the present step's, from the side whose turn it is, moves the job
- * on: the measurements, the work order, Complete, the go-ahead, and the
- * fitted piece, after which the job is finished. A job being assembled and
+ * What ends the present step, from the side whose turn it is, moves the job
+ * on: the workshop's Complete after measuring, the work order, Complete after
+ * assembling, the go-ahead, and Complete after fitting, after which the job
+ * is finished. A job being assembled and
  * ordered moves on with whichever of Complete and Arrived comes last. Only the present step can be
  * added to: none is skipped, and one that is done is closed (`onlyNow`).
  */
@@ -262,13 +277,14 @@ export const send = mutation({
     assemble: v.optional(v.boolean()),
     order: v.optional(v.boolean()),
     complete: v.optional(v.boolean()),
+    ordered: v.optional(v.boolean()),
     arrived: v.optional(v.boolean()),
     visitAt: v.optional(v.number()),
     callPhone: v.optional(v.string()),
     // Sent by apps from before threads were tags only; no longer kept.
     text: v.optional(v.string()),
   },
-  handler: async (ctx, { jobId, from, photos, step: named, boards, assemble, order, complete, arrived, visitAt, callPhone }) => {
+  handler: async (ctx, { jobId, from, photos, step: named, boards, assemble, order, complete, ordered, arrived, visitAt, callPhone }) => {
     const job = await ctx.db.get(jobId)
     if (!job) throw new ConvexError('That work order is gone.')
     await checkPhotos(ctx, photos)
@@ -279,11 +295,19 @@ export const send = mutation({
 
     let step: Tag
     let moves = false
-    const marks: { boards?: number; assemble?: boolean; order?: boolean; complete?: boolean; arrived?: boolean; visitAt?: number; callPhone?: string } = {}
+    const marks: { boards?: number; assemble?: boolean; order?: boolean; complete?: boolean; ordered?: boolean; arrived?: boolean; visitAt?: number; callPhone?: string } = {}
     const facts: Needs & { boardsTotal?: number; boardsMade?: number; visitAt?: number; callPhone?: string } = {}
     const needs = needsOf(job)
 
-    if (from === 'workshop' && complete) {
+    if (from === 'workshop' && complete && open && (at === 'measurement' || at === 'fitting')) {
+      // Measured, or fitted, after however many visits it took: there has to
+      // be a photograph of it, sent before or with this.
+      const shot = photos.length > 0 || job.messages.some((m) => m.from === 'workshop' && (m.step ?? 'measurement') === at && m.photos.length > 0)
+      if (!shot) throw new ConvexError(at === 'measurement' ? 'Send a photo of the measurements first.' : 'Send a photo of it fitted first.')
+      step = at
+      marks.complete = true
+      moves = true
+    } else if (from === 'workshop' && complete) {
       if (!open || at !== 'assemble' || !needs.assemble) throw new ConvexError('Only a job being assembled can be marked complete.')
       if (job.assembled) throw new ConvexError('Assembling is already complete.')
       step = 'assemble'
@@ -301,11 +325,19 @@ export const send = mutation({
       if (TURN[step as Stage] !== 'workshop') throw new ConvexError('This step is the shop\'s to do.')
       onlyNow(step, at)
       if (step === 'assemble' && !needs.assemble) throw new ConvexError('This job is not to be assembled. The shop is ordering it in.')
-      // Assembling is finished by Complete, not by a photograph of it.
-      moves = step !== 'assemble'
+      // A visit's photographs. The step ends with Complete, not with a
+      // photograph: measuring and fitting can take more than one visit.
+      moves = false
+    } else if (ordered) {
+      if (!open || at !== 'assemble' || !needs.order) throw new ConvexError('Nothing is being ordered in for this job.')
+      if (job.ordered) throw new ConvexError('The order is already sent.')
+      if (!photos.length) throw new ConvexError('Send the screenshot of the order.')
+      step = 'ordered'
+      marks.ordered = facts.ordered = true
     } else if (arrived) {
       if (!open || at !== 'assemble' || !needs.order) throw new ConvexError('Nothing is being ordered in for this job.')
       if (job.arrived) throw new ConvexError('The ordered items are already marked arrived.')
+      if (!job.ordered) throw new ConvexError('Send the screenshot of the order first.')
       // The proof that it came in: the supplier's bill or challan, photographed.
       if (!photos.length) throw new ConvexError('Photograph the bill or challan of what was ordered.')
       step = 'arrived'
@@ -372,6 +404,16 @@ export const setNeeds = mutation({
       ...(workDone(next) ? { stage: 'goahead' as const } : {}),
       shopSeenAt: Date.now(),
     })
+  },
+})
+
+/** A job put before the others, or back among them. */
+export const setPriority = mutation({
+  args: { jobId: v.id('workshopJobs'), priority: v.boolean() },
+  handler: async (ctx, { jobId, priority }) => {
+    const job = await ctx.db.get(jobId)
+    if (!job) throw new ConvexError('That work order is gone.')
+    await ctx.db.patch(jobId, { priority, updatedAt: Date.now() })
   },
 })
 

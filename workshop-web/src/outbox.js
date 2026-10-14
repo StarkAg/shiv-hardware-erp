@@ -68,11 +68,12 @@ export async function deliver(item) {
         ...(item.boards != null ? { boards: item.boards } : {}),
         ...(item.assemble != null ? { assemble: item.assemble, order: item.order } : {}),
         ...(item.complete ? { complete: true } : {}),
+        ...(item.ordered ? { ordered: true } : {}),
         ...(item.arrived ? { arrived: true } : {}),
         ...(item.visitAt ? { visitAt: item.visitAt, callPhone: item.callPhone } : {}),
       })
     }
-    else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds })
+    else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds, ...(item.priority ? { priority: true } : {}) })
     // The live list has it by now, so its stand-in goes.
     discard(item)
   } catch (err) {
@@ -107,6 +108,7 @@ const withJob = (store, jobId, change) => {
   if (jobs) store.setQuery(api.workshop.list, {}, jobs.flatMap((j) => (j.id !== jobId ? [j] : change(j) ?? [])))
 }
 export const atOnce = {
+  setPriority: (store, { jobId, priority }) => withJob(store, jobId, (j) => ({ ...j, priority, updatedAt: Date.now() })),
   setNeeds: (store, { jobId, assemble, order }) => withJob(store, jobId, (j) => ({ ...j, needsAssemble: assemble, needsOrder: order, updatedAt: Date.now() })),
   seen: (store, { jobId, side }) => withJob(store, jobId, (j) => ({ ...j, [`${side}SeenAt`]: Date.now() })),
   setCustomer: (store, { jobId, ledgerId, title }) => {

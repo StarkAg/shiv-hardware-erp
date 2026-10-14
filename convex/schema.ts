@@ -1168,7 +1168,12 @@ export default defineSchema({
     needsAssemble: v.optional(v.boolean()),
     needsOrder: v.optional(v.boolean()),
     assembled: v.optional(v.boolean()),
+    // Ordering, in two proofs: the order sent to the supplier (a screenshot
+    // of the WhatsApp), then the goods come in (their bill or challan).
+    ordered: v.optional(v.boolean()),
     arrived: v.optional(v.boolean()),
+    // A job to be done before the others: first on both phones' lists.
+    priority: v.optional(v.boolean()),
     visitAt: v.optional(v.number()),
     callPhone: v.optional(v.string()),
     messages: v.array(v.object({
@@ -1182,15 +1187,19 @@ export default defineSchema({
       //   measurement  the workshop's measurements (photographs)
       //   quotation    the shop's work order (photographs, and `boards` to make)
       //   assemble     the workshop's work status (`boards` made so far), or `complete`
+      //   ordered      the shop's order to the supplier (`ordered`, a screenshot of it)
       //   arrived      the shop's ordered items come in (`arrived`, photographs of the bill or challan)
       //   goahead      the shop's go-ahead (`visitAt`, `callPhone`)
       //   fitting      the workshop's fitted piece (photographs)
-      step: v.optional(v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('arrived'), v.literal('goahead'), v.literal('fitting'))),
+      step: v.optional(v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('ordered'), v.literal('arrived'), v.literal('goahead'), v.literal('fitting'))),
       boards: v.optional(v.number()),
       // On a work order: what it asks for (see needsAssemble, needsOrder).
       assemble: v.optional(v.boolean()),
       order: v.optional(v.boolean()),
+      // The workshop's step done: measuring (after one visit or several),
+      // assembling, or fitting.
       complete: v.optional(v.boolean()),
+      ordered: v.optional(v.boolean()),
       arrived: v.optional(v.boolean()),
       visitAt: v.optional(v.number()),
       callPhone: v.optional(v.string()),
