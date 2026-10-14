@@ -199,7 +199,7 @@ function jidOf(raw) {
 function caption(item) {
   const day = new Date(item.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
   const amount = item.amount != null ? ` · ₹${Math.round(item.amount).toLocaleString('en-IN')}` : ''
-  return `${item.name}\nBill ${item.label} · ${day}${amount}\nShiv Hardware Store`
+  return `Thank you for purchasing with us, ${item.name}.\nHere is the bill copy for your online records.\n\nBill ${item.label} · ${day}${amount}\nShiv Hardware Store`
 }
 
 const indiaHour = () => new Date(Date.now() + 19_800_000).getUTCHours()

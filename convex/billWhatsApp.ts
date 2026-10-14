@@ -161,6 +161,15 @@ export const status = query({
   },
 })
 
+/** The bills sent lately, voucher and when: the panel's day book marks them. */
+export const sent = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query('billWhatsApp').withIndex('by_at').order('desc').take(3000)
+    return rows.filter((r) => r.status === 'sent').map((r) => ({ voucherId: r.voucherId, at: r.at }))
+  },
+})
+
 /** When each of these vouchers went to WhatsApp, for the screens that show a bill. */
 export async function sentAt(ctx: QueryCtx, voucherIds: Id<'vouchers'>[]) {
   const out = new Map<string, number>()

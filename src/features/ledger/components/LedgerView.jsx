@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronLeft, Paperclip, Pencil, Printer, ReceiptText, Trash2, X } from 'lucide-react'
+import { WhatsAppSent } from '../../../components/WhatsAppSent'
 import { useStore } from '../../../lib/store'
 import VoucherBillPreview from './VoucherBillPreview'
 import { photoStrip } from './BillViewer'
@@ -708,7 +709,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                 ) : (
                   <tr key={item.key}>
                     <td className="mono" data-label="Date">{shortDate(item.r.date)}</td>
-                    <td className="mono entryno" data-label="Vch">{item.r.vchLabel}</td>
+                    <td className="mono entryno" data-label="Vch">{item.r.vchLabel}{item.r.whatsappAt && <WhatsAppSent at={item.r.whatsappAt} />}</td>
                     <td className="vchtype" data-label="Type">{rowType(item.r)}</td>
                     <td className="ref mono" data-label="Ref">{item.r.refNo || '—'}</td>
                     <td className="particulars" data-label="Particulars">

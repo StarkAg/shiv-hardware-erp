@@ -1,6 +1,7 @@
 import { useState, useDeferredValue, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
+import { WhatsAppSent } from '../../components/WhatsAppSent'
 import { flushLocal, useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
 // The ledger's own photo picker: files chosen here, and photographs the phone
@@ -5032,6 +5033,9 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     to: to ? startOfDay(to) + 86_399_999 : undefined,
   }, `daybook:${from}:${to}`) as any[] | undefined
   const loading = vouchers === undefined
+  // Sales that have gone to the customer's WhatsApp (convex/billWhatsApp.ts).
+  const sentList = useQuery(api.billWhatsApp.sent, {})
+  const whatsappAt = useMemo(() => new Map((sentList ?? []).map((r) => [String(r.voucherId), r.at])), [sentList])
 
   // Every bill is a bill: there are no drafts to keep apart any more.
   const finished = bills
@@ -5270,6 +5274,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                     <tr key={r.key} className={r.problem ? 'unposted' : r.amount === null ? 'unpriced' : undefined}>
                       <td className="mono entryno" data-label="Vch">
                         {r.label}
+                        {whatsappAt.has(r.key) && <WhatsAppSent at={whatsappAt.get(r.key)!} />}
                         {/* No day lines in entry order, so each row says its own date. */}
                         {!byDate && <div className="ref">{iso(new Date(r.date)).split('-').reverse().join('/').replace(/\/(\d\d)(\d\d)$/, '/$2')}</div>}
                       </td>

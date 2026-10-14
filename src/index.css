@@ -365,3 +365,6 @@ input[type='number'] { -moz-appearance: textfield; }
 /* Text selection — the browser default is a hard blue that fights both themes. */
 ::selection { background: rgba(180, 145, 80, .35); }
 :root.dark ::selection { background: rgba(196, 160, 92, .40); color: #fff; }
+
+/* A sale sent to the customer's WhatsApp: a green double tick beside its number. */
+.wa-sent { display: inline-flex; align-items: center; margin-left: 5px; vertical-align: -1px; color: #137333; }
