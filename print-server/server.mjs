@@ -2211,13 +2211,16 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
   // "order" → read the bill photo and reply with the items (any chat, anyone).
   if (await maybeHandleWhatsAppOrder(sock, msg, downloadMediaMessage)) return
 
-  // Direct 1:1 chats: auto-reply with the enquiry redirect, then stop. (Groups
-  // fall through to the auto-print handling below.)
+  // Direct 1:1 chats: auto-reply with the enquiry redirect, then stop.
   if (jid.endsWith('@s.whatsapp.net')) {
     await maybeAutoReplyToDirectMessage(sock, jid, msg)
     return
   }
 
+  // Group auto-print (photo/PDF in the group + bw/cp) is switched off: not used
+  // since Sep 2026. Kept commented out below in case it is wanted back.
+  return
+  /*
   if (!jid.endsWith('@g.us')) return
 
   // A message that failed to decrypt arrives as an empty stub; WhatsApp then
@@ -2344,6 +2347,7 @@ async function handleBaileysMessage(sock, msg, downloadMediaMessage) {
     whatsappWebState.lastError = { at: new Date().toISOString(), error: String(err.message ?? err) }
     console.error('[whatsapp-web] auto print failed', err)
   }
+  */
 }
 
 async function startWhatsAppWebAutoPrint() {
@@ -2616,34 +2620,56 @@ async function notifyCustomerGuaranteeReady(document) {
   }
 }
 
-// Send the guarantee-ready message to one mobile immediately — no dedupe, no
-// print. Backs the "Generate" button and the diagnostic endpoint. Throws an
-// Error with a user-facing message on any failure; resolves with the JID sent to.
-async function sendGuaranteeWhatsAppTo(rawMobile, name = '') {
+// The JID for a mobile, once the shop's WhatsApp link is up. A send that
+// lands while the link is coming up — this server just restarted, or WhatsApp
+// dropped the socket and it is redialling — waits for it instead of failing:
+// the link is back in seconds, and failing showed the counter a "WhatsApp
+// needs login" box for an account that was logged in all along.
+async function whatsappReadyFor(rawMobile) {
   const jid = customerMobileToWhatsAppJid(rawMobile)
   if (!jid) throw new Error(`Enter a valid mobile number (got "${rawMobile ?? ''}").`)
-  // A send that lands while the link is coming up — this server just restarted,
-  // or WhatsApp dropped the socket and it is redialling — waits for it instead
-  // of failing: the link is back in seconds, and failing showed the counter a
-  // "WhatsApp needs login" box for an account that was logged in all along.
   for (let waited = 0; waited < 15_000 && ['starting', 'reconnecting'].includes(whatsappWebState.status); waited += 250) {
     await new Promise(resolve => setTimeout(resolve, 250))
   }
   if (!whatsappSock || whatsappWebState.status !== 'ready') {
     throw new Error(`WhatsApp is not connected on the shop computer (status: ${whatsappWebState.status}).`)
   }
-  const message = buildGuaranteeMessage(name)
-  if (withinNotifyCooldown(jid)) {
-    console.log(`[whatsapp-notify] skipped ${jid} — messaged within the last cooldown window`)
-    return { jid, message, skipped: true }
-  }
+  return jid
+}
 
+async function mustBeOnWhatsApp(jid, rawMobile) {
   let existsCheck
   try {
     const [check] = await whatsappSock.onWhatsApp(jid)
     existsCheck = check
   } catch { /* existence check failed — proceed with the send anyway */ }
   if (existsCheck && existsCheck.exists === false) throw new Error(`${rawMobile} is not on WhatsApp.`)
+}
+
+// A file (an account statement as a PDF) into a customer's chat, from the
+// shop's number. Sent when someone presses the button, never on its own.
+async function sendWhatsAppDocumentTo(rawMobile, { data, fileName, mimetype = 'application/pdf', caption = '' }) {
+  const buffer = Buffer.from(String(data ?? ''), 'base64')
+  if (!buffer.length) throw new Error('Nothing to send.')
+  const jid = await whatsappReadyFor(rawMobile)
+  await mustBeOnWhatsApp(jid, rawMobile)
+  await whatsappSock.sendMessage(jid, { document: buffer, mimetype, fileName, ...(caption ? { caption } : {}) })
+  console.log(`[whatsapp-send] ${fileName} (${buffer.length} bytes) to ${jid}`)
+  return { jid }
+}
+
+// Send the guarantee-ready message to one mobile immediately — no dedupe, no
+// print. Backs the "Generate" button and the diagnostic endpoint. Throws an
+// Error with a user-facing message on any failure; resolves with the JID sent to.
+async function sendGuaranteeWhatsAppTo(rawMobile, name = '') {
+  const jid = await whatsappReadyFor(rawMobile)
+  const message = buildGuaranteeMessage(name)
+  if (withinNotifyCooldown(jid)) {
+    console.log(`[whatsapp-notify] skipped ${jid} — messaged within the last cooldown window`)
+    return { jid, message, skipped: true }
+  }
+
+  await mustBeOnWhatsApp(jid, rawMobile)
 
   await whatsappSock.sendMessage(jid, { text: message })
   markJidNotified(jid)
@@ -3641,6 +3667,22 @@ app.post('/whatsapp-notify-customer', async (req, res) => {
 })
 
 // Same send path, kept for quick manual testing (GET or POST with ?mobile=&name=).
+// A document to a customer's chat — the Share PDF button on an account.
+app.post('/whatsapp-send-document', async (req, res) => {
+  const mobile = String(req.body?.mobile ?? '').trim()
+  try {
+    const result = await sendWhatsAppDocumentTo(mobile, {
+      data: req.body?.data,
+      fileName: String(req.body?.fileName ?? 'document.pdf'),
+      mimetype: String(req.body?.mimetype ?? 'application/pdf'),
+      caption: String(req.body?.caption ?? ''),
+    })
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    res.status(400).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
 app.all('/whatsapp-web/test-notify', async (req, res) => {
   const mobile = String(req.body?.mobile ?? req.query?.mobile ?? '').trim()
   const name = String(req.body?.name ?? req.query?.name ?? '').trim()
