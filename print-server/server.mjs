@@ -2652,126 +2652,6 @@ async function sendGuaranteeWhatsAppTo(rawMobile, name = '') {
   return { jid, message, skipped: false }
 }
 
-/**
- * Sale bills to the customer's own WhatsApp chat (convex/billWhatsApp.ts).
- *
- * The shop keeps its bills on WhatsApp, each in the party's chat. Once
- * switched on in the books, every sale saved from then on is sent here from
- * the shop's number: its photos as they are, or a bill typed in the panel as
- * a picture of the printed bill, with a line saying which bill it is.
- *
- * Gently, because WhatsApp blocks numbers that send like a machine: one bill
- * at a time, a minute or three apart, only in the day, and no more than a
- * day's worth. A bill waits a while after it was last saved, so one typed
- * wrong can be put right or deleted first. The books say what is due and
- * keep what was sent, so a restart neither loses nor repeats one.
- */
-const BILL_WHATSAPP_REST_MS = Number(process.env.BILL_WHATSAPP_REST_MIN || 10) * 60_000
-const BILL_WHATSAPP_DAILY_MAX = Number(process.env.BILL_WHATSAPP_DAILY_MAX || 40)
-const BILL_WHATSAPP_HOURS = String(process.env.BILL_WHATSAPP_HOURS || '9-21').split('-').map(Number)
-const BILL_WHATSAPP_GAP_MS = [60_000, 180_000]
-let billWhatsAppClient = null
-let billWhatsAppBusy = false
-let billWhatsAppNextAt = 0
-
-/** The print server's own link to the books, with its device key; null without one. */
-async function shopConvex() {
-  if (billWhatsAppClient) return billWhatsAppClient
-  const url = process.env.CONVEX_URL
-  const token = process.env.SHIV_DEVICE_TOKEN
-  if (!url || !token) return null
-  const { ConvexClient } = await import('convex/browser')
-  billWhatsAppClient = new ConvexClient(url)
-  billWhatsAppClient.setAuth(async () => token)
-  return billWhatsAppClient
-}
-
-/** The hour in India now, whatever the PC's own clock zone. */
-const indiaHour = () => new Date(Date.now() + 19_800_000).getUTCHours()
-
-/** A typed bill, drawn as it prints and photographed: a JPG of the page. */
-async function billPicture(bill) {
-  return await runPrintExclusive('whatsapp bill picture', async () => {
-    const page = await getSharedPage()
-    try {
-      await page.setViewport({ width: 559, height: 793, deviceScaleFactor: 2 })
-      await page.setContent(buildBillHtml(bill), { waitUntil: 'networkidle0' })
-      return Buffer.from(await page.screenshot({ type: 'jpeg', quality: 88, fullPage: true }))
-    } finally {
-      await page.close().catch(() => {})
-    }
-  })
-}
-
-function billCaption(item) {
-  const day = new Date(item.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
-  const amount = item.amount != null ? ` · ₹${Math.round(item.amount).toLocaleString('en-IN')}` : ''
-  return `${item.name}\nBill ${item.label} · ${day}${amount}\nShiv Hardware Store`
-}
-
-async function sendDueBillToWhatsApp() {
-  if (billWhatsAppBusy || Date.now() < billWhatsAppNextAt) return
-  if (!whatsappSock || whatsappWebState.status !== 'ready') return
-  const [fromHour, toHour] = BILL_WHATSAPP_HOURS
-  const hour = indiaHour()
-  if (hour < fromHour || hour >= toHour) return
-  const convex = await shopConvex().catch(() => null)
-  if (!convex) return
-  billWhatsAppBusy = true
-  let item = null
-  const { anyApi } = await import('convex/server')
-  const record = (status, extra = {}) => convex.mutation(anyApi.billWhatsApp.record, { voucherId: item.voucherId, status, ...extra })
-  try {
-    const due = await convex.query(anyApi.billWhatsApp.due, { before: Date.now() - BILL_WHATSAPP_REST_MS, limit: 1 })
-    if (!due?.on || !due.items?.length || due.sentToday >= BILL_WHATSAPP_DAILY_MAX) return
-    item = due.items[0]
-    const jid = customerMobileToWhatsAppJid(item.phone)
-    if (!jid) { await record('skipped', { reason: `not a mobile number: ${item.phone}` }); return }
-    try {
-      const [check] = await whatsappSock.onWhatsApp(jid)
-      if (check && check.exists === false) { await record('skipped', { to: jid, reason: 'not on WhatsApp' }); return }
-    } catch { /* the check failed: send anyway */ }
-
-    // The bill's own photos, or the printed bill when it has none.
-    const media = []
-    for (const photo of item.photos) {
-      const res = await fetch(photo.url)
-      if (!res.ok) throw new Error(`a photo could not be fetched (${res.status})`)
-      const data = Buffer.from(await res.arrayBuffer())
-      media.push(/pdf/i.test(photo.contentType ?? '')
-        ? { document: data, mimetype: 'application/pdf', fileName: `${item.label}.pdf` }
-        : { image: data })
-    }
-    if (!media.length && item.bill) media.push({ image: await billPicture(item.bill) })
-    if (!media.length) { await record('skipped', { reason: 'nothing to send' }); return }
-
-    const caption = billCaption(item)
-    for (const [i, m] of media.entries()) {
-      await whatsappSock.sendMessage(jid, i === 0 ? { ...m, caption } : m)
-      if (i < media.length - 1) await new Promise(resolve => setTimeout(resolve, 2_000 + Math.random() * 2_000))
-    }
-    await record('sent', { to: jid })
-    console.log(`[whatsapp-bills] sent ${item.label} to ${jid} (${item.name}), ${media.length} ${media.length === 1 ? 'page' : 'pages'}`)
-    const [lo, hi] = BILL_WHATSAPP_GAP_MS
-    billWhatsAppNextAt = Date.now() + lo + Math.random() * (hi - lo)
-  } catch (err) {
-    console.error(`[whatsapp-bills] ${item?.label ?? 'check'} failed:`, err?.message ?? err)
-    if (item) await record('failed', { reason: String(err?.message ?? err) }).catch(() => {})
-    billWhatsAppNextAt = Date.now() + 5 * 60_000
-  } finally {
-    billWhatsAppBusy = false
-  }
-}
-
-function startBillWhatsApp() {
-  if (!process.env.CONVEX_URL || !process.env.SHIV_DEVICE_TOKEN) {
-    console.log('   Bills to WhatsApp: off (no SHIV_DEVICE_TOKEN)')
-    return
-  }
-  console.log(`   Bills to WhatsApp: when switched on in the books, ${BILL_WHATSAPP_HOURS.join('-')}h, at most ${BILL_WHATSAPP_DAILY_MAX} a day`)
-  setInterval(() => { void sendDueBillToWhatsApp() }, 30_000)
-}
-
 function printDocumentPayload(payload, copies) {
   const kind = payload?.kind ?? 'quotation'
   return runPrintExclusive(`document ${kind}`, () => printDocumentPayloadImpl(payload, copies))
@@ -4219,7 +4099,6 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('   Cloud polling: disabled')
   }
   startWhatsAppWebAutoPrint()
-  startBillWhatsApp()
   // Watchdog: keep the linked WhatsApp session alive indefinitely. If it stays
   // stuck (not ready/qr/starting) for over 8 minutes, reconnect using the SAVED
   // session — no re-link. Skips 'logged_out' (that path already re-shows a QR).

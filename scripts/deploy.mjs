@@ -29,7 +29,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync, rmdirSync, cpSync, statSync, symlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { homedir, hostname, platform } from 'node:os'
+import { homedir, hostname, platform, tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 
@@ -57,6 +57,10 @@ const TARGETS = [
   { id: 'backups', kind: 'railway', service: 'backups', upload: 'backup-job', label: 'Nightly backups (Railway)', paths: ['backup-job'] },
   { id: 'bis', kind: 'railway', service: 'bis-lookup', upload: 'bis-lookup', label: 'BIS lookup (Railway)', paths: ['bis-lookup'] },
   { id: 'team-backups', kind: 'railway', service: 'convex-backups', upload: 'team-backup-job', label: 'Convex team backups (Railway)', paths: ['team-backup-job'] },
+  // Sale bills to the customer's WhatsApp, from the owner's own WhatsApp. It
+  // draws a typed bill with the shop PC's template, so that and the
+  // letterhead go up beside it (`stage`).
+  { id: 'whatsapp-bills', kind: 'railway', service: 'whatsapp-bills', upload: 'whatsapp-bills', stage: ['print-server/template.mjs', 'public/assets'], label: 'WhatsApp bills (Railway)', paths: ['whatsapp-bills', 'print-server/template.mjs', 'public/assets'] },
   { id: 'panel', kind: 'vercel', project: 'shiv-panel', domain: 'shiv-panel.vercel.app', label: 'Panel website', paths: PANEL_SOURCES, build: 'panel' },
   { id: 'counter', kind: 'vercel', project: 'shiv-counter', domain: 'shivhardware-counter.vercel.app', label: 'Counter website', paths: PANEL_SOURCES, build: 'counter' },
   site('cash', 'cash-web', 'cash-web', 'shivhardware-cash.vercel.app', 'Cashier'),
@@ -319,7 +323,23 @@ async function railwayDeployments() {
 }
 
 async function deployRailway(t, sha) {
-  const pathArgs = t.upload === '.' ? [] : [t.upload, '--path-as-root']
+  // A service that needs files from elsewhere in the repo goes up from a copy
+  // with them put in beside it, at the same paths.
+  let staged = null
+  if (t.stage) {
+    staged = join(tmpdir(), `shiv-${t.service}-${Date.now()}`)
+    cpSync(join(ROOT, t.upload), staged, { recursive: true, filter: (src) => !src.includes('node_modules') })
+    for (const p of t.stage) cpSync(join(ROOT, p), join(staged, p), { recursive: true })
+  }
+  try {
+    return await railwayUp(t, sha, staged)
+  } finally {
+    if (staged) rmSync(staged, { recursive: true, force: true })
+  }
+}
+
+async function railwayUp(t, sha, staged) {
+  const pathArgs = staged ? [staged, '--path-as-root'] : t.upload === '.' ? [] : [t.upload, '--path-as-root']
   // --ci streams the build and exits non-zero when it fails, so a broken build is a failure here.
   await run('railway', ['up', ...pathArgs, '--project', RAILWAY_PROJECT, '--service', t.service, '--environment', 'production', '--ci', '--message', `deploy@${sha.slice(0, 7)}`], { timeout: 30 * 60_000 })
   return `Railway ${t.service}`

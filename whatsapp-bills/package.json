@@ -1,0 +1,16 @@
+{
+  "name": "shiv-whatsapp-bills",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Sale bills to the customer's WhatsApp chat, from the shop owner's own WhatsApp, linked here (Railway)",
+  "main": "server.mjs",
+  "scripts": { "start": "node server.mjs" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "convex": "^1.40.0",
+    "puppeteer-core": "^25.1.0",
+    "qrcode": "^1.5.4"
+  }
+}
