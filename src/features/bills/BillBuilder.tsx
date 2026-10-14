@@ -729,6 +729,17 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.category, item.brandName, item.heightIn, item.widthIn, item.qty, item.rateSqft])
 
+  /**
+   * An item picked onto a line that was only a figure: the "On account" line
+   * a bill from the books opens with, a charge, a round-off. It becomes an
+   * item line, its quantity, rate and amount the item's, and the bill's total
+   * follows it. Picked as it was, the line kept the old figure as though it
+   * had been typed and stayed a figure, so only the name in the box changed.
+   */
+  const wasFigure = isAmountOnlyLine(item) || isRoundupLine(item)
+  const asItem = wasFigure ? { amountOnly: undefined, isRoundup: undefined, isDiscount: undefined, qty: 1 } : {}
+  const figuresOf = wasFigure ? { ...item, qty: 1, amount: 0, rateSqft: undefined, unit: undefined } : item
+
   function selectCategory(opt: ProductOption) {
     setSearch(opt.label)
     setShowDrop(false)
@@ -740,13 +751,14 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       const fieldStr = Object.values(defaultFieldValues).filter(Boolean).join(' ')
       const savedRate = catRate(opt.category)
       onUpdate(item.id, {
+        ...asItem,
         category: opt.category,
         sizeIn: defaultSize,
         brandName: defaultBrand,
         fieldValues: defaultFieldValues,
         heightIn: undefined,
         widthIn: undefined,
-        ...keepTyped(item, {
+        ...keepTyped(figuresOf, {
           rate: savedRate,
           unit: hardwareCatalog[opt.category]?.unit ?? HARDWARE_DEFAULT_UNIT[opt.category] ?? 'Pc',
           unitRates: hardwareCatalog[opt.category]?.unitRates,
@@ -762,9 +774,11 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     const h = isBoard ? 8 : 78
     const w = isBoard ? 4 : 36
     const rate = firstBrand?.rate ?? 0
-    const cost = calcCost(rate, h, w, item.qty, opt.category)
-    const desc = buildDescription(opt.category, firstBrand?.name ?? '', h, w, item.qty)
+    const qty = wasFigure ? 1 : item.qty
+    const cost = calcCost(rate, h, w, qty, opt.category)
+    const desc = buildDescription(opt.category, firstBrand?.name ?? '', h, w, qty)
     onUpdate(item.id, {
+      ...asItem,
       category: opt.category,
       brandName: firstBrand?.name ?? '',
       sizeIn: undefined,
@@ -850,6 +864,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     // selling price; only failing both does its own remembered rate fill it.
     const opening = buying || same ? null : openingRate(name, unit, lines, item.id, sold)
     onUpdate(item.id, {
+      ...asItem,
       customEntryId: entry.id,
       category: undefined,
       description: name,
@@ -859,7 +874,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       // it — passing back through the field is navigation, not a fresh choice.
       // What is typed on the line wins; the item's remembered rate and unit
       // only fill a line that has none yet. See keepTyped.
-      ...(same ? {} : keepTyped(item, opening
+      ...(same && !wasFigure ? {} : keepTyped(figuresOf, opening
         ? { rate: opening.rate, unit: opening.unit }
         : { rate: entry.rate, unit, unitRates: entry.unitRates })),
       heightIn:  undefined,
@@ -912,9 +927,10 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     // failing that, the item's remembered selling rate for that unit.
     const opening = r && !buying ? openingRate(r.description, unit, lines, item.id, sold) : null
     const rate = r ? (opening?.rate || r.rate || (entry && !buying ? rateForUnit(entry, unit) : 0)) : 0
-    const qty = item.qty || 1
+    const qty = wasFigure ? 1 : item.qty || 1
     const description = r?.description ?? ''
     onUpdate(item.id, {
+      ...asItem,
       category: undefined,
       customEntryId: entry?.id,
       description,
