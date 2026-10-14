@@ -36,6 +36,21 @@ const haystack = (it) => fold([
   it.brand, it.grade && `grade ${it.grade} ss${it.grade}`, it.code, it.product, it.size, it.wire, it.finish, it.netLabel,
 ].filter(Boolean).join(' '))
 
+const byName = (values) => [...values].sort((a, b) => String(a).localeCompare(String(b)))
+const bySize = (values) => [...values].sort((a, b) => sizeKey(a).localeCompare(sizeKey(b)))
+
+/** The filter stages, top to bottom: what each narrows by, and how its keys read. */
+const STAGES = [
+  { key: 'brand', label: 'Brand', show: (v) => v, order: (values) => [...values].sort((a, b) => {
+    const ra = BRAND_ORDER.indexOf(a), rb = BRAND_ORDER.indexOf(b)
+    return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb) || a.localeCompare(b)
+  }) },
+  { key: 'grade', label: 'Grade', show: (v) => `Grade ${v}`, order: byName },
+  { key: 'product', label: 'Item', show: (v) => v, order: byName },
+  { key: 'size', label: 'Size', show: (v) => v, order: (values) => bySize(values) },
+  { key: 'wire', label: 'Wire', show: (v) => v, order: byName },
+]
+
 /** The numbers in a size, for ordering 15×20 before 17×20 and 4″ before 6″. */
 const sizeKey = (size) => (String(size).match(/\d+/g) ?? []).map((n) => n.padStart(4, '0')).join('.')
 
@@ -56,22 +71,38 @@ export default function App() {
   const items = live ?? cached
 
   const [search, setSearch] = useState('')
-  const [brand, setBrand] = useState('')
   const [editing, setEditing] = useState(null)
 
-  const brands = useMemo(() => {
-    const names = [...new Set((items ?? []).map((it) => it.brand))]
-    return names.sort((a, b) => {
-      const ra = BRAND_ORDER.indexOf(a), rb = BRAND_ORDER.indexOf(b)
-      return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb) || a.localeCompare(b)
-    })
-  }, [items])
+  /*
+   * Filters in stages, as the Inventory app has them: the brands first, and
+   * once one is chosen, rows of keys for its grades, items, sizes and wires —
+   * each row showing only what the other choices leave. A key pressed again
+   * lets go; choosing another brand starts the rest afresh.
+   */
+  const [picked, setPicked] = useState({})
+  const pick = (stage, value) => setPicked((was) => {
+    if (stage === 'brand') return was.brand === value ? {} : { brand: value }
+    const next = { ...was }
+    if (was[stage] === value) delete next[stage]
+    else next[stage] = value
+    return next
+  })
 
   const sorted = useMemo(() => sortItems((items ?? []).map((it) => ({ ...it, hay: haystack(it) }))), [items])
+  const stages = useMemo(() => STAGES
+    .filter((s) => s.key === 'brand' || picked.brand !== undefined)
+    .map((s) => {
+      const pool = sorted.filter((it) => STAGES.every((o) => o.key === s.key || picked[o.key] === undefined || it[o.key] === picked[o.key]))
+      return { ...s, values: s.order([...new Set(pool.map((it) => it[s.key]).filter((v) => v !== undefined && v !== ''))]) }
+    })
+    .filter((s) => s.values.length > 1 || picked[s.key] !== undefined), [sorted, picked])
+
   const shown = useMemo(() => {
     const words = fold(search).split(/\s+/).filter(Boolean)
-    return sorted.filter((it) => (!brand || it.brand === brand) && words.every((w) => it.hay.includes(w)))
-  }, [sorted, search, brand])
+    return sorted.filter((it) =>
+      STAGES.every((s) => picked[s.key] === undefined || it[s.key] === picked[s.key]) &&
+      words.every((w) => it.hay.includes(w)))
+  }, [sorted, search, picked])
 
   // Grouped as the makers' lists are: a brand (and grade), then each product.
   const groups = useMemo(() => {
@@ -111,12 +142,16 @@ export default function App() {
             aria-label="Search the price list"
           />
         </label>
-        <div className="brands" role="group" aria-label="Brand">
-          <button type="button" className={`pick ${brand === '' ? 'on' : ''}`} aria-pressed={brand === ''} onClick={() => setBrand('')}>All</button>
-          {brands.map((b) => (
-            <button key={b} type="button" className={`pick ${brand === b ? 'on' : ''}`} aria-pressed={brand === b} onClick={() => setBrand(brand === b ? '' : b)}>
-              {b}
-            </button>
+        <div className="stages" aria-label="Filters">
+          {stages.map((s) => (
+            <div key={s.key} className="chips" role="group" aria-label={s.label}>
+              {s.values.map((value) => (
+                <button key={value} type="button" className={picked[s.key] === value ? 'on' : ''} aria-pressed={picked[s.key] === value}
+                  onClick={() => pick(s.key, value)}>
+                  {s.show(value)}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       </div>
