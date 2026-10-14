@@ -175,10 +175,12 @@ export default function JobPage({ job, onBack }) {
   const sendComplete = () => { post({ jobId: job.id, step: 'assemble', complete: true }); setCompleting(false) }
 
   /* ── what was ordered in, at the counter ────────────────────────────────── */
-  // Arrived, with the challan's photos when some are taken.
+  // Arrived, with its proof: the supplier's bill or challan, photographed.
   const [arriving, setArriving] = useState(false)
+  const proof = picked.length > 0 && step === 'arrived'
   const sendArrived = () => {
-    const shots = picked.length && step === 'arrived' ? take() : []
+    if (!proof) return
+    const shots = take()
     post({ jobId: job.id, step: 'arrived', arrived: true, files: shots.map((p) => p.file), previews: shots.map((p) => p.url) })
     setArriving(false)
   }
@@ -251,12 +253,12 @@ export default function JobPage({ job, onBack }) {
     quotation: <>{head('Work order')}{tray('quotation', { gallery: true })}</>,
     assemble: (
       <>
-        {head(stageAt(job).label, needs.ordering ? 'Order it from the supplier. Tap Arrived when it comes in.' : '')}
+        {head(stageAt(job).label, needs.ordering ? 'Order it from the supplier. When it comes in, photograph its bill or challan.' : '')}
         {needs.assemble && (job.assembled
           ? <p className="mark ok"><TickIcon size={18} /> Assembling complete</p>
           : job.boardsMade != null ? counter(job.boardsMade, false) : <p className="mark">Assembling: nothing counted yet.</p>)}
         {needs.order && !needs.ordering && <p className="mark ok"><TickIcon size={18} /> Ordered items arrived</p>}
-        {needs.ordering && tray('arrived', { gallery: true, camera: 'Photograph the challan' })}
+        {needs.ordering && tray('arrived', { gallery: true })}
         <span className="ask">This job</span>
         {tickNeeds(needs, (next) => setChanging(next))}
       </>
@@ -292,7 +294,9 @@ export default function JobPage({ job, onBack }) {
   }[at] : {
     measurement: photoKey('visit', ''),
     quotation: photoKey('quotation', 'Photograph work order'),
-    assemble: needs.ordering ? { label: 'Arrived', Icon: TickIcon, run: () => setArriving(true), tone: 'safe' } : null,
+    assemble: !needs.ordering ? null
+      : proof ? { label: 'Arrived', Icon: TickIcon, run: () => setArriving(true), tone: 'safe' }
+      : { label: 'Photograph bill or challan', Icon: CameraIcon, run: () => shoot('arrived'), tone: 'must' },
     goahead: { label: 'Send go-ahead', Icon: SendIcon, run: sendGoAhead, tone: 'safe', off: !goReady },
   }[at]
 

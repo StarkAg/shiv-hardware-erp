@@ -1182,7 +1182,7 @@ export default defineSchema({
       //   measurement  the workshop's measurements (photographs)
       //   quotation    the shop's work order (photographs, and `boards` to make)
       //   assemble     the workshop's work status (`boards` made so far), or `complete`
-      //   arrived      the shop's ordered items come in (`arrived`, photographs of the challan if any)
+      //   arrived      the shop's ordered items come in (`arrived`, photographs of the bill or challan)
       //   goahead      the shop's go-ahead (`visitAt`, `callPhone`)
       //   fitting      the workshop's fitted piece (photographs)
       step: v.optional(v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('arrived'), v.literal('goahead'), v.literal('fitting'))),

@@ -243,7 +243,7 @@ export const create = mutation({
  *     the `boards` it asks for and whether it is to be assembled (`assemble`),
  *     ordered in (`order`), or both;
  *   - `arrived`: what was ordered has come in, with photographs of the
- *     challan if there are any;
+ *     supplier's bill or challan as proof (needed);
  *   - the go-ahead: `visitAt` and `callPhone`, once the work is complete.
  *
  * What is the present step's, from the side whose turn it is, moves the job
@@ -306,6 +306,8 @@ export const send = mutation({
     } else if (arrived) {
       if (!open || at !== 'assemble' || !needs.order) throw new ConvexError('Nothing is being ordered in for this job.')
       if (job.arrived) throw new ConvexError('The ordered items are already marked arrived.')
+      // The proof that it came in: the supplier's bill or challan, photographed.
+      if (!photos.length) throw new ConvexError('Photograph the bill or challan of what was ordered.')
       step = 'arrived'
       marks.arrived = facts.arrived = true
       moves = workDone({ ...job, ...facts })

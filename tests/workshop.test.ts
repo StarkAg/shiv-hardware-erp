@@ -239,10 +239,12 @@ describe('workshop: a work order as a chat in photos', () => {
     await expect(send(order, { from: 'workshop', complete: true })).rejects.toThrow('being assembled')
     await expect(send(order, { from: 'workshop', photos: [await photo()], step: 'assemble' })).rejects.toThrow('not to be assembled')
     await expect(send(order, { from: 'shop', visitAt: when, callPhone: '8340785465' })).rejects.toThrow('once the work is complete')
-    // Arrived, with the challan's photo.
+    // Arrived needs its proof: the bill or challan, photographed.
+    await expect(send(order, { from: 'shop', arrived: true })).rejects.toThrow('Photograph the bill or challan')
+    expect(await job(order)).toMatchObject({ arrived: false })
     await send(order, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(order)).toMatchObject({ stage: 'goahead', arrived: true })
-    await expect(send(order, { from: 'shop', arrived: true })).rejects.toThrow('Nothing is being ordered')
+    await expect(send(order, { from: 'shop', photos: [await photo()], arrived: true })).rejects.toThrow('Nothing is being ordered')
     expect((await job(order)).messages.slice(-2).map((m) => [m.step, m.assemble, m.order, m.arrived, m.photos.length])).toEqual([
       ['quotation', false, true, false, 1], ['arrived', null, null, true, 1],
     ])
@@ -256,13 +258,13 @@ describe('workshop: a work order as a chat in photos', () => {
     expect(await job(both)).toMatchObject({ stage: 'assemble', assembled: true, arrived: false })
     await expect(send(both, { from: 'workshop', complete: true })).rejects.toThrow('already complete')
     await expect(send(both, { from: 'workshop', boards: 5 })).rejects.toThrow('being assembled')
-    await send(both, { from: 'shop', arrived: true })
+    await send(both, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(both)).toMatchObject({ stage: 'goahead' })
 
     // And Arrived first waits for Complete.
     const other = await toWorkOrder()
     await send(other, { from: 'shop', photos: [await photo()], assemble: true, order: true })
-    await send(other, { from: 'shop', arrived: true })
+    await send(other, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(other)).toMatchObject({ stage: 'assemble', arrived: true, assembled: false })
     await send(other, { from: 'workshop', complete: true })
     expect(await job(other)).toMatchObject({ stage: 'goahead' })
@@ -277,7 +279,7 @@ describe('workshop: a work order as a chat in photos', () => {
     await t.mutation(api.workshop.setNeeds, { jobId: old, assemble: true, order: true })
     expect(await job(old)).toMatchObject({ stage: 'assemble', needsOrder: true })
     await expect(t.mutation(api.workshop.setNeeds, { jobId: old, assemble: false, order: false })).rejects.toThrow('Tick')
-    await send(old, { from: 'shop', arrived: true })
+    await send(old, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(old)).toMatchObject({ stage: 'assemble' })
     await t.mutation(api.workshop.setNeeds, { jobId: old, assemble: false, order: true })
     expect(await job(old)).toMatchObject({ stage: 'goahead' })
