@@ -268,9 +268,9 @@ export const create = mutation({
  *   - photographs of the visit order (any time) or of the work order, with
  *     the `boards` it asks for;
  *   - `ordered`: the order is sent to the supplier, with the screenshot of
- *     it as proof (needed);
+ *     it when there is one;
  *   - `arrived`: what was ordered has come in, with photographs of the
- *     supplier's bill or challan as proof (needed);
+ *     supplier's bill or challan when there are any;
  *   - the go-ahead: `visitAt` and `callPhone`, once the work is complete.
  *     Any visits after the first are the workshop's own to arrange.
  *
@@ -346,15 +346,12 @@ export const send = mutation({
     } else if (ordered) {
       if (!open || at !== 'assemble' || !needs.order) throw new ConvexError('Nothing is being ordered in for this job.')
       if (job.ordered) throw new ConvexError('The order is already sent.')
-      if (!photos.length) throw new ConvexError('Send the screenshot of the order.')
       step = 'ordered'
       marks.ordered = facts.ordered = true
     } else if (arrived) {
       if (!open || at !== 'assemble' || !needs.order) throw new ConvexError('Nothing is being ordered in for this job.')
       if (job.arrived) throw new ConvexError('The ordered items are already marked arrived.')
-      if (!job.ordered) throw new ConvexError('Send the screenshot of the order first.')
-      // The proof that it came in: the supplier's bill or challan, photographed.
-      if (!photos.length) throw new ConvexError('Photograph the bill or challan of what was ordered.')
+      if (!job.ordered) throw new ConvexError('Mark it ordered first.')
       step = 'arrived'
       marks.arrived = facts.arrived = true
       moves = workDone({ ...job, ...facts })

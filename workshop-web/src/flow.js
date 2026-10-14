@@ -19,8 +19,9 @@ export const api = anyApi
  *   quotation    the shop makes the work order from them and sends its photo
  *   assemble     the workshop builds it, says how many pieces are made, then Complete;
  *                or, where the job asks for it, the shop orders it in
- *                (Ordered, with the WhatsApp screenshot) and says Arrived (with
- *                the bill or challan); or both, side by side (`needsOf`)
+ *                (Ordered, with the WhatsApp screenshot if it likes) and says
+ *                Arrived (with the bill or challan if it likes); or both, side
+ *                by side (`needsOf`)
  *   goahead      the shop rings the customer and says when to go and whom to ring
  *   fitting      the workshop fits it and photographs it, over as many visits
  *                as it needs, then Fitting done; the job is finished

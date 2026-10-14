@@ -118,7 +118,7 @@ export default function JobPage({ job, onBack }) {
   ) : (
     <>
       {camera && <button type="button" className="key ghost" onClick={() => shoot(tag)}><CameraIcon /> {camera}</button>}
-      {gallery && <button type="button" className="key ghost" onClick={() => fromPhone(tag)}><PhotosIcon /> Choose from the phone</button>}
+      {gallery && <button type="button" className="key ghost" onClick={() => fromPhone(tag)}><PhotosIcon /> {gallery === true ? 'Choose from the phone' : gallery}</button>}
     </>
   ))
   /** The button at the foot for a photo step: the camera, then Send once something is shot. */
@@ -171,19 +171,20 @@ export default function JobPage({ job, onBack }) {
     : photoKey(tag, label))
 
   /* ── what was ordered in, at the counter ────────────────────────────────── */
-  // Ordered, with its proof: the screenshot of the order sent to the supplier.
+  // Ordered, with the screenshot of the order sent to the supplier if one was chosen.
+  // Without one it is asked first, as nothing else stands between a tap and the step.
+  const [ordering, setOrdering] = useState(false)
   const orderProof = picked.length > 0 && step === 'ordered'
   const sendOrdered = () => {
-    if (!orderProof) return
-    const shots = take()
+    const shots = orderProof ? take() : []
     post({ jobId: job.id, step: 'ordered', ordered: true, files: shots.map((p) => p.file), previews: shots.map((p) => p.url) })
+    setOrdering(false)
   }
-  // Arrived, with its proof: the supplier's bill or challan, photographed.
+  // Arrived, with the supplier's bill or challan if it was photographed.
   const [arriving, setArriving] = useState(false)
   const proof = picked.length > 0 && step === 'arrived'
   const sendArrived = () => {
-    if (!proof) return
-    const shots = take()
+    const shots = proof ? take() : []
     post({ jobId: job.id, step: 'arrived', arrived: true, files: shots.map((p) => p.file), previews: shots.map((p) => p.url) })
     setArriving(false)
   }
@@ -248,14 +249,14 @@ export default function JobPage({ job, onBack }) {
     quotation: <>{head('Work order')}{tray('quotation', { gallery: true })}</>,
     assemble: (
       <>
-        {head(stageAt(job).label, needs.toOrder ? 'Order it from the supplier on WhatsApp, then send the screenshot of the order.'
-          : needs.ordering ? 'Ordered. When it comes in, photograph its bill or challan.' : '')}
+        {head(stageAt(job).label, needs.toOrder ? 'Order it from the supplier on WhatsApp, then mark it ordered.'
+          : needs.ordering ? 'Ordered. Mark it arrived when it comes in.' : '')}
         {needs.assemble && (job.assembled
           ? <p className="mark ok"><TickIcon size={18} /> Assembling complete</p>
           : job.boardsMade != null ? counter(job.boardsMade, false) : <p className="mark">Assembling: nothing counted yet.</p>)}
         {needs.order && job.ordered && <p className="mark ok"><TickIcon size={18} /> Ordered</p>}
         {needs.order && !needs.ordering && <p className="mark ok"><TickIcon size={18} /> Ordered items arrived</p>}
-        {needs.toOrder ? tray('ordered', { camera: '' }) : needs.ordering && tray('arrived', { gallery: true })}
+        {needs.toOrder ? tray('ordered', { gallery: 'Add WhatsApp screenshot' }) : needs.ordering && tray('arrived', { gallery: true, camera: 'Photograph bill or challan' })}
       </>
     ),
     goahead: (
@@ -292,9 +293,8 @@ export default function JobPage({ job, onBack }) {
     assemble: !needs.ordering ? null
       : needs.toOrder ? (orderProof
         ? { label: 'Send ordered', Icon: SendIcon, run: sendOrdered, tone: 'safe' }
-        : { label: 'Choose WhatsApp screenshot', Icon: PhotosIcon, run: () => fromPhone('ordered'), tone: 'must' })
-      : proof ? { label: 'Arrived', Icon: TickIcon, run: () => setArriving(true), tone: 'safe' }
-      : { label: 'Photograph bill or challan', Icon: CameraIcon, run: () => shoot('arrived'), tone: 'must' },
+        : { label: 'Ordered', Icon: TickIcon, run: () => setOrdering(true), tone: 'safe' })
+      : { label: 'Arrived', Icon: TickIcon, run: () => setArriving(true), tone: 'safe' },
     goahead: { label: 'Send go-ahead', Icon: SendIcon, run: sendGoAhead, tone: 'safe', off: !goReady },
   }[at]
 
@@ -442,6 +442,16 @@ export default function JobPage({ job, onBack }) {
           <div className="sheetbtns">
             <button type="button" className="ghost" onClick={() => setCompleting(false)}>Not yet</button>
             <button type="button" className="solid safe" onClick={sendComplete}>{DONE[at] ?? 'Complete'}</button>
+          </div>
+        </Sheet>
+      )}
+      {ordering && (
+        <Sheet label="Ordered" onClose={() => setOrdering(false)}>
+          <b className="sheettitle">Ordered?</b>
+          <p>No screenshot with it. Arrived is next, when the items come in. This cannot be gone back to.</p>
+          <div className="sheetbtns">
+            <button type="button" className="ghost" onClick={() => setOrdering(false)}>Not yet</button>
+            <button type="button" className="solid safe" onClick={sendOrdered}>Ordered</button>
           </div>
         </Sheet>
       )}
