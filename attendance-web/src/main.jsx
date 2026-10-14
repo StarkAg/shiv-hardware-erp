@@ -9,7 +9,7 @@ const CONVEX_URL =
   import.meta.env.VITE_CONVEX_URL || 'https://sensible-panther-176.convex.cloud'
 const convex = new ConvexReactClient(CONVEX_URL)
 // A phone already given the PIN carries its token, for the Pay tab's money.
-authorizeClient(convex)
+authorizeClient(convex, CONVEX_URL)
 
 // A scroll over an amount box scrolls the page, never the amount: the box
 // lets go of focus before the wheel can nudge the figure it holds.

@@ -63,6 +63,15 @@ export default defineSchema({
   }),
   // Wrong PINs, so guessing it is paused after a few.
   pinAttempts: defineTable({ at: v.number() }).index('by_at', ['at']),
+  // A one-time pass from a trusted app, carried in the link to another of the
+  // shop's apps, so that app trusts the phone without the PIN (convex/devices.ts).
+  devicePasses: defineTable({
+    code: v.string(),
+    fromId: v.id('trustedDevices'),
+    app: v.string(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+  }).index('by_code', ['code']).index('by_expires', ['expiresAt']),
 
   // ── Bills backup (single-row snapshot; all bills incl. drafts) ────────────
   // Now only the running bill number and when a bill last changed; the bills

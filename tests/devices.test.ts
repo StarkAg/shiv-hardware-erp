@@ -82,3 +82,37 @@ describe('the list', () => {
     expect(await phone.as.query(api.devices.me, {})).toEqual({ trusted: false })
   })
 })
+
+describe('one PIN for all the apps on a phone', () => {
+  test('a trusted app makes a pass that trusts another app once, with no PIN', async () => {
+    const t = untrusted(schema, modules)
+    // Only a trusted app can make a pass.
+    await expect(t.mutation(api.devices.pass, { app: 'Cash' })).rejects.toMatchObject({ data: { code: 'untrusted' } })
+    const { as } = await trustedAs(t, 'Safari on iPhone · Accounts')
+    const code = await as.mutation(api.devices.pass, { app: 'Cash' })
+    expect(code).toMatch(/^[0-9a-f]{48}$/)
+
+    const used = await t.mutation(internal.devices.usePass, { code, name: 'Safari on iPhone · Cash', app: 'Cash' })
+    expect(used.ok).toBe(true)
+    const cash = t.withIdentity({ subject: (used as { id: string }).id })
+    expect(await cash.query(api.devices.me, {})).toMatchObject({ trusted: true, name: 'Safari on iPhone · Cash' })
+    // Once only, and a made-up one is nothing.
+    expect(await t.mutation(internal.devices.usePass, { code, name: 'X', app: 'Cash' })).toMatchObject({ ok: false })
+    expect(await t.mutation(internal.devices.usePass, { code: 'f'.repeat(48), name: 'X', app: 'Cash' })).toMatchObject({ ok: false })
+  })
+
+  test('is no good after a few minutes, or once the app that made it is removed', async () => {
+    const t = untrusted(schema, modules)
+    const { id, as } = await trustedAs(t)
+    const old = await as.mutation(api.devices.pass, { app: 'Cash' })
+    await t.run(async (ctx) => {
+      const row = (await ctx.db.query('devicePasses').collect())[0]
+      await ctx.db.patch(row._id, { expiresAt: Date.now() - 1 })
+    })
+    expect(await t.mutation(internal.devices.usePass, { code: old, name: 'X', app: 'Cash' })).toMatchObject({ ok: false })
+
+    const fresh = await as.mutation(api.devices.pass, { app: 'Cash' })
+    await as.mutation(api.devices.remove, { id: id as never, pin: '26112003' })
+    expect(await t.mutation(internal.devices.usePass, { code: fresh, name: 'X', app: 'Cash' })).toMatchObject({ ok: false })
+  })
+})

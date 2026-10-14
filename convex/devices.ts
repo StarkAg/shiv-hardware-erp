@@ -89,6 +89,62 @@ export const issueServerKey = internalAction({
   },
 })
 
+/**
+ * One PIN for all the shop's apps on a phone.
+ *
+ * Each app is its own website, and a phone keeps what a website saves apart
+ * from every other, so each used to ask the PIN for itself. Now an app that
+ * is trusted makes a pass when one of the others is opened from it: the pass
+ * rides in the link (after the #, so it never reaches a web server), works
+ * once, for a few minutes, and trusts that app on this phone with no PIN.
+ */
+const PASS_LIFE = 5 * 60_000
+
+export const pass = mutation({
+  args: { app: v.string() },
+  handler: async (ctx, { app }) => {
+    const me = await deviceOf(ctx)
+    if (!me) throw new ConvexError('This device is not trusted.')
+    const now = Date.now()
+    for (const old of await ctx.db.query('devicePasses').withIndex('by_expires', (q) => q.lt('expiresAt', now - PASS_LIFE)).take(50)) {
+      await ctx.db.delete(old._id)
+    }
+    const bytes = crypto.getRandomValues(new Uint8Array(24))
+    const code = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    await ctx.db.insert('devicePasses', { code, fromId: me._id, app: app.trim().slice(0, 40), expiresAt: now + PASS_LIFE })
+    return code
+  },
+})
+
+/** Uses a pass up: the app it was made for is trusted, as one more device on the list. */
+export const usePass = internalMutation({
+  args: { code: v.string(), name: v.string(), app: v.string() },
+  handler: async (ctx, { code, name, app }) => {
+    const row = await ctx.db.query('devicePasses').withIndex('by_code', (q) => q.eq('code', code)).unique()
+    const now = Date.now()
+    if (!row || row.usedAt || row.expiresAt < now) return { ok: false as const, error: 'That link has been used or is too old. Open it again from the other app, or give the PIN.' }
+    const from = await ctx.db.get(row.fromId)
+    if (!from) return { ok: false as const, error: 'The app that made the link is no longer trusted.' }
+    await ctx.db.patch(row._id, { usedAt: now })
+    const id = await ctx.db.insert('trustedDevices', {
+      name: name.trim().slice(0, 80) || 'Device', app: app.trim().slice(0, 40), kind: 'device', createdAt: now, lastSeenAt: now,
+    })
+    await record(ctx, 'device.trust', `Trusted device: ${name} (${app}), opened from ${from.name}`, { entity: 'device', entityId: id })
+    return { ok: true as const, id: String(id) }
+  },
+})
+
+/** Trust this app on this phone with a pass from another of its trusted apps. */
+export const trustByPass = openAction({
+  args: { code: v.string(), name: v.string(), app: v.string() },
+  handler: async (ctx, { code, name, app }): Promise<{ ok: true; token: string } | { ok: false; error: string }> => {
+    const res = await ctx.runMutation(internal.devices.usePass, { code: code.slice(0, 64), name, app })
+    if (!res.ok) return res
+    const token: string = await ctx.runAction(internal.deviceKeys.signToken, { deviceId: res.id, name })
+    return { ok: true, token }
+  },
+})
+
 /** Whether this call comes from a trusted device. Open: it is how an app learns it must ask for the PIN. */
 export const me = openQuery({
   args: {},

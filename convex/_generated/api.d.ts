@@ -16,6 +16,7 @@ import type * as backups from "../backups.js";
 import type * as billFlow from "../billFlow.js";
 import type * as billLedger from "../billLedger.js";
 import type * as billLocks from "../billLocks.js";
+import type * as billWhatsApp from "../billWhatsApp.js";
 import type * as bills from "../bills.js";
 import type * as cash from "../cash.js";
 import type * as catalog from "../catalog.js";
@@ -99,6 +100,7 @@ declare const fullApi: ApiFromModules<{
   billFlow: typeof billFlow;
   billLedger: typeof billLedger;
   billLocks: typeof billLocks;
+  billWhatsApp: typeof billWhatsApp;
   bills: typeof bills;
   cash: typeof cash;
   catalog: typeof catalog;
