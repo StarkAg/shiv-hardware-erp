@@ -18,6 +18,15 @@
  * The bill's own photos go as they are; a bill typed in the panel goes as a
  * picture of the printed bill, drawn here with the shop PC's own template.
  *
+ * The link is kept for good. It lives on the service's volume, so a restart
+ * or an update picks it up again; a dropped connection is redialled for ever,
+ * and a link stuck for ten minutes is redialled afresh. WhatsApp saying the
+ * device is logged out is believed only when it says so three times running,
+ * and even then the old link is moved aside, not deleted, before a new QR is
+ * shown. What ends the link for real is the owner removing it under Linked
+ * devices, or his phone being off WhatsApp for about 14 days, which is
+ * WhatsApp's own rule for every linked device.
+ *
  * Environment (Railway variables):
  *   CONVEX_URL          the shop's deployment
  *   SHIV_DEVICE_TOKEN   this service's key: npx convex run --prod devices:issueServerKey '{"name":"whatsapp-bills"}'
@@ -26,7 +35,7 @@
  *   BILL_WHATSAPP_REST_MIN, BILL_WHATSAPP_DAILY_MAX, BILL_WHATSAPP_HOURS (10, 40, 9-21)
  */
 import http from 'node:http'
-import { rm } from 'node:fs/promises'
+import { rename } from 'node:fs/promises'
 
 const PORT = Number(process.env.PORT || 8080)
 const AUTH_DIR = process.env.AUTH_DIR || '/data/auth'
@@ -45,6 +54,11 @@ const log = (...a) => console.log(new Date().toISOString(), ...a)
 /* ── the WhatsApp link ───────────────────────────────────────────────────── */
 const silent = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return silent } }
 let relogin = async () => {}
+let redial = () => {}
+let since = Date.now()
+const setStatus = (status) => { if (state.status !== status) since = Date.now(); state.status = status }
+/** A link put aside rather than deleted, so a logout WhatsApp did not mean can be undone by hand. */
+const putAside = () => rename(AUTH_DIR, `${AUTH_DIR}-${new Date().toISOString().replace(/[:.]/g, '-')}`).catch(() => {})
 
 async function startWhatsApp() {
   const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestBaileysVersion } = await import('@whiskeysockets/baileys')
@@ -52,6 +66,7 @@ async function startWhatsApp() {
   let auth = await useMultiFileAuthState(AUTH_DIR)
   let gen = 0
   let attempts = 0
+  let loggedOutRuns = 0
   let version = null
 
   async function connect() {
@@ -71,13 +86,14 @@ async function startWhatsApp() {
     s.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
       if (mine !== gen) return
       if (qr) {
-        state.status = 'qr'
+        setStatus('qr')
         state.qr = await qrcode.toDataURL(qr, { margin: 1, width: 320 }).catch(() => null)
       }
       if (connection === 'open') {
         sock = s
         attempts = 0
-        state.status = 'ready'
+        loggedOutRuns = 0
+        setStatus('ready')
         state.qr = null
         state.readyAt = new Date().toISOString()
         state.me = s.user?.id?.split(':')[0]?.split('@')[0] ?? null
@@ -88,16 +104,19 @@ async function startWhatsApp() {
         if (sock === s) sock = null
         const code = lastDisconnect?.error?.output?.statusCode
         const message = String(lastDisconnect?.error?.message ?? '')
-        const loggedOut = code === DisconnectReason.loggedOut
-        state.status = loggedOut ? 'logged_out' : 'reconnecting'
+        // Believed on the third time running: a single 401 can be WhatsApp's own hiccup.
+        loggedOutRuns = code === DisconnectReason.loggedOut ? loggedOutRuns + 1 : 0
+        const loggedOut = loggedOutRuns >= 3
+        setStatus(loggedOut ? 'logged_out' : 'reconnecting')
         state.lastError = message ? { at: new Date().toISOString(), code, message } : null
         // An old client version is refused with 405: the current one is fetched.
         if (!version && (code === 405 || /connection failure/i.test(message))) {
           version = (await fetchLatestBaileysVersion().catch(() => null))?.version ?? null
         }
-        log(`[whatsapp] closed code=${code}${loggedOut ? ', logged out: scan the QR again' : ', reconnecting'}`)
+        log(`[whatsapp] closed code=${code}${loggedOut ? ', logged out three times running: old link put aside, scan the QR again' : ', reconnecting with the saved link'}`)
         if (loggedOut) {
-          await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+          loggedOutRuns = 0
+          await putAside()
           auth = await useMultiFileAuthState(AUTH_DIR)
         }
         attempts = loggedOut ? 0 : attempts + 1
@@ -108,12 +127,22 @@ async function startWhatsApp() {
 
   relogin = async () => {
     gen++
+    try { await sock?.logout?.() } catch { /* already gone */ }
     try { sock?.end?.(new Error('relogin')) } catch { /* gone */ }
     sock = null
-    state.status = 'starting'
+    setStatus('starting')
     state.qr = null
-    await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+    await putAside()
     auth = await useMultiFileAuthState(AUTH_DIR)
+    void connect()
+  }
+
+  // Redial with the saved link, as a stuck connection needs.
+  redial = () => {
+    gen++
+    try { sock?.end?.(new Error('redial')) } catch { /* gone */ }
+    sock = null
+    setStatus('reconnecting')
     void connect()
   }
 
@@ -272,5 +301,28 @@ http.createServer((req, res) => {
 }).listen(PORT, () => log(`WhatsApp Bills on :${PORT}; ${HOURS.join('-')}h, at most ${DAILY_MAX} a day, after ${REST_MS / 60_000} min`))
 
 if (!LOGIN_KEY) log('LOGIN_KEY is not set: the login page answers nobody')
-void startWhatsApp().catch((err) => { state.status = 'error'; state.lastError = { message: String(err?.message ?? err) }; log('[whatsapp] could not start', err) })
+void startWhatsApp().catch((err) => { setStatus('error'); state.lastError = { message: String(err?.message ?? err) }; log('[whatsapp] could not start', err) })
 setInterval(() => { void sendDue() }, 30_000)
+
+// Watchdog: a link that is neither up nor waiting for a scan for ten minutes
+// is redialled with the saved link, never thrown away.
+setInterval(() => {
+  if (['ready', 'qr', 'logged_out'].includes(state.status)) return
+  if (Date.now() - since > 10 * 60_000) {
+    log(`[whatsapp] watchdog: "${state.status}" for ten minutes, redialling with the saved link`)
+    since = Date.now()
+    redial()
+  }
+}, 60_000)
+
+// Nothing WhatsApp throws stops the service.
+process.on('unhandledRejection', (err) => log('[process] unhandled', err?.message ?? err))
+process.on('uncaughtException', (err) => log('[process] uncaught', err?.message ?? err))
+
+// An update or a restart: the connection is closed, never logged out, so the
+// saved link is there when the service comes back.
+process.on('SIGTERM', () => {
+  log('[process] stopping; the WhatsApp link stays saved')
+  try { sock?.end?.(undefined) } catch { /* gone */ }
+  setTimeout(() => process.exit(0), 1500)
+})
