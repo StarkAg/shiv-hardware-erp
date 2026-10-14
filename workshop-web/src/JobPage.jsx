@@ -94,7 +94,7 @@ export default function JobPage({ job, onBack }) {
     <div className="chips needs" role="group" aria-label="What this job needs">
       {NEEDS.map(([k, label]) => (
         <button key={k} type="button" className={value[k] ? 'on' : ''} aria-pressed={value[k]}
-          onClick={() => { const next = { ...value, [k]: !value[k] }; if (next.assemble || next.order) onPick(next) }}>
+          onClick={() => { const next = { assemble: value.assemble, order: value.order, [k]: !value[k] }; if (next.assemble || next.order) onPick(next) }}>
           {value[k] && <TickIcon size={20} strokeWidth="3" />} {label}
         </button>
       ))}
@@ -187,7 +187,7 @@ export default function JobPage({ job, onBack }) {
   const changeNeeds = () => {
     const next = changing
     setChanging(null)
-    setNeeds({ jobId: job.id, ...next }).catch((err) => setError(said(err)))
+    setNeeds({ jobId: job.id, assemble: next.assemble, order: next.order }).catch((err) => setError(said(err)))
   }
   const doneBy = (n) => (!n.assemble || job.assembled) && (!n.order || job.arrived)
   /** What was asked for and is done, said before the go-ahead. */
