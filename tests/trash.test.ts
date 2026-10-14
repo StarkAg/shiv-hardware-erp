@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from './trustedConvex'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'
 
@@ -25,17 +25,31 @@ async function fixture() {
   return { t, ...ids }
 }
 
+// The Trash opens only with the code (LEDGER_PIN).
+const CODE = 'test-pin-only'
+beforeEach(() => { vi.stubEnv('LEDGER_PIN', CODE) })
+afterEach(() => { vi.unstubAllEnvs() })
+
 describe('shared trash', () => {
+  it('opens only with the code, every time', async () => {
+    const { t } = await fixture()
+    await expect(t.query(api.trash.all, { pin: 'wrong' })).rejects.toThrow('Wrong code')
+    await expect(t.query(api.trash.all, { pin: '' })).rejects.toThrow('Wrong code')
+    await expect(t.mutation(api.trash.unlock, { pin: 'wrong' })).rejects.toThrow('Wrong code')
+    expect(await t.mutation(api.trash.unlock, { pin: CODE })).toBe(true)
+    expect(await t.query(api.trash.all, { pin: CODE })).toEqual([])
+  })
+
   it('shows a linked bill and voucher once, restores both with original balanced lines', async () => {
     const { t } = await fixture()
     await t.mutation(api.bills.remove, { id: 'bill-7' })
-    const rows = await t.query(api.trash.all, {})
+    const rows = await t.query(api.trash.all, { pin: CODE })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ source: 'bill', linkedVoucher: 'SAL-0007', amount: 125 })
     expect(await t.run(ctx => ctx.db.query('voucherEntries').collect())).toHaveLength(0)
     if (rows[0].source !== 'bill') throw new Error('Expected bill')
     await t.mutation(api.bills.restore, { id: rows[0]._id })
-    expect(await t.query(api.trash.all, {})).toHaveLength(0)
+    expect(await t.query(api.trash.all, { pin: CODE })).toHaveLength(0)
     expect((await t.query(api.bills.get, {}))?.bills).toHaveLength(1)
     const vouchers = await t.run(ctx => ctx.db.query('vouchers').collect())
     expect(vouchers).toHaveLength(1)
@@ -50,12 +64,12 @@ describe('shared trash', () => {
   it('keeps standalone vouchers visible and restorable', async () => {
     const { t, voucherId } = await fixture()
     await t.mutation(api.vouchers.remove, { id: voucherId })
-    const rows = await t.query(api.trash.all, {})
+    const rows = await t.query(api.trash.all, { pin: CODE })
     expect(rows).toHaveLength(1)
     expect(rows[0].source).toBe('voucher')
     if (rows[0].source !== 'voucher') throw new Error('Expected voucher')
     await t.mutation(api.trash.restore, { id: rows[0]._id })
-    expect(await t.query(api.trash.all, {})).toHaveLength(0)
+    expect(await t.query(api.trash.all, { pin: CODE })).toHaveLength(0)
   })
 
   it('pairs older bill deletions without an explicit trash ID', async () => {
@@ -65,7 +79,7 @@ describe('shared trash', () => {
       const bill = (await ctx.db.query('billsTrash').collect())[0]
       await ctx.db.patch(bill._id, { voucherTrashId: undefined })
     })
-    const rows = await t.query(api.trash.all, {})
+    const rows = await t.query(api.trash.all, { pin: CODE })
     expect(rows).toHaveLength(1)
     if (rows[0].source !== 'bill') throw new Error('Expected bill')
     await t.mutation(api.bills.restore, { id: rows[0]._id })
@@ -82,7 +96,7 @@ describe('shared trash', () => {
       await ctx.db.insert('trash', { ...voucher, fy: '2025-26' })
       return bill._id
     })
-    expect(await t.query(api.trash.all, {})).toHaveLength(3)
+    expect(await t.query(api.trash.all, { pin: CODE })).toHaveLength(3)
     await expect(t.mutation(api.bills.restore, { id: billId })).rejects.toThrow('missing or ambiguous')
     expect((await t.query(api.bills.get, {}))?.bills).toHaveLength(0)
     expect(await t.run(ctx => ctx.db.query('vouchers').collect())).toHaveLength(0)
@@ -99,16 +113,13 @@ describe('shared trash', () => {
   })
 
   it('purges a linked pair only with the correct server-side PIN', async () => {
-    vi.stubEnv('LEDGER_PIN', 'test-pin-only')
-    try {
-      const { t } = await fixture()
-      await t.mutation(api.bills.remove, { id: 'bill-7' })
-      const [bill] = await t.run(ctx => ctx.db.query('billsTrash').collect())
-      await expect(t.mutation(api.bills.purge, { id: bill._id, pin: 'wrong' })).rejects.toThrow()
-      expect(await t.query(api.trash.all, {})).toHaveLength(1)
-      await t.mutation(api.bills.purge, { id: bill._id, pin: 'test-pin-only' })
-      expect(await t.run(ctx => ctx.db.query('billsTrash').collect())).toHaveLength(0)
-      expect(await t.run(ctx => ctx.db.query('trash').collect())).toHaveLength(0)
-    } finally { vi.unstubAllEnvs() }
+    const { t } = await fixture()
+    await t.mutation(api.bills.remove, { id: 'bill-7' })
+    const [bill] = await t.run(ctx => ctx.db.query('billsTrash').collect())
+    await expect(t.mutation(api.bills.purge, { id: bill._id, pin: 'wrong' })).rejects.toThrow()
+    expect(await t.query(api.trash.all, { pin: CODE })).toHaveLength(1)
+    await t.mutation(api.bills.purge, { id: bill._id, pin: 'test-pin-only' })
+    expect(await t.run(ctx => ctx.db.query('billsTrash').collect())).toHaveLength(0)
+    expect(await t.run(ctx => ctx.db.query('trash').collect())).toHaveLength(0)
   })
 })

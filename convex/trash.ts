@@ -7,10 +7,24 @@ import { requirePin } from "./lib/pin";
 import { linkTrashRows } from './lib/trashLinks';
 import { attachmentIds, deleteUnreferencedFiles, describeAttachments } from './lib/attachmentFiles';
 
-/** One bin for the panel and books. A linked bill/voucher is one deleted event. */
+/**
+ * The Trash opens with the code (LEDGER_PIN), every time: what is deleted is
+ * not for every trusted device to read, nor to put back. Checked here first,
+ * so a wrong code gets a plain refusal; the list itself asks for it again.
+ */
+export const unlock = mutation({
+  args: { pin: v.string() },
+  handler: async (_ctx, { pin }) => {
+    requirePin(pin);
+    return true;
+  },
+});
+
+/** One bin for the panel and books. A linked bill/voucher is one deleted event. Only with the code. */
 export const all = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { pin: v.string() },
+  handler: async (ctx, { pin }) => {
+    requirePin(pin);
     const [bills, vouchers, ledgers, types] = await Promise.all([
       ctx.db.query('billsTrash').collect(), ctx.db.query('trash').collect(),
       ctx.db.query('ledgers').collect(), ctx.db.query('voucherTypes').collect(),

@@ -1,6 +1,5 @@
-import { useLive } from '../ledger/lib/cache'
 import { useMemo, useState } from 'react'
-import { Images, List, Paperclip, X } from 'lucide-react'
+import { Images, List, Lock, Paperclip, X } from 'lucide-react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { rupees, shortDate } from '../ledger/lib/format'
@@ -12,10 +11,63 @@ import '../ledger/ledger.css'
 
 type TrashRow = NonNullable<ReturnType<typeof useQuery<typeof api.trash.all>>>[number]
 
-/** The panel and ledger share one bin; linked bills and vouchers appear once. */
+// The Trash used to be kept on the device so it opened at once; with a code
+// on it, a copy would show it without one. Any copy left from before goes.
+try {
+  for (const key of Object.keys(localStorage)) if (/^shivledger:q:.*:trash$/.test(key)) localStorage.removeItem(key)
+} catch { /* nothing kept */ }
+
+/**
+ * The Trash asks for the code each time it is opened: the code stays only
+ * while the page is open, so leaving it and coming back asks again.
+ */
 export function BillTrash() {
   const dark = useLedgerTheme()
-  const rows = useLive(api.trash.all, {}, 'trash')
+  const [code, setCode] = useState<string | null>(null)
+  if (code === null) return <TrashLock dark={dark} onOpen={setCode} />
+  return <TrashBin code={code} />
+}
+
+function TrashLock({ dark, onOpen }: { dark: boolean; onOpen: (code: string) => void }) {
+  const unlock = useMutation(api.trash.unlock)
+  const [pin, setPin] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pin.trim() || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await unlock({ pin: pin.trim() })
+      onOpen(pin.trim())
+    } catch (err) {
+      setError((err as { data?: string })?.data || 'Wrong code.')
+      setPin('')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
+      <div className="app">
+        <h1 className="pagetitle">Trash</h1>
+        <form className="trash-lock" onSubmit={submit}>
+          <Lock size={26} aria-hidden="true" />
+          <label htmlFor="trash-code">Code to open the Trash</label>
+          <input id="trash-code" type="password" inputMode="numeric" autoComplete="off" autoFocus value={pin} onChange={(e) => setPin(e.target.value)} />
+          {error && <p className="error" role="alert">{error}</p>}
+          <button className="btn" type="submit" disabled={busy || !pin.trim()}>{busy ? 'Checking' : 'Open'}</button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/** The panel and ledger share one bin; linked bills and vouchers appear once. */
+function TrashBin({ code }: { code: string }) {
+  const dark = useLedgerTheme()
+  const rows = useQuery(api.trash.all, { pin: code })
   const restoreBill = useMutation(api.bills.restore)
   const restoreVoucher = useMutation(api.trash.restore)
   const purgeBill = useMutation(api.bills.purge)

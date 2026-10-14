@@ -1429,3 +1429,9 @@ to{transform: scale(1); color: #fff}}
 .ledger-root .trash-meta{display: flex; flex-direction: column; gap: 2px; min-width: 0;}
 .ledger-root .trash-meta span{overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
 .ledger-root .trash-card .btn.small{align-self: flex-start;}
+
+/* The code asked each time the Trash is opened. */
+.ledger-root .trash-lock{display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 280px; margin: 48px auto; text-align: center;}
+.ledger-root .trash-lock label{font-weight: 700;}
+.ledger-root .trash-lock input{width: 100%; padding: 12px 14px; font-size: 20px; letter-spacing: 6px; text-align: center; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg);}
+.ledger-root .trash-lock .btn{width: 100%;}
