@@ -67,6 +67,17 @@ describe('sale bills to the customer\'s WhatsApp', () => {
     expect((await t.query(api.billWhatsApp.due, { before: at(15 * MIN), limit: 10 })).items).toEqual([])
     expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items.map((x) => x.voucherId)).toEqual([edited])
 
+    // The panel's page: what still waits and why, what happened lately, and a send again.
+    const q = await t.query(api.billWhatsApp.queue, {})
+    expect(q.waiting.map((w) => [w.label, w.held])).toEqual([
+      ['SAL-0045', null],
+      ['SAL-0043', 'Waiting for its amount'],
+      ['SAL-0042', 'No mobile number on the account'],
+    ])
+    expect(q.recent.map((r) => [r.label, r.status])).toEqual([['SAL-0044', 'failed'], ['SAL-0041', 'sent']])
+    await t.mutation(api.billWhatsApp.sendAgain, { voucherId: withPhoto })
+    expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items.map((x) => x.label)).toContain('SAL-0041')
+
     // Switched off, nothing goes; switched on again, it keeps its first start.
     await t.mutation(api.billWhatsApp.setOn, { on: false })
     expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items).toEqual([])

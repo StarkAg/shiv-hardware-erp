@@ -285,8 +285,9 @@ http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x')
   const keyOk = LOGIN_KEY && url.searchParams.get('key') === LOGIN_KEY
   if (url.pathname === '/health') {
-    res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, status: state.status }))
+    // Read by the panel's WhatsApp page: whether the link is up, and to which number.
+    res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'no-store' })
+    res.end(JSON.stringify({ ok: true, status: state.status, me: state.status === 'ready' ? state.me : null, since: state.readyAt, hours: HOURS, dailyMax: DAILY_MAX, restMin: REST_MS / 60_000 }))
     return
   }
   if (!keyOk) { res.writeHead(404); res.end(); return }

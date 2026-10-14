@@ -1414,3 +1414,6 @@ to{transform: scale(1); color: #fff}}
   .ledger-root .cash-day .xbtn{display: none;}
   .ledger-root .cash-panel{break-inside: avoid;}
 }
+
+/* A heading between two tables on one page (the WhatsApp bills page). */
+.ledger-root .sectiontitle{margin: 22px 0 8px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--muted, #78716c);}

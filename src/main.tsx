@@ -44,6 +44,7 @@ const DayPaper = page(() => import('./features/paper/DayPaper'), 'DayPaper')
 const Receive = page(() => import('./features/receive/Receive'), 'Receive')
 const BillFlow = page(() => import('./features/flow/BillFlow'), 'BillFlow')
 const TrustedDevices = page(() => import('./features/devices/TrustedDevices'), 'TrustedDevices')
+const WhatsAppBills = page(() => import('./features/whatsapp/WhatsAppBills'), 'WhatsAppBills')
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
@@ -180,6 +181,8 @@ const router = createHashRouter([
       { path: 'cash-review',    element: <CashReview /> },
       { path: 'trash',          element: <BillTrash /> },
       { path: 'devices',        element: <TrustedDevices /> },
+      // Sale bills to the customer's WhatsApp: what is waiting, what went.
+      { path: 'whatsapp',       element: <WhatsAppBills /> },
       { path: 'printer-queue',  element: <PrinterQueue /> },
       // The quotation half's own customer list. Not the books' party list —
       // these are people who may only ever have had a quotation. Named for

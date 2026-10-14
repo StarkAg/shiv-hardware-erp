@@ -161,6 +161,67 @@ export const status = query({
   },
 })
 
+/**
+ * The panel's WhatsApp page: whether sending is on, the sales still to go
+ * (and why one cannot), and what was sent, skipped or failed lately.
+ */
+export const queue = query({
+  args: {},
+  handler: async (ctx) => {
+    const settings = await settingsOf(ctx)
+    const from = settings?.billWhatsAppFrom ?? null
+    const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
+    const waiting = []
+    if (from && sale) {
+      const candidates = (
+        await ctx.db.query('vouchers').withIndex('by_date', (q) => q.gte('date', from - 7 * DAY)).collect()
+      ).filter((vch) => vch.typeId === sale._id && vch.createdAt >= from).sort((a, b) => b.createdAt - a.createdAt)
+      for (const vch of candidates) {
+        const done = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', vch._id)).unique()
+        if (done && (done.status !== 'failed' || done.attempts >= TRIES)) continue
+        const party = await ctx.db.get(vch.partyLedgerId)
+        const mobile = !!party?.phone && /\d{10}/.test(party.phone.replace(/\D/g, ''))
+        waiting.push({
+          voucherId: vch._id,
+          label: label(sale.abbr, vch.voucherNo),
+          name: bare(party?.name),
+          phone: party?.phone ?? '',
+          amount: vch.amount ?? null,
+          savedAt: Math.max(vch.createdAt, vch.updatedAt),
+          // Why it is not going yet, when something stops it.
+          held: vch.status !== 'final' ? 'Waiting for its amount' : !mobile ? 'No mobile number on the account' : null,
+          tries: done?.attempts ?? 0,
+          lastError: done?.status === 'failed' ? done.reason ?? '' : '',
+        })
+      }
+    }
+    const recent = await ctx.db.query('billWhatsApp').withIndex('by_at').order('desc').take(60)
+    return {
+      on: settings?.billWhatsAppOn === true,
+      from,
+      waiting,
+      recent: await Promise.all(recent.map(async (r) => {
+        const vch = await ctx.db.get(r.voucherId)
+        const party = vch ? await ctx.db.get(vch.partyLedgerId) : null
+        return {
+          voucherId: r.voucherId, status: r.status, at: r.at, reason: r.reason ?? '', attempts: r.attempts,
+          name: bare(party?.name), label: vch && sale ? label(sale.abbr, vch.voucherNo) : 'Deleted bill',
+          amount: vch?.amount ?? null,
+        }
+      })),
+    }
+  },
+})
+
+/** A bill sent, skipped or given up on, put back to go again. */
+export const sendAgain = mutation({
+  args: { voucherId: v.id('vouchers') },
+  handler: async (ctx, { voucherId }) => {
+    const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
+    if (row) await ctx.db.delete(row._id)
+  },
+})
+
 /** The bills sent lately, voucher and when: the panel's day book marks them. */
 export const sent = query({
   args: {},

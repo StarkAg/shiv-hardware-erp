@@ -20,7 +20,7 @@ import {
   NotebookPen,
   Scale,
   TrendingUp, HandCoins, CalendarClock, PackageCheck, PackageOpen,
-  ReceiptIndianRupee, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, Inbox, ShieldCheck, ClipboardList, Truck } from 'lucide-react'
+  ReceiptIndianRupee, MessageCircle, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, Inbox, ShieldCheck, ClipboardList, Truck } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { UpdateBanner } from './UpdateBanner'
 import { Toaster } from './Toast'
@@ -142,6 +142,7 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     label: 'Settings',
     items: [
       { to: '/trash', label: 'Trash', icon: Trash2 },
+      { to: '/whatsapp', label: 'WhatsApp Bills', icon: MessageCircle },
       { to: '/devices', label: 'Trusted Devices', icon: MonitorSmartphone },
       /*
        * Bill Scanner and Printer Queue are not listed.
