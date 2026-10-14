@@ -356,11 +356,7 @@ function Party({ party, onBack }) {
   const [viewer, setViewer] = useState(null)
   const [profile, setProfile] = useState(false)
   const end = useRef(null)
-  // A bill's photos open over the account; the phone's Back closes them.
-  const openPhotos = (shots, at, label) => {
-    window.history.pushState({ party: party.id, photo: true }, '')
-    setViewer({ shots, at, label })
-  }
+  const thread = useRef(null)
   useEffect(() => {
     const onPop = (e) => { if (!e.state?.photo) setViewer(null) }
     window.addEventListener('popstate', onPop)
@@ -389,6 +385,59 @@ function Party({ party, onBack }) {
     return out
   }, [data])
 
+  // Every bill in the account with photos, oldest first as in the thread, the
+  // shop's and the party's alike: the viewer swipes on from one into the next.
+  // A sale and the money taken with it are one voucher with the same photos,
+  // so a voucher is in here once, as its bill.
+  const bills = useMemo(() => {
+    const out = []
+    const at = new Map()
+    for (const it of items) {
+      if (it.day) continue
+      const v = it.r ?? it.p
+      const shots = (v.attachmentUrls ?? []).filter((a) => a.url && !isPdf(a))
+      if (!shots.length) continue
+      const id = it.r ? v.voucherId : v._id
+      const label = `${v.vchLabel ?? 'Bill'}${v.refNo ? ` ${v.refNo}` : ''}`
+      const bill = {
+        key: it.key,
+        shots,
+        label: `${label} ${party.name}`,
+        title: it.r ? `${kindOf(v)} · ${label}` : `${SENT[v.vchType] ?? 'Bill'} · ${label}`,
+        who: (it.r ? v.side === ours : pendingOurs) ? 'Shop' : party.name,
+        date: it.date,
+        amount: it.r ? rupees(v.amount) : 'Amount not added yet',
+      }
+      if (!at.has(id)) { at.set(id, out.length); out.push(bill) }
+      else if (it.r && !v.settlement) out[at.get(id)] = bill
+    }
+    return out
+  }, [items, party.name, pendingOurs])
+  const keyOf = useMemo(() => {
+    const m = new Map()
+    for (const it of items) {
+      const v = it.r ?? it.p
+      if (v) m.set(it.key, it.r ? v.voucherId : v._id)
+    }
+    return m
+  }, [items])
+
+  // A bill's photos open over the account; the phone's Back closes them. The
+  // viewer holds the bills as they were when it opened, so a bill saved at the
+  // counter meanwhile does not move the pages under a finger.
+  const openPhotos = (key, page) => {
+    const id = keyOf.get(key)
+    const bill = bills.findIndex((b) => keyOf.get(b.key) === id)
+    if (bill < 0) return
+    window.history.pushState({ party: party.id, photo: true }, '')
+    setViewer({ bills, bill, page, opened: Date.now() })
+  }
+  // The thread behind follows the viewer, so Back lands on the bill last seen.
+  const showBubble = (key) => {
+    const el = thread.current?.querySelector(`[data-key="${CSS.escape(key)}"]`)
+    el?.scrollIntoView({ block: 'center' })
+  }
+
   const closing = data ? (data.closing < 0.5 ? SETTLED : `${rupees(data.closing)} ${sideWord(data.closingSide)}`) : 'Loading…'
 
   return (
@@ -410,16 +459,16 @@ function Party({ party, onBack }) {
           </a>
         )}
       </header>
-      <main className="thread">
+      <main className="thread" ref={thread}>
         {data && !items.length && <p className="note">No bills or payments yet.</p>}
         {items.map((it) => {
           if (it.day) return <div key={it.key} className="daytag"><span>{it.day}</span></div>
           if (it.p) {
             const shots = (it.p.attachmentUrls ?? []).filter((a) => a.url)
             return (
-              <div key={it.key} className={`bubble ${pendingOurs ? 'right' : 'left'} pending`}>
+              <div key={it.key} data-key={it.key} className={`bubble ${pendingOurs ? 'right' : 'left'} pending`}>
                 <div className="kind">{SENT[it.p.vchType] ?? 'Bill'} · {it.p.vchLabel ?? ''} · amount not added yet</div>
-                <Photos shots={shots} onOpen={(pages, at) => openPhotos(pages, at, `${it.p.vchLabel ?? 'Bill'} ${party.name}`)} />
+                <Photos shots={shots} onOpen={(page) => openPhotos(it.key, page)} />
               </div>
             )
           }
@@ -427,14 +476,14 @@ function Party({ party, onBack }) {
           const right = r.side === ours
           const shots = (r.attachmentUrls ?? []).filter((a) => a.url)
           return (
-            <div key={it.key} className={`bubble ${right ? 'right' : 'left'}`}>
+            <div key={it.key} data-key={it.key} className={`bubble ${right ? 'right' : 'left'}`}>
               <div className="kind">{kindOf(r)} · {r.vchLabel}{r.refNo ? ` · ${r.refNo}` : ''}</div>
               <div className="line">
                 <span className="money">{rupees(r.amount)}</span>
                 <span className="bal">Balance {rupees(r.balance < 0 ? -r.balance : r.balance)} {sideWord(r.balanceSide)}</span>
               </div>
               {r.narration && <div className="narr">{r.narration}</div>}
-              <Photos shots={shots} onOpen={(pages, at) => openPhotos(pages, at, `${r.vchLabel}${r.refNo ? ` ${r.refNo}` : ''} ${party.name}`)} />
+              <Photos shots={shots} onOpen={(page) => openPhotos(it.key, page)} />
             </div>
           )
         })}
@@ -447,7 +496,7 @@ function Party({ party, onBack }) {
           {data.pendingCount > 0 && <span>+ {data.pendingCount} bill{data.pendingCount === 1 ? '' : 's'} with no amount</span>}
         </footer>
       )}
-      {viewer && <Viewer key={viewer.label} {...viewer} onClose={() => window.history.back()} />}
+      {viewer && <Viewer key={viewer.opened} bills={viewer.bills} bill={viewer.bill} page={viewer.page} onBill={showBubble} onClose={() => window.history.back()} />}
       {profile && (
         <Profile
           party={party}
@@ -469,7 +518,7 @@ function Photos({ shots, onOpen }) {
     <div className="photos">
       {shots.map((a) => isPdf(a)
         ? <a key={a.storageId} className="pdf" href={a.url} target="_blank" rel="noreferrer">PDF</a>
-        : <button key={a.storageId} type="button" onClick={() => onOpen(pages, pages.indexOf(a))}><Shot url={a.url} width={THUMB} alt="Bill photo" loading="lazy" decoding="async" /></button>)}
+        : <button key={a.storageId} type="button" onClick={() => onOpen(pages.indexOf(a))}><Shot url={a.url} width={THUMB} alt="Bill photo" loading="lazy" decoding="async" /></button>)}
     </div>
   )
 }
@@ -485,51 +534,82 @@ const PrintIcon = () => (
 )
 
 /**
- * A bill's photos, full screen: swipe (or the arrow keys) to turn its pages.
+ * An account's bill photos, full screen: swipe (or the arrow keys) to turn the
+ * pages, and on past a bill's last page into the next bill, the shop's and the
+ * party's alike, oldest to newest as in the thread. The bar names the bill in
+ * view; Share and Print are that bill's.
  *
  * Each page shows at once from a screen-sized copy, and the photo itself is
- * fetched behind it, once: that one copy is what sharpens the page for
- * zooming, what Share hands on (every page, as JPG, in the bill's order) and
- * what Print sends to the shop.
+ * fetched behind it, once, for the bill in view and the one either side: that
+ * copy is what sharpens the page for zooming, what Share hands on (every page,
+ * as JPG, in the bill's order) and what Print sends to the shop. Only the
+ * pages near the one in view are drawn, so a long account opens as fast as a
+ * short one.
  */
-function Viewer({ shots, at: start, label, onClose }) {
+function Viewer({ bills, bill: startBill, page: startPage, onBill, onClose }) {
   const convex = useConvex()
   const strip = useRef(null)
-  const [at, setAt] = useState(start)
+  const slides = useMemo(() => bills.flatMap((b, bi) => b.shots.map((shot, pi) => ({ shot, bi, pi, key: `${b.key}:${shot.storageId}` }))), [bills])
+  const start = slides.findIndex((s) => s.bi === startBill && s.pi === startPage)
+  const [at, setAt] = useState(Math.max(0, start))
   const [full, setFull] = useState({})
+  const fetching = useRef(new Set())
+  const made = useRef([])
   const [note, setNote] = useState('')
   const [asking, setAsking] = useState(false)
   const [sending, setSending] = useState(false)
   const [job, setJob] = useState(null)
 
+  const here = slides[at] ?? slides[0]
+  const billAt = here?.bi ?? 0
+  const current = bills[billAt]
+  const shots = current?.shots ?? []
+
   useEffect(() => {
     let closed = false
-    const made = []
-    for (const shot of shots) {
-      void (async () => {
-        try {
-          const res = await fetch(shot.url)
-          if (!res.ok) return
-          const blob = await res.blob()
-          if (closed) return
-          const url = URL.createObjectURL(blob)
-          made.push(url)
-          setFull((have) => ({ ...have, [shot.storageId]: { blob, url } }))
-        } catch { /* the screen-sized copy stays; Share and Print wait */ }
-      })()
+    for (const b of [bills[billAt], bills[billAt + 1], bills[billAt - 1]]) {
+      for (const shot of b?.shots ?? []) {
+        if (fetching.current.has(shot.storageId)) continue
+        fetching.current.add(shot.storageId)
+        void (async () => {
+          try {
+            const res = await fetch(shot.url)
+            if (!res.ok) throw new Error('fetch')
+            const blob = await res.blob()
+            const url = URL.createObjectURL(blob)
+            made.current.push(url)
+            if (!closed) setFull((have) => ({ ...have, [shot.storageId]: { blob, url } }))
+          } catch {
+            // The screen-sized copy stays; coming back to the bill tries again.
+            fetching.current.delete(shot.storageId)
+          }
+        })()
+      }
     }
-    return () => { closed = true; for (const url of made) URL.revokeObjectURL(url) }
-  }, [shots])
+    return () => { closed = true }
+  }, [bills, billAt])
+  useEffect(() => () => { for (const url of made.current) URL.revokeObjectURL(url) }, [])
+
+  // A new bill in view: the account behind follows it, and the last bill's
+  // share or print message goes.
+  const shown = useRef(billAt)
+  useEffect(() => {
+    if (shown.current === billAt) return
+    shown.current = billAt
+    if (current) onBill?.(current.key)
+    setNote('')
+    if (!sending) setJob(null)
+  }, [billAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opens on the page that was tapped.
   useLayoutEffect(() => {
     const el = strip.current
-    if (el) el.scrollLeft = start * el.clientWidth
+    if (el) el.scrollLeft = Math.max(0, start) * el.clientWidth
   }, [start])
 
   const turn = (by) => {
     const el = strip.current
-    if (el) el.scrollTo({ left: Math.min(shots.length - 1, Math.max(0, at + by)) * el.clientWidth, behavior: 'smooth' })
+    if (el) el.scrollTo({ left: Math.min(slides.length - 1, Math.max(0, at + by)) * el.clientWidth, behavior: 'smooth' })
   }
   useEffect(() => {
     const onKey = (e) => {
@@ -541,11 +621,11 @@ function Viewer({ shots, at: start, label, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const ready = shots.every((s) => full[s.storageId])
-  const base = label.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Bill'
+  const ready = shots.length > 0 && shots.every((s) => full[s.storageId])
+  const base = (current?.label ?? '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Bill'
   const nameOf = (i) => (shots.length > 1 ? `${base} page ${i + 1}.jpg` : `${base}.jpg`)
   const pages = `${shots.length} ${shots.length === 1 ? 'page' : 'pages'}`
-  /** Every page as a JPG, named in the bill's order. */
+  /** Every page of the bill in view as a JPG, named in the bill's order. */
   const jpegs = () => Promise.all(shots.map(async (s, i) => new File([await asJpeg(full[s.storageId].blob)], nameOf(i), { type: 'image/jpeg' })))
 
   const share = async () => {
@@ -602,22 +682,29 @@ function Viewer({ shots, at: start, label, onClose }) {
     <div className="viewer" role="dialog" aria-modal="true" aria-label={base}>
       <div className="vbar">
         <button type="button" onClick={onClose} aria-label="Close"><CloseIcon /></button>
-        <span className="count">{shots.length > 1 ? `${at + 1} of ${shots.length}` : ''}</span>
+        <span className="count">{shots.length > 1 ? `Page ${here.pi + 1} of ${shots.length}` : ''}</span>
         <button type="button" className="text" onClick={share} disabled={!ready}><ShareIcon /> Share</button>
         <button type="button" className="text" onClick={() => setAsking(true)} disabled={!ready || sending}><PrintIcon /> Print</button>
       </div>
+      {current && (
+        <div className={`vbill ${current.who === 'Shop' ? 'shop' : ''}`}>
+          <div className="vtitle"><b>{current.title}</b><span>{billAt + 1} of {bills.length}</span></div>
+          <div className="vmeta"><span className="vwho">{current.who}</span><span>{dayOf(current.date)}</span><b>{current.amount}</b></div>
+        </div>
+      )}
       <div className="vstrip" ref={strip}
-        onScroll={(e) => setAt(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}>
-        {shots.map((s, i) => (
-          <div key={s.storageId} className="vslide" onClick={onClose}>
-            {full[s.storageId]
-              ? <img src={full[s.storageId].url} alt={`Bill, page ${i + 1}`} onClick={(e) => e.stopPropagation()} />
-              : <Shot url={s.url} width={SCREEN} alt={`Bill, page ${i + 1}`} onClick={(e) => e.stopPropagation()} />}
+        onScroll={(e) => setAt(Math.min(slides.length - 1, Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth))))}>
+        {slides.map((sl, i) => (
+          <div key={sl.key} className="vslide" onClick={onClose}>
+            {Math.abs(i - at) > 2 ? null
+              : full[sl.shot.storageId]
+                ? <img src={full[sl.shot.storageId].url} alt={`Bill, page ${sl.pi + 1}`} onClick={(e) => e.stopPropagation()} />
+                : <Shot url={sl.shot.url} width={SCREEN} alt={`Bill, page ${sl.pi + 1}`} onClick={(e) => e.stopPropagation()} />}
           </div>
         ))}
       </div>
       {shots.length > 1 && (
-        <div className="vdots" aria-hidden="true">{shots.map((s, i) => <i key={s.storageId} className={i === at ? 'on' : ''} />)}</div>
+        <div className="vdots" aria-hidden="true">{shots.map((s, i) => <i key={s.storageId} className={i === here.pi ? 'on' : ''} />)}</div>
       )}
       {(note || sending || job) && (
         <div className="vnote" role="status">
