@@ -40,6 +40,7 @@ export const SHOP_APPS = [
   { app: 'Vouchers', name: 'Voucher Bill Shooter', url: 'https://shivhardware-voucher.vercel.app/' },
   { app: 'Sort', name: 'Sort', url: 'https://shivhardware-sort.vercel.app/' },
   { app: 'Print', name: 'Shiv Print', url: 'https://shivhardware-print.vercel.app/' },
+  { app: 'Price List', name: 'Price List', url: 'https://shivhardware-prices.vercel.app/' },
 ]
 
 export function deviceToken() {

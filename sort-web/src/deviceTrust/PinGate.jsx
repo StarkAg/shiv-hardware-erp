@@ -1,9 +1,9 @@
 /**
  * The shop PIN, asked once per phone; the app behind it once trusted.
  *
- * Asked once for all the shop's apps: right after the PIN, and whenever the
- * app is opened with ?apps, the other apps are listed, and one opened from
- * here comes with a one-time pass and is trusted without the PIN. A key lost
+ * Asked once for all the shop's apps: whenever an app is opened with ?apps,
+ * the other apps are listed, and one opened from there comes with a one-time
+ * pass and is trusted without the PIN. A key lost
  * from localStorage is found again in its second copy before the PIN is asked.
  * On an iPhone in Safari it says to open the app from the Home Screen, where
  * the phone keeps what the app saved.
@@ -101,8 +101,10 @@ export function PinGate({ convexUrl, app, client, children }) {
       const res = await trustDevice(convexUrl, pin.trim(), app)
       if (!res.ok) { setError(res.error); setPin(''); return }
       if (client) authorizeClient(client, convexUrl)
-      // Straight after the PIN: the other apps, to open trusted from here.
-      setPhase('apps')
+      // Straight into the app. The other apps are listed only when asked for
+      // (?apps): shown after every PIN, they stood between Tony and the app
+      // he had opened (14 Oct 2026).
+      setPhase('trusted')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
