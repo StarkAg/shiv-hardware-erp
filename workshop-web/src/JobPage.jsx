@@ -3,8 +3,8 @@ import { useMutation } from 'convex/react'
 import { SIDE, SIDE_NAME } from './side.js'
 import { BUBBLE } from './offline.js'
 import {
-  TAGS, TAG_FROM, addressOf, api, contactsOf, finished, lineOf, mapLinkOf, myTurn, nameOf, newIn,
-  said, stageId, stampOf, titleOf, visitLine,
+  TAGS, TAG_FROM, addressOf, api, contactsOf, finished, lineOf, mapLinkOf, myTurn, nameOf, needsOf, newIn,
+  said, stageAt, stageId, stampOf, titleOf, visitLine,
 } from './flow.js'
 import { atOnce, deliver, discard, post, useOutbox } from './outbox.js'
 import {
@@ -16,7 +16,9 @@ import Camera from './Camera.jsx'
 import Viewer from './Viewer.jsx'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
-const DOWN = ['fitting', 'goahead', 'assemble', 'quotation', 'measurement', 'visit']
+const DOWN = ['fitting', 'goahead', 'arrived', 'assemble', 'quotation', 'measurement', 'visit']
+/** What a work order can ask for, a tick each; either or both. */
+const NEEDS = [['assemble', 'Assemble'], ['order', 'Order in']]
 /** Something sent before everything was tagged: read by who sent it. */
 const tagOf = (m) => m.step ?? (m.from === 'workshop' ? 'measurement' : 'visit')
 
@@ -27,6 +29,10 @@ const tagOf = (m) => m.step ?? (m.from === 'workshop' ? 'measurement' : 'visit')
  * it the step in hand, as one panel: blue with this side's work in it when the
  * step is its turn (the measurements, the work order, the count of pieces, the
  * go-ahead, the fitting), yellow and saying who it is with when it is not.
+ * A work order is ticked for the workshop to assemble, the shop to order it in
+ * from a supplier, or both; with both, the third step is each side's at once,
+ * the workshop's Complete and the shop's Arrived, and the go-ahead waits for
+ * the two.
  * Then who it is for, and everything sent so far, step by step with the latest
  * first. The one action of the step is a single button at the foot of the
  * screen, always in the same place under the thumb.
@@ -39,6 +45,7 @@ export default function JobPage({ job, onBack }) {
   const seen = useMutation(api.workshop.seen).withOptimisticUpdate(atOnce.seen)
   const removeMessage = useMutation(api.workshop.removeMessage)
   const setCustomer = useMutation(api.workshop.setCustomer).withOptimisticUpdate(atOnce.setCustomer)
+  const setNeeds = useMutation(api.workshop.setNeeds).withOptimisticUpdate(atOnce.setNeeds)
   const { picked, add, drop, take } = usePicked()
   const [error, setError] = useState('')
   // What this phone has sent for the job and is still on its way: shown in its step at once.
@@ -46,6 +53,7 @@ export default function JobPage({ job, onBack }) {
   const at = stageId(job)
   const mine = myTurn(job)
   const over = finished(job)
+  const needs = needsOf(job)
 
   // With the job on screen, what the other side sent is no longer new.
   const news = newIn(job)
@@ -79,6 +87,19 @@ export default function JobPage({ job, onBack }) {
   // The camera's way out where no live one can be had and, at the counter, a picture already on the phone.
   const file = useRef(null)
   const [boardsToMake, setBoardsToMake] = useState('')
+  // What the work order being sent asks for: assembling, until the counter ticks otherwise.
+  const [asks, setAsks] = useState({ assemble: true, order: false })
+  // Ticks a box, never leaving none ticked.
+  const tickNeeds = (value, onPick) => (
+    <div className="chips needs" role="group" aria-label="What this job needs">
+      {NEEDS.map(([k, label]) => (
+        <button key={k} type="button" className={value[k] ? 'on' : ''} aria-pressed={value[k]}
+          onClick={() => { const next = { ...value, [k]: !value[k] }; if (next.assemble || next.order) onPick(next) }}>
+          {value[k] && <TickIcon size={20} strokeWidth="3" />} {label}
+        </button>
+      ))}
+    </div>
+  )
   const shoot = (tag) => { setError(''); setStep(tag); setCam(true) }
   const fromPhone = (tag) => { setError(''); setStep(tag); file.current?.click() }
   // Sent at once: it shows in its step while it goes up behind (the outbox).
@@ -86,7 +107,11 @@ export default function JobPage({ job, onBack }) {
     if (!picked.length || !step) return
     const shots = take()
     const n = Number(boardsToMake)
-    post({ jobId: job.id, step, files: shots.map((p) => p.file), previews: shots.map((p) => p.url), ...(step === 'quotation' && boardsToMake !== '' && n >= 0 ? { boards: n } : {}) })
+    post({
+      jobId: job.id, step, files: shots.map((p) => p.file), previews: shots.map((p) => p.url),
+      ...(step === 'quotation' && asks.assemble && boardsToMake !== '' && n >= 0 ? { boards: n } : {}),
+      ...(step === 'quotation' ? { assemble: asks.assemble, order: asks.order } : {}),
+    })
     setBoardsToMake('')
   }
   /**
@@ -97,7 +122,8 @@ export default function JobPage({ job, onBack }) {
   const tray = (tag, { gallery = false, camera = '' } = {}) => (picked.length && step === tag ? (
     <>
       <Picked picked={picked} onDrop={drop} />
-      {tag === 'quotation' && (
+      {tag === 'quotation' && tickNeeds(asks, setAsks)}
+      {tag === 'quotation' && asks.assemble && (
         <label className="ask inline">
           Pieces to make
           <input type="number" inputMode="numeric" min={0} max={999} placeholder="0" value={boardsToMake} onChange={(e) => setBoardsToMake(e.target.value)} />
@@ -148,6 +174,25 @@ export default function JobPage({ job, onBack }) {
   const [completing, setCompleting] = useState(false)
   const sendComplete = () => { post({ jobId: job.id, step: 'assemble', complete: true }); setCompleting(false) }
 
+  /* ── what was ordered in, at the counter ────────────────────────────────── */
+  // Arrived, with the challan's photos when some are taken.
+  const [arriving, setArriving] = useState(false)
+  const sendArrived = () => {
+    const shots = picked.length && step === 'arrived' ? take() : []
+    post({ jobId: job.id, step: 'arrived', arrived: true, files: shots.map((p) => p.file), previews: shots.map((p) => p.url) })
+    setArriving(false)
+  }
+  // The ticks changed while the job is being assembled or ordered: asked first.
+  const [changing, setChanging] = useState(null)
+  const changeNeeds = () => {
+    const next = changing
+    setChanging(null)
+    setNeeds({ jobId: job.id, ...next }).catch((err) => setError(said(err)))
+  }
+  const doneBy = (n) => (!n.assemble || job.assembled) && (!n.order || job.arrived)
+  /** What was asked for and is done, said before the go-ahead. */
+  const ready = needs.assemble && needs.order ? 'Assembled, and the ordered items are in.' : needs.order ? 'The ordered items are in.' : 'Assembled.'
+
   /* ── the go-ahead ───────────────────────────────────────────────────────── */
   // Tomorrow at ten until the counter says otherwise, and the customer's first number.
   const [going, setGoing] = useState(() => {
@@ -194,16 +239,31 @@ export default function JobPage({ job, onBack }) {
   ) : SIDE === 'workshop' ? {
     measurement: <>{head('Measure')}{tray('measurement')}</>,
     quotation: head('Work order', 'The shop is making the work order from your measurements.'),
-    assemble: <>{head('Assemble')}{counter(tallied, true)}</>,
-    goahead: head('Go-ahead', 'Assembled. The shop calls the customer, then sends when to visit and whom to call.'),
+    assemble: needs.assembling
+      ? <>{head('Assemble', needs.order ? (job.arrived ? 'The ordered items are in at the shop.' : 'The shop is ordering items for this job too.') : '')}{counter(tallied, true)}</>
+      : needs.assemble
+        ? <>{head('Assembled', 'The shop is waiting for the ordered items. The go-ahead comes once they are in.')}{counter(job.boardsMade ?? 0, false)}</>
+        : head('Order in', 'Nothing to assemble. The shop is ordering it in; it comes to you to fit.'),
+    goahead: head('Go-ahead', `${ready} The shop calls the customer, then sends when to visit and whom to call.`),
     fitting: <>{head('Fit it')}{visit}{tray('fitting')}</>,
   }[at] : {
     measurement: <>{head('Measurement', 'The workshop is to visit the site and measure.')}{tray('visit', { gallery: true, camera: 'Add a visit order photo' })}</>,
     quotation: <>{head('Work order')}{tray('quotation', { gallery: true })}</>,
-    assemble: <>{head('Being assembled', job.boardsMade == null ? 'Nothing counted yet.' : '')}{job.boardsMade != null && counter(job.boardsMade, false)}</>,
+    assemble: (
+      <>
+        {head(stageAt(job).label, needs.ordering ? 'Order it from the supplier. Tap Arrived when it comes in.' : '')}
+        {needs.assemble && (job.assembled
+          ? <p className="mark ok"><TickIcon size={18} /> Assembling complete</p>
+          : job.boardsMade != null ? counter(job.boardsMade, false) : <p className="mark">Assembling: nothing counted yet.</p>)}
+        {needs.order && !needs.ordering && <p className="mark ok"><TickIcon size={18} /> Ordered items arrived</p>}
+        {needs.ordering && tray('arrived', { gallery: true, camera: 'Photograph the challan' })}
+        <span className="ask">This job</span>
+        {tickNeeds(needs, (next) => setChanging(next))}
+      </>
+    ),
     goahead: (
       <>
-        {head('Go-ahead', 'Assembled. Call the customer, then say when to visit and whom to call.')}
+        {head('Go-ahead', `${ready} Call the customer, then say when to visit and whom to call.`)}
         <label className="ask">When to visit
           <input type="datetime-local" value={going.when} onChange={(e) => setGoing({ ...going, when: e.target.value })} />
         </label>
@@ -227,11 +287,12 @@ export default function JobPage({ job, onBack }) {
   /* ── the one button at the foot ─────────────────────────────────────────── */
   const dock = over ? null : SIDE === 'workshop' ? {
     measurement: photoKey('measurement', 'Photograph measurements'),
-    assemble: { label: 'Complete', Icon: TickIcon, run: () => { sendTally(); setCompleting(true) }, tone: 'safe' },
+    assemble: needs.assembling ? { label: 'Complete', Icon: TickIcon, run: () => { sendTally(); setCompleting(true) }, tone: 'safe' } : null,
     fitting: photoKey('fitting', 'Photograph it fitted'),
   }[at] : {
     measurement: photoKey('visit', ''),
     quotation: photoKey('quotation', 'Photograph work order'),
+    assemble: needs.ordering ? { label: 'Arrived', Icon: TickIcon, run: () => setArriving(true), tone: 'safe' } : null,
     goahead: { label: 'Send go-ahead', Icon: SendIcon, run: sendGoAhead, tone: 'safe', off: !goReady },
   }[at]
 
@@ -306,7 +367,11 @@ export default function JobPage({ job, onBack }) {
                     </div>
                   )}
                   {m.complete && <p className="mark ok"><TickIcon size={18} /> Assembling complete <time>{stampOf(m.at)}</time></p>}
+                  {tag === 'quotation' && (m.assemble != null || m.order != null) && (
+                    <p className="mark">{[m.assemble && 'Assemble', m.order && 'Order in'].filter(Boolean).join(' + ')}</p>
+                  )}
                   {m.boards != null && tag === 'quotation' && <p className="mark"><b>{m.boards}</b> {m.boards === 1 ? 'piece' : 'pieces'} to make</p>}
+                  {m.arrived && <p className="mark ok"><TickIcon size={18} /> Ordered items arrived <time>{stampOf(m.at)}</time></p>}
                   {m.boards != null && tag !== 'quotation' && <p className="mark"><b>{m.boards}</b>{job.boardsTotal ? ` of ${job.boardsTotal}` : ''} {m.boards === 1 && !job.boardsTotal ? 'piece' : 'pieces'} made <time>{stampOf(m.at)}</time></p>}
                   {m.visitAt && (
                     <p className="mark">Visit <b>{visitLine(m.visitAt)}</b>{m.callPhone && <a href={`tel:${m.callPhone}`}><PhoneIcon size={15} /> {m.callPhone}</a>}</p>
@@ -353,10 +418,38 @@ export default function JobPage({ job, onBack }) {
       {completing && (
         <Sheet label="Complete" onClose={() => setCompleting(false)}>
           <b className="sheettitle">Assembling complete?</b>
-          <p>The shop is told, and sends the go-ahead after calling the customer. This step cannot be gone back to.</p>
+          <p>{needs.ordering
+            ? 'The shop is told. The go-ahead waits for the ordered items to come in. This step cannot be gone back to.'
+            : 'The shop is told, and sends the go-ahead after calling the customer. This step cannot be gone back to.'}</p>
           <div className="sheetbtns">
             <button type="button" className="ghost" onClick={() => setCompleting(false)}>Not yet</button>
             <button type="button" className="solid safe" onClick={sendComplete}>Complete</button>
+          </div>
+        </Sheet>
+      )}
+      {arriving && (
+        <Sheet label="Arrived" onClose={() => setArriving(false)}>
+          <b className="sheettitle">Ordered items arrived?</b>
+          <p>{needs.assembling
+            ? 'The workshop is told. The go-ahead waits for assembling to be complete.'
+            : 'The go-ahead is next: call the customer.'} This cannot be gone back to.</p>
+          <div className="sheetbtns">
+            <button type="button" className="ghost" onClick={() => setArriving(false)}>Not yet</button>
+            <button type="button" className="solid safe" onClick={sendArrived}>Arrived</button>
+          </div>
+        </Sheet>
+      )}
+      {changing && (
+        <Sheet label="This job" onClose={() => setChanging(null)}>
+          <b className="sheettitle">{NEEDS.filter(([k]) => changing[k]).map(([, label]) => label).join(' + ')}?</b>
+          <p>{doneBy(changing)
+            ? 'Everything it asks for is done, so it goes on to the go-ahead.'
+            : changing.assemble && !needs.assemble ? 'The workshop is told to assemble it.'
+            : changing.order && !needs.order ? 'Order it from the supplier, then tap Arrived.'
+            : 'The other side sees the change.'}</p>
+          <div className="sheetbtns">
+            <button type="button" className="ghost" onClick={() => setChanging(null)}>Cancel</button>
+            <button type="button" className="solid" onClick={changeNeeds}>Change</button>
           </div>
         </Sheet>
       )}

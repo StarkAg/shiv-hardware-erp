@@ -1159,6 +1159,16 @@ export default defineSchema({
     // for the list and the card at the head of the chat.
     boardsTotal: v.optional(v.number()),
     boardsMade: v.optional(v.number()),
+    // What the work order asks for: the workshop to assemble it (absent
+    // means yes, as every job did before), and the shop to order it in from
+    // a supplier. Either or both; while a job is at assemble, each that is
+    // asked for is done on its own side, assembling by the workshop's
+    // Complete and ordering by the shop's Arrived, and the go-ahead waits
+    // for both.
+    needsAssemble: v.optional(v.boolean()),
+    needsOrder: v.optional(v.boolean()),
+    assembled: v.optional(v.boolean()),
+    arrived: v.optional(v.boolean()),
     visitAt: v.optional(v.number()),
     callPhone: v.optional(v.string()),
     messages: v.array(v.object({
@@ -1172,11 +1182,16 @@ export default defineSchema({
       //   measurement  the workshop's measurements (photographs)
       //   quotation    the shop's work order (photographs, and `boards` to make)
       //   assemble     the workshop's work status (`boards` made so far), or `complete`
+      //   arrived      the shop's ordered items come in (`arrived`, photographs of the challan if any)
       //   goahead      the shop's go-ahead (`visitAt`, `callPhone`)
       //   fitting      the workshop's fitted piece (photographs)
-      step: v.optional(v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('goahead'), v.literal('fitting'))),
+      step: v.optional(v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('arrived'), v.literal('goahead'), v.literal('fitting'))),
       boards: v.optional(v.number()),
+      // On a work order: what it asks for (see needsAssemble, needsOrder).
+      assemble: v.optional(v.boolean()),
+      order: v.optional(v.boolean()),
       complete: v.optional(v.boolean()),
+      arrived: v.optional(v.boolean()),
       visitAt: v.optional(v.number()),
       callPhone: v.optional(v.string()),
       // The device it was sent from, as the Trusted devices list names it.

@@ -66,7 +66,9 @@ export async function deliver(item) {
         jobId: item.jobId, from: SIDE, photos: item.photoIds,
         ...(item.step ? { step: item.step } : {}),
         ...(item.boards != null ? { boards: item.boards } : {}),
+        ...(item.assemble != null ? { assemble: item.assemble, order: item.order } : {}),
         ...(item.complete ? { complete: true } : {}),
+        ...(item.arrived ? { arrived: true } : {}),
         ...(item.visitAt ? { visitAt: item.visitAt, callPhone: item.callPhone } : {}),
       })
     }
@@ -105,6 +107,7 @@ const withJob = (store, jobId, change) => {
   if (jobs) store.setQuery(api.workshop.list, {}, jobs.flatMap((j) => (j.id !== jobId ? [j] : change(j) ?? [])))
 }
 export const atOnce = {
+  setNeeds: (store, { jobId, assemble, order }) => withJob(store, jobId, (j) => ({ ...j, needsAssemble: assemble, needsOrder: order, updatedAt: Date.now() })),
   seen: (store, { jobId, side }) => withJob(store, jobId, (j) => ({ ...j, [`${side}SeenAt`]: Date.now() })),
   setCustomer: (store, { jobId, ledgerId, title }) => {
     const account = ledgerId ? store.getQuery(api.workshop.customers, {})?.find((c) => c.id === ledgerId) : null

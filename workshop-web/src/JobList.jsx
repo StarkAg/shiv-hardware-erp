@@ -24,7 +24,7 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
   const FILTERS = [
     { id: 'todo', label: 'To do', icon: TodoIcon, test: (j) => myTurn(j) || newIn(j) > 0 },
     { id: 'all', label: 'All', icon: AllIcon, test: () => true },
-    ...STAGES.map((st) => ({ id: st.id, label: st.short, full: st.label, icon: STEP_ICONS[st.id], test: (j) => !finished(j) && stageId(j) === st.id })),
+    ...STAGES.map((st) => ({ id: st.id, label: st.short, full: st.id === 'assemble' ? 'Assemble or order in' : st.label, icon: STEP_ICONS[st.id], test: (j) => !finished(j) && stageId(j) === st.id })),
   ]
   const [filter, setFilter] = useState('todo')
   const showing = FILTERS.find((f) => f.id === filter) ?? FILTERS[0]
@@ -83,7 +83,7 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
           const last = job.messages[job.messages.length - 1]
           const first = job.messages.flatMap((m) => m.photos)[0]
           const news = newIn(job)
-          const assembling = stageId(job) === 'assemble' && !finished(job) && job.boardsTotal
+          const assembling = stageId(job) === 'assemble' && !finished(job) && job.needsAssemble !== false && job.boardsTotal
           return (
             <li key={job.id} className={`card holdable ${myTurn(job) ? 'mine' : ''} ${finished(job) ? 'over' : ''}`} {...holdToDelete(job)}>
               <button type="button" className="open" onClick={() => onOpen(job.id)}>

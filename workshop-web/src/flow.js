@@ -16,7 +16,9 @@ export const api = anyApi
  *
  *   measurement  the workshop measures on site and photographs the figures
  *   quotation    the shop makes the work order from them and sends its photo
- *   assemble     the workshop builds it, says how many pieces are made, then Complete
+ *   assemble     the workshop builds it, says how many pieces are made, then Complete;
+ *                or, where the work order asks for it, the shop orders it in and
+ *                says Arrived; or both, side by side (`needsOf`)
  *   goahead      the shop rings the customer and says when to go and whom to ring
  *   fitting      the workshop fits it and photographs it; the job is finished
  *
@@ -34,17 +36,53 @@ export const STAGES = [
  * Nothing in a job is free text: everything sent is tagged with what it is,
  * and this is what each tag is called.
  */
-export const TAGS = { visit: 'Visit order', measurement: 'Measurement', quotation: 'Work order', assemble: 'Work status', goahead: 'Go-ahead', fitting: 'Fitted' }
+export const TAGS = { visit: 'Visit order', measurement: 'Measurement', quotation: 'Work order', assemble: 'Work status', arrived: 'Arrived', goahead: 'Go-ahead', fitting: 'Fitted' }
 /** The side that sends each tag. */
-export const TAG_FROM = { visit: 'shop', measurement: 'workshop', quotation: 'shop', assemble: 'workshop', goahead: 'shop', fitting: 'workshop' }
+export const TAG_FROM = { visit: 'shop', measurement: 'workshop', quotation: 'shop', assemble: 'workshop', arrived: 'shop', goahead: 'shop', fitting: 'workshop' }
+
+/**
+ * What a job's work order asks for: the workshop to assemble it, the shop to
+ * order it in from a supplier, or both. A job from before the choice is to be
+ * assembled. `assembling` and `ordering` are what is still to do of each.
+ */
+export const needsOf = (job) => {
+  const assemble = job.needsAssemble !== false
+  const order = job.needsOrder === true
+  return { assemble, order, assembling: assemble && !job.assembled, ordering: order && !job.arrived }
+}
+/** The third step, named for what the work order asks for. */
+const WORK = {
+  assemble: { label: 'Assemble', short: 'Assemble' },
+  order: { label: 'Order in', short: 'Order in' },
+  both: { label: 'Assemble, order in', short: 'Make, buy' },
+}
+const workOf = (job) => { const n = needsOf(job); return WORK[n.assemble && n.order ? 'both' : n.order ? 'order' : 'assemble'] }
+/** A step as it is for this job: the third one is named for what its work order asks for. */
+export const stepOf = (job, st) => (st.id === 'assemble' && stageNo(stageId(job)) >= stageNo('assemble') ? { ...st, ...workOf(job) } : st)
 
 export const stageId = (job) => job.stage ?? 'measurement'
-export const stageAt = (job) => STAGES.find((s) => s.id === stageId(job)) ?? STAGES[0]
+export const stageAt = (job) => stepOf(job, STAGES.find((s) => s.id === stageId(job)) ?? STAGES[0])
 export const stageNo = (id) => STAGES.findIndex((s) => s.id === id)
 export const finished = (job) => job.status === 'done'
-export const stageOf = (job) => (finished(job) ? 'Done' : stageAt(job).todo)
-/** Whether the step a job stands at is this side's to do. */
-export const myTurn = (job) => !finished(job) && stageAt(job).turn === SIDE
+export const stageOf = (job) => {
+  if (finished(job)) return 'Done'
+  if (stageId(job) !== 'assemble') return stageAt(job).todo
+  const n = needsOf(job)
+  return n.assembling && n.ordering ? 'Assembling, ordered in'
+    : n.ordering ? 'Ordered, to arrive'
+    : 'Being assembled'
+}
+/**
+ * Whether the step a job stands at is this side's to do. While a job is
+ * assembled and ordered in at once it is both sides' turn: the workshop's
+ * until it is complete, the shop's until what was ordered has arrived.
+ */
+export const myTurn = (job) => {
+  if (finished(job)) return false
+  if (stageId(job) !== 'assemble') return stageAt(job).turn === SIDE
+  const n = needsOf(job)
+  return SIDE === 'workshop' ? n.assembling : n.ordering
+}
 /** Where a step stands for a job: done, the one in hand, or still to come. */
 export const stepState = (job, id) => (finished(job) || stageNo(id) < stageNo(stageId(job)) ? 'done' : id === stageId(job) ? 'now' : 'later')
 
@@ -74,6 +112,7 @@ export const visitLine = (ms) => new Date(ms).toLocaleString('en-IN', { weekday:
 export const lineOf = (m, job) => {
   const n = m.photos?.length ?? m.files?.length ?? 0
   if (m.complete) return 'Complete'
+  if (m.arrived) return 'Ordered items arrived'
   if (m.visitAt) return `Go-ahead: ${visitLine(m.visitAt)}`
   if (m.boards != null && m.step !== 'quotation') return `Work status: ${piecesLine(m.boards, job?.boardsTotal)}`
   if (n) return `${TAGS[m.step] ?? (m.from === 'workshop' ? 'Measurement' : 'Photo')}${n > 1 ? ` · ${n} photos` : ''}`

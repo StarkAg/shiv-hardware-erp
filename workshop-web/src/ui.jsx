@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useConvex } from 'convex/react'
 import { sized } from './offline.js'
-import { STAGES, said, stageAt, stageId, stepState, finished, myTurn } from './flow.js'
+import { STAGES, said, stageAt, stageId, stepOf, stepState, finished, myTurn } from './flow.js'
 
 /**
  * The small parts both screens are made of: the icons, a photo at the size it
@@ -71,7 +71,7 @@ export function StepTracker({ job, mini = false }) {
         return (
           <li key={s.id} className={look(s.id)} aria-current={state === 'now' ? 'step' : undefined}>
             <span className="dot">{state === 'done' ? <TickIcon size={22} strokeWidth="3.2" /> : i + 1}</span>
-            <span className="word">{s.short}</span>
+            <span className="word">{stepOf(job, s).short}</span>
           </li>
         )
       })}
