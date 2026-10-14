@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { useMutation, useQuery } from 'convex/react'
 import { useLive } from '../ledger/lib/cache'
 import { Link } from 'react-router-dom'
 import { api } from '../../../convex/_generated/api'
@@ -166,6 +168,38 @@ function FromTheBooks() {
   )
 }
 
+/**
+ * What last night's Verify Data found (convex/integrity.ts), in red at the top
+ * of the home page until a check finds nothing. Each line opens the bill or
+ * voucher to put right; "Check again" runs it there and then.
+ */
+function BooksCheck() {
+  const report = useQuery(api.integrity.latest, {})
+  const runNow = useMutation(api.integrity.runNow)
+  const [checking, setChecking] = useState(false)
+  if (!report || report.problems.length === 0) return null
+  const again = async () => {
+    setChecking(true)
+    try { await runNow({}) } finally { setChecking(false) }
+  }
+  return (
+    <section className="books-check" role="alert">
+      <div className="books-check-head">
+        <b>{report.problems.length === 1 ? '1 problem in the books' : `${report.problems.length} problems in the books`}</b>
+        <span>Checked {when(report.at)}</span>
+        <button className="btn ghost" onClick={again} disabled={checking}>
+          {checking ? 'Checking…' : 'Check again'}
+        </button>
+      </div>
+      <ul>
+        {report.problems.map((p, i) => (
+          <li key={i}>{p.link ? <Link to={p.link}>{p.text}</Link> : p.text}</li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 export function Home() {
   const dark = useLedgerTheme()
   const { bills } = useStore()
@@ -177,6 +211,7 @@ export function Home() {
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
       <div className="app">
+        {convexEnabled() && <BooksCheck />}
         {unposted > 0 && (
           <div className="home-grid" style={{ marginBottom: 12 }}>
             <Figure label="Bills not in the books" value={String(unposted)} to="/day" tone="attention" />

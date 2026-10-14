@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMutation } from 'convex/react';
+import { useNavigate } from 'react-router-dom';
+import { useStore } from '../../../lib/store';
 import { api } from '../../../../convex/_generated/api';
 import Combo from './Combo';
 import { shortDate, today } from '../lib/format';
@@ -12,6 +14,22 @@ import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
 const ACCOUNT_GROUP = { Purchase: 'Purchase Accounts', Sale: 'Sales Accounts' };
 
 export default function PriceDialog({ voucher, ledgers, groups, onClose }) {
+  /**
+   * A bill filed without an amount is priced in the bill itself, the way
+   * Tally changes an invoice: the books refuse a price put on its voucher
+   * alone (vouchers.price), which left bill 76 saying 0 against a voucher of
+   * 12,600. Same lookup as VoucherEditor.
+   */
+  const bills = useStore((st) => st.bills);
+  const navigate = useNavigate();
+  const ref = String(voucher.refNo ?? '');
+  const fromBill = bills.find((b) => String(b.voucherId ?? '') === String(voucher._id))
+    ?? (ref.startsWith('BILL-') ? bills.find((b) => String(b.number) === ref.slice(5)) : null);
+  useEffect(() => {
+    if (!fromBill) return;
+    onClose();
+    navigate(`/bills/${fromBill.id}`);
+  }, [fromBill, navigate, onClose]);
   const groupName = ACCOUNT_GROUP[voucher.vchType] ?? 'Purchase Accounts';
   const accounts = ledgers.filter((l) => l.groupName === groupName);
   const [amount, setAmount] = useState('');
@@ -54,6 +72,8 @@ export default function PriceDialog({ voucher, ledgers, groups, onClose }) {
     }
     return undefined;
   };
+
+  if (fromBill) return null;
 
   return (
     <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

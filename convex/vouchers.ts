@@ -1,15 +1,15 @@
 import { mutation, query } from "./lib/guarded";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
-import { round2, fyOf } from "./lib/money";
+import type { Doc, Id } from "./_generated/dataModel";
+import { round2, fyOf, lastPostableDate } from "./lib/money";
 import { record, money, day } from "./lib/history";
 import { nextVoucherNo, voucherCounterName } from "./lib/numbering";
 import { writeLines, clearLines } from "./lib/entries";
 import { requirePin } from "./lib/pin";
 import { attachmentIds, deleteUnreferencedFiles, describeAttachments } from './lib/attachmentFiles';
 import { GRN_ABBR, GRN_TYPE } from './lib/receipts';
-import { readBills, writeBills } from './lib/billRows';
+import { dropBill, readBills, writeBills } from './lib/billRows';
 import { ensureVoucherFlow } from './lib/billFlow';
 
 const attachmentKind = v.union(
@@ -340,6 +340,7 @@ export const price = mutation({
     const voucher = await ctx.db.get(id);
     if (!voucher) throw new Error("Voucher not found");
     if (voucher.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
+    await refuseIfFromBill(ctx, voucher);
     const type = await ctx.db.get(voucher.typeId);
     const sides = SIDES[type?.name ?? ""];
     if (!sides) throw new Error(`Cannot price a ${type?.name ?? "unknown"} voucher`);
@@ -499,6 +500,7 @@ export const edit = mutation({
     const voucher = await ctx.db.get(args.id);
     if (!voucher) throw new Error("Voucher not found");
     if (voucher.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
+    await refuseIfFromBill(ctx, voucher);
     const type = await ctx.db.get(voucher.typeId);
     const sides = SIDES[type?.name ?? ""];
     if (!sides) throw new Error(`Cannot edit a ${type?.name ?? "unknown"} voucher`);
@@ -589,8 +591,22 @@ export const update = mutation({
   },
   handler: async (ctx, { id, ...patch }) => {
     const voucher = await ctx.db.get(id);
-    if (voucher?.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
-    await ctx.db.patch(id, { ...patch, updatedAt: Date.now() });
+    if (!voucher) throw new Error("Voucher not found");
+    if (voucher.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
+    // The narration is the voucher's own; its date and reference are the bill's.
+    if (patch.date !== undefined || patch.refNo !== undefined) await refuseIfFromBill(ctx, voucher);
+    let renumber = {};
+    if (patch.date !== undefined) {
+      if (patch.date > lastPostableDate(Date.now())) throw new ConvexError(`The date ${day(patch.date)} is after today. Check the day and the year.`);
+      // Moved across 1 April: it takes the next number in that year's series,
+      // as edit does, or it would be numbered in one year and dated in another.
+      if (fyOf(patch.date) !== voucher.fy) {
+        const type = await ctx.db.get(voucher.typeId);
+        if (!type) throw new Error("Voucher type not found");
+        renumber = { fy: fyOf(patch.date), voucherNo: await nextVoucherNo(ctx, type, fyOf(patch.date)) };
+      }
+    }
+    await ctx.db.patch(id, { ...patch, ...renumber, updatedAt: Date.now() });
     if (patch.date !== undefined) {
       const lines = await ctx.db
         .query("voucherEntries")
@@ -751,9 +767,74 @@ export const remove = mutation({
       if (!cash?.deleted) throw new Error('Reverse this payment in Cashier → Staff Payments.');
     }
 
-    return await trashVoucher(ctx, id);
+    const voucherTrashId = await trashVoucher(ctx, id);
+    await binBillOf(ctx, voucher, voucherTrashId);
+    return voucherTrashId;
   },
 });
+
+/**
+ * The bill a voucher was written from, if any: the one that names it, or —
+ * for bills older than that link — the one whose BILL-n reference it carries,
+ * for the same party.
+ */
+export async function billForVoucher(ctx: MutationCtx, voucher: Doc<"vouchers">): Promise<any | null> {
+  const bills = await readBills(ctx);
+  const id = String(voucher._id);
+  const ref = String(voucher.refNo ?? "");
+  return bills.find((b: any) => String(b?.voucherId ?? "") === id)
+    ?? (ref.startsWith("BILL-")
+      ? bills.find((b: any) => !b?.voucherId && b?.kind !== "quotation" && `BILL-${b?.number}` === ref &&
+          (!b?.ledgerId || String(b.ledgerId) === String(voucher.partyLedgerId)))
+      : undefined)
+    ?? null;
+}
+
+/**
+ * One writer, as Tally has it: a voucher written from a bill changes only by
+ * saving the bill (billLedger.postBill), which rewrites both in one step. A
+ * change made to the voucher alone left the two disagreeing — bill 76 priced
+ * in the ledger at 12,600 while the bill still said 0.
+ */
+async function refuseIfFromBill(ctx: MutationCtx, voucher: Doc<"vouchers">) {
+  const bill = await billForVoucher(ctx, voucher);
+  if (bill) throw new ConvexError(`This voucher is bill ${bill.number}. Open bill ${bill.number} to change it.`);
+}
+
+/**
+ * Tally's rule: the voucher is the record. Deleting one from the books takes
+ * the bill it was written from to the bills' Trash with it, linked to the
+ * voucher, so restoring either brings both back.
+ *
+ * Left behind, the bill stayed in the day book as "Posted" for an entry that
+ * was gone (RCT-445, Harsh, 14 Oct 2026). Deleting the bill already took the
+ * voucher; this is the other way round. `bills.remove` trashes its voucher
+ * directly, so a bill is never binned twice.
+ */
+async function binBillOf(ctx: MutationCtx, voucher: Doc<"vouchers">, voucherTrashId: Id<"trash"> | null) {
+  if (!voucherTrashId) return;
+  const bill = await billForVoucher(ctx, voucher);
+  if (!bill?.id) return;
+
+  const deletedAt = Date.now();
+  const tombstone = await ctx.db.query("billTombstones")
+    .withIndex("by_bill", (q) => q.eq("billId", bill.id)).unique();
+  if (!tombstone) {
+    await ctx.db.insert("billTombstones", {
+      billId: bill.id,
+      number: bill.number ? String(bill.number) : undefined,
+      deletedAt,
+    });
+  }
+  await ctx.db.insert("billsTrash", {
+    billId: bill.id,
+    bill,
+    deletedAt,
+    voucherRef: voucher.refNo ?? `BILL-${bill.number}`,
+    voucherTrashId,
+  });
+  await dropBill(ctx, bill.id);
+}
 
 /**
  * Takes out the money that was taken with a bill, and leaves the bill.
@@ -892,6 +973,7 @@ export const retype = mutation({
     const voucher = await ctx.db.get(id);
     if (!voucher) throw new Error("Voucher not found");
     if (voucher.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Manage this payment in Cashier → Staff Payments.');
+    await refuseIfFromBill(ctx, voucher);
 
     const was = await ctx.db.get(voucher.typeId);
     if (was?.name === to) return { changed: false };

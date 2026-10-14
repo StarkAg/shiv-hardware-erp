@@ -239,6 +239,17 @@ export const removeLedger = mutation({
       throw new ConvexError("This account has vouchers against it — it cannot be deleted.");
     }
 
+    // Its bills too, quotations included: a bill left naming a deleted account
+    // stays in the day book as "Posted" for a customer who is gone (bill 445,
+    // Harsh, 14 Oct 2026).
+    const billed = (await readBills(ctx)).filter((b: any) => String(b?.ledgerId ?? "") === String(id));
+    if (billed.length) {
+      const list = billed.slice(0, 5).map((b: any) => b.number).join(", ");
+      throw new ConvexError(
+        `Bill ${list}${billed.length > 5 ? " and more" : ""} ${billed.length === 1 ? "is" : "are"} for this account. Delete ${billed.length === 1 ? "it" : "them"} in the day book first.`
+      );
+    }
+
     /**
      * The trash counts as well.
      *

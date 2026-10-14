@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { record, money } from "./lib/history";
 import { requirePin } from "./lib/pin";
 import { linkTrashRows } from './lib/trashLinks';
+import { api } from "./_generated/api";
 import { attachmentIds, deleteUnreferencedFiles, describeAttachments } from './lib/attachmentFiles';
 
 /**
@@ -112,32 +113,55 @@ export const restore = mutation({
     const row = await ctx.db.get(id);
     if (!row) throw new Error("That entry is no longer in the trash");
     if (row.refNo?.startsWith('CASH-staff-pay-')) throw new Error('Record a new payment in Cashier → Staff Payments so wages and cash stay together.');
-
-    // A W/B sale's receipt is only that sale's cash; alone it would clear an
-    // account of a sale that is not there.
-    if (row.paysFor) {
-      const sale = await ctx.db.query("vouchers")
-        .filter((q) => q.eq(q.field("refNo"), row.paysFor)).first();
-      if (!sale) {
-        throw new Error(`This receipt is the cash for ${row.paysFor.replace("BILL-", "bill ")}. Restore that bill and it comes back with it.`);
-      }
+    // Deleted with its bill (vouchers.remove bins both): the bill's own
+    // restore puts the two back together, so a bill is never left in the bin.
+    const [deletedBills, deletedVouchers] = await Promise.all([
+      ctx.db.query('billsTrash').collect(), ctx.db.query('trash').collect(),
+    ]);
+    const bill = [...linkTrashRows(deletedBills, deletedVouchers)].find(([, voucherTrashId]) => voucherTrashId === id);
+    if (bill) {
+      await ctx.runMutation(api.bills.restore, { id: bill[0] });
+      const back = await ctx.db.query('vouchers')
+        .filter((q) => q.eq(q.field('voucherNo'), row.voucherNo))
+        .filter((q) => q.eq(q.field('typeId'), row.typeId))
+        .filter((q) => q.eq(q.field('fy'), row.fy)).first();
+      return back?._id ?? null;
     }
 
-    const voucherId = await putBack(ctx, row);
-
-    // And it comes back with its sale, unless one is already live.
-    if (row.refNo?.startsWith("BILL-")) {
-      const live = await ctx.db.query("vouchers")
-        .filter((q) => q.eq(q.field("paysFor"), row.refNo)).first();
-      if (!live) {
-        const receipt = (await ctx.db.query("trash").withIndex("by_deletedAt").order("desc").collect())
-          .find((r) => r.paysFor === row.refNo);
-        if (receipt) await putBack(ctx, receipt);
-      }
-    }
-    return voucherId;
+    return await restoreVoucher(ctx, row);
   },
 });
+
+/**
+ * A voucher out of the trash, with the W/B receipt that goes with its sale.
+ * Called by `restore` above and by `bills.restore`, which puts the bill back
+ * itself — so it never asks for the bill, or the two would call each other.
+ */
+export async function restoreVoucher(ctx: MutationCtx, row: Doc<"trash">) {
+  // A W/B sale's receipt is only that sale's cash; alone it would clear an
+  // account of a sale that is not there.
+  if (row.paysFor) {
+    const sale = await ctx.db.query("vouchers")
+      .filter((q) => q.eq(q.field("refNo"), row.paysFor)).first();
+    if (!sale) {
+      throw new Error(`This receipt is the cash for ${row.paysFor.replace("BILL-", "bill ")}. Restore that bill and it comes back with it.`);
+    }
+  }
+
+  const voucherId = await putBack(ctx, row);
+
+  // And it comes back with its sale, unless one is already live.
+  if (row.refNo?.startsWith("BILL-")) {
+    const live = await ctx.db.query("vouchers")
+      .filter((q) => q.eq(q.field("paysFor"), row.refNo)).first();
+    if (!live) {
+      const receipt = (await ctx.db.query("trash").withIndex("by_deletedAt").order("desc").collect())
+        .find((r) => r.paysFor === row.refNo);
+      if (receipt) await putBack(ctx, receipt);
+    }
+  }
+  return voucherId;
+}
 
 /** Writes a deleted voucher back, lines and all, and takes it out of the trash. */
 async function putBack(ctx: MutationCtx, row: Doc<"trash">) {

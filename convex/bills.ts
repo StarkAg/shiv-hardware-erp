@@ -9,6 +9,7 @@ import { record } from './lib/history'
 import { dropBill, readBill, readBills, storeMeta, writeBills } from './lib/billRows'
 import { attachmentIds, deleteUnreferencedFiles } from './lib/attachmentFiles'
 import { trashVoucher } from './vouchers'
+import { restoreVoucher } from './trash'
 import { nextVoucherPhotoNo } from './lib/numbering'
 
 /**
@@ -72,6 +73,11 @@ export const save = mutation({
       // A bill the books refused stays on the device that wrote it. Uploaded,
       // it was a bill the accounts had never heard of.
       if (bill.postError) { refused += 1; continue }
+      // One writer: a bill enters the books only by posting
+      // (billLedger.postBill), which writes it and its voucher together. A
+      // new one arriving here, with no voucher, would be a bill the books do
+      // not have. Quotations never post, so they come this way.
+      if (!mine && inTheBooks(bill) && !bill.voucherId) { refused += 1; continue }
       // Money on a posted bill changes only by posting it. Anything else the
       // device changed (a photo, a print mark) is still taken; what the books
       // were written from stays as the server has it.
@@ -297,9 +303,9 @@ export const remove = mutation({
       : bill.voucherId
         ? null
         : await ctx.db.query('vouchers').filter((q) => q.eq(q.field('refNo'), ref)).first()) ?? null
-    const voucherTrashId = voucher
-      ? await ctx.runMutation(api.vouchers.remove, { id: voucher._id })
-      : null
+    // Trashed directly, not through vouchers.remove, which would bin this
+    // bill as well and leave it in the bin twice.
+    const voucherTrashId = voucher ? await trashVoucher(ctx, voucher._id) : null
 
     const deletedAt = Date.now()
     const tombstone = await ctx.db
@@ -369,7 +375,10 @@ export const restore = mutation({
         throw new Error('The linked accounting voucher is missing or ambiguous. Review it before restoring this bill.')
       }
     }
-    if (voucherTrashId) await ctx.runMutation(api.trash.restore, { id: voucherTrashId })
+    if (voucherTrashId) {
+      const voucher = await ctx.db.get(voucherTrashId)
+      if (voucher) await restoreVoucher(ctx, voucher)
+    }
     // It is back on the books, so it is no longer deleted anywhere.
     const tombstone = await ctx.db
       .query('billTombstones')

@@ -1,8 +1,9 @@
 import { useState, useDeferredValue, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
+import { confirmPostingDate } from '../../lib/dateCheck'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { WhatsAppSent } from '../../components/WhatsAppSent'
-import { flushLocal, useStore } from '../../lib/store'
+import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
 // The ledger's own photo picker: files chosen here, and photographs the phone
 // has already sent in. One picker for the whole shop rather than a second one
@@ -83,15 +84,18 @@ import { catalogChangesFor } from '../../lib/learnCatalog'
 import { paidByDefault, withPaidDefault } from '../../lib/paidDefault'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
 import { StockMoves, stockGoesOut } from './StockMoves'
-import { convexEnabled } from '../../lib/convexSync'
+import { convexEnabled, withTimeout } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import { queueBillPhotos } from '../../lib/billPhotoOutbox'
 import { knownPapers, partyPaperKnown } from '../../lib/paperUrls'
 import { BillDock, readDockSize, type DockSize } from '../../components/BillDock'
-import { postingTrouble, queuePost } from '../../lib/postOutbox'
+import { postingTrouble } from '../../lib/postOutbox'
 import Confirm from '../ledger/components/Confirm'
 import { indiaDate, indiaToday } from '../../lib/businessDate'
+
+/** How long Save waits for the books before saying there was no answer. */
+const POST_WAIT_MS = 25_000
 import { clearFormDraft, draftKey, loadFormDraft, saveFormDraft } from '../../lib/formDrafts'
 
 /**
@@ -3494,12 +3498,12 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       // checked rather than refused for nothing.
       const known = bills.find((b) => b.id === bill.id && !b.postError)
       const expectedRev = bill.voucherId ? bill.rev ?? 0 : known ? undefined : null
-      const res = await postToLedger({
+      const res = await withTimeout(postToLedger({
         bill: plain(bill) as never,
         attachments: (bill.attachments ?? []) as never,
         keepAsBill,
         ...(expectedRev !== undefined ? { expectedRev } : {}),
-      })
+      }), POST_WAIT_MS)
       const stored = { ...bill, ...((res?.bill as Bill) ?? {}) } as Bill & { total: number }
       // Whatever went wrong last time is over; the mark has to go with it, or
       // a bill that posted on the retry would stay flagged and unsynced.
@@ -3522,20 +3526,16 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       }
       const message = typeof data === 'string' ? data : err instanceof Error ? err.message : String(err)
       console.error('[ledger] posting failed', err)
-      // A voucher borrowed from the ledger is not one of this PC's bills, so
-      // there is nothing to keep it in — only the books, which refused it.
-      if (!keepAsBill) {
-        toast(`Not saved to the books\n${message}`, 'error')
-        return null
-      }
-      saveBill({ ...bill, postError: message })
-      // Said only once it is true. The PC's storage can be full or switched
-      // off, and then the bill is on this screen and nowhere else.
-      if (await flushLocal()) {
-        toast(`Not saved to the books\n${message}\nKept on this PC as unposted.`, 'error')
+      /*
+       * Not in the books, so not saved — anywhere. It used to be kept on this
+       * PC as "Not posted": a bill the books had never heard of. The typing
+       * stays on screen to save again. No answer is not a refusal: the books
+       * may still take it, so the day book is the place to look first.
+       */
+      if (/no answer from the cloud/.test(message)) {
+        toast('No answer from the books yet\nIt may still go through. Check the day book before you save again.\nYour typing is still here.', 'error')
       } else {
-        setUnkept({ ...bill, postError: message })
-        toast(`Not saved to the books, and not kept on this PC\n${message}\nDownload a copy before leaving this bill.`, 'error')
+        toast(`Not saved\n${message}\nYour typing is still here.`, 'error')
       }
       return null
     }
@@ -3612,25 +3612,13 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     const photoKind = MONEY_KINDS.includes(draft.kind ?? 'sale') ? ('receipt' as const) : ('bill' as const)
 
     /*
-     * Instant save. The bill is kept on this PC and the screen moves on; the
-     * books get it in the background (src/lib/postOutbox.ts) and their answer
-     * — the number, the voucher, the account — replaces this copy a moment
-     * later. Until then it shows as "Posting…". A refusal marks it "Not
-     * posted" with a Retry, as before. Only a caller that needs the books'
-     * answer before it can go on (a delivery filed with its purchase) waits.
+     * Saved means in the books, as in Tally: Save waits for the books' answer
+     * and the bill is kept only once they have it. It used to be kept on this
+     * PC first and posted in the background ("Posting…"), and a bill the books
+     * then refused or never got stayed on the counter as a bill with no
+     * voucher. `opts.wait` is still accepted from callers that pass it.
      */
-    if (!borrowed && !opts.wait) {
-      const known = bills.find((b) => b.id === outgoing.id && !b.postError && !b.pendingPost)
-      const expectedRev = outgoing.voucherId ? outgoing.rev ?? 0 : known ? undefined : null
-      queuePost(outgoing, expectedRev)
-      if (later.length) {
-        void queueBillPhotos({ id: outgoing.id, number: outgoing.number }, photoKind, later)
-        setPhotoFiles([])
-      }
-      void claimPhotos()
-      return { bill: outgoing, ledgerId: outgoing.ledgerId }
-    }
-
+    void opts
     const result = await postStored(outgoing, !borrowed)
     // Posted, or kept on this PC as unposted: either way the bill exists, and
     // its photos follow it — the outbox keeps trying until the books have it.
@@ -3719,6 +3707,9 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       navigate(quote.ledgerId ? `/ledger/customers/${quote.ledgerId}` : '/day', { replace: true })
       return
     }
+
+    // A date after today, or in an earlier year, before anything is posted.
+    if (!confirmPostingDate(draft.date)) return
 
     // Keep the editor and selected files available until saving succeeds.
     const partyTab = sideGroup === 'Sundry Creditors' ? 'suppliers' : 'customers'

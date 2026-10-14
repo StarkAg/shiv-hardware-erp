@@ -92,9 +92,12 @@ describe('#6 a date moved across 1 April moves the voucher into that year', () =
     expect(v?.voucherNo).toBe(1)
   })
 
-  test('the same edit from the ledger does the same', async () => {
+  test('the same edit from the ledger does the same, on a voucher with no bill', async () => {
     const t = await shop()
     const first = await t.mutation(api.billLedger.postBill, { bill: bill() } as any)
+    // A voucher written from a bill changes only through the bill now (one
+    // writer), so the bill is taken away to leave a voucher of the ledger's own.
+    await t.run(async (ctx) => { for (const row of await ctx.db.query('bills').collect()) await ctx.db.delete(row._id) })
     const v = (await t.run((ctx) => ctx.db.get(first.voucherId)))!
     const other = await t.run(async (ctx) => (await ctx.db.query('ledgers').filter((q) => q.eq(q.field('name'), 'Sales')).first())!._id)
     await t.mutation(api.vouchers.edit, {
@@ -173,17 +176,19 @@ describe('#4 a save from an old copy is refused', () => {
     expect(err.data.newer.total).toBe(2000)
   })
 
-  test('an edit from the ledger also makes the open copy old', async () => {
+  test("an edit to a bill's voucher from the ledger is refused: the bill is the one way in", async () => {
     const t = await shop()
     const first = await t.mutation(api.billLedger.postBill, { bill: bill(), expectedRev: null } as any)
     const v = (await t.run((ctx) => ctx.db.get(first.voucherId)))!
     const sales = await t.run(async (ctx) => (await ctx.db.query('ledgers').filter((q) => q.eq(q.field('name'), 'Sales')).first())!._id)
-    await t.mutation(api.vouchers.edit, {
+    await expect(t.mutation(api.vouchers.edit, {
       id: first.voucherId, date: v.date, partyLedgerId: v.partyLedgerId, accountLedgerId: sales, amount: 1500,
-    } as any)
-    await expect(
-      t.mutation(api.billLedger.postBill, { bill: first.bill, expectedRev: first.bill.rev } as any),
-    ).rejects.toMatchObject({ data: { code: 'stale' } })
+    } as any)).rejects.toThrow(/Open bill/)
+    await expect(t.mutation(api.vouchers.price, { id: first.voucherId, amount: 1500, accountLedgerId: sales } as any))
+      .rejects.toThrow(/Open bill/)
+    expect((await t.run((ctx) => ctx.db.get(first.voucherId)))?.amount).toBe(v.amount)
+    // The bill saves as it was opened: nothing changed its voucher behind it.
+    await t.mutation(api.billLedger.postBill, { bill: first.bill, expectedRev: first.bill.rev } as any)
   })
 
   test('a new bill that someone else already posted is refused too', async () => {

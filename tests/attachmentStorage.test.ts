@@ -69,7 +69,7 @@ describe('attachment persistence and previews', () => {
     const t = convexTest(schema, modules)
     const photo = await t.run(ctx => ctx.storage.store(new Blob(['bill'], { type: 'image/jpeg' })))
     const row = await t.mutation(api.inbox.add, { storageId: photo })
-    await t.mutation(api.bills.save, { bills: [{ id: 'shared', updatedAt: 1, attachments: [{ storageId: photo }] }], billSeq: 0 })
+    await t.mutation(api.bills.save, { bills: [{ id: 'shared', updatedAt: 1, voucherId: 'v-shared', attachments: [{ storageId: photo }] }], billSeq: 0 })
     await t.mutation(api.inbox.discard, { id: row })
     expect(await t.run(ctx => ctx.db.system.get(photo))).not.toBeNull()
     const loose = await t.run(ctx => ctx.storage.store(new Blob(['loose'])))

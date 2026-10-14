@@ -61,9 +61,28 @@ describe('shared trash', () => {
     expect(await t.run(ctx => ctx.db.query('vouchers').collect())).toHaveLength(1)
   })
 
-  it('keeps standalone vouchers visible and restorable', async () => {
+  it('deleting a bill\'s voucher from the ledger takes the bill too; restoring the voucher brings both', async () => {
     const { t, voucherId } = await fixture()
     await t.mutation(api.vouchers.remove, { id: voucherId })
+    expect((await t.query(api.bills.get, {}))?.bills).toHaveLength(0)
+    expect(await t.query(api.bills.deletedIds, {})).toEqual(['bill-7'])
+    const rows = await t.query(api.trash.all, { pin: CODE })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ source: 'bill', linkedVoucher: 'SAL-0007' })
+    const [bill] = await t.run(ctx => ctx.db.query('billsTrash').collect())
+    await t.mutation(api.trash.restore, { id: bill.voucherTrashId! })
+    expect(await t.query(api.trash.all, { pin: CODE })).toHaveLength(0)
+    expect((await t.query(api.bills.get, {}))?.bills).toHaveLength(1)
+    expect(await t.run(ctx => ctx.db.query('vouchers').collect())).toHaveLength(1)
+    expect(await t.run(ctx => ctx.db.query('voucherEntries').collect())).toHaveLength(2)
+  })
+
+  it('keeps standalone vouchers visible and restorable', async () => {
+    const { t, voucherId } = await fixture()
+    // Not written from a bill: no bill names it or carries its reference.
+    await t.run(ctx => ctx.db.patch(voucherId, { refNo: 'R-1' }))
+    await t.mutation(api.vouchers.remove, { id: voucherId })
+    expect((await t.query(api.bills.get, {}))?.bills).toHaveLength(1)
     const rows = await t.query(api.trash.all, { pin: CODE })
     expect(rows).toHaveLength(1)
     expect(rows[0].source).toBe('voucher')

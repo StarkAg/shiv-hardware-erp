@@ -21,3 +21,14 @@ export const fyOf = (ms: number): string => {
   const startYear = d.getUTCMonth() >= 3 ? y : y - 1;
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
 };
+
+/**
+ * The latest date anything may be posted on: the end of today as the shop
+ * counts it. Dates are kept as midnight UTC of the day written, so today in
+ * India is found first and the bound is the end of that day in UTC.
+ */
+export const lastPostableDate = (now: number): number => {
+  const DAY = 86_400_000;
+  const IST = 19_800_000;
+  return Math.floor((now + IST) / DAY) * DAY + DAY - 1;
+};

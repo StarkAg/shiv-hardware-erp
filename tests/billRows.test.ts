@@ -9,8 +9,10 @@ import { api, internal } from '../convex/_generated/api'
 
 const modules = import.meta.glob('../convex/**/*.ts')
 
+// A posted bill: it names its voucher, or the books would refuse it as a new
+// bill arriving without one (bills.save takes new bills only from posting).
 const aBill = (id: string, number: string, updatedAt: number, name = 'Ramesh') =>
-  ({ id, number, updatedAt, customerName: name, date: '2026-09-11', items: [], total: 0 })
+  ({ id, number, updatedAt, customerName: name, date: '2026-09-11', items: [], total: 0, voucherId: `v-${id}` })
 
 async function legacy(bills: any[]) {
   const t = convexTest(schema, modules)

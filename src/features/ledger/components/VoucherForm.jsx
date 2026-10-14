@@ -9,6 +9,7 @@ import BillViewer from './BillViewer';
 import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
 import Confirm from './Confirm';
 import { inputDate, today, fromInputDate, longDate } from '../lib/format';
+import { confirmPostingDate } from '../../../lib/dateCheck';
 import { groupLabel } from '../lib/groups';
 import { nextStep } from '../lib/walk';
 
@@ -202,6 +203,7 @@ export default function VoucherForm({
       return setError('Enter an amount above zero');
     if (!spec.unpriced && value === undefined) return setError('Enter an amount');
     if (!partyId || !accountId) return setError('Pick both ledgers');
+    if (!confirmPostingDate(date)) return;
 
     setBusy(true);
     try {

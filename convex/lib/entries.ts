@@ -7,10 +7,11 @@
  * sides straight into the table and trusted itself. One writer now, so a bill
  * cannot post a half-entry the books would carry forever.
  */
+import { ConvexError } from 'convex/values'
 import type { MutationCtx } from '../_generated/server'
 import type { Id } from '../_generated/dataModel'
-import { round2, balanced, signed } from './money'
-import { record } from './history'
+import { round2, balanced, signed, lastPostableDate } from './money'
+import { record, day } from './history'
 
 export type Line = { ledgerId: Id<'ledgers'>; side: 'Dr' | 'Cr'; amount: number }
 
@@ -21,6 +22,12 @@ export async function writeLines(
   date: number,
   lines: Line[],
 ) {
+  // Nothing is posted after today: a date in the future is a mistyped year
+  // or day, and it would sit in next month's books where nobody looks. Here,
+  // where every posting passes, so no screen can let one through.
+  if (date > lastPostableDate(Date.now())) {
+    throw new ConvexError(`The date ${day(date)} is after today. Check the day and the year.`)
+  }
   const total = lines.reduce((t, l) => t + signed(l.side, round2(l.amount)), 0)
   if (!balanced(total)) {
     throw new Error(

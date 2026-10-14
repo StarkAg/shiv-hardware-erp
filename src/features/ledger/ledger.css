@@ -1435,3 +1435,16 @@ to{transform: scale(1); color: #fff}}
 .ledger-root .trash-lock label{font-weight: 700;}
 .ledger-root .trash-lock input{width: 100%; padding: 12px 14px; font-size: 20px; letter-spacing: 6px; text-align: center; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg);}
 .ledger-root .trash-lock .btn{width: 100%;}
+
+/* Verify Data on the home page: red, because a problem in the books is the one
+   thing on that screen that must be put right before anything else. */
+.ledger-root .books-check{margin: 0 0 14px; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+  background: color-mix(in srgb, var(--red) 8%, var(--bg)); color: var(--fg);}
+.ledger-root .books-check-head{display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;}
+.ledger-root .books-check-head b{color: var(--red); font-size: 14px;}
+.ledger-root .books-check-head span{color: var(--muted); font-size: 12px;}
+.ledger-root .books-check-head .btn{margin-left: auto;}
+.ledger-root .books-check ul{margin: 8px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.55;}
+.ledger-root .books-check a{color: var(--fg); text-decoration: underline; text-decoration-color: var(--red);
+  text-underline-offset: 3px; overflow-wrap: anywhere;}

@@ -7,6 +7,7 @@ import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { useUploader } from '../ledger/lib/upload'
 import { rupees } from '../ledger/lib/format'
+import { confirmPostingDate } from '../../lib/dateCheck'
 
 type Mode = 'ledger' | 'photo' | 'payment'
 type Party = {
@@ -144,6 +145,7 @@ export function QuickEntry() {
     const value = Number(amount)
     if (!Number.isFinite(value) || value <= 0 || Math.abs(Math.round(value * 100) - value * 100) > 0.000001) throw Error('Enter an amount with at most two decimals.')
     if (!Number.isFinite(from)) throw Error('Choose a valid date.')
+    if (!confirmPostingDate(from)) throw Error('Not saved. Check the date.')
     if (proofs.length > 12 || proofs.some(file => !file.type.startsWith('image/'))) throw Error('Choose at most 12 image proof files.')
     const account = accounts.find(row => row._id === accountId)
     if (!account) throw Error('Choose the Cash or Bank account for this money.')

@@ -23,7 +23,7 @@ describe('an item written into a bill joins the stock list', () => {
     // A sale of last week names it: seven off a shelf that has none is seven owed.
     await t.mutation(api.bills.save, {
       billSeq: 1,
-      bills: [{ id: 'b1', number: '1', kind: 'sale', date: '2026-10-03', customerName: 'Sanjay', items: [], total: 0, updatedAt: 1000,
+      bills: [{ id: 'b1', number: '1', kind: 'sale', date: '2026-10-03', customerName: 'Sanjay', items: [], total: 0, updatedAt: 1000, voucherId: 'v-b1',
         stock: [{ ref: made.ref, name: made.name, qty: 7 }, { ref: glue.ref, name: glue.name, qty: 2 }] }],
     })
     expect((await stock(made.ref)).stock).toBe(-7)

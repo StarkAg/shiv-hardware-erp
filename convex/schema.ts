@@ -651,6 +651,18 @@ export default defineSchema({
    * is ever removed — not by a delete, not by a purge, not by a wipe. A ledger
    * you cannot audit is just a spreadsheet with extra steps.
    */
+  // What the nightly Verify Data found (convex/integrity.ts): the problems
+  // as they stood at `at`, shown on the home page until a run finds none.
+  integrityReports: defineTable({
+    at: v.number(),
+    by: v.string(),              // 'night' or 'hand'
+    problems: v.array(v.object({
+      kind: v.string(),
+      text: v.string(),
+      link: v.optional(v.string()),
+    })),
+  }).index("by_at", ["at"]),
+
   history: defineTable({
     at: v.number(),
     action: v.string(),          // voucher.create, ledger.update, admin.wipe …

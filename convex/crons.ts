@@ -34,4 +34,8 @@ crons.daily('check the sealed history', { hourUTC: 20, minuteUTC: 0 }, internal.
 // every few hours until it is in a block (convex/anchor.ts).
 crons.interval('bring the books fingerprint into bitcoin', { hours: 3 }, internal.anchor.upgrade, {})
 
+// Verify Data (convex/integrity.ts): every rule the books must keep, checked
+// at 1:45 am in the shop, after the history check and before the backup.
+crons.daily('verify the books', { hourUTC: 20, minuteUTC: 15 }, internal.integrity.run, { by: 'night' })
+
 export default crons
