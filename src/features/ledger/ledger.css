@@ -1448,3 +1448,8 @@ to{transform: scale(1); color: #fff}}
 .ledger-root .books-check ul{margin: 8px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.55;}
 .ledger-root .books-check a{color: var(--fg); text-decoration: underline; text-decoration-color: var(--red);
   text-underline-offset: 3px; overflow-wrap: anywhere;}
+
+/* WhatsApp PDF: where to send it. One choice to a line, full width, so the
+   customer's name and number never wrap into the next button. */
+.ledger-root .sendto-choices{display: flex; flex-direction: column; gap: 8px; margin-top: 14px;}
+.ledger-root .sendto-choices .btn{justify-content: center; width: 100%; overflow-wrap: anywhere;}

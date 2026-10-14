@@ -2628,13 +2628,17 @@ async function notifyCustomerGuaranteeReady(document) {
 async function whatsappReadyFor(rawMobile) {
   const jid = customerMobileToWhatsAppJid(rawMobile)
   if (!jid) throw new Error(`Enter a valid mobile number (got "${rawMobile ?? ''}").`)
+  await whatsappReady()
+  return jid
+}
+
+async function whatsappReady() {
   for (let waited = 0; waited < 15_000 && ['starting', 'reconnecting'].includes(whatsappWebState.status); waited += 250) {
     await new Promise(resolve => setTimeout(resolve, 250))
   }
   if (!whatsappSock || whatsappWebState.status !== 'ready') {
     throw new Error(`WhatsApp is not connected on the shop computer (status: ${whatsappWebState.status}).`)
   }
-  return jid
 }
 
 async function mustBeOnWhatsApp(jid, rawMobile) {
@@ -2648,14 +2652,36 @@ async function mustBeOnWhatsApp(jid, rawMobile) {
 
 // A file (an account statement as a PDF) into a customer's chat, from the
 // shop's number. Sent when someone presses the button, never on its own.
+// `rawMobile` 'group' sends to the shop's own group ("Shiv Hardware").
 async function sendWhatsAppDocumentTo(rawMobile, { data, fileName, mimetype = 'application/pdf', caption = '' }) {
   const buffer = Buffer.from(String(data ?? ''), 'base64')
   if (!buffer.length) throw new Error('Nothing to send.')
-  const jid = await whatsappReadyFor(rawMobile)
-  await mustBeOnWhatsApp(jid, rawMobile)
+  let jid
+  if (rawMobile === 'group') {
+    jid = (await shopGroup()).id
+  } else {
+    jid = await whatsappReadyFor(rawMobile)
+    await mustBeOnWhatsApp(jid, rawMobile)
+  }
   await whatsappSock.sendMessage(jid, { document: buffer, mimetype, fileName, ...(caption ? { caption } : {}) })
   console.log(`[whatsapp-send] ${fileName} (${buffer.length} bytes) to ${jid}`)
   return { jid }
+}
+
+// The shop's own group, once the link is up — asked of WhatsApp itself, so a
+// number that has left the group, or a group id that is wrong, is said
+// plainly instead of a send that never arrives.
+async function shopGroup() {
+  const id = WHATSAPP_AUTO_PRINT_GROUP_ID
+  if (!id) throw new Error('No shop group is set on the shop computer (WHATSAPP_AUTO_PRINT_GROUP_ID).')
+  await whatsappReady()
+  let meta
+  try {
+    meta = await whatsappSock.groupMetadata(id)
+  } catch (err) {
+    throw new Error(`The shop WhatsApp cannot see the group (${err?.message ?? err}).`)
+  }
+  return { id, subject: meta.subject || '', size: meta.participants?.length ?? 0 }
 }
 
 // Send the guarantee-ready message to one mobile immediately — no dedupe, no
@@ -3667,7 +3693,17 @@ app.post('/whatsapp-notify-customer', async (req, res) => {
 })
 
 // Same send path, kept for quick manual testing (GET or POST with ?mobile=&name=).
-// A document to a customer's chat — the Share PDF button on an account.
+// Whether the shop number can see its group, and what it is called.
+app.get('/whatsapp-web/group/check', async (_req, res) => {
+  try {
+    res.json({ ok: true, ...(await shopGroup()) })
+  } catch (err) {
+    res.status(400).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
+// A document to a customer's chat, or to the shop group ("mobile": "group")
+// — the WhatsApp PDF button on an account.
 app.post('/whatsapp-send-document', async (req, res) => {
   const mobile = String(req.body?.mobile ?? '').trim()
   try {

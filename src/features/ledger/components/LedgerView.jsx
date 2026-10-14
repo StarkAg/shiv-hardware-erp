@@ -125,25 +125,22 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const [purgingParty, setPurgingParty] = useState(null);
   const data = useLive(api.reports.ledger, { ledgerId }, `ledger:${ledgerId}`);
   /**
-   * The statement as a PDF, into the customer's own WhatsApp chat from the
-   * shop's number (the shop PC sends it). Where the shop PC cannot be reached
-   * — the website on a phone, away from the shop — or the account has no
-   * mobile, the phone's share sheet takes it instead, or Downloads.
+   * The statement as a PDF, with a page for every bill photo, sent on
+   * WhatsApp from the shop's number (the shop PC sends it) — to the shop's
+   * own group or into the customer's chat, as chosen in the box the button
+   * opens. "Another way" is the phone's share sheet, or Downloads; it is also
+   * where a send falls to when the shop PC cannot be reached.
    *
-   * '' at rest, 'busy' while it goes, then 'sent' or 'saved' for a moment.
+   * `sharing`: '' at rest, 'photos n of m' and 'busy' while it goes, then
+   * 'sent' or 'saved' for a moment.
    */
   const [sharing, setSharing] = useState('');
+  const [choosing, setChoosing] = useState(false);
   const settle = (state) => { setSharing(state); setTimeout(() => setSharing(''), 4000); };
-  async function sharePdf() {
-    // Asked first: it goes straight into the customer's chat, and a message
-    // sent cannot be taken back.
-    const to = String(data?.account?.phone ?? '').trim();
-    if (to) {
-      const photos = [...(data?.rows ?? []), ...(data?.pending ?? [])]
-        .reduce((n, r) => n + (r.attachmentUrls?.length ?? 0), 0);
-      const what = photos ? `the statement and ${photos} bill ${photos === 1 ? 'photo' : 'photos'}` : 'the statement';
-      if (!window.confirm(`Send ${what} to ${data.account.name} (${phoneDisplay(to)}) on WhatsApp?`)) return;
-    }
+  const photoCount = [...(data?.rows ?? []), ...(data?.pending ?? [])]
+    .reduce((n, r) => n + (r.attachmentUrls?.length ?? 0), 0);
+  async function sharePdf(target) {
+    setChoosing(false);
     setSharing('busy');
     let pdf;
     try {
@@ -153,11 +150,11 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
       setSharing('');
       return window.alert(`Could not make the PDF: ${err?.message ?? err}`);
     }
-    const mobile = String(data?.account?.phone ?? '').trim();
-    if (mobile) {
+    const to = target === 'group' ? 'group' : target === 'customer' ? String(data?.account?.phone ?? '').trim() : '';
+    if (to) {
       try {
-        await sendWhatsAppDocument(mobile, pdf.blob, pdf.name);
-        return settle('sent');
+        await sendWhatsAppDocument(to, pdf.blob, pdf.name);
+        return settle(target === 'group' ? 'sent to group' : 'sent');
       } catch (err) {
         // Only an unreachable shop PC falls through to sharing by hand; a
         // refusal (not on WhatsApp, link logged out) is said as it is.
@@ -416,18 +413,17 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
             </button>
             <button
               className="btn ghost"
-              onClick={sharePdf}
+              onClick={() => setChoosing(true)}
               disabled={sharing === 'busy' || sharing.startsWith('photos')}
-              title={account?.phone
-                ? `Send this statement as a PDF to ${phoneDisplay(account.phone)} on WhatsApp`
-                : 'Share this statement as a PDF'}
+              title="Send this statement, with its bill photos, as a PDF on WhatsApp"
             >
               <Share2 size={16} aria-hidden="true" />
               {sharing.startsWith('photos') ? `Adding ${sharing}…`
                 : sharing === 'busy' ? (account?.phone ? 'Sending…' : 'Making PDF…')
                 : sharing === 'sent' ? 'Sent on WhatsApp'
+                : sharing === 'sent to group' ? 'Sent to the group'
                 : sharing === 'saved' ? 'Saved to Downloads'
-                : account?.phone ? 'WhatsApp PDF' : 'Share PDF'}
+                : 'WhatsApp PDF'}
             </button>
             {rows.length || pending.length ? (
               <button
@@ -447,6 +443,34 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
           </div>
         </div>
       </div>
+
+      {choosing && account && (
+        <div className="modal-bg" onMouseDown={(e) => e.target === e.currentTarget && setChoosing(false)}>
+          <div className="modal narrow sendto" role="dialog" aria-label="Send the statement to">
+            <h2>Send to</h2>
+            <p className="note">
+              Statement of {account.name}
+              {photoCount ? ` with ${photoCount} bill ${photoCount === 1 ? 'photo' : 'photos'}` : ''}, as a PDF.
+            </p>
+            <div className="sendto-choices">
+              <button type="button" className="btn" onClick={() => sharePdf('group')}>
+                Shiv Hardware group
+              </button>
+              {account.phone && (
+                <button type="button" className="btn" onClick={() => sharePdf('customer')}>
+                  {account.name} · {phoneDisplay(account.phone)}
+                </button>
+              )}
+              <button type="button" className="btn ghost" onClick={() => sharePdf('other')}>
+                Another way
+              </button>
+              <button type="button" className="btn ghost" onClick={() => setChoosing(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deletingParty && account && (
         <Confirm
