@@ -306,7 +306,10 @@ export default function JobPage({ job, onBack }) {
   })).filter((s) => s.items.length || s.pending.length)
 
   const contacts = contactsOf(job.phone)
-  const customerNow = job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: job.phone } : job.title ? { name: job.title } : null
+  // The account's own phone, without the numbers added on the job, which the sheet lists to change.
+  const phones = job.phones ?? []
+  const customerNow = job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: contacts.filter((n) => !phones.includes(n)).join(', '), phones }
+    : job.title || phones.length ? { name: job.title, phones } : null
 
   return (
     <div className="app page">
@@ -457,7 +460,7 @@ export default function JobPage({ job, onBack }) {
       {choosing !== undefined && (
         <Sheet label="Customer" wide onClose={() => setChoosing(undefined)}>
           <b className="sheettitle">Who is this for?</b>
-          <p>Pick the customer's account from the panel; the name, place and phone come with it.</p>
+          <p>Pick the customer's account from the panel; the name, place and phone come with it. Add any more numbers to ring under it.</p>
           <CustomerPicker value={choosing} onChange={setChoosing} />
           <div className="sheetbtns">
             <button type="button" className="ghost" onClick={() => setChoosing(undefined)}>Cancel</button>

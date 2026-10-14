@@ -1175,6 +1175,9 @@ export default defineSchema({
     // correction in the panel shows here), else whatever was typed.
     ledgerId: v.optional(v.id('ledgers')),
     title: v.optional(v.string()),
+    // More numbers to ring for this job, added at the counter: beside the
+    // account's own phone, or the only ones for a name typed without one.
+    phones: v.optional(v.array(v.string())),
     status: v.union(v.literal('open'), v.literal('done')),
     // Where the work stands, in the order it goes: to be measured on site
     // (the workshop), the work order to be made from the measurements (the

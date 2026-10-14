@@ -94,6 +94,9 @@ const clean = (text: string | undefined, max: number) => {
   const tidy = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
   return tidy || undefined
 }
+/** A job's added numbers: digits and a leading plus, seven digits at least, each once, eight at most. */
+const phonesOf = (list: string[]) =>
+  [...new Set(list.map((n) => String(n).replace(/[^\d+]/g, '')).filter((n) => n.replace(/\D/g, '').length >= 7))].slice(0, 8)
 
 /** Compared to the end, whatever differs, so timing says nothing about how close a guess was. */
 function requireDeletePin(pin: string) {
@@ -153,7 +156,9 @@ export const list = query({
         title: (account ? bare(account.name) : '') || job.title || '',
         ledgerId: account?._id ?? null,
         place: account?.place ?? '',
-        phone: account?.phone ?? '',
+        // Every number to ring, the account's first; contactsOf reads them apart.
+        phone: [account?.phone, ...(job.phones ?? [])].filter(Boolean).join(', '),
+        phones: job.phones ?? [],
         status: job.status,
         stage: job.stage ?? 'measurement',
         boardsTotal: job.boardsTotal ?? null,
@@ -208,6 +213,7 @@ export const create = mutation({
   args: {
     ledgerId: v.optional(v.id('ledgers')),
     title: v.optional(v.string()),
+    phones: v.optional(v.array(v.string())),
     // Sent by apps from before the steps were fixed; not used. A job starts at measurement.
     stage: v.optional(stage),
     photos: v.array(v.id('_storage')),
@@ -217,7 +223,7 @@ export const create = mutation({
     assemble: v.optional(v.boolean()),
     order: v.optional(v.boolean()),
   },
-  handler: async (ctx, { ledgerId, title, photos, priority, assemble, order }) => {
+  handler: async (ctx, { ledgerId, title, phones, photos, priority, assemble, order }) => {
     if (!photos.length) throw new ConvexError('Add a photo of the work order.')
     const needs = assemble === undefined && order === undefined ? null : { assemble: assemble === true, order: order === true }
     if (needs) checkNeeds(needs.assemble, needs.order)
@@ -235,6 +241,7 @@ export const create = mutation({
       ...(account ? { ledgerId: account._id } : {}),
       // Kept beside the account too, so the job still has a name if the account is ever removed.
       title: clean(account ? bare(account.name) : title, 80),
+      ...(phones && phonesOf(phones).length ? { phones: phonesOf(phones) } : {}),
       status: 'open',
       ...(priority ? { priority: true } : {}),
       ...(needs ? { needsAssemble: needs.assemble, needsOrder: needs.order } : {}),
@@ -429,10 +436,10 @@ export const seen = mutation({
   },
 })
 
-/** Who a job is for, set or corrected after it was sent: an account from the books, or a typed name. */
+/** Who a job is for, set or corrected after it was sent: an account from the books, or a typed name, and any more numbers to ring. */
 export const setCustomer = mutation({
-  args: { jobId: v.id('workshopJobs'), ledgerId: v.optional(v.id('ledgers')), title: v.optional(v.string()) },
-  handler: async (ctx, { jobId, ledgerId, title }) => {
+  args: { jobId: v.id('workshopJobs'), ledgerId: v.optional(v.id('ledgers')), title: v.optional(v.string()), phones: v.optional(v.array(v.string())) },
+  handler: async (ctx, { jobId, ledgerId, title, phones }) => {
     const job = await ctx.db.get(jobId)
     if (!job) throw new ConvexError('That work order is gone.')
     const account = ledgerId ? await ctx.db.get(ledgerId) : null
@@ -440,6 +447,8 @@ export const setCustomer = mutation({
     await ctx.db.patch(jobId, {
       ledgerId: account?._id,
       title: clean(account ? bare(account.name) : title, 80),
+      // Left as they are by an app from before numbers could be added.
+      ...(phones ? { phones: phonesOf(phones).length ? phonesOf(phones) : undefined } : {}),
       updatedAt: Date.now(),
     })
   },

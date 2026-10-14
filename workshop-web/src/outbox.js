@@ -109,8 +109,11 @@ const withJob = (store, jobId, change) => {
 export const atOnce = {
   setPriority: (store, { jobId, priority }) => withJob(store, jobId, (j) => ({ ...j, priority, updatedAt: Date.now() })),
   seen: (store, { jobId, side }) => withJob(store, jobId, (j) => ({ ...j, [`${side}SeenAt`]: Date.now() })),
-  setCustomer: (store, { jobId, ledgerId, title }) => {
+  setCustomer: (store, { jobId, ledgerId, title, phones }) => {
     const account = ledgerId ? store.getQuery(api.workshop.customers, {})?.find((c) => c.id === ledgerId) : null
-    withJob(store, jobId, (j) => ({ ...j, ledgerId: account?.id ?? null, title: account?.name ?? title ?? '', place: account?.place ?? '', phone: account?.phone ?? '', updatedAt: Date.now() }))
+    withJob(store, jobId, (j) => {
+      const added = phones ?? j.phones ?? []
+      return { ...j, ledgerId: account?.id ?? null, title: account?.name ?? title ?? '', place: account?.place ?? '', phone: [account?.phone, ...added].filter(Boolean).join(', '), phones: added, updatedAt: Date.now() }
+    })
   },
 }
