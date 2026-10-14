@@ -2,6 +2,7 @@ import { ConvexError, v } from 'convex/values'
 import { internalMutation } from './_generated/server'
 import { mutation, query } from './lib/guarded'
 import { record } from './lib/history'
+import { requirePin } from './lib/pin'
 
 /**
  * Price List — the makers' rates the shop quotes from (prices-web).
@@ -20,10 +21,20 @@ export const list = query({
 
 const rate = v.union(v.number(), v.null())
 
-/** One item's rates, as corrected from the app. null clears a rate. */
+/**
+ * The shop's code, checked before the app opens a rate for changing. A rate
+ * is what the counter quotes from, so it does not change at a stray tap.
+ */
+export const unlock = mutation({
+  args: { pin: v.string() },
+  handler: async (_ctx, { pin }) => { requirePin(pin); return true },
+})
+
+/** One item's rates, as corrected from the app, behind the shop's code. null clears a rate. */
 export const setRates = mutation({
-  args: { id: v.id('priceItems'), mrp: v.optional(rate), net: v.optional(rate) },
-  handler: async (ctx, { id, mrp, net }) => {
+  args: { pin: v.string(), id: v.id('priceItems'), mrp: v.optional(rate), net: v.optional(rate) },
+  handler: async (ctx, { pin, id, mrp, net }) => {
+    requirePin(pin)
     const item = await ctx.db.get(id)
     if (!item) throw new ConvexError('That item is no longer on the list.')
     for (const n of [mrp, net]) {

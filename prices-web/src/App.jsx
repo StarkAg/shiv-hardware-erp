@@ -205,9 +205,22 @@ function Row({ it, onOpen }) {
   )
 }
 
-/** The rates of one item, to put right. Blank clears a rate. */
+// The shop's code, once it has been right, is held for five minutes so a few
+// rates can be put right without typing it for each. In memory only.
+const heldCode = { pin: '', until: 0 }
+const codeStillGood = () => heldCode.until > Date.now()
+
+/**
+ * One item's rates. Shown first as they are; Change asks for the shop's code
+ * (checked by the books, prices.unlock) before the rates can be typed over,
+ * so a stray tap on the counter never changes what is quoted. Blank clears a
+ * rate.
+ */
 function EditRates({ it, onClose }) {
+  const unlock = useMutation(api.unlock)
   const setRates = useMutation(api.setRates)
+  const [mode, setMode] = useState('view') // view, code, edit
+  const [code, setCode] = useState('')
   const [mrp, setMrp] = useState(it.mrp ?? '')
   const [net, setNet] = useState(it.net ?? '')
   const [busy, setBusy] = useState(false)
@@ -223,39 +236,76 @@ function EditRates({ it, onClose }) {
     return () => { for (const el of under) el.inert = false; removeEventListener('keydown', esc) }
   }, [onClose])
 
+  const said = (err) => String(err?.data ?? err?.message ?? err).replace(/^.*Uncaught ConvexError:\s*/s, '').split('\n')[0]
+  const change = () => { setError(''); setMode(codeStillGood() ? 'edit' : 'code') }
   const asRate = (s) => (String(s).trim() === '' ? null : Number(s))
-  const save = async (e) => {
+
+  const submit = async (e) => {
     e.preventDefault()
-    const m = asRate(mrp), n = asRate(net)
-    if ([m, n].some((x) => x !== null && !(x >= 0))) return setError('Enter a rate of 0 or more, or leave it blank.')
+    if (mode === 'view') return
     setBusy(true)
     setError('')
     try {
-      await setRates({ id: it._id, mrp: m, net: n })
+      if (mode === 'code') {
+        if (!code.trim()) { setError('Type the shop code.'); return }
+        await unlock({ pin: code.trim() })
+        heldCode.pin = code.trim()
+        heldCode.until = Date.now() + 5 * 60_000
+        setMode('edit')
+        return
+      }
+      const m = asRate(mrp), n = asRate(net)
+      if ([m, n].some((x) => x !== null && !(x >= 0))) { setError('Enter a rate of 0 or more, or leave it blank.'); return }
+      await setRates({ pin: heldCode.pin, id: it._id, mrp: m, net: n })
       onClose()
     } catch (err) {
-      setError(String(err?.data ?? err?.message ?? err))
+      const why = said(err)
+      if (/wrong code/i.test(why)) { heldCode.until = 0; setCode(''); setMode('code') }
+      setError(why)
+    } finally {
       setBusy(false)
     }
   }
 
   return (
     <div className="sheetback" ref={back} onClick={busy ? undefined : onClose}>
-      <form className="sheet" role="dialog" aria-modal="true" aria-label={`Rates of ${it.product} ${it.size}`} onClick={(e) => e.stopPropagation()} onSubmit={save}>
+      <form className="sheet" role="dialog" aria-modal="true" aria-label={`Rates of ${it.product} ${it.size}`} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <span className="sheettitle">{it.product} {it.size}</span>
         <p>{[it.brand, it.grade && `Grade ${it.grade}`, it.code && `Code ${it.code}`, it.wire, it.finish].filter(Boolean).join(' · ')}</p>
-        <label className="field">
-          <span>{it.netLabel ?? 'Net'} (what the shop pays)</span>
-          <input type="number" inputMode="decimal" step="0.01" min="0" value={net} onChange={(e) => setNet(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>MRP</span>
-          <input type="number" inputMode="decimal" step="0.01" min="0" value={mrp} onChange={(e) => setMrp(e.target.value)} />
-        </label>
+
+        {mode === 'view' && (
+          <dl className="facts-list">
+            <div><dt>{it.netLabel ?? 'Net'}</dt><dd>{it.net != null ? rupees(it.net) : 'No rate'}</dd></div>
+            <div><dt>MRP</dt><dd>{it.mrp != null ? rupees(it.mrp) : 'No rate'}</dd></div>
+          </dl>
+        )}
+
+        {mode === 'code' && (
+          <label className="field">
+            <span>Shop code, to change this rate</span>
+            <input type="password" inputMode="numeric" autoComplete="off" autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
+          </label>
+        )}
+
+        {mode === 'edit' && (
+          <>
+            <label className="field">
+              <span>{it.netLabel ?? 'Net'} (what the shop pays)</span>
+              <input type="number" inputMode="decimal" step="0.01" min="0" autoFocus value={net} onChange={(e) => setNet(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>MRP</span>
+              <input type="number" inputMode="decimal" step="0.01" min="0" value={mrp} onChange={(e) => setMrp(e.target.value)} />
+            </label>
+          </>
+        )}
+
         {error && <p className="error" role="alert">{error}</p>}
         <div className="sheetbtns">
-          <button type="button" className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="safe" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="button" className="ghost" onClick={onClose} disabled={busy}>{mode === 'view' ? 'Close' : 'Cancel'}</button>
+          {mode === 'view' && <button type="button" className="ghost" onClick={change}>Change</button>}
+          {mode === 'code' && <button type="submit" className="must" disabled={busy}>{busy ? 'Checking…' : 'Unlock'}</button>}
+          {mode === 'edit' && <button type="submit" className="safe" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>}
         </div>
       </form>
     </div>
