@@ -35,8 +35,8 @@ type Side = 'shop' | 'workshop'
  *   assemble     the workshop builds it, saying how many boards are made, then Complete;
  *                and where the work order asks for it, the shop orders it in from a
  *                supplier, sends the screenshot of the order (Ordered), and says
- *                Arrived with the goods' bill or challan. A work order asks for either or both
- *                (`needsOf`), and both go on side by side
+ *                Arrived with the goods' bill or challan. A job is made asking for
+ *                either or both (`needsOf`), and both go on side by side
  *   goahead      the shop rings the customer and says when to go and whom to ring
  *   fitting      the workshop fits it and photographs it, over one visit or
  *                several (the workshop's to arrange), then Complete;
@@ -69,8 +69,9 @@ function boardCount(n: number) {
   return Math.trunc(n)
 }
 /**
- * What a job's work order asks for. A job from before a work order could ask
- * to order anything in is to be assembled, as every job then was.
+ * What a job asks for, chosen by the counter when it makes the job and not
+ * changed after. A job from before the choice is to be assembled, as every
+ * job then was.
  */
 type Needs = { needsAssemble?: boolean; needsOrder?: boolean; assembled?: boolean; ordered?: boolean; arrived?: boolean }
 const needsOf = (job: Needs) => ({ assemble: job.needsAssemble !== false, order: job.needsOrder === true })
@@ -198,9 +199,10 @@ export const list = query({
 })
 
 /**
- * A new work order from the counter: its photographs, and who it is for —
- * a customer's account picked from the books, or a name typed for someone
- * who has none yet.
+ * A new work order from the counter: its photographs, who it is for (a
+ * customer's account picked from the books, or a name typed for someone who
+ * has none yet), and what it asks for: the workshop to assemble it, the shop
+ * to order it in, or both.
  */
 export const create = mutation({
   args: {
@@ -211,9 +213,14 @@ export const create = mutation({
     photos: v.array(v.id('_storage')),
     text: v.optional(v.string()),
     priority: v.optional(v.boolean()),
+    // Absent from an app from before the choice: the job is to be assembled.
+    assemble: v.optional(v.boolean()),
+    order: v.optional(v.boolean()),
   },
-  handler: async (ctx, { ledgerId, title, photos, priority }) => {
+  handler: async (ctx, { ledgerId, title, photos, priority, assemble, order }) => {
     if (!photos.length) throw new ConvexError('Add a photo of the work order.')
+    const needs = assemble === undefined && order === undefined ? null : { assemble: assemble === true, order: order === true }
+    if (needs) checkNeeds(needs.assemble, needs.order)
     await checkPhotos(ctx, photos)
     const account = ledgerId ? await ctx.db.get(ledgerId) : null
     if (ledgerId && !account) throw new ConvexError('That customer is no longer in the books. Pick again.')
@@ -230,6 +237,7 @@ export const create = mutation({
       title: clean(account ? bare(account.name) : title, 80),
       status: 'open',
       ...(priority ? { priority: true } : {}),
+      ...(needs ? { needsAssemble: needs.assemble, needsOrder: needs.order } : {}),
       messages: [{ id: `${now}-0`, from: 'shop', photos, step: 'visit', by: device?.name, at: now }],
       shopSeenAt: now,
       workshopSeenAt: 0,
@@ -251,8 +259,7 @@ export const create = mutation({
  *     Measuring and fitting need a photograph first.
  * From the shop:
  *   - photographs of the visit order (any time) or of the work order, with
- *     the `boards` it asks for and whether it is to be assembled (`assemble`),
- *     ordered in (`order`), or both;
+ *     the `boards` it asks for;
  *   - `ordered`: the order is sent to the supplier, with the screenshot of
  *     it as proof (needed);
  *   - `arrived`: what was ordered has come in, with photographs of the
@@ -274,6 +281,7 @@ export const send = mutation({
     photos: v.array(v.id('_storage')),
     step: v.optional(tag),
     boards: v.optional(v.number()),
+    // Sent with a work order by an app of 14 Oct 2026; no longer used.
     assemble: v.optional(v.boolean()),
     order: v.optional(v.boolean()),
     complete: v.optional(v.boolean()),
@@ -284,7 +292,7 @@ export const send = mutation({
     // Sent by apps from before threads were tags only; no longer kept.
     text: v.optional(v.string()),
   },
-  handler: async (ctx, { jobId, from, photos, step: named, boards, assemble, order, complete, ordered, arrived, visitAt, callPhone }) => {
+  handler: async (ctx, { jobId, from, photos, step: named, boards, complete, ordered, arrived, visitAt, callPhone }) => {
     const job = await ctx.db.get(jobId)
     if (!job) throw new ConvexError('That work order is gone.')
     await checkPhotos(ctx, photos)
@@ -361,14 +369,8 @@ export const send = mutation({
       step = named === 'visit' || named === 'quotation' ? named : at === 'measurement' ? 'visit' : 'quotation'
       onlyNow(step, at)
       if (step === 'quotation' && boards !== undefined) marks.boards = facts.boardsTotal = boardCount(boards)
-      if (step === 'quotation') {
-        // An app from before the ticks sends neither: the job is to be assembled.
-        const a = assemble ?? !order
-        const o = order === true
-        checkNeeds(a, o)
-        marks.assemble = facts.needsAssemble = a
-        marks.order = facts.needsOrder = o
-      }
+      // What the job asks for was chosen when it was made: `assemble` and
+      // `order` from an app of the day the work order chose it are not used.
       moves = step === 'quotation'
     }
 
@@ -384,10 +386,10 @@ export const send = mutation({
 })
 
 /**
- * What the work order asks for, changed by the shop while the job is being
- * assembled or ordered: a job found to need a part ordered in after all, or
- * one ticked for the wrong thing. What is already done stays done, and a job
- * left with everything asked for done moves on to the go-ahead.
+ * What a job asks for, corrected while it is being assembled or ordered. Not
+ * in the apps, where it is chosen once, when the job is made: for a
+ * correction made from the computer. What is already done stays done, and a
+ * job left with everything asked for done moves on to the go-ahead.
  */
 export const setNeeds = mutation({
   args: { jobId: v.id('workshopJobs'), assemble: v.boolean(), order: v.boolean() },

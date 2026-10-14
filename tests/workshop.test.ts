@@ -230,8 +230,8 @@ describe('workshop: a work order as a chat in photos', () => {
     const t = convexTest(schema, modules)
     const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
     const when = Date.parse('2026-10-14T10:30:00+05:30')
-    const toWorkOrder = async () => {
-      const id = await t.mutation(api.workshop.create, { photos: [await photo()] })
+    const toWorkOrder = async (needs: { assemble?: boolean; order?: boolean } = {}) => {
+      const id = await t.mutation(api.workshop.create, { photos: [await photo()], ...needs })
       await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [await photo()], step: 'measurement' })
       await t.mutation(api.workshop.send, { jobId: id, from: 'workshop', photos: [], complete: true })
       return id
@@ -239,13 +239,14 @@ describe('workshop: a work order as a chat in photos', () => {
     const job = async (id: string) => (await t.query(api.workshop.list, {})).find((j) => j.id === id)!
     const send = (id: string, args: Record<string, unknown>) => t.mutation(api.workshop.send, { jobId: id, photos: [], ...args } as never)
 
-    // A work order asks for something: neither ticked is refused.
-    const order = await toWorkOrder()
-    await expect(send(order, { from: 'shop', photos: [await photo()], assemble: false, order: false })).rejects.toThrow('Tick')
-    expect(await job(order)).toMatchObject({ stage: 'quotation' })
+    // What a job asks for is chosen when it is made: neither ticked is refused.
+    await expect(t.mutation(api.workshop.create, { photos: [await photo()], assemble: false, order: false })).rejects.toThrow('Tick')
+    const order = await toWorkOrder({ assemble: false, order: true })
+    expect(await job(order)).toMatchObject({ stage: 'quotation', needsAssemble: false, needsOrder: true })
 
     // Only ordered in: nothing for the workshop to assemble, the shop says Arrived and the go-ahead is next.
-    await send(order, { from: 'shop', photos: [await photo()], assemble: false, order: true })
+    // Ticks sent with the work order, as the app of the day before did, do not change it.
+    await send(order, { from: 'shop', photos: [await photo()], assemble: true, order: false })
     expect(await job(order)).toMatchObject({ stage: 'assemble', needsAssemble: false, needsOrder: true, arrived: false })
     await expect(send(order, { from: 'workshop', boards: 2 })).rejects.toThrow('being assembled')
     await expect(send(order, { from: 'workshop', complete: true })).rejects.toThrow('being assembled')
@@ -263,13 +264,13 @@ describe('workshop: a work order as a chat in photos', () => {
     await send(order, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(order)).toMatchObject({ stage: 'goahead', arrived: true })
     await expect(send(order, { from: 'shop', photos: [await photo()], arrived: true })).rejects.toThrow('Nothing is being ordered')
-    expect((await job(order)).messages.slice(-3).map((m) => [m.step, m.assemble, m.order, m.ordered, m.arrived, m.photos.length])).toEqual([
-      ['quotation', false, true, false, false, 1], ['ordered', null, null, true, false, 1], ['arrived', null, null, false, true, 1],
+    expect((await job(order)).messages.slice(-3).map((m) => [m.step, m.ordered, m.arrived, m.photos.length])).toEqual([
+      ['quotation', false, false, 1], ['ordered', true, false, 1], ['arrived', false, true, 1],
     ])
 
     // Both, side by side: Complete first waits for Arrived.
-    const both = await toWorkOrder()
-    await send(both, { from: 'shop', photos: [await photo()], boards: 4, assemble: true, order: true })
+    const both = await toWorkOrder({ assemble: true, order: true })
+    await send(both, { from: 'shop', photos: [await photo()], boards: 4 })
     expect(await job(both)).toMatchObject({ stage: 'assemble', needsAssemble: true, needsOrder: true })
     await send(both, { from: 'workshop', boards: 4 })
     await send(both, { from: 'workshop', complete: true })
@@ -281,21 +282,21 @@ describe('workshop: a work order as a chat in photos', () => {
     expect(await job(both)).toMatchObject({ stage: 'goahead' })
 
     // And Arrived first waits for Complete.
-    const other = await toWorkOrder()
-    await send(other, { from: 'shop', photos: [await photo()], assemble: true, order: true })
+    const other = await toWorkOrder({ assemble: true, order: true })
+    await send(other, { from: 'shop', photos: [await photo()] })
     await send(other, { from: 'shop', photos: [await photo()], ordered: true })
     await send(other, { from: 'shop', photos: [await photo()], arrived: true })
     expect(await job(other)).toMatchObject({ stage: 'assemble', arrived: true, assembled: false })
     await send(other, { from: 'workshop', complete: true })
     expect(await job(other)).toMatchObject({ stage: 'goahead' })
 
-    // A work order sent by an app from before the ticks is to be assembled.
+    // A job made by an app from before the ticks is to be assembled.
     const old = await toWorkOrder()
     await send(old, { from: 'shop', photos: [await photo()], boards: 2 })
     expect(await job(old)).toMatchObject({ stage: 'assemble', needsAssemble: true, needsOrder: false })
 
-    // The ticks changed while assembling: a part to order after all, then
-    // assembling found not needed once it has arrived, which moves it on.
+    // A correction from the computer while assembling: a part to order after
+    // all, then assembling found not needed once it has arrived, which moves it on.
     await t.mutation(api.workshop.setNeeds, { jobId: old, assemble: true, order: true })
     expect(await job(old)).toMatchObject({ stage: 'assemble', needsOrder: true })
     await expect(t.mutation(api.workshop.setNeeds, { jobId: old, assemble: false, order: false })).rejects.toThrow('Tick')

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from './flow.js'
 import { post } from './outbox.js'
-import { CameraIcon, CloseIcon, FlagIcon, PersonIcon, PhotosIcon, Picked, Sheet, usePicked } from './ui.jsx'
+import { CameraIcon, CloseIcon, FlagIcon, PersonIcon, PhotosIcon, Picked, Sheet, TickIcon, usePicked } from './ui.jsx'
 import Camera from './Camera.jsx'
 
 /**
@@ -51,11 +51,19 @@ export function CustomerPicker({ value, onChange, disabled }) {
 /** A picked or typed customer, as the server takes it. */
 export const customerArgs = (c) => (c?.ledgerId ? { ledgerId: c.ledgerId } : c?.name?.trim() ? { title: c.name.trim() } : {})
 
-/** A new job: the photo or photos of the visit order, and who it is for. It starts at measurement. */
+/** What a job can ask for, a tick each; either or both, chosen once, here. */
+const NEEDS = [['assemble', 'Assemble'], ['order', 'Order in']]
+
+/**
+ * A new job, in the order the counter has it: who it is for, whether the
+ * workshop assembles it or the shop orders it in (or both), then the photo or
+ * photos of the visit order. It starts at measurement.
+ */
 export default function NewOrder({ onClose }) {
   const { picked, add, drop, take } = usePicked()
   const [customer, setCustomer] = useState(null)
   const [priority, setPriority] = useState(false)
+  const [needs, setNeeds] = useState({ assemble: true, order: false })
   // The live camera, open over the sheet while photographing.
   const [cam, setCam] = useState(false)
   const camera = useRef(null)
@@ -66,14 +74,23 @@ export default function NewOrder({ onClose }) {
   const send = () => {
     if (!picked.length) return
     const photos = take()
-    post({ customer: customerArgs(customer), title: customer?.name?.trim() ?? '', priority, files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
+    post({ customer: customerArgs(customer), title: customer?.name?.trim() ?? '', priority, needs, files: photos.map((p) => p.file), previews: photos.map((p) => p.url) })
     onClose()
   }
 
   return (
     <Sheet label="New visit order" wide onClose={onClose}>
       <b className="sheettitle">New visit order</b>
-      <p>Photograph the visit order. It goes to the workshop, to visit and measure.</p>
+      <CustomerPicker value={customer} onChange={setCustomer} />
+      <div className="needs" role="group" aria-label="What this job needs">
+        {NEEDS.map(([k, label]) => (
+          <button key={k} type="button" className={needs[k] ? 'on' : ''} aria-pressed={needs[k]}
+            onClick={() => { const next = { ...needs, [k]: !needs[k] }; if (next.assemble || next.order) setNeeds(next) }}>
+            {needs[k] && <TickIcon size={20} strokeWidth="3" />} {label}
+          </button>
+        ))}
+      </div>
+      <span className="ask sheetask">Visit order</span>
       {/* The camera's way out where no live one can be had, and pictures already on the phone. */}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={took} />
       <input ref={gallery} type="file" accept="image/*" multiple hidden onChange={took} />
@@ -83,7 +100,6 @@ export default function NewOrder({ onClose }) {
         <button type="button" className="pick" onClick={() => setCam(true)}><CameraIcon /> Take photo</button>
         <button type="button" className="pick" onClick={() => gallery.current?.click()}><PhotosIcon /> Choose</button>
       </div>
-      <CustomerPicker value={customer} onChange={setCustomer} />
       <button type="button" className={`priority ${priority ? 'on' : ''}`} aria-pressed={priority} onClick={() => setPriority(!priority)}>
         <FlagIcon size={20} strokeWidth="2.6" /> Priority
       </button>

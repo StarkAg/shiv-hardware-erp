@@ -66,14 +66,13 @@ export async function deliver(item) {
         jobId: item.jobId, from: SIDE, photos: item.photoIds,
         ...(item.step ? { step: item.step } : {}),
         ...(item.boards != null ? { boards: item.boards } : {}),
-        ...(item.assemble != null ? { assemble: item.assemble, order: item.order } : {}),
         ...(item.complete ? { complete: true } : {}),
         ...(item.ordered ? { ordered: true } : {}),
         ...(item.arrived ? { arrived: true } : {}),
         ...(item.visitAt ? { visitAt: item.visitAt, callPhone: item.callPhone } : {}),
       })
     }
-    else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds, ...(item.priority ? { priority: true } : {}) })
+    else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds, ...(item.priority ? { priority: true } : {}), ...(item.needs ? { assemble: item.needs.assemble, order: item.needs.order } : {}) })
     // The live list has it by now, so its stand-in goes.
     discard(item)
   } catch (err) {
@@ -109,7 +108,6 @@ const withJob = (store, jobId, change) => {
 }
 export const atOnce = {
   setPriority: (store, { jobId, priority }) => withJob(store, jobId, (j) => ({ ...j, priority, updatedAt: Date.now() })),
-  setNeeds: (store, { jobId, assemble, order }) => withJob(store, jobId, (j) => ({ ...j, needsAssemble: assemble, needsOrder: order, updatedAt: Date.now() })),
   seen: (store, { jobId, side }) => withJob(store, jobId, (j) => ({ ...j, [`${side}SeenAt`]: Date.now() })),
   setCustomer: (store, { jobId, ledgerId, title }) => {
     const account = ledgerId ? store.getQuery(api.workshop.customers, {})?.find((c) => c.id === ledgerId) : null

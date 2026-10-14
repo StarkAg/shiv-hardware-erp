@@ -18,7 +18,7 @@ export const api = anyApi
  *                visit at a time, as many as it needs, then Measuring done
  *   quotation    the shop makes the work order from them and sends its photo
  *   assemble     the workshop builds it, says how many pieces are made, then Complete;
- *                or, where the work order asks for it, the shop orders it in
+ *                or, where the job asks for it, the shop orders it in
  *                (Ordered, with the WhatsApp screenshot) and says Arrived (with
  *                the bill or challan); or both, side by side (`needsOf`)
  *   goahead      the shop rings the customer and says when to go and whom to ring
@@ -63,24 +63,24 @@ export const visitsOf = (job, tag) => {
 }
 
 /**
- * What a job's work order asks for: the workshop to assemble it, the shop to
- * order it in from a supplier, or both. A job from before the choice is to be
- * assembled. `assembling` and `ordering` are what is still to do of each.
+ * What a job asks for, chosen when the counter makes it: the workshop to
+ * assemble it, the shop to order it in from a supplier, or both. A job from
+ * before the choice is to be assembled. `assembling` and `ordering` are what is still to do of each.
  */
 export const needsOf = (job) => {
   const assemble = job.needsAssemble !== false
   const order = job.needsOrder === true
   return { assemble, order, assembling: assemble && !job.assembled, ordering: order && !job.arrived, toOrder: order && !job.ordered }
 }
-/** The third step, named for what the work order asks for. */
+/** The third step, named for what the job asks for. */
 const WORK = {
   assemble: { label: 'Assemble', short: 'Assemble' },
   order: { label: 'Order in', short: 'Order in' },
   both: { label: 'Assemble, order in', short: 'Make, buy' },
 }
 const workOf = (job) => { const n = needsOf(job); return WORK[n.assemble && n.order ? 'both' : n.order ? 'order' : 'assemble'] }
-/** A step as it is for this job: the third one is named for what its work order asks for. */
-export const stepOf = (job, st) => (st.id === 'assemble' && stageNo(stageId(job)) >= stageNo('assemble') ? { ...st, ...workOf(job) } : st)
+/** A step as it is for this job: the third one is named for what the job asks for. */
+export const stepOf = (job, st) => (st.id === 'assemble' ? { ...st, ...workOf(job) } : st)
 
 export const stageId = (job) => job.stage ?? 'measurement'
 export const stageAt = (job) => stepOf(job, STAGES.find((s) => s.id === stageId(job)) ?? STAGES[0])
