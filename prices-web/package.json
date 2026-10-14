@@ -1,0 +1,21 @@
+{
+  "name": "shiv-prices-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5188 --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "bash deploy.sh"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "convex": "^1.42.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}

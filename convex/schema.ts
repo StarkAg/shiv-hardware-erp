@@ -1155,6 +1155,24 @@ export default defineSchema({
    * photo is corrected against the white paper around the chip, so chips shot
    * on different days under different light compare fairly.
    */
+  // Price List (prices-web, convex/prices.ts): the rates the shop quotes
+  // from, one row per item as the maker's list prints it.
+  priceItems: defineTable({
+    category: v.string(),             // "Kitchen basket"
+    brand: v.string(),                // Godrej, Olive, Truluv, Silver Shine
+    grade: v.optional(v.string()),    // steel grade, "202" / "304"
+    code: v.optional(v.string()),     // the maker's product code
+    product: v.string(),              // Plain, Thali, Cutlery …
+    size: v.string(),                 // "17×20×6", "6″"
+    wire: v.optional(v.string()),     // "5mm wire", "6 mm / 500 mm"
+    finish: v.optional(v.string()),
+    mrp: v.optional(v.number()),
+    net: v.optional(v.number()),      // what the shop pays
+    netLabel: v.optional(v.string()), // how the list names it: "After CD", "After margin"
+    key: v.string(),                  // brand|grade|code|product|size|wire|finish, for the seed
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   micaChips: defineTable({
     brand: v.string(),
     catalog: v.optional(v.string()),

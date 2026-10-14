@@ -68,6 +68,7 @@ const TARGETS = [
   site('attendance', 'attendance-web', 'shivhardware-attendance', 'shivhardware-attendance.vercel.app', 'Attendance'),
   site('inventory', 'inventory-web', 'inventory-web', 'shivhardware-inventory.vercel.app', 'Inventory'),
   site('mica', 'mica-web', 'mica-web', 'shivhardware-mica.vercel.app', 'Mica Match'),
+  site('prices', 'prices-web', 'shivhardware-prices', 'shivhardware-prices.vercel.app', 'Price List (makers' rates)'),
   site('orders', 'order-web', 'order-web', 'shivhardware-orders.vercel.app', 'Orders'),
   site('print', 'print-web', 'print-web', 'shivhardware-print.vercel.app', 'Shiv Print'),
   site('stock', 'stock-web', 'stock-web', 'shivhardware-stock.vercel.app', 'Stock'),
