@@ -20,6 +20,8 @@ const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation
 /** Something sent before everything was tagged: read by who sent it. */
 const whenDay = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 const tagOf = (m) => m.step ?? (m.from === 'workshop' ? 'measurement' : 'visit')
+/** Whether a message marks something besides its photographs, so it stays when they are all deleted (removePhoto). */
+const marksOf = (m) => !!(m.text || m.boards != null || m.assemble != null || m.order != null || m.complete || m.ordered || m.arrived || m.visitAt)
 
 /**
  * One job, as a page built around its steps.
@@ -43,6 +45,7 @@ const tagOf = (m) => m.step ?? (m.from === 'workshop' ? 'measurement' : 'visit')
 export default function JobPage({ job, onBack }) {
   const seen = useMutation(api.workshop.seen).withOptimisticUpdate(atOnce.seen)
   const removeMessage = useMutation(api.workshop.removeMessage)
+  const removePhoto = useMutation(api.workshop.removePhoto)
   const setCustomer = useMutation(api.workshop.setCustomer).withOptimisticUpdate(atOnce.setCustomer)
   const setPriority = useMutation(api.workshop.setPriority).withOptimisticUpdate(atOnce.setPriority)
   const setNeeds = useMutation(api.workshop.setNeeds).withOptimisticUpdate(atOnce.setNeeds)
@@ -74,9 +77,15 @@ export default function JobPage({ job, onBack }) {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  // What was sent and is about to be deleted, once a finger has been held on it.
+  // What was sent and is about to be deleted, once a finger has been held on it:
+  // the whole message, or held on one photograph (`photo`), that one only.
   const [deleting, setDeleting] = useState(null)
   const holdToDelete = useHold(setDeleting)
+  /** On a photograph: held, it is the one to delete, not the message around it. */
+  const holdPhoto = (m, photo) => {
+    const hold = holdToDelete({ ...m, photo })
+    return { ...hold, onPointerDown: (e) => { e.stopPropagation(); hold.onPointerDown(e) } }
+  }
   // The customer being chosen in the "Customer" sheet; undefined while it is shut.
   const [choosing, setChoosing] = useState(undefined)
 
@@ -386,7 +395,7 @@ export default function JobPage({ job, onBack }) {
                   {m.photos.length > 0 && (
                     <div className="shots">
                       {m.photos.map((p) => (
-                        <button key={p.storageId} type="button" onClick={() => openPhoto(p.storageId)}>
+                        <button key={p.storageId} type="button" onClick={() => openPhoto(p.storageId)} {...holdPhoto(m, p.storageId)}>
                           <Shot url={p.url} width={BUBBLE} alt={TAGS[tag]} loading="lazy" decoding="async" />
                         </button>
                       ))}
@@ -488,12 +497,17 @@ export default function JobPage({ job, onBack }) {
           </div>
         </Sheet>
       )}
-      {deleting && (
+      {deleting && (deleting.photo ? (
+        <DeleteSheet title="Delete this photo?" onClose={() => setDeleting(null)} run={(pin) => removePhoto({ jobId: job.id, messageId: deleting.id, photo: deleting.photo, pin })}>
+          {TAGS[tagOf(deleting)]}, {stampOf(deleting.at)}{deleting.photos.length > 1 ? ` · photo ${deleting.photos.findIndex((p) => p.storageId === deleting.photo) + 1} of ${deleting.photos.length}` : ''}
+          <br />It is removed for both sides, for good. The other photos stay, and the job stays at the step it has reached.{job.messages.length === 1 && deleting.photos.length === 1 && !marksOf(deleting) ? ' It is the only thing here, so the work order goes with it.' : ''}
+        </DeleteSheet>
+      ) : (
         <DeleteSheet title="Delete this?" onClose={() => setDeleting(null)} run={(pin) => removeMessage({ jobId: job.id, messageId: deleting.id, pin })}>
           {TAGS[tagOf(deleting)]}, {stampOf(deleting.at)}{deleting.photos.length ? ` · ${deleting.photos.length} ${deleting.photos.length === 1 ? 'photo' : 'photos'}` : ''}
           <br />It is removed for both sides, for good. The job stays at the step it has reached.{job.messages.length === 1 ? ' It is the only thing here, so the work order goes with it.' : ''}
         </DeleteSheet>
-      )}
+      ))}
     </div>
   )
 }

@@ -487,6 +487,31 @@ export const removeMessage = mutation({
 })
 
 /**
+ * One photograph taken out of a message, for good: either side's to do, and
+ * only with the delete PIN. A message that was only photographs goes when its
+ * last one does; one that also marks something (a step done, ordered, the
+ * pieces to make) keeps the mark. A thread left with nothing in it goes too.
+ */
+export const removePhoto = mutation({
+  args: { jobId: v.id('workshopJobs'), messageId: v.string(), photo: v.id('_storage'), pin: v.string() },
+  handler: async (ctx, { jobId, messageId, photo, pin }) => {
+    requireDeletePin(pin)
+    const job = await ctx.db.get(jobId)
+    const from = job?.messages.find((m) => m.id === messageId)
+    if (!job || !from?.photos.includes(photo)) return
+    try { await ctx.storage.delete(photo) } catch { /* already gone */ }
+    const photos = from.photos.filter((id) => id !== photo)
+    const marks = from.text || from.boards != null || from.assemble != null || from.order != null
+      || from.complete || from.ordered || from.arrived || from.visitAt != null
+    const left = photos.length || marks
+      ? job.messages.map((m) => (m.id === messageId ? { ...m, photos } : m))
+      : job.messages.filter((m) => m.id !== messageId)
+    if (left.length) await ctx.db.patch(jobId, { messages: left, updatedAt: Date.now() })
+    else await ctx.db.delete(jobId)
+  },
+})
+
+/**
  * A whole work order taken off the list, with every photograph in its thread,
  * for good: either side's to do, and only with the delete PIN.
  */
