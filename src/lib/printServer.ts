@@ -537,6 +537,30 @@ export async function sendGuaranteeWhatsApp(mobile: string, name = ''): Promise<
   }
 }
 
+/**
+ * A file into a customer's WhatsApp chat, from the shop's number on the shop
+ * PC. Not retried: a reply that never came may still have been a send, and a
+ * customer sent the same statement twice is worse than a press of the button.
+ * Throws a TypeError when the shop PC cannot be reached, so the caller can
+ * share the file another way.
+ */
+export async function sendWhatsAppDocument(mobile: string, blob: Blob, fileName: string): Promise<{ jid: string }> {
+  const data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+  const res = await fetchPrintServer('/whatsapp-send-document', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mobile, fileName, mimetype: blob.type || 'application/pdf', data }),
+  }, 30_000)
+  const json = await res.json().catch(() => null)
+  if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Print server returned HTTP ${res.status}`)
+  return json as { jid: string }
+}
+
 export async function printOnServer(payload: ServerPrintPayload, copies = 1, printer?: string): Promise<ServerPrintResult> {
   try {
     const res = await fetchPrintServer('/print', {

@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, Paperclip, Pencil, Printer, ReceiptText, Trash2, X } from 'lucide-react'
+import { ChevronLeft, Paperclip, Pencil, Printer, ReceiptText, Share2, Trash2, X } from 'lucide-react'
+import { shareFile } from '../../../lib/shareImage'
+import { sendWhatsAppDocument } from '../../../lib/printServer'
+import { statementPdf } from '../lib/pdf'
 import { WhatsAppSent } from '../../../components/WhatsAppSent'
 import { useStore } from '../../../lib/store'
 import VoucherBillPreview from './VoucherBillPreview'
@@ -121,6 +124,58 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const [deletingParty, setDeletingParty] = useState(false);
   const [purgingParty, setPurgingParty] = useState(null);
   const data = useLive(api.reports.ledger, { ledgerId }, `ledger:${ledgerId}`);
+  /**
+   * The statement as a PDF, into the customer's own WhatsApp chat from the
+   * shop's number (the shop PC sends it). Where the shop PC cannot be reached
+   * — the website on a phone, away from the shop — or the account has no
+   * mobile, the phone's share sheet takes it instead, or Downloads.
+   *
+   * '' at rest, 'busy' while it goes, then 'sent' or 'saved' for a moment.
+   */
+  const [sharing, setSharing] = useState('');
+  const settle = (state) => { setSharing(state); setTimeout(() => setSharing(''), 4000); };
+  async function sharePdf() {
+    // Asked first: it goes straight into the customer's chat, and a message
+    // sent cannot be taken back.
+    const to = String(data?.account?.phone ?? '').trim();
+    if (to) {
+      const photos = [...(data?.rows ?? []), ...(data?.pending ?? [])]
+        .reduce((n, r) => n + (r.attachmentUrls?.length ?? 0), 0);
+      const what = photos ? `the statement and ${photos} bill ${photos === 1 ? 'photo' : 'photos'}` : 'the statement';
+      if (!window.confirm(`Send ${what} to ${data.account.name} (${phoneDisplay(to)}) on WhatsApp?`)) return;
+    }
+    setSharing('busy');
+    let pdf;
+    try {
+      pdf = await statementPdf(data, { onPhoto: (done, of) => setSharing(`photos ${done} of ${of}`) });
+      setSharing('busy');
+    } catch (err) {
+      setSharing('');
+      return window.alert(`Could not make the PDF: ${err?.message ?? err}`);
+    }
+    const mobile = String(data?.account?.phone ?? '').trim();
+    if (mobile) {
+      try {
+        await sendWhatsAppDocument(mobile, pdf.blob, pdf.name);
+        return settle('sent');
+      } catch (err) {
+        // Only an unreachable shop PC falls through to sharing by hand; a
+        // refusal (not on WhatsApp, link logged out) is said as it is.
+        const unreachable = err instanceof TypeError || /Cannot find Shiv Print Server/.test(String(err?.message));
+        if (!unreachable) {
+          setSharing('');
+          return window.alert(`Not sent on WhatsApp: ${err?.message ?? err}`);
+        }
+      }
+    }
+    try {
+      const how = await shareFile(pdf.blob, pdf.name, 'application/pdf');
+      return how === 'saved' ? settle('saved') : setSharing('');
+    } catch (err) {
+      setSharing('');
+      window.alert(`Could not share the PDF: ${err?.message ?? err}`);
+    }
+  }
   // Its bills' photos: their addresses kept for the bill screen, and the
   // newest downloading in the background, so a bill opens with its photo at once.
   useEffect(() => {
@@ -358,6 +413,21 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
               onClick={() => onPrint({ scope: 'party', ledgerId })}
             >
               <Printer size={16} aria-hidden="true" /> Print
+            </button>
+            <button
+              className="btn ghost"
+              onClick={sharePdf}
+              disabled={sharing === 'busy' || sharing.startsWith('photos')}
+              title={account?.phone
+                ? `Send this statement as a PDF to ${phoneDisplay(account.phone)} on WhatsApp`
+                : 'Share this statement as a PDF'}
+            >
+              <Share2 size={16} aria-hidden="true" />
+              {sharing.startsWith('photos') ? `Adding ${sharing}…`
+                : sharing === 'busy' ? (account?.phone ? 'Sending…' : 'Making PDF…')
+                : sharing === 'sent' ? 'Sent on WhatsApp'
+                : sharing === 'saved' ? 'Saved to Downloads'
+                : account?.phone ? 'WhatsApp PDF' : 'Share PDF'}
             </button>
             {rows.length || pending.length ? (
               <button
@@ -837,7 +907,9 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
       {deleting && (
         <Confirm
           title={`Delete ${deleting.vchLabel}?`}
-          body={`${account?.name} · ${shortDate(deleting.date)}. It moves to Trash, where it can be restored.`}
+          body={`${account?.name} · ${shortDate(deleting.date)}. ${
+            billFor(deleting) ? `Bill ${billFor(deleting).number} goes with it. Both move` : 'It moves'
+          } to Trash, where it can be restored.`}
           confirmLabel="Delete"
           danger
           onConfirm={() => removeVoucher({ id: deleting.voucherId ?? deleting._id })}

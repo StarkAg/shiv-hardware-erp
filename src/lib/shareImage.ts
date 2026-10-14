@@ -74,7 +74,12 @@ export async function elementToJpeg(element: ReactElement, { scale = 2, quality 
  * Returns how it went, for the message shown after.
  */
 export async function shareJpeg(blob: Blob, fileName: string): Promise<'shared' | 'saved' | 'cancelled'> {
-  const file = new File([blob], fileName, { type: 'image/jpeg' })
+  return shareFile(blob, fileName, 'image/jpeg')
+}
+
+/** The same for any file — a statement as a PDF. */
+export async function shareFile(blob: Blob, fileName: string, type: string): Promise<'shared' | 'saved' | 'cancelled'> {
+  const file = new File([blob], fileName, { type })
   if (navigator.share && navigator.canShare?.({ files: [file] })) {
     try {
       // The picture alone. A title or text rides along as WhatsApp's caption
