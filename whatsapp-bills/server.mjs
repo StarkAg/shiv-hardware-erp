@@ -17,6 +17,7 @@
  * last save, so one typed wrong can be put right or deleted before it goes.
  * The bill's own photos go as they are; a bill typed in the panel goes as a
  * picture of the printed bill, drawn here with the shop PC's own template.
+ * The pages go first, then one message saying which bill they are.
  *
  * The link is kept for good. It lives on the service's volume, so a restart
  * or an update picks it up again; a dropped connection is redialled for ever,
@@ -238,10 +239,14 @@ async function sendDue() {
     if (!media.length && item.bill) media.push({ image: await billPicture(item.bill) })
     if (!media.length) { await record('skipped', { reason: 'nothing to send' }); return }
 
-    for (const [i, m] of media.entries()) {
-      await sock.sendMessage(jid, i === 0 ? { ...m, caption: caption(item) } : m)
-      if (i < media.length - 1) await new Promise((resolve) => setTimeout(resolve, 2_000 + Math.random() * 2_000))
+    // Every page of the bill, then the line saying which bill it is, as its
+    // own message after them: the note on the first photo read as being
+    // about that page alone.
+    for (const m of media) {
+      await sock.sendMessage(jid, m)
+      await new Promise((resolve) => setTimeout(resolve, 2_000 + Math.random() * 2_000))
     }
+    await sock.sendMessage(jid, { text: caption(item) })
     await record('sent', { to: jid })
     state.lastSent = { at: new Date().toISOString(), label: item.label, name: item.name }
     log(`[bills] sent ${item.label} to ${item.name}, ${media.length} ${media.length === 1 ? 'page' : 'pages'}`)
