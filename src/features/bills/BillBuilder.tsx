@@ -1927,16 +1927,54 @@ type PanelList = { title: string; rows: PanelRow[]; highlight: number; onPick: (
 
 const ListPanelContext = createContext<(l: PanelList | null) => void>(() => {})
 
+/** Whether the panel was folded away on this computer. */
+const LIST_PANEL_KEY = 'shiv.billListPanel.folded'
+
 function TallyListPanel({ list }: { list: PanelList | null }) {
   const ref = useRef<HTMLDivElement>(null)
+  // Folded away to a strip on the right edge, for a screen that wants the
+  // room. The boxes keep their own dropdowns, so nothing is lost while it is.
+  const [folded, setFolded] = useState(() => {
+    try { return localStorage.getItem(LIST_PANEL_KEY) === '1' } catch { return false }
+  })
+  const fold = (v: boolean) => {
+    setFolded(v)
+    try { localStorage.setItem(LIST_PANEL_KEY, v ? '1' : '0') } catch { /* kept for this visit only */ }
+  }
   useEffect(() => {
     ref.current?.querySelector('[data-hl="1"]')?.scrollIntoView({ block: 'nearest' })
-  }, [list?.highlight, list?.rows.length])
+  }, [list?.highlight, list?.rows.length, folded])
+
+  if (folded) {
+    return (
+      <button
+        type="button"
+        onClick={() => fold(false)}
+        title="Show list"
+        aria-label="Show list"
+        className="no-print fixed right-0 top-0 z-30 hidden h-screen w-7 flex-col items-center gap-2 border-l border-stone-300 bg-stone-100 pt-2 text-muted hover:bg-stone-200 hover:text-stone-900 dark:border-white/15 dark:bg-stone-900 dark:hover:bg-white/10 dark:hover:text-white xl:flex"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        <span className="text-[11px] font-bold uppercase tracking-wider [writing-mode:vertical-rl]">
+          {list?.title ?? 'List'}
+        </span>
+      </button>
+    )
+  }
 
   return (
     <aside className="no-print fixed right-0 top-0 z-30 hidden h-screen w-80 flex-col border-l border-stone-300 bg-stone-50 dark:border-white/15 dark:bg-stone-900 xl:flex 2xl:w-96">
-      <div className="border-b border-stone-300 bg-stone-100 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-muted dark:border-white/15 dark:bg-white/5">
-        {list?.title ?? 'List'}
+      <div className="flex items-center justify-between gap-2 border-b border-stone-300 bg-stone-100 py-1 pl-3 pr-1 text-[11px] font-bold uppercase tracking-wider text-muted dark:border-white/15 dark:bg-white/5">
+        <span>{list?.title ?? 'List'}</span>
+        <button
+          type="button"
+          onClick={() => fold(true)}
+          title="Hide list"
+          aria-label="Hide list"
+          className="rounded p-1 hover:bg-stone-200 hover:text-stone-900 dark:hover:bg-white/10 dark:hover:text-white"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
       </div>
       <div ref={ref} className="flex-1 overflow-y-auto py-1">
         {list?.rows.length
