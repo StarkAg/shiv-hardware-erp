@@ -98,5 +98,5 @@ export function nextAdjustment() { return writing.then(read).then(state => state
 export function queuedStock(items, queue) {
   const delta = new Map()
   for (const operation of queue) delta.set(operation.ref, (delta.get(operation.ref) ?? 0) + operation.delta)
-  return items.map(item => ({ ...item, stock: Math.max(0, item.stock + (delta.get(item.ref) ?? 0)) }))
+  return items.map(item => ({ ...item, stock: item.stock + (delta.get(item.ref) ?? 0) }))
 }

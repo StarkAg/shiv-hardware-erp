@@ -12,6 +12,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('device inventory catalogue updates', () => {
+  it('shows a queued decrement below zero before it syncs', () => {
+    expect(queuedStock([{ ref: 'door', stock: 0 }], [{ ref: 'door', delta: -1 }]))
+      .toEqual([{ ref: 'door', stock: -1 }])
+  })
+
   it('discovers added products without replacing local quantities or pending taps', async () => {
     const existing = { ref: 'seed:door:signature:30:78x30', name: '30mm Signature 78 x 30', stock: 8 }
     const added = { ref: 'custom:door:signature-gold:35:81x32', name: '35mm Signature Gold 81 x 32', brand: 'Signature Gold', mm: 35, size: '81x32', category: 'door', stock: 7 }

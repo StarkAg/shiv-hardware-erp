@@ -319,7 +319,7 @@ export default function App() {
           : <ul className={`stock-list ${editing ? '' : 'stock-cards'}`}>
               {shown.map(item => <li key={item.ref}>
                 {editing ? <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
-                  <button aria-label={`Decrease ${item.name}`} disabled={item.stock <= 0} onClick={() => change(item, -1)}><StepIcon /></button>
+                  <button aria-label={`Decrease ${item.name}`} onClick={() => change(item, -1)}><StepIcon /></button>
                   <span className="quantity alpha-quantity" aria-live="polite"><span>α</span><span>{quantity(item.stock)}</span></span>
                   <button aria-label={`Increase ${item.name}`} onClick={() => change(item, 1)}><StepIcon plus /></button>
                 </div></> : <StockCard item={item} />}

@@ -544,9 +544,10 @@ export const adjustSeed = mutation({
       }
     }
     const item = (await seededStock(ctx)).find(i => i.ref === ref)!;
-    // A physical shelf count starts at zero when old bills show a deficit.
-    const qty = Math.max(0, item.stock) + delta;
-    if (qty < 0) throw new ConvexError("Stock cannot go below zero.");
+    // A negative figure records a shortage rather than hiding it. It lets the
+    // shelf be corrected from zero even when something was sold before it was
+    // counted into this app.
+    const qty = item.stock + delta;
     const at = Date.now();
     await ctx.db.insert("stockCounts", {
       ref, qty, day: today(at), at, note: `Inventory Edit: ${delta > 0 ? "+1" : "-1"}`,

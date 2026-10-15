@@ -66,12 +66,12 @@ describe('supplied plywood and door inventory', () => {
     await expect(t.mutation(api.inventory.adjustSeed, { pin, ref, delta: -1, operationId: 'phone-a-001' })).rejects.toThrow('does not match')
   })
 
-  it('does not let a shelf count become negative', async () => {
+  it('records a shortage when a shelf count goes below zero', async () => {
     const t = await initialized()
     const ref = oneSheetRef
     await t.mutation(api.inventory.adjustSeed, { pin, ref, delta: -1 })
-    await expect(t.mutation(api.inventory.adjustSeed, { pin, ref, delta: -1 })).rejects.toThrow('below zero')
-    expect((await t.query(api.inventory.seedList, {})).find(item => item.ref === ref)?.stock).toBe(0)
+    await t.mutation(api.inventory.adjustSeed, { pin, ref, delta: -1 })
+    expect((await t.query(api.inventory.seedList, {})).find(item => item.ref === ref)?.stock).toBe(-1)
   })
 
   it('applies matching bills after initialization, regardless of old catalogue IDs', async () => {
