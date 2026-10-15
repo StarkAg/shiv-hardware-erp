@@ -2887,6 +2887,7 @@ export function BillBuilder() {
   // full screen when asked. A new bill starts with nothing open.
   const [photoShown, setPhotoShown] = useState<unknown>(null)
   const [photoFull, setPhotoFull] = useState(false)
+  const listFolded = useListPanelFolded()
   const [dockSize, setDockSize] = useState<DockSize>(readDockSize)
   const [dockKey, setDockKey] = useState(0)
   // The phone queue's arrows on the docked photo (see BillDrop's stepRef).
