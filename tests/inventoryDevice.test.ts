@@ -32,4 +32,11 @@ describe('device inventory catalogue updates', () => {
       .toMatchObject({ stock: 9, brand: 'Signature Gold', name: '30mm Signature Gold 78 x 30' })
     expect(state.items.find(item => item.ref === added.ref)).toMatchObject({ stock: 7 })
   })
+
+  it('refreshes a shelf when a bill adds a new stock movement', async () => {
+    const item = { ref: 'seed:ply:signature:19:7x4', name: '19mm Signature 7 x 4', stock: 26, moves: 2, lastMove: '2026-10-13' }
+    await hydrateFromConvexOnce([item], 100)
+    await hydrateFromConvexOnce([{ ...item, stock: 41, moves: 3, lastMove: '2026-10-14' }], 200)
+    expect((await loadDeviceInventory()).items).toMatchObject([{ ref: item.ref, stock: 41, moves: 3 }])
+  })
 })

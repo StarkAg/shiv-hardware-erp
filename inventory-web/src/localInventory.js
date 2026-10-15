@@ -77,17 +77,24 @@ function serial(change) {
 }
 export function loadDeviceInventory() { return writing.then(read) }
 export function saveRemoteInventory(items) { return serial(async state => ({ ...state, items: copy(items) })) }
-/** Download quantities once; discover newly added items without replacing local counts. */
+/**
+ * Convex is the shelf total: bills add and remove stock there as soon as they
+ * are saved. A new count or bill movement refreshes that shelf on every open
+ * Inventory phone. An unchanged server response never overwrites a newer
+ * local count; unsynced device taps stay in `queue` and are layered over these
+ * totals by `queuedStock`.
+ */
+function remoteVersion(item) {
+  return `${item?.counted?.at ?? ''}|${item?.lastMove ?? ''}|${item?.moves ?? ''}`
+}
 export function hydrateFromConvexOnce(items, at = Date.now()) {
   return serial(async state => state.convexHydratedAt
     ? {
         ...state,
-        // A completed server merge replaces these shelf totals; pending taps
-        // are kept separately in queue and applied afterwards.
-        items: [
-          ...state.items.filter(saved => !/^(?:seed:ply:signature-gold:19|custom:ply:signature-gold:21):(6x3|7x4|8x4)$/.test(saved.ref)),
-          ...copy(items).filter(item => /^seed:ply:signature-gold:19:(6x3|7x4|8x4)$/.test(item.ref) || !state.items.some(saved => saved.ref === item.ref)),
-        ],
+        items: copy(items).map((remote) => {
+          const saved = state.items.find((item) => item.ref === remote.ref)
+          return saved && remoteVersion(saved) === remoteVersion(remote) ? saved : remote
+        }),
       }
     : { ...state, items: copy(items), convexHydratedAt: at, lastConvexSyncAt: at })
 }
