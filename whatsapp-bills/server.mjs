@@ -207,10 +207,9 @@ let busy = false
 let nextAt = 0
 
 async function sendDue() {
-  if (busy || Date.now() < nextAt || !sock || state.status !== 'ready') return
+  if (busy || !sock || state.status !== 'ready') return
   const [fromHour, toHour] = HOURS
   const hour = indiaHour()
-  if (hour < fromHour || hour >= toHour) return
   const db = await books().catch(() => null)
   if (!db) return
   busy = true
@@ -218,8 +217,11 @@ async function sendDue() {
   const record = (status, extra = {}) => db.mutation(anyApi.billWhatsApp.record, { voucherId: item.voucherId, status, ...extra })
   try {
     const due = await db.query(anyApi.billWhatsApp.due, { before: Date.now() - REST_MS, limit: 1 })
-    if (!due?.on || !due.items?.length || due.sentToday >= DAILY_MAX) return
+    if (!due?.items?.length || due.sentToday >= DAILY_MAX) return
     item = due.items[0]
+    // A person pressing Send now is intentional: it can go while the regular
+    // schedule is off, outside its hours, and without waiting for its gap.
+    if (!item.onDemand && (!due.on || hour < fromHour || hour >= toHour || Date.now() < nextAt)) return
     const jid = jidOf(item.phone)
     if (!jid) { await record('skipped', { reason: `not a mobile number: ${item.phone}` }); return }
     try {

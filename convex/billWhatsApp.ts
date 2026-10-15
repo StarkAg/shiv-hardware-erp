@@ -67,22 +67,33 @@ export const due = query({
     const sentToday = (
       await ctx.db.query('billWhatsApp').withIndex('by_at', (q) => q.gte('at', dayStart(before))).collect()
     ).filter((r) => r.status === 'sent').length
-    if (!on || !from) return { on, sentToday, items: [] }
+    if (!from) return { on, sentToday, items: [] }
+
+    // A person may choose one waiting bill to go now without enabling the
+    // automatic sender. The request lives in the same one-row-per-voucher log
+    // that records an actual send, so every device and the service see it.
+    const requested = new Set((await ctx.db.query('billWhatsApp').collect())
+      .filter((row) => row.status === 'requested')
+      .map((row) => String(row.voucherId)))
+    if (!on && requested.size === 0) return { on, sentToday, items: [] }
 
     const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
     if (!sale) return { on, sentToday, items: [] }
     // A bill's date can be set back a day or two from when it was typed.
     const candidates = (
       await ctx.db.query('vouchers').withIndex('by_date', (q) => q.gte('date', from - 7 * DAY)).collect()
-    ).filter((vch) => vch.typeId === sale._id && vch.status === 'final' && vch.createdAt >= from && Math.max(vch.createdAt, vch.updatedAt) <= before)
-      .sort((a, b) => a.createdAt - b.createdAt)
+    ).filter((vch) => vch.typeId === sale._id && vch.status === 'final' && vch.createdAt >= from &&
+      (requested.has(String(vch._id)) || (on && Math.max(vch.createdAt, vch.updatedAt) <= before)))
+      // A specifically requested bill comes before the automatic queue.
+      .sort((a, b) => Number(requested.has(String(b._id))) - Number(requested.has(String(a._id))) || a.createdAt - b.createdAt)
 
     const items = []
     let snapshots: Map<string, unknown> | null = null
     for (const vch of candidates) {
       if (items.length >= limit) break
       const done = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', vch._id)).unique()
-      if (done && (done.status !== 'failed' || done.attempts >= TRIES)) continue
+      const onDemand = done?.status === 'requested'
+      if (done && !onDemand && (done.status !== 'failed' || done.attempts >= TRIES)) continue
       const party = await ctx.db.get(vch.partyLedgerId)
       if (!party?.phone || !/\d{10}/.test(party.phone.replace(/\D/g, ''))) continue
       const photos = await photosOf(ctx, vch.attachments)
@@ -103,6 +114,7 @@ export const due = query({
         photos,
         bill,
         tries: done?.attempts ?? 0,
+        onDemand,
       })
     }
     return { on, sentToday, items }
@@ -178,7 +190,7 @@ export const queue = query({
       ).filter((vch) => vch.typeId === sale._id && vch.createdAt >= from).sort((a, b) => b.createdAt - a.createdAt)
       for (const vch of candidates) {
         const done = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', vch._id)).unique()
-        if (done && (done.status !== 'failed' || done.attempts >= TRIES)) continue
+        if (done && done.status !== 'requested' && (done.status !== 'failed' || done.attempts >= TRIES)) continue
         const party = await ctx.db.get(vch.partyLedgerId)
         const mobile = !!party?.phone && /\d{10}/.test(party.phone.replace(/\D/g, ''))
         waiting.push({
@@ -192,10 +204,12 @@ export const queue = query({
           held: vch.status !== 'final' ? 'Waiting for its amount' : !mobile ? 'No mobile number on the account' : null,
           tries: done?.attempts ?? 0,
           lastError: done?.status === 'failed' ? done.reason ?? '' : '',
+          requested: done?.status === 'requested',
         })
       }
     }
-    const recent = await ctx.db.query('billWhatsApp').withIndex('by_at').order('desc').take(60)
+    const recent = (await ctx.db.query('billWhatsApp').withIndex('by_at').order('desc').take(60))
+      .filter((row) => row.status !== 'requested')
     return {
       on: settings?.billWhatsAppOn === true,
       from,
@@ -219,6 +233,32 @@ export const sendAgain = mutation({
   handler: async (ctx, { voucherId }) => {
     const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
     if (row) await ctx.db.delete(row._id)
+  },
+})
+
+/**
+ * Explicitly send one eligible waiting sale, without enabling automatic
+ * WhatsApp bills. The linked service picks this request up immediately.
+ */
+export const requestNow = mutation({
+  args: { voucherId: v.id('vouchers') },
+  handler: async (ctx, { voucherId }) => {
+    const settings = await settingsOf(ctx)
+    const from = settings?.billWhatsAppFrom
+    const [sale, voucher] = await Promise.all([
+      ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique(),
+      ctx.db.get(voucherId),
+    ])
+    if (!from || !sale || !voucher || voucher.typeId !== sale._id || voucher.createdAt < from) throw new Error('This bill is not in the WhatsApp sending list.')
+    if (voucher.status !== 'final') throw new Error('Enter the final amount before sending this bill.')
+    const party = await ctx.db.get(voucher.partyLedgerId)
+    if (!party?.phone || !/\d{10}/.test(party.phone.replace(/\D/g, ''))) throw new Error('Add the customer\'s mobile number before sending this bill.')
+
+    const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
+    if (row?.status === 'sent' || row?.status === 'skipped') throw new Error('This bill has already been handled.')
+    const fields = { status: 'requested' as const, attempts: 0, at: Date.now() }
+    if (row) await ctx.db.patch(row._id, fields)
+    else await ctx.db.insert('billWhatsApp', { voucherId, ...fields })
   },
 })
 

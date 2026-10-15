@@ -793,11 +793,13 @@ export default defineSchema({
 
   /**
    * Each sale bill sent to the customer's WhatsApp, or why it was not: one
-   * row per bill (convex/billWhatsApp.ts). `to` is the chat it went to.
+   * row per bill (convex/billWhatsApp.ts). `requested` is a deliberate
+   * one-off send; it does not turn automatic sending back on. `to` is the
+   * chat it went to.
    */
   billWhatsApp: defineTable({
     voucherId: v.id("vouchers"),
-    status: v.union(v.literal("sent"), v.literal("skipped"), v.literal("failed")),
+    status: v.union(v.literal("requested"), v.literal("sent"), v.literal("skipped"), v.literal("failed")),
     to: v.optional(v.string()),
     reason: v.optional(v.string()),
     attempts: v.number(),

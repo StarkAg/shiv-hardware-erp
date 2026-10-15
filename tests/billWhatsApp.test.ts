@@ -78,9 +78,14 @@ describe('sale bills to the customer\'s WhatsApp', () => {
     await t.mutation(api.billWhatsApp.sendAgain, { voucherId: withPhoto })
     expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items.map((x) => x.label)).toContain('SAL-0041')
 
-    // Switched off, nothing goes; switched on again, it keeps its first start.
+    // Switched off, automatic sending stops. A person can still explicitly
+    // request this one voucher without turning the automatic sender on.
     await t.mutation(api.billWhatsApp.setOn, { on: false })
     expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items).toEqual([])
+    await t.mutation(api.billWhatsApp.requestNow, { voucherId: edited })
+    due = await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })
+    expect(due.on).toBe(false)
+    expect(due.items.map((x) => [x.label, x.onDemand])).toEqual([['SAL-0045', true]])
     await t.mutation(api.billWhatsApp.setOn, { on: true })
     expect((await t.query(api.billWhatsApp.status, {})).from).not.toBeNull()
   })

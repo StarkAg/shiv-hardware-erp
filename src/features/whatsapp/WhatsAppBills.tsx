@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Send } from 'lucide-react'
 import { useMutation } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -45,7 +45,9 @@ export function WhatsAppBills() {
   const link = useLink()
   const setOn = useMutation(api.billWhatsApp.setOn)
   const sendAgain = useMutation(api.billWhatsApp.sendAgain)
+  const requestNow = useMutation(api.billWhatsApp.requestNow)
   const [again, setAgain] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
+  const [sendingNow, setSendingNow] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
   const [switching, setSwitching] = useState(false)
   const [error, setError] = useState('')
 
@@ -78,10 +80,10 @@ export function WhatsAppBills() {
         {error && <p className="error" role="alert">{error}</p>}
 
         <h2 className="sectiontitle">To send</h2>
-        {queue === undefined ? <TableSkeleton cols={5} rows={3} wide={1} /> : (
+        {queue === undefined ? <TableSkeleton cols={6} rows={3} wide={1} /> : (
           <div className="table-wrap"><div className="scroller">
             <table className="ledger">
-              <thead><tr><th className="w-no">Vch</th><th>Party</th><th className="num">Amount</th><th>Saved</th><th>Waiting</th></tr></thead>
+              <thead><tr><th className="w-no">Vch</th><th>Party</th><th className="num">Amount</th><th>Saved</th><th>Waiting</th><th className="w-acts" /></tr></thead>
               <tbody>
                 {queue.waiting.map((w) => (
                   <tr key={w.voucherId} className={w.held ? 'unpriced' : undefined}>
@@ -91,14 +93,22 @@ export function WhatsAppBills() {
                     <td className="ref" data-label="Saved">{when(w.savedAt)}</td>
                     <td data-label="Waiting">
                       {w.held ? <span className="warn">{w.held}</span>
+                        : w.requested ? <span className="credit">Sending now</span>
                         : w.tries ? <span className="warn">Trying again ({w.tries} of 3): {w.lastError}</span>
                         : !queue.on ? 'Sending is off'
                         : !linked ? 'WhatsApp not linked'
                         : 'Next to go'}
                     </td>
+                    <td className="rowacts">
+                      <button className="xbtn" title={w.requested ? 'This bill is being sent' : 'Send this bill now'} aria-label={`Send ${w.label} now`}
+                        disabled={!!w.held || !!w.requested || !linked}
+                        onClick={() => setSendingNow({ voucherId: w.voucherId, label: w.label, name: w.name })}>
+                        <Send size={14} aria-hidden="true" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
-                {queue.waiting.length === 0 && <tr><td colSpan={5} className="particulars">Nothing waiting.</td></tr>}
+                {queue.waiting.length === 0 && <tr><td colSpan={6} className="particulars">Nothing waiting.</td></tr>}
               </tbody>
             </table>
           </div></div>
@@ -142,6 +152,19 @@ export function WhatsAppBills() {
               const { voucherId } = again
               setAgain(null)
               try { await sendAgain({ voucherId }) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+            }}
+          />
+        )}
+        {sendingNow && (
+          <Confirm
+            title={`Send ${sendingNow.label} now?`}
+            body={`It will go to ${sendingNow.name || 'the customer'}'s WhatsApp now. Automatic sending stays off.`}
+            confirmLabel="Send now"
+            onClose={() => setSendingNow(null)}
+            onConfirm={async () => {
+              const { voucherId } = sendingNow
+              setSendingNow(null)
+              try { await requestNow({ voucherId }) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
             }}
           />
         )}
