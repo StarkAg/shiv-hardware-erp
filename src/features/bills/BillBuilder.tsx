@@ -581,6 +581,10 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     { kind: 'fare' as const },
   ], [filtered, customFiltered, search, duplicateEntry])
 
+  // Where each fixed row sits in navOptions, so the dropdown highlights the
+  // row the keyboard and the right-hand panel mean.
+  const idxOf = (kind: 'add' | 'bill' | 'roundup' | 'fare') => navOptions.findIndex((o) => o.kind === kind)
+
   /** A fare, cartage or labour charge: a figure with a label, nothing else. */
   function pickFare() { pickCharge('Fare') }
 
@@ -1240,19 +1244,43 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                     </div>
                   )}
 
+                  {/* The typed name, as a row of its own: Create comes before the
+                      fixed rows, as the right-hand list has it. */}
+                  {!addingNew && search.trim() && !duplicateEntry && (
+                        <button
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            addingNewRef.current = true
+                            setNewName(search.trim())
+                            setNewRate(0)
+                            setAddingNew(true)
+                          }}
+                          data-hl={highlight === idxOf('add') ? '1' : undefined}
+                          onMouseEnter={() => setHighlight(idxOf('add'))}
+                          className={`flex w-full min-w-0 items-center gap-2 px-3 py-2 text-sm font-medium text-shiv-green ${
+                            highlight === idxOf('add') ? 'bg-stone-100 dark:bg-white/10' : ''
+                          }`}
+                        >
+                          <Plus size={13} className="shrink-0" />
+                          <span className="truncate">Create "{search.trim()}"</span>
+                        </button>
+                  )}
+
                   <button
                     onMouseDown={(e) => { e.preventDefault(); pickCharge('Bill') }}
-                    onMouseEnter={() => setHighlight(navOptions.length - 3)}
-                    className={`flex w-full items-center gap-2 border-t border-stone-100 px-3 py-2 text-sm dark:border-white/5 ${highlight === navOptions.length - 3 ? 'bg-stone-100 dark:bg-white/10' : ''}`}
+                    data-hl={highlight === idxOf('bill') ? '1' : undefined}
+                    onMouseEnter={() => setHighlight(idxOf('bill'))}
+                    className={`flex w-full items-center gap-2 border-t border-stone-100 px-3 py-2 text-sm dark:border-white/5 ${highlight === idxOf('bill') ? 'bg-stone-100 dark:bg-white/10' : ''}`}
                   >
                     <ReceiptText size={13} /> Bill — total amount only
                   </button>
 
                   <button
                     onMouseDown={(e) => { e.preventDefault(); pickRoundup() }}
-                    onMouseEnter={() => setHighlight(navOptions.length - 2)}
+                    data-hl={highlight === idxOf('roundup') ? '1' : undefined}
+                    onMouseEnter={() => setHighlight(idxOf('roundup'))}
                     className={`flex w-full min-w-0 items-center gap-2 border-t border-stone-100 px-3 py-2 text-sm font-medium text-danger dark:border-white/5 ${
-                      highlight === navOptions.length - 2 ? 'bg-stone-100 dark:bg-white/10' : ''
+                      highlight === idxOf('roundup') ? 'bg-stone-100 dark:bg-white/10' : ''
                     }`}
                   >
                     <Minus size={13} className="shrink-0" />
@@ -1261,9 +1289,10 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
 
                   <button
                     onMouseDown={(e) => { e.preventDefault(); pickFare() }}
-                    onMouseEnter={() => setHighlight(navOptions.length - 1)}
+                    data-hl={highlight === idxOf('fare') ? '1' : undefined}
+                    onMouseEnter={() => setHighlight(idxOf('fare'))}
                     className={`flex w-full min-w-0 items-center gap-2 border-t border-stone-100 px-3 py-2 text-sm font-medium text-stone-600 dark:border-white/5 dark:text-stone-300 ${
-                      highlight === navOptions.length - 1 ? 'bg-stone-100 dark:bg-white/10' : ''
+                      highlight === idxOf('fare') ? 'bg-stone-100 dark:bg-white/10' : ''
                     }`}
                   >
                     <Truck size={13} className="shrink-0" />
@@ -1273,25 +1302,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                   {/* ── Add new / inline form ── */}
                   <div className="border-t border-stone-100 dark:border-white/5">
                     {!addingNew ? (
-                      search.trim() && !duplicateEntry ? (
-                        <button
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            addingNewRef.current = true
-                            setNewName(search.trim())
-                            setNewRate(0)
-                            setAddingNew(true)
-                          }}
-                          data-hl={highlight === navOptions.length - 1 ? '1' : undefined}
-                          onMouseEnter={() => setHighlight(navOptions.length - 1)}
-                          className={`flex w-full min-w-0 items-center gap-2 px-3 py-2 text-sm font-medium text-shiv-green ${
-                            highlight === navOptions.length - 1 ? 'bg-stone-100 dark:bg-white/10' : ''
-                          }`}
-                        >
-                          <Plus size={13} className="shrink-0" />
-                          <span className="truncate">Add "{search.trim()}" to My Items</span>
-                        </button>
-                      ) : (
+                      search.trim() && !duplicateEntry ? null : (
                         <button
                           onMouseDown={(e) => {
                             e.preventDefault()
