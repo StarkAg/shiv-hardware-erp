@@ -2999,6 +2999,12 @@ export function BillBuilder() {
     keepPhoto.current = false
     if (keep) { keptPhotoFor.current = draft.id; return }
     setPhotoShown(null); setPhotoFull(false)
+    // The photos ticked under From the phone, and any dropped on, belong to
+    // the voucher they were chosen on. They used to stay chosen when that
+    // voucher was left unsaved, so the next bill saved took them as its own:
+    // another bill's paper attached to it with nobody choosing it there.
+    setPhotoPicked([])
+    setPhotoFiles([])
   }, [draft.id])
   // A bill opened from the books comes with its paper: the photo already on
   // it is docked beside the form at once, without a click on its thumbnail.
@@ -3848,17 +3854,23 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   async function claimPhotos() {
-    const failedClaims = [] as typeof photoPicked
+    const claimed = new Set<string>()
+    let failed = 0
     for (const p of photoPicked) {
       try {
         if (p.source === 'voucher') await claimVoucherPhoto({ id: p._id as never })
         else await claimFromPhone({ id: p._id as never })
+        claimed.add(p._id)
       } catch {
-        failedClaims.push(p)
+        failed++
       }
     }
-    setPhotoPicked(failedClaims)
-    if (failedClaims.length) toast('Bill saved, but its photo is still in the phone queue.', 'error')
+    // Only the ones filed come off the list. Setting the list outright put a
+    // photo whose filing failed back as chosen on whatever bill was open by
+    // then, the next one, which would take it on Save; and wiped any photo
+    // already chosen there.
+    setPhotoPicked((now) => now.filter((p) => !claimed.has(p._id)))
+    if (failed) toast('Bill saved, but its photo is still in the phone queue.', 'error')
   }
 
   /**
