@@ -25,6 +25,7 @@ import { printViaShop } from '../../lib/printViaShop'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
 import { indiaYear } from '../../lib/businessDate'
+import { rateFromAmount } from '../../lib/guaranteeRate'
 import { BillDock, readDockSize, type DockSize } from '../../components/BillDock'
 import BillViewerUntyped from '../ledger/components/BillViewer'
 
@@ -64,6 +65,8 @@ type SizeRow = {
   /** ₹ per sq ft; while set, the amount is worked out from it. */
   sqftRate: number | ''
   amount: number | ''
+  /** A hand-entered amount keeps its total while still showing its derived rate. */
+  amountManual?: boolean
 }
 
 // The periods offered for a card: every period the shop's PVC
@@ -216,13 +219,21 @@ function useComboOptions(guarantees: GuaranteeDocument[], brands: Brand[]): Comb
  */
 function applyRowEdit(row: SizeRow, patch: Partial<SizeRow>, rateFor: RateLookup): SizeRow {
   const next = { ...row, ...patch }
-  if ('amount' in patch) return { ...next, sqftRate: '' }
+  const sqft = rowSqft(next)
+  const totalSqft = sqft * rowQty(next)
+  // An amount may be typed first (or come from an older bill). Derive the
+  // price per square foot so staff can see and reuse it, without changing the
+  // hand-entered total when size or quantity is edited afterwards.
+  if ('amount' in patch) {
+    if (next.amount === '') return { ...next, sqftRate: '', amountManual: false }
+    return { ...next, sqftRate: rateFromAmount(next.amount, totalSqft), amountManual: true }
+  }
+  if ('sqftRate' in patch) next.amountManual = false
   if (('type' in patch || 'thickness' in patch) && !('sqftRate' in patch)) {
     const was = rateFor(row.type, row.thickness)
-    if (row.sqftRate === '' || row.sqftRate === was) next.sqftRate = rateFor(next.type, next.thickness)
+    if (!row.amountManual && (row.sqftRate === '' || row.sqftRate === was)) next.sqftRate = rateFor(next.type, next.thickness)
   }
-  const sqft = rowSqft(next)
-  if (next.sqftRate !== '' && sqft > 0) next.amount = Math.round(sqft * Number(next.sqftRate) * rowQty(next))
+  if (!next.amountManual && next.sqftRate !== '' && sqft > 0) next.amount = Math.round(totalSqft * Number(next.sqftRate))
   return next
 }
 
@@ -523,7 +534,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       .map((it) => {
         const length = splitDecimalInches(it.heightIn!)
         const height = splitDecimalInches(it.widthIn!)
-        return {
+        const row: SizeRow = {
           id: uid(),
           thickness: '',
           type: it.brandName || '',
@@ -535,6 +546,13 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
           sqftRate: it.rateSqft || '',
           amount: it.amount || '',
         }
+        // Older bills keep their total but did not always store ₹/sq ft.
+        // Show the rate derived from that total on the guarantee card.
+        if (row.sqftRate === '') {
+          row.sqftRate = rateFromAmount(row.amount, rowSqft(row) * rowQty(row))
+          row.amountManual = row.sqftRate !== ''
+        }
+        return row
       })
 
     if (imported.length) {
