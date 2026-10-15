@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useShortcuts } from '../lib/useShortcuts'
 import { isDarkMode, toggleTheme } from '../lib/theme'
 import { assetPath } from '../lib/assets'
 import {
   ChevronLeft,
+  ChevronUp,
   Moon,
   Trash2, MonitorSmartphone,
   Users,
@@ -182,7 +183,7 @@ const VOUCHERS = [
 const MOBILE_NAV_ITEMS = [
   { to: '/home', label: 'Home', icon: LayoutDashboard, match: ['/home'] },
   { to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck, match: ['/bill-flow'] },
-  { to: '/day', label: 'Day Book', icon: ReceiptText, match: ['/day', '/bills', '/cash-review'] },
+  { to: '/day', label: 'Day Book', icon: ReceiptText, match: ['/day', '/bills'] },
   { to: '/ledger', label: 'Accounts', icon: BookOpen, match: ['/ledger', '/ledgers'] },
   { to: '/cash-review', label: 'Cash', icon: Wallet, match: ['/cash-review'] },
 ] as const
@@ -205,6 +206,124 @@ function isCurrent(item: NavItem, pathname: string, search: string): boolean {
   // address now, so only the voucher's own path is left to exclude here.
   if (path === '/day' && search.startsWith('?new=')) return false
   return paths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
+
+/**
+ * The phone's bar, as on GradeX: a floating pill with one highlight that slides
+ * to the slot in use, and a More button at its end that opens everything the
+ * menu has which the five slots do not.
+ */
+function PhoneNav() {
+  const { pathname, search } = useLocation()
+  const [more, setMore] = useState(false)
+
+  // A page opened from the panel, or a press of Escape, puts it away.
+  useEffect(() => { setMore(false) }, [pathname, search])
+  useEffect(() => {
+    if (!more) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMore(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [more])
+
+  const slots = MOBILE_NAV_ITEMS.length + 1
+  const current = MOBILE_NAV_ITEMS.findIndex(({ match }) =>
+    match.some((prefix) => pathname.startsWith(prefix)),
+  )
+  // The highlight rests on More while its panel is open, as it is the page in use.
+  const lensAt = more ? slots - 1 : current
+
+  const onBar = new Set<string>(MOBILE_NAV_ITEMS.map((i) => i.to))
+  const rest = AREAS
+    .map((area) => ({ label: area.label, items: area.items.filter((i) => !onBar.has(i.to)) }))
+    .filter((area) => area.items.length > 0)
+
+  const slotClass = (on: boolean) =>
+    `relative z-10 flex h-full min-w-0 select-none flex-col items-center justify-center gap-0.5 rounded-full px-0.5 text-[10px] font-semibold leading-tight transition-colors active:scale-90 ${
+      on ? 'text-stone-950 dark:text-shiv-green' : 'text-muted'
+    }`
+
+  return (
+    <>
+      {more && (
+        <>
+          <button
+            type="button"
+            aria-label="Close more navigation"
+            className="no-print fixed inset-0 z-40 cursor-default bg-stone-950/25 md:hidden"
+            onClick={() => setMore(false)}
+          />
+          <div
+            id="phone-more-panel"
+            className="phone-more-panel no-print fixed z-50 flex flex-col overflow-y-auto rounded-2xl border border-stone-200/90 bg-stone-50 p-2 shadow-xl shadow-black/20 dark:border-white/10 dark:bg-stone-900 md:hidden"
+          >
+            {rest.map((area) => (
+              <div key={area.label} className="pb-1">
+                <div className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-muted">{area.label}</div>
+                {area.items.map((item) => {
+                  const on = isCurrent(item, pathname, search)
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className={`flex items-center gap-3 rounded-full px-3 py-2.5 text-sm font-medium transition ${
+                        on
+                          ? 'bg-shiv-green/20 text-stone-950 dark:text-shiv-green'
+                          : 'text-stone-700 active:bg-stone-200/70 dark:text-stone-200 dark:active:bg-white/10'
+                      }`}
+                    >
+                      <item.icon size={18} className="shrink-0" />
+                      <span className="flex-1">{item.label}</span>
+                      {item.badge && CONVEX_READY && <ClaimsBadge />}
+                    </Link>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <nav
+        className="phone-nav no-print fixed z-50 md:hidden"
+        aria-label="Primary navigation"
+      >
+        <div className="relative grid h-full grid-cols-6 items-center px-1">
+          {lensAt >= 0 && (
+            <span
+              aria-hidden="true"
+              className="phone-nav-lens"
+              style={{ transform: `translateX(${lensAt * 100}%)` }}
+            />
+          )}
+          {MOBILE_NAV_ITEMS.map(({ to, label, icon: Icon }, i) => (
+            <NavLink
+              key={to}
+              to={to}
+              aria-label={label}
+              title={label}
+              className={slotClass(i === lensAt)}
+            >
+              <Icon size={20} strokeWidth={i === lensAt ? 2.5 : 2} />
+              <span className="w-full truncate text-center">{label}</span>
+            </NavLink>
+          ))}
+          <button
+            type="button"
+            onClick={() => setMore((v) => !v)}
+            aria-label={more ? 'Close more navigation' : 'Open more navigation'}
+            aria-expanded={more}
+            aria-controls="phone-more-panel"
+            className={slotClass(more)}
+          >
+            <span aria-hidden="true" className="absolute left-0 top-1/2 h-6 w-px -translate-y-1/2 bg-stone-300 dark:bg-white/15" />
+            <ChevronUp size={20} className={`transition-transform duration-200 ${more ? 'rotate-180' : ''}`} />
+            <span>More</span>
+          </button>
+        </div>
+      </nav>
+    </>
+  )
 }
 
 /**
@@ -403,32 +522,7 @@ export function AppLayout() {
         </div>
       </main>
 
-      <nav
-        className="mobile-bottom-nav no-print fixed inset-x-0 z-40 grid grid-cols-5 gap-1 border-t border-stone-200/90 bg-stone-50/95 px-2 pt-1.5 shadow-[0_-4px_18px_rgba(28,25,23,0.12)] backdrop-blur-lg dark:border-white/10 dark:bg-stone-950/95 md:hidden"
-        aria-label="Primary navigation"
-      >
-        {MOBILE_NAV_ITEMS.map(({ to, label, icon: Icon, match }) => {
-          const active = match.some((prefix) => location.pathname.startsWith(prefix))
-          return (
-            <NavLink
-              key={to}
-              to={to}
-              aria-label={label}
-              title={label}
-              className={`flex min-h-[3.75rem] min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-1 text-[8px] font-semibold leading-tight select-none
-                active:scale-90 active:opacity-70
-                ${active
-                  ? 'bg-shiv-green/20 text-stone-950 dark:bg-shiv-green/20 dark:text-shiv-green'
-                  : 'text-muted'
-                }`}
-              style={{ transition: 'transform 80ms ease, opacity 80ms ease' }}
-            >
-              <Icon size={19} strokeWidth={active ? 2.5 : 2} />
-              <span className="w-full whitespace-normal text-center">{label}</span>
-            </NavLink>
-          )
-        })}
-      </nav>
+      <PhoneNav />
     </div>
   )
 }

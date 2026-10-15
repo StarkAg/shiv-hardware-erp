@@ -286,6 +286,67 @@ input[type='number'] { -moz-appearance: textfield; }
 }
 
 /*
+ * The phone's floating bar (AppLayout's PhoneNav), after GradeX's: a pill held
+ * clear of the screen's edges, with one highlight that slides to the slot in
+ * use. The page still reserves --mobile-bottom-nav-space beneath it.
+ */
+.phone-nav {
+  --phone-nav-height: 56px;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(400px, calc(100vw - 24px));
+  height: var(--phone-nav-height);
+  border-radius: calc(var(--phone-nav-height) / 2);
+  border: 1px solid rgb(231 229 228 / 0.9);
+  background: rgb(250 250 249 / 0.88);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 10px 30px rgb(28 25 23 / 0.18);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.dark .phone-nav {
+  border-color: rgb(255 255 255 / 0.12);
+  background: rgb(28 25 23 / 0.82);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 10px 30px rgb(0 0 0 / 0.4);
+}
+
+/* One slot wide, one slot over per step: 1/6 of the row it sits in. */
+.phone-nav-lens {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 4px;
+  width: calc((100% - 8px) / 6);
+  border-radius: 999px;
+  background: rgb(185 146 75 / 0.22);
+  pointer-events: none;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.phone-more-panel {
+  right: 12px;
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 56px + 10px);
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(64vh, 560px);
+  transform-origin: bottom right;
+  animation: phone-more-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes phone-more-in {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone-nav-lens { transition: none; }
+  .phone-more-panel { animation: none; }
+}
+
+/*
  * Screens that fill the window rather than scrolling: the quotation picker and
  * the guarantee card. They subtract the back bar where there is one — the
  * landing page has none, so the variable is 0 there.
