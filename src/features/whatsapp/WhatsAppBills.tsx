@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Check, RotateCcw, Send } from 'lucide-react'
-import { useMutation } from 'convex/react'
+import { Check, Eye, RotateCcw, Send } from 'lucide-react'
+import { useMutation, useQuery } from 'convex/react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -8,6 +8,9 @@ import { useLive } from '../ledger/lib/cache'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import Confirm from '../ledger/components/Confirm'
 import { TableSkeleton } from '../ledger/components/Skeleton'
+import BillViewerUntyped from '../ledger/components/BillViewer'
+import VoucherBillPreviewUntyped from '../ledger/components/VoucherBillPreview'
+import type { Bill } from '../../lib/types'
 import '../ledger/ledger.css'
 
 /** The Railway service holding the owner's WhatsApp link (whatsapp-bills/). */
@@ -16,6 +19,47 @@ const SERVICE = 'https://whatsapp-bills-production.up.railway.app'
 const when = (ms: number) => new Date(ms).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 const rupees = (n: number | null) => (n == null ? '—' : `₹${Math.round(n).toLocaleString('en-IN')}`)
 const STATUS: Record<string, string> = { sent: 'Sent', skipped: 'Not sent', failed: 'Failed' }
+
+// The ledger's viewers are plain JSX.
+const BillViewer = BillViewerUntyped as unknown as (props: {
+  voucher: unknown
+  onClose: () => void
+  toolsBefore?: React.ReactNode
+}) => JSX.Element
+const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
+  bill: Bill
+  onClose: () => void
+  actions?: React.ReactNode
+}) => JSX.Element
+
+type Waiting = { voucherId: Id<'vouchers'>; label: string; name: string; amount: number | null; needsRecipient: boolean; canSend: boolean }
+
+/**
+ * The bill as it will go: its own photos, or the typed bill drawn as it
+ * prints. Send from here asks the same question as Send in the row.
+ */
+function SeeBill({ row, onSend, onClose }: { row: Waiting; onSend: () => void; onClose: () => void }) {
+  const what = useQuery(api.billWhatsApp.preview, { voucherId: row.voucherId })
+  const send = (
+    <button type="button" className="btn" onClick={onSend} disabled={!row.canSend}>
+      <Send size={15} aria-hidden="true" /> Send
+    </button>
+  )
+  if (what === undefined) return null
+  if (what?.photos.length) {
+    return (
+      <BillViewer
+        voucher={{ vchLabel: row.label, party: row.name, amount: row.amount, attachmentUrls: what.photos }}
+        onClose={onClose}
+        toolsBefore={send}
+      />
+    )
+  }
+  if (what?.bill) return <VoucherBillPreview bill={what.bill as Bill} onClose={onClose} actions={send} />
+  return (
+    <Confirm title={`${row.label} has nothing to show`} body="No photo and no typed bill: it would not be sent." confirmLabel="Close" onClose={onClose} onConfirm={onClose} />
+  )
+}
 
 type Link = { status: string; me: string | null; hours?: number[]; dailyMax?: number; restMin?: number } | null
 
@@ -50,6 +94,7 @@ export function WhatsAppBills() {
   const markSent = useMutation(api.billWhatsApp.markSent)
   const [again, setAgain] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
   const [sendingNow, setSendingNow] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string; needsRecipient: boolean } | null>(null)
+  const [seeing, setSeeing] = useState<Waiting | null>(null)
   const [markingSent, setMarkingSent] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
   const [switching, setSwitching] = useState(false)
   const [error, setError] = useState('')
@@ -103,6 +148,10 @@ export function WhatsAppBills() {
                         : 'Next to go'}
                     </td>
                     <td className="rowacts">
+                      <button className="xbtn" title="See the bill" aria-label={`See ${w.label}`}
+                        onClick={() => setSeeing({ voucherId: w.voucherId, label: w.label, name: w.name, amount: w.amount, needsRecipient: w.needsRecipient, canSend: !w.held && !w.requested && linked })}>
+                        <Eye size={14} aria-hidden="true" />
+                      </button>
                       <button className="xbtn" title={w.requested ? 'This bill is being sent' : 'Send this bill now'} aria-label={`Send ${w.label} now`}
                         disabled={!!w.held || !!w.requested || !linked}
                         onClick={() => setSendingNow({ voucherId: w.voucherId, label: w.label, name: w.name, needsRecipient: w.needsRecipient })}>
@@ -160,6 +209,17 @@ export function WhatsAppBills() {
               const { voucherId } = again
               setAgain(null)
               try { await sendAgain({ voucherId }) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+            }}
+          />
+        )}
+        {seeing && (
+          <SeeBill
+            row={seeing}
+            onClose={() => setSeeing(null)}
+            onSend={() => {
+              const { voucherId, label, name, needsRecipient } = seeing
+              setSeeing(null)
+              setSendingNow({ voucherId, label, name, needsRecipient })
             }}
           />
         )}

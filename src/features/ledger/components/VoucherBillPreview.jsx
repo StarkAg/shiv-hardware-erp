@@ -24,7 +24,7 @@ const NARROW = 600;
 const SIDE_NARROW = 8;
 const FOOT = 44;
 
-export default function VoucherBillPreview({ bill, onClose }) {
+export default function VoucherBillPreview({ bill, onClose, actions = null }) {
   const frameRef = useRef(null);
   const bodyRef = useRef(null);
   const srcDoc = useMemo(() => buildBillHtml(bill), [bill]);
@@ -106,6 +106,7 @@ export default function VoucherBillPreview({ bill, onClose }) {
           {bill.customerName ? ` · ${bill.customerName}` : ''}
         </h2>
         <div className="billpeek-acts">
+          {actions}
           <button className="btn" onClick={print}>
             <Printer size={15} aria-hidden="true" /> Print
           </button>

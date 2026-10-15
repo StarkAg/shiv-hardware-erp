@@ -237,6 +237,23 @@ export const queue = query({
   },
 })
 
+/**
+ * What one bill will go as, to look at before pressing Send: its own photos,
+ * or for a bill typed in the panel the bill itself, drawn as it prints.
+ */
+export const preview = query({
+  args: { voucherId: v.id('vouchers') },
+  handler: async (ctx, { voucherId }) => {
+    const vch = await ctx.db.get(voucherId)
+    if (!vch) return null
+    const photos = await photosOf(ctx, vch.attachments)
+    const bill = photos.length ? null
+      : (await ctx.db.query('bills').collect())
+          .find((row) => String((row.bill as { voucherId?: string })?.voucherId ?? '') === String(voucherId))?.bill ?? null
+    return { photos, bill }
+  },
+})
+
 /** A bill sent, skipped or given up on, put back to go again. */
 export const sendAgain = mutation({
   args: { voucherId: v.id('vouchers') },
