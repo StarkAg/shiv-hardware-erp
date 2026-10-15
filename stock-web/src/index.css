@@ -92,6 +92,8 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .itemname:hover { border-color: var(--line); }
 .itemname:focus { border-color: var(--ink); background: #fff; outline: none; }
 .itemname.static:hover { border-color: transparent; }
+.editname { min-height: 36px; padding: 0 12px; border: 2px solid var(--ink); background: #fff; color: var(--ink); font: 700 15px/1 var(--sign); }
+.editname:hover { background: var(--ink); color: #fff; }
 .itemrate { display: flex; align-items: center; gap: 2px; width: 130px; color: var(--dim); font: 700 19px/1 var(--sign); }
 
 .chiprow { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, IndianRupee, Package, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, IndianRupee, Package, Plus, Trash2, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
 import type { CatalogField, ProductCategory } from '../../lib/types'
@@ -175,7 +175,6 @@ function CatalogCard({
   showSizes,
   onPatch,
   onRemoveItem,
-  onRename,
 }: {
   title: string
   isOpen: boolean
@@ -184,20 +183,10 @@ function CatalogCard({
   showSizes: boolean
   onPatch: (patch: Partial<EntryData>) => void
   onRemoveItem?: () => void
-  onRename?: (name: string) => void
 }) {
   const sizes = data.sizes ?? []
   const brands = data.brands ?? []
   const fields = data.fields ?? []
-  const [editingName, setEditingName] = useState(false)
-  const [name, setName] = useState(title)
-
-  function saveName() {
-    const next = name.trim()
-    if (next && next !== title) onRename?.(next)
-    else setName(title)
-    setEditingName(false)
-  }
 
   function addField(label: string) {
     onPatch({ fields: [...fields, { id: fieldUid(), label, values: [] }] })
@@ -220,46 +209,16 @@ function CatalogCard({
 
   return (
     <div className="overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-white/10 dark:bg-stone-900">
-      <div className="flex w-full items-center justify-between px-4 py-3">
-        {editingName ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveName()
-                if (e.key === 'Escape') { setName(title); setEditingName(false) }
-              }}
-              className="min-w-0 rounded border border-shiv-green bg-white px-2 py-0.5 text-sm font-semibold text-stone-800 dark:bg-stone-950 dark:text-white"
-              aria-label="Item name"
-            />
-            <span className="text-xs text-muted">{summary}</span>
-          </div>
-        ) : (
-          <button className="min-w-0 flex flex-1 items-center gap-2.5 text-left" onClick={onToggle}>
-            <span className="truncate font-semibold text-stone-800 dark:text-white">{title}</span>
-            <span className="text-xs text-muted">{summary}</span>
-          </button>
-        )}
-        {onRename && (
-          <button
-            onClick={() => {
-              if (editingName) saveName()
-              else { setName(title); setEditingName(true) }
-            }}
-            title={editingName ? 'Save item name' : 'Edit item name'}
-            aria-label={editingName ? 'Save item name' : 'Edit item name'}
-            className="ml-3 shrink-0 text-muted hover:text-shiv-green"
-          >
-            <Pencil size={15} />
-          </button>
-        )}
+      <button className="flex w-full items-center justify-between px-4 py-3" onClick={onToggle}>
+        <div className="flex items-center gap-2.5">
+          <span className="font-semibold text-stone-800 dark:text-white">{title}</span>
+          <span className="text-xs text-muted">{summary}</span>
+        </div>
         {isOpen
           ? <ChevronDown size={16} className="shrink-0 text-muted" />
           : <ChevronRight size={16} className="shrink-0 text-muted" />
         }
-      </div>
+      </button>
 
       {isOpen && (
         <div className="divide-y divide-stone-50 border-t border-stone-100 px-4 dark:divide-white/5 dark:border-white/10">
@@ -392,7 +351,6 @@ export function Inventory() {
               data={entry}
               showSizes
               onPatch={(patch) => updateCustomEntry(entry.id, patch)}
-              onRename={(name) => updateCustomEntry(entry.id, { name })}
               onRemoveItem={() => removeCustomEntry(entry.id)}
             />
           ))}

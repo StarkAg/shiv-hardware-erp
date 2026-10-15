@@ -211,6 +211,8 @@ function RateTable({ cat, brands, onPatch, onDelete, onAdd, query }) {
 
 function ItemCard({ entry, onPatch, onRename, onDelete, noSizes }) {
   const [field, setField] = useState('')
+  const [editingName, setEditingName] = useState(false)
+  const [name, setName] = useState(entry.name)
   const fields = entry.fields || []
 
   const setList = (key, list) => onPatch({ [key]: list })
@@ -224,24 +226,41 @@ function ItemCard({ entry, onPatch, onRename, onDelete, noSizes }) {
     setField('')
   }
 
+  function saveName() {
+    const next = name.trim()
+    if (next && next !== entry.name) onRename?.(next)
+    else setName(entry.name)
+    setEditingName(false)
+  }
+
   return (
     <div className="itemcard">
       <div className="itemhead">
-        {onRename ? (
+        {editingName ? (
           <input
             className="itemname"
             aria-label="Item name"
-            key={entry.name}
-            defaultValue={entry.name}
-            onBlur={(e) => {
-              const v = e.target.value.trim()
-              if (v && v !== entry.name) onRename(v)
-              else e.target.value = entry.name
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveName()
+              if (e.key === 'Escape') { setName(entry.name); setEditingName(false) }
             }}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
           />
         ) : (
           <span className="itemname static">{entry.name}</span>
+        )}
+        {onRename && (
+          <button
+            className="editname"
+            onClick={() => {
+              if (editingName) saveName()
+              else { setName(entry.name); setEditingName(true) }
+            }}
+          >
+            {editingName ? 'Save' : 'Edit'}
+          </button>
         )}
         <div className="itemrate">
           <span>₹</span>
