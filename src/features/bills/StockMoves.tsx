@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation } from 'convex/react'
 import { useLive } from '../ledger/lib/cache'
-import { Boxes, Check, Plus, X } from 'lucide-react'
+import { Boxes, Check, ChevronDown, Plus, X } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Bill, BillItem, StockLine } from '../../lib/types'
 import { isAmountOnlyLine, isRoundupLine } from '../../lib/types'
@@ -22,8 +22,6 @@ const uid = () => Math.random().toString(36).slice(2, 10)
  * a sale of it shows below nil until its real count is entered in Inventory.
  */
 
-/** The choice at the foot of an item list that opens the box to write a new one. */
-const NEW_ITEM = '__new__'
 
 type StockRow = { ref: string; name: string; stock: number; category?: string }
 
@@ -34,23 +32,122 @@ const GROUPS: { key: string; label: string }[] = [
 ]
 
 /**
- * "12mm Signature Gold 7 x 4" is grouped under "12mm Signature Gold": the list
- * splits by thickness and brand, so a sheet is found without reading every
- * size of every brand. A name not written that way stays under its category.
+ * "12mm Signature Gold 7 x 4" is grouped under its company, "Signature Gold":
+ * the list splits by company so a sheet is found without reading every size of
+ * every brand. Signature comes first (Signature, then Signature Gold), the
+ * other companies follow A to Z; inside a company the thinnest sheet leads. A
+ * name not written that way stays under its category.
  */
 const SIZED = /^(\d+(?:\.\d+)?)\s*mm\s+(.*?)\s+\d+(?:\.\d+)?\s*[x×]\s*\d/i
-function groupedRows(rows: StockRow[]) {
-  const groups = new Map<string, { mm: number; brand: string; rows: StockRow[] }>()
-  for (const r of rows) {
-    const m = r.name.match(SIZED)
-    const key = m ? `${m[1]}mm ${m[2]}` : ''
-    const g = groups.get(key) ?? { mm: m ? Number(m[1]) : Infinity, brand: m ? m[2] : '', rows: [] }
-    g.rows.push(r)
-    groups.set(key, g)
+type Section = { key: string; title: string; rows: StockRow[] }
+const bySize = (a: StockRow, b: StockRow) =>
+  (Number(a.name.match(SIZED)?.[1]) || Infinity) - (Number(b.name.match(SIZED)?.[1]) || Infinity)
+  || a.name.localeCompare(b.name, undefined, { numeric: true })
+function stockSections(list: StockRow[]): Section[] {
+  const out: Section[] = []
+  for (const g of GROUPS) {
+    const rows = list.filter((r) => (r.category ?? 'other') === g.key)
+    const brands = new Map<string, StockRow[]>()
+    const plain: StockRow[] = []
+    for (const r of rows) {
+      const brand = g.key === 'other' ? null : r.name.match(SIZED)?.[2]
+      if (brand) brands.set(brand, [...(brands.get(brand) ?? []), r])
+      else plain.push(r)
+    }
+    const rank = (brand: string) => (/^signature/i.test(brand) ? 0 : 1)
+    const ordered = [...brands.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+    for (const [brand, rs] of ordered) {
+      out.push({ key: `${g.key}:${brand}`, title: g.key === 'ply' ? brand : `${g.label} · ${brand}`, rows: rs.sort(bySize) })
+    }
+    if (plain.length) out.push({ key: `${g.key}:`, title: g.label, rows: plain.sort(bySize) })
   }
-  return [...groups.entries()]
-    .sort(([, a], [, b]) => a.mm - b.mm || a.brand.localeCompare(b.brand))
-    .map(([key, g]) => ({ key, rows: g.rows.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) }))
+  return out
+}
+
+/**
+ * The stock list as a dropdown of our own: the browser's own menu cannot make
+ * a company's name larger than its sizes, which is what finding a sheet needs.
+ */
+function StockPicker({ value, fallback, list, onPick, onNew }: {
+  value: string
+  fallback: string
+  list: StockRow[]
+  onPick: (ref: string) => void
+  onNew: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [find, setFind] = useState('')
+  const box = useRef<HTMLDivElement>(null)
+  const sections = useMemo(() => {
+    const q = find.trim().toLowerCase()
+    const rows = q ? list.filter((r) => q.split(/\s+/).every((w) => r.name.toLowerCase().includes(w))) : list
+    return stockSections(rows)
+  }, [list, find])
+  const chosen = list.find((r) => r.ref === value)
+
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', away)
+    box.current?.querySelector('[data-chosen="1"]')?.scrollIntoView({ block: 'center' })
+    return () => document.removeEventListener('mousedown', away)
+  }, [open])
+
+  const close = () => { setOpen(false); setFind('') }
+  return (
+    <div ref={box} className="relative min-w-0 flex-1" onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); close() } }}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-left text-sm dark:border-white/10 dark:bg-stone-900 dark:text-white"
+      >
+        <span className="min-w-0 flex-1 truncate">{chosen ? chosen.name : fallback || 'Pick an item'}</span>
+        <ChevronDown size={15} className="shrink-0 text-muted" aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 z-40 mt-1 overflow-hidden rounded-lg border border-stone-300 bg-white shadow-2xl dark:border-white/15 dark:bg-stone-900">
+          <input
+            autoFocus
+            value={find}
+            onChange={(e) => setFind(e.target.value)}
+            placeholder="Find, e.g. 12 sig 7"
+            aria-label="Find a stock item"
+            className="w-full border-b border-stone-200 bg-transparent px-3 py-2 text-sm outline-none dark:border-white/10 dark:text-white"
+          />
+          <div role="listbox" className="max-h-[60vh] overflow-y-auto">
+            {sections.map((sec) => (
+              <div key={sec.key}>
+                <div className="sticky top-0 z-10 border-y border-stone-200 bg-stone-100 px-3 py-1.5 text-base font-extrabold tracking-wide text-stone-900 dark:border-white/10 dark:bg-stone-800 dark:text-white">
+                  {sec.title}
+                </div>
+                {sec.rows.map((r) => (
+                  <button
+                    key={r.ref}
+                    type="button"
+                    role="option"
+                    aria-selected={r.ref === value}
+                    data-chosen={r.ref === value ? '1' : undefined}
+                    onClick={() => { onPick(r.ref); close() }}
+                    className={`flex w-full min-w-0 items-baseline gap-2 px-4 py-2 text-left text-[15px] hover:bg-stone-100 dark:hover:bg-white/10 ${r.ref === value ? 'bg-shiv-green/20 font-semibold' : 'text-stone-700 dark:text-stone-200'}`}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                    <span className={`shrink-0 text-xs tabular-nums ${r.stock <= 0 ? 'font-semibold text-red-600' : 'text-muted'}`}>{r.stock} in stock</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+            {!sections.length && <div className="px-3 py-3 text-sm text-muted">Nothing like that in the list.</div>}
+            <button type="button" onClick={() => { close(); onNew() }}
+              className="flex w-full items-center gap-2 border-t border-stone-200 px-3 py-2.5 text-left text-sm font-semibold text-shiv-green dark:border-white/10">
+              <Plus size={14} aria-hidden="true" /> Write a new item
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 const isBillLine = (i: BillItem) => !!i.amountOnly && /^bill$/i.test(i.description.trim())
@@ -190,26 +287,13 @@ export function StockMoves({ bill, out, onChange }: {
                     {writing.error && <span role="alert" className="text-xs font-semibold text-red-600">{writing.error}</span>}
                   </span>
                 ) : (
-                <select
+                <StockPicker
                   value={l.ref}
-                  onChange={(e) => (e.target.value === NEW_ITEM ? setWriting({ at, name: '', busy: false, error: '' }) : pick(at, e.target.value))}
-                  className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-stone-900 dark:text-white"
-                >
-                  {!row && <option value={l.ref}>{l.name || 'Pick an item'}</option>}
-                  {GROUPS.flatMap((g) => {
-                    const rows = (list ?? []).filter((r) => (r.category ?? 'other') === g.key)
-                    // Plywood and doors split by thickness and brand; the rest stays one group.
-                    const parts = g.key === 'other' ? [{ key: '', rows }] : groupedRows(rows)
-                    return parts.filter((part) => part.rows.length).map((part) => (
-                      <optgroup key={`${g.key}:${part.key}`} label={part.key ? `${g.label} · ${part.key}` : g.label}>
-                        {part.rows.map((r) => (
-                          <option key={r.ref} value={r.ref}>{r.name} · {r.stock} in stock</option>
-                        ))}
-                      </optgroup>
-                    ))
-                  })}
-                  <option value={NEW_ITEM}>Write a new item…</option>
-                </select>
+                  fallback={l.name}
+                  list={list ?? []}
+                  onPick={(ref) => pick(at, ref)}
+                  onNew={() => setWriting({ at, name: '', busy: false, error: '' })}
+                />
                 )}
                 <input
                   type="number"
