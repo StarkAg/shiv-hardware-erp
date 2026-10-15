@@ -229,11 +229,12 @@ export function WhatsAppBills() {
             body={`It will go to ${sendingNow.name || 'the customer'}'s WhatsApp now. Automatic sending stays off.`}
             confirmLabel="Send now"
             ask={sendingNow.needsRecipient ? { label: 'Customer WhatsApp number' } : undefined}
+            toggle={{ label: 'New number: send the smile, folded hands and card first' }}
             onClose={() => setSendingNow(null)}
-            onConfirm={async (phone) => {
+            onConfirm={async (phone, newNumber) => {
               const { voucherId } = sendingNow
               setSendingNow(null)
-              try { await requestNow({ voucherId, ...(phone.trim() ? { phone } : {}) }) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+              try { await requestNow({ voucherId, ...(phone.trim() ? { phone } : {}), ...(newNumber ? { newNumber } : {}) }) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
             }}
           />
         )}

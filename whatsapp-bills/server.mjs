@@ -36,8 +36,7 @@
  *   BILL_WHATSAPP_REST_MIN, BILL_WHATSAPP_DAILY_MAX, BILL_WHATSAPP_HOURS (10, 40, 9-21)
  */
 import http from 'node:http'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { readFile, rename } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 const PORT = Number(process.env.PORT || 8080)
@@ -55,48 +54,6 @@ const state = { status: 'starting', qr: null, readyAt: null, me: null, lastError
 let sock = null
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
-
-/* ── the owner's chats ───────────────────────────────────────────────────── */
-// Who the owner already has a chat with, so a customer he has written to by
-// hand is not greeted as a stranger. WhatsApp hands a linked device the
-// phone's chat list once, when it is linked; after that every message in or
-// out adds to it. Kept on the volume beside the link.
-const CHATS_FILE = path.join(path.dirname(AUTH_DIR), 'chats.json')
-const chats = { ids: new Set(), syncedAt: 0 }
-/** The chat list comes in pieces after a link: greetings wait until it has had time to arrive. */
-const SETTLE_MS = 5 * 60_000
-let saveTimer = null
-
-async function loadChats() {
-  try {
-    const kept = JSON.parse(await readFile(CHATS_FILE, 'utf8'))
-    chats.ids = new Set(kept.ids ?? [])
-    chats.syncedAt = kept.syncedAt ?? 0
-  } catch { /* none yet */ }
-}
-function saveChats() {
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    mkdir(path.dirname(CHATS_FILE), { recursive: true })
-      .then(() => writeFile(CHATS_FILE, JSON.stringify({ syncedAt: chats.syncedAt, ids: [...chats.ids] })))
-      .catch((err) => log('[chats] could not save', err?.message ?? err))
-  }, 2_000)
-}
-/** A person's chat, by number or by WhatsApp's private id, device part dropped. */
-function chatKey(jid) {
-  const m = /^([^:@]+)(?::\d+)?@(s\.whatsapp\.net|lid)$/.exec(String(jid ?? ''))
-  return m ? `${m[1]}@${m[2]}` : null
-}
-function noteChats(jids) {
-  let added = false
-  for (const jid of jids) {
-    const key = chatKey(jid)
-    if (key && !chats.ids.has(key)) { chats.ids.add(key); added = true }
-  }
-  if (added) saveChats()
-}
-const knownChat = (...jids) => jids.some((jid) => chats.ids.has(chatKey(jid)))
-const keysOf = (messages = []) => messages.flatMap((m) => [m.key?.remoteJid, m.key?.remoteJidAlt])
 
 /* ── the WhatsApp link ───────────────────────────────────────────────────── */
 const silent = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return silent } }
@@ -130,17 +87,6 @@ async function startWhatsApp() {
       markOnlineOnConnect: false,
     })
     s.ev.on('creds.update', () => { if (mine === gen) auth.saveCreds() })
-    s.ev.on('messaging-history.set', ({ chats: list = [], messages, lidPnMappings = [] }) => {
-      noteChats([
-        ...list.flatMap((c) => [c.id, c.pnJid, c.lidJid]),
-        ...keysOf(messages),
-        ...lidPnMappings.flatMap((m) => [m.lid, m.pn]),
-      ])
-      if (!chats.syncedAt) { chats.syncedAt = Date.now() + SETTLE_MS; saveChats() }
-      log(`[chats] history: ${list.length} chats, ${chats.ids.size} known`)
-    })
-    s.ev.on('chats.upsert', (list) => noteChats(list.flatMap((c) => [c.id, c.pnJid, c.lidJid])))
-    s.ev.on('messages.upsert', ({ messages }) => noteChats(keysOf(messages)))
     s.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
       if (mine !== gen) return
       if (qr) {
@@ -283,17 +229,10 @@ async function sendDue() {
     if (!item.onDemand && (!due.on || hour < fromHour || hour >= toHour || Date.now() < nextAt)) return
     const jid = jidOf(item.phone)
     if (!jid) { await record('skipped', { reason: `not a mobile number: ${item.phone}` }); return }
-    let lid = null
     try {
       const [check] = await sock.onWhatsApp(jid)
       if (check && check.exists === false) { await record('skipped', { to: jid, reason: 'not on WhatsApp' }); return }
-      lid = check?.lid ?? null
     } catch { /* the check failed: send anyway */ }
-    lid ??= await sock.signalRepository?.lidMapping?.getLIDForPN?.(jid).catch(() => null) ?? null
-    // Greeted only when this sender has not sent the number a bill and the
-    // owner has no chat with it. Until the owner's chat list has arrived
-    // nobody is greeted, rather than greeting someone he already knows.
-    const greet = item.newChat && chats.syncedAt > 0 && Date.now() >= chats.syncedAt && !knownChat(jid, lid)
 
     const media = []
     for (const photo of item.photos) {
@@ -310,7 +249,7 @@ async function sendDue() {
     // A number this sender has not written to before is greeted the way the
     // shop does it by hand: a smile, folded hands, then the visiting card.
     // The one place emoji are allowed (AGENTS.md), written as code points.
-    if (greet) {
+    if (item.newChat) {
       for (const text of ['\u{1F642}', '\u{1F64F}']) {
         await sock.sendMessage(jid, { text })
         await new Promise((resolve) => setTimeout(resolve, 1_000 + Math.random() * 1_000))
@@ -367,7 +306,7 @@ http.createServer((req, res) => {
   if (url.pathname === '/health') {
     // Read by the panel's WhatsApp page: whether the link is up, and to which number.
     res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'no-store' })
-    res.end(JSON.stringify({ ok: true, status: state.status, me: state.status === 'ready' ? state.me : null, since: state.readyAt, hours: HOURS, dailyMax: DAILY_MAX, restMin: REST_MS / 60_000, chats: { known: chats.ids.size, ready: chats.syncedAt > 0 && Date.now() >= chats.syncedAt } }))
+    res.end(JSON.stringify({ ok: true, status: state.status, me: state.status === 'ready' ? state.me : null, since: state.readyAt, hours: HOURS, dailyMax: DAILY_MAX, restMin: REST_MS / 60_000 }))
     return
   }
   if (!keyOk) { res.writeHead(404); res.end(); return }
@@ -387,7 +326,7 @@ http.createServer((req, res) => {
 }).listen(PORT, () => log(`WhatsApp Bills on :${PORT}; ${HOURS.join('-')}h, at most ${DAILY_MAX} a day, after ${REST_MS / 60_000} min`))
 
 if (!LOGIN_KEY) log('LOGIN_KEY is not set: the login page answers nobody')
-void loadChats().then(startWhatsApp).catch((err) => { setStatus('error'); state.lastError = { message: String(err?.message ?? err) }; log('[whatsapp] could not start', err) })
+void startWhatsApp().catch((err) => { setStatus('error'); state.lastError = { message: String(err?.message ?? err) }; log('[whatsapp] could not start', err) })
 setInterval(() => { void sendDue() }, 30_000)
 
 // Watchdog: a link that is neither up nor waiting for a scan for ten minutes

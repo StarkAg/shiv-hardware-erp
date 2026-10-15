@@ -806,6 +806,9 @@ export default defineSchema({
     requestedPhone: v.optional(v.string()),
     // Set when the counter confirms it was shared by hand, not by this service.
     markedSent: v.optional(v.boolean()),
+    // The counter said this is a number the owner has not written to yet: the
+    // smile, folded hands and visiting card go before the bill.
+    greet: v.optional(v.boolean()),
     attempts: v.number(),
     at: v.number(),
   })

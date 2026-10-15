@@ -51,8 +51,8 @@ describe('sale bills to the customer\'s WhatsApp', () => {
       ['SAL-0044', 'Sanjay Mahto Ji', 0, 'printed'],
     ])
     expect(due.items.map((i) => i.voucherId)).not.toContain(before)
-    // Nothing sent to Sanjay yet: his first bill comes after the greeting.
-    expect(due.items.every((i) => i.newChat)).toBe(true)
+    // The automatic sender never greets: only a Send now ticked New number does.
+    expect(due.items.every((i) => !i.newChat)).toBe(true)
 
     // Sent once. A failure is tried again, three times in all.
     await t.mutation(api.billWhatsApp.record, { voucherId: withPhoto, status: 'sent', to: '918340785465@s.whatsapp.net' })
@@ -68,10 +68,7 @@ describe('sale bills to the customer\'s WhatsApp', () => {
     // An edit makes it wait again before it goes.
     const edited = await voucher(sale, sanjay, 45, at(6 * MIN), { updatedAt: at(19 * MIN), attachments: [await photo()] })
     expect((await t.query(api.billWhatsApp.due, { before: at(15 * MIN), limit: 10 })).items).toEqual([])
-    const later = (await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items
-    expect(later.map((x) => x.voucherId)).toEqual([edited])
-    // His number has had a bill from this sender, so no greeting again.
-    expect(later[0].newChat).toBe(false)
+    expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items.map((x) => x.voucherId)).toEqual([edited])
 
     // The panel's page: what still waits and why, what happened lately, and a send again.
     const q = await t.query(api.billWhatsApp.queue, {})
@@ -95,7 +92,7 @@ describe('sale bills to the customer\'s WhatsApp', () => {
     const qWithShared = await t.query(api.billWhatsApp.queue, {})
     expect(qWithShared.waiting.find((x) => x.voucherId === shared)).toMatchObject({ needsRecipient: true, phone: '' })
     await expect(t.mutation(api.billWhatsApp.requestNow, { voucherId: shared })).rejects.toThrow('10-digit WhatsApp number')
-    await t.mutation(api.billWhatsApp.requestNow, { voucherId: shared, phone: '99345 58177' })
+    await t.mutation(api.billWhatsApp.requestNow, { voucherId: shared, phone: '99345 58177', newNumber: true })
     due = await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })
     expect(due.on).toBe(false)
     expect(due.items.map((x) => [x.label, x.phone, x.onDemand, x.shared, x.newChat])).toEqual([['SAL-0046', '9934558177', true, true, true]])

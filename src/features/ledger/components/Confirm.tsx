@@ -22,6 +22,7 @@ export default function Confirm({
   requireText,
   requireLabel,
   ask,
+  toggle,
   onConfirm,
   onClose,
 }: {
@@ -34,7 +35,9 @@ export default function Confirm({
   requireLabel?: string
   /** A code the server checks. What is typed reaches `onConfirm`. */
   ask?: { label: string; secret?: boolean }
-  onConfirm: (typed: string) => void | Promise<void>
+  /** A tick box; whether it is ticked reaches `onConfirm` as the second argument. */
+  toggle?: { label: string }
+  onConfirm: (typed: string, ticked: boolean) => void | Promise<void>
   onClose: () => void
 }) {
   // Opened from the quotation and rate screens too, which are not inside the
@@ -43,6 +46,7 @@ export default function Confirm({
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState('');
   const [secret, setSecret] = useState('');
+  const [ticked, setTicked] = useState(false);
   const [error, setError] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
   const submitting = useRef(false);
@@ -80,7 +84,7 @@ export default function Confirm({
     setBusy(true);
     setError('');
     try {
-      await onConfirm(secret);
+      await onConfirm(secret, ticked);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -125,6 +129,13 @@ export default function Confirm({
               autoComplete="off"
               spellCheck="false"
             />
+          </label>
+        )}
+
+        {toggle && (
+          <label className="check">
+            <input type="checkbox" checked={ticked} disabled={busy} onChange={(e) => setTicked(e.target.checked)} />
+            {toggle.label}
           </label>
         )}
 

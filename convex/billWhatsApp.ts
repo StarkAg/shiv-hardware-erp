@@ -76,15 +76,10 @@ export const due = query({
     // A person may choose one waiting bill to go now without enabling the
     // automatic sender. The request lives in the same one-row-per-voucher log
     // that records an actual send, so every device and the service see it.
-    const log = await ctx.db.query('billWhatsApp').collect()
-    const requested = new Set(log
+    const requested = new Set((await ctx.db.query('billWhatsApp').collect())
       .filter((row) => row.status === 'requested')
       .map((row) => String(row.voucherId)))
-    // Numbers this sender has put a bill in before. A new one is greeted
-    // first, as the shop does by hand: a smile, folded hands, the card.
-    const greeted = new Set(log
-      .filter((row) => row.status === 'sent' && !row.markedSent && row.to)
-      .map((row) => mobile(row.to).slice(-10)))
+
     if (!on && requested.size === 0) return { on, sentToday, items: [] }
 
     const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
@@ -128,7 +123,9 @@ export const due = query({
         bill,
         tries: done?.attempts ?? 0,
         onDemand,
-        newChat: !greeted.has(mobile(phone).slice(-10)),
+        // Only when the counter said so for this send: the sender cannot see
+        // which numbers the owner already has a chat with.
+        newChat: onDemand && done?.greet === true,
         shared: needsRecipient(party.name),
       })
     }
@@ -276,8 +273,8 @@ export const sendAgain = mutation({
  * WhatsApp bills. The linked service picks this request up immediately.
  */
 export const requestNow = mutation({
-  args: { voucherId: v.id('vouchers'), phone: v.optional(v.string()) },
-  handler: async (ctx, { voucherId, phone }) => {
+  args: { voucherId: v.id('vouchers'), phone: v.optional(v.string()), newNumber: v.optional(v.boolean()) },
+  handler: async (ctx, { voucherId, phone, newNumber }) => {
     const settings = await settingsOf(ctx)
     const from = settings?.billWhatsAppFrom
     const [sale, voucher] = await Promise.all([
@@ -295,7 +292,7 @@ export const requestNow = mutation({
 
     const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
     if (row?.status === 'sent' || row?.status === 'skipped') throw new Error('This bill has already been handled.')
-    const fields = { status: 'requested' as const, attempts: 0, at: Date.now(), ...(shared ? { requestedPhone } : {}) }
+    const fields = { status: 'requested' as const, attempts: 0, at: Date.now(), greet: newNumber === true, ...(shared ? { requestedPhone } : {}) }
     if (row) await ctx.db.patch(row._id, fields)
     else await ctx.db.insert('billWhatsApp', { voucherId, ...fields })
   },
