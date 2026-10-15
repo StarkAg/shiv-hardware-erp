@@ -53,6 +53,16 @@ async function photosOf(ctx: QueryCtx, docs: Attachment[]) {
   return out
 }
 
+/**
+ * The papers a customer can be sent by hand: a sale and the receipts, refunds
+ * and returns that go with it. The automatic sender stays with sales only. A
+ * purchase or a payment out is the shop's own paper with a supplier.
+ */
+const SENDABLE = new Set(['Sale', 'Receipt', 'Refund', 'Goods Return', 'Discount'])
+async function typesOf(ctx: QueryCtx) {
+  return new Map((await ctx.db.query('voucherTypes').collect()).map((t) => [String(t._id), t]))
+}
+
 async function settingsOf(ctx: QueryCtx) {
   return await ctx.db.query('settings').withIndex('by_key', (q) => q.eq('key', SETTINGS_KEY)).unique()
 }
@@ -80,12 +90,14 @@ export const due = query({
 
     if ((!on || !from) && requested.size === 0) return { on, sentToday, items: [] }
 
-    const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
+    const types = await typesOf(ctx)
+    const sale = [...types.values()].find((t) => t.name === 'Sale')
     if (!sale) return { on, sentToday, items: [] }
     // Asked for by hand: looked up one by one, so a sale from before the
-    // sending was switched on can go too (Older bills on the panel's page).
+    // sending was switched on can go too, and a receipt (Older bills on the
+    // panel's page).
     const asked = (await Promise.all([...requested].map((id) => ctx.db.get(id as Id<'vouchers'>))))
-      .filter((vch): vch is Doc<'vouchers'> => !!vch && vch.typeId === sale._id && vch.status === 'final')
+      .filter((vch): vch is Doc<'vouchers'> => !!vch && SENDABLE.has(types.get(String(vch.typeId))?.name ?? '') && vch.status === 'final')
       .sort((a, b) => a.createdAt - b.createdAt)
     // The automatic queue: only sales made after it was switched on. A bill's
     // date can be set back a day or two from when it was typed.
@@ -117,9 +129,12 @@ export const due = query({
         bill = snapshots.get(String(vch._id)) ?? null
         if (!bill) continue
       }
+      const type = types.get(String(vch.typeId))!
       items.push({
         voucherId: vch._id,
-        label: label(sale.abbr, vch.voucherNo),
+        label: label(type.abbr, vch.voucherNo),
+        // Sale, Receipt…: the note under it says which.
+        kind: type.name,
         date: vch.date,
         amount: vch.amount ?? null,
         name: bare(party.name),
@@ -199,7 +214,9 @@ export const queue = query({
   handler: async (ctx) => {
     const settings = await settingsOf(ctx)
     const from = settings?.billWhatsAppFrom ?? null
-    const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
+    const types = await typesOf(ctx)
+    const sale = [...types.values()].find((t) => t.name === 'Sale')
+    const labelOf = (vch: Doc<'vouchers'>) => label(types.get(String(vch.typeId))?.abbr ?? '', vch.voucherNo)
     const waiting = []
     if (sale) {
       const recent = from ? (
@@ -211,7 +228,7 @@ export const queue = query({
         (await ctx.db.query('billWhatsApp').collect())
           .filter((row) => row.status === 'requested' && !seen.has(String(row.voucherId)))
           .map((row) => ctx.db.get(row.voucherId)),
-      )).filter((vch): vch is Doc<'vouchers'> => !!vch && vch.typeId === sale._id)
+      )).filter((vch): vch is Doc<'vouchers'> => !!vch && SENDABLE.has(types.get(String(vch.typeId))?.name ?? ''))
       const candidates = [...recent, ...asked].sort((a, b) => b.createdAt - a.createdAt)
       for (const vch of candidates) {
         const done = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', vch._id)).unique()
@@ -222,7 +239,7 @@ export const queue = query({
         waiting.push({
           voucherId: vch._id,
           partyLedgerId: vch.partyLedgerId,
-          label: label(sale.abbr, vch.voucherNo),
+          label: labelOf(vch),
           name: bare(party?.name),
           phone: shared ? '' : party?.phone ?? '',
           amount: vch.amount ?? null,
@@ -247,7 +264,7 @@ export const queue = query({
         const party = vch ? await ctx.db.get(vch.partyLedgerId) : null
         return {
           voucherId: r.voucherId, status: r.status, at: r.at, reason: r.reason ?? '', attempts: r.attempts, markedSent: r.markedSent === true,
-          name: bare(party?.name), label: vch && sale ? label(sale.abbr, vch.voucherNo) : 'Deleted bill',
+          name: bare(party?.name), label: vch ? labelOf(vch) : 'Deleted bill',
           amount: vch?.amount ?? null,
         }
       })),
@@ -280,17 +297,24 @@ export const preview = query({
 export const older = query({
   args: { partyLedgerId: v.id('ledgers') },
   handler: async (ctx, { partyLedgerId }) => {
-    const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
-    if (!sale) return []
+    const types = await typesOf(ctx)
     const party = await ctx.db.get(partyLedgerId)
-    const sales = (await ctx.db.query('vouchers').withIndex('by_party', (q) => q.eq('partyLedgerId', partyLedgerId)).collect())
-      .filter((vch) => vch.typeId === sale._id)
-      .sort((a, b) => b.date - a.date || b.voucherNo - a.voucherNo)
-    return await Promise.all(sales.map(async (vch) => {
+    const papers = (await ctx.db.query('vouchers').withIndex('by_party', (q) => q.eq('partyLedgerId', partyLedgerId)).collect())
+      .filter((vch) => SENDABLE.has(types.get(String(vch.typeId))?.name ?? ''))
+      .sort((a, b) => b.date - a.date || b.createdAt - a.createdAt)
+    // A paper typed in the panel goes as the bill drawn; one with neither that
+    // nor a photo has nothing to send.
+    const drawn = papers.some((vch) => !vch.attachments.length)
+      ? new Set((await ctx.db.query('bills').collect()).map((row) => String((row.bill as { voucherId?: string })?.voucherId ?? '')))
+      : new Set<string>()
+    return await Promise.all(papers.map(async (vch) => {
       const done = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', vch._id)).unique()
+      const type = types.get(String(vch.typeId))!
       return {
         voucherId: vch._id,
-        label: label(sale.abbr, vch.voucherNo),
+        label: label(type.abbr, vch.voucherNo),
+        kind: type.name,
+        hasPicture: vch.attachments.length > 0 || drawn.has(String(vch._id)),
         date: vch.date,
         amount: vch.amount ?? null,
         name: bare(party?.name),
@@ -321,13 +345,11 @@ export const sendAgain = mutation({
 export const requestNow = mutation({
   args: { voucherId: v.id('vouchers'), phone: v.optional(v.string()), newNumber: v.optional(v.boolean()) },
   handler: async (ctx, { voucherId, phone, newNumber }) => {
-    // Any sale, however old: a person asked for this one. Only the automatic
-    // sender is held to the sales made after it was switched on.
-    const [sale, voucher] = await Promise.all([
-      ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique(),
-      ctx.db.get(voucherId),
-    ])
-    if (!sale || !voucher || voucher.typeId !== sale._id) throw new Error('Only a sale bill can be sent on WhatsApp.')
+    // Any sale or receipt, however old: a person asked for this one. Only the
+    // automatic sender is held to the sales made after it was switched on.
+    const voucher = await ctx.db.get(voucherId)
+    const type = voucher ? await ctx.db.get(voucher.typeId) : null
+    if (!voucher || !SENDABLE.has(type?.name ?? '')) throw new Error('Only a customer\'s bill or receipt can be sent on WhatsApp.')
     if (voucher.status !== 'final') throw new Error('Enter the final amount before sending this bill.')
     const party = await ctx.db.get(voucher.partyLedgerId)
     const shared = needsRecipient(party?.name)

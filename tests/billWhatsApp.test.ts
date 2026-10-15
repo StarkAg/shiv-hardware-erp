@@ -115,8 +115,14 @@ describe('sale bills to the customer\'s WhatsApp', () => {
     await expect(t.mutation(api.billWhatsApp.requestNow, { voucherId: before })).rejects.toThrow('already being sent')
     await t.mutation(api.billWhatsApp.record, { voucherId: before, status: 'sent', to: '918340785465@s.whatsapp.net' })
     expect((await t.query(api.billWhatsApp.older, { partyLedgerId: sanjay })).find((o) => o.voucherId === before)).toMatchObject({ status: 'sent' })
+    // A receipt with its photo can be sent by hand too; the automatic sender never takes one.
+    const receiptType = await t.run((ctx) => ctx.db.insert('voucherTypes', { name: 'Receipt', abbr: 'RCT', sort: 3 }))
+    const receipt = await voucher(receiptType, sanjay, 193, now - 30 * MIN, { attachments: [await photo()] })
+    expect((await t.query(api.billWhatsApp.older, { partyLedgerId: sanjay })).find((o) => o.voucherId === receipt)).toMatchObject({ label: 'RCT-0193', kind: 'Receipt', hasPicture: true })
+    await t.mutation(api.billWhatsApp.requestNow, { voucherId: receipt })
+    expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items.map((x) => [x.label, x.kind])).toEqual([['RCT-0193', 'Receipt']])
     // A purchase is never sendable, old or new.
     const bought = await voucher(purchase, supplier, 8, now - 90 * MIN)
-    await expect(t.mutation(api.billWhatsApp.requestNow, { voucherId: bought })).rejects.toThrow('Only a sale bill')
+    await expect(t.mutation(api.billWhatsApp.requestNow, { voucherId: bought })).rejects.toThrow('bill or receipt')
   })
 })

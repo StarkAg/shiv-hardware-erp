@@ -85,7 +85,7 @@ function OlderBills({ linked, onSee, onSend }: {
 
   return (
     <>
-      <h2 className="sectiontitle">Older bills</h2>
+      <h2 className="sectiontitle">Older bills and receipts</h2>
       <div className="toolbar">
         <input
           className="partysearch"
@@ -114,7 +114,7 @@ function OlderBills({ linked, onSee, onSend }: {
             <tbody>
               {bills.map((b) => {
                 const noPhone = !b.needsRecipient && !/\d{10}/.test(b.phone.replace(/\D/g, ''))
-                const held = !b.final ? 'Waiting for its amount' : noPhone ? 'No mobile number on the account' : null
+                const held = !b.final ? 'Waiting for its amount' : !b.hasPicture ? 'No photo to send' : noPhone ? 'No mobile number on the account' : null
                 const row: Waiting = { voucherId: b.voucherId, label: b.label, name: b.name, amount: b.amount, needsRecipient: b.needsRecipient, canSend: !held && b.status !== 'requested' && linked }
                 return (
                   <tr key={b.voucherId}>
@@ -139,7 +139,7 @@ function OlderBills({ linked, onSee, onSend }: {
                   </tr>
                 )
               })}
-              {bills.length === 0 && <tr><td colSpan={5} className="particulars">No sales for {party.name}.</td></tr>}
+              {bills.length === 0 && <tr><td colSpan={5} className="particulars">No bills or receipts for {party.name}.</td></tr>}
             </tbody>
           </table>
         </div></div>
