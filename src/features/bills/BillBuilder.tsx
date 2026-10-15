@@ -1,7 +1,7 @@
 import { useState, useDeferredValue, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { confirmPostingDate } from '../../lib/dateCheck'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, IndianRupee, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, Trash2, Truck, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, IndianRupee, Loader2, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, ScanText, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { WhatsAppSent } from '../../components/WhatsAppSent'
 import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
@@ -60,13 +60,13 @@ const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
   onClose: () => void
 }) => JSX.Element
 import type { Bill, BillItem, ProductCategory } from '../../lib/types'
-import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS, isQuotation, isBuyingBill, nextQuoteNumber, DEFAULT_PAYMENT_MODE } from '../../lib/types'
+import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS, isQuotation, isBuyingBill, nextQuoteNumber, DEFAULT_PAYMENT_MODE, SHOP } from '../../lib/types'
 import type { BillKind } from '../../lib/types'
 import { SiteSizesNote } from './WorkOrders'
 import { DEFAULT_GST_RATE, GST_RATES, handLines, withCharges, type BillCharges } from '../../lib/billCharges'
 import { MONEY_KINDS, buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
 import { deviceId, deviceName } from '../../lib/device'
-import { useMutation, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 // The day book is the ledger's table, so it uses the ledger's own styling and
 // formatters rather than a second set that would drift from them.
@@ -81,6 +81,7 @@ import { keepTyped, rateForUnit, withUnitRate } from '../../lib/linePick'
 import { itemHistory, recallList, type ItemHistory, type RecalledItem } from '../../lib/itemHistory'
 import { lastSoldRates, openingRate, type SoldRate } from '../../lib/rateFill'
 import { canonicalUnit, foldName, isWithoutBillParty } from '../../../convex/lib/text'
+import { numberToFill, parseContactRead, type ContactRead, type ReadNumber } from '../../../convex/lib/contactRead'
 import { catalogChangesFor } from '../../lib/learnCatalog'
 import { paidByDefault, withPaidDefault } from '../../lib/paidDefault'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
@@ -89,6 +90,7 @@ import { convexEnabled, withTimeout } from '../../lib/convexSync'
 import { Button, DropDown } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import { queueBillPhotos } from '../../lib/billPhotoOutbox'
+import { photoAsJpeg } from '../../lib/photoAsJpeg'
 import { knownPapers, partyPaperKnown } from '../../lib/paperUrls'
 import { BillDock, readDockSize, type DockSize } from '../../components/BillDock'
 import { postingTrouble } from '../../lib/postOutbox'
@@ -3114,19 +3116,112 @@ export function BillBuilder() {
   // However the voucher was opened — the name typed, picked, or the voucher
   // started from the account itself — an empty box takes the account's
   // number, so the bill carries it and it need not be asked.
+  // A box holding only what the photo reader put there (below) counts as
+  // empty here: the account's own number outranks a reading.
   useEffect(() => {
     if (!contactOnFile) return
-    setDraft((d) => (
-      (!d.customerPhone && contactOnFile.phone) || (!d.customerUid && contactOnFile.uid)
+    setDraft((d) => {
+      const soft = photoFilled.current.id === d.id ? photoFilled.current : undefined
+      const phone = d.customerPhone && d.customerPhone !== soft?.phone ? d.customerPhone : ''
+      const uid = d.customerUid && d.customerUid !== soft?.uid ? d.customerUid : ''
+      return (!phone && contactOnFile.phone && d.customerPhone !== contactOnFile.phone)
+        || (!uid && contactOnFile.uid && d.customerUid !== contactOnFile.uid)
         ? {
             ...d,
-            customerPhone: d.customerPhone || contactOnFile.phone,
-            customerUid: d.customerUid || contactOnFile.uid,
+            customerPhone: phone || contactOnFile.phone || d.customerPhone,
+            customerUid: uid || contactOnFile.uid || d.customerUid,
           }
-        : d))
+        : d
+    })
   }, [contactOnFile])
   const phoneKnown = !!contactOnFile?.phone && !changeContact && (draft.customerPhone ?? '') === contactOnFile.phone
   const uidKnown = !!contactOnFile?.uid && !changeContact && (draft.customerUid ?? '') === contactOnFile.uid
+
+  /**
+   * The customer's mobile and Aadhaar, read off each bill photo as it is
+   * attached (convex/ai.ts readContact). A whole number goes into an empty box
+   * only — never over one typed, never where the account has its own — and
+   * what was read is shown under the box either way, so a misreading is seen
+   * before the bill is saved. A box still holding the reading is yellow.
+   */
+  const readContactAi = useAction(api.ai.readContact)
+  const [contactRead, setContactRead] = useState<ContactRead & { id: string; reading: number }>({ id: '', reading: 0, phones: [], uids: [] })
+  const photoFilled = useRef<{ id: string; phone: string; uid: string }>({ id: '', phone: '', uid: '' })
+  const contactTried = useRef<{ id: string; keys: Set<string> }>({ id: '', keys: new Set() })
+  const contactOnFileRef = useRef(contactOnFile)
+  contactOnFileRef.current = contactOnFile
+  useEffect(() => {
+    if (isSupplierVoucher) return
+    const id = draft.id
+    if (contactTried.current.id !== id) contactTried.current = { id, keys: new Set() }
+    const tried = contactTried.current.keys
+    const fresh = [
+      ...photoPicked.map((p) => ({ key: `s:${p.storageId}`, storageId: p.storageId, file: undefined as File | undefined })),
+      ...photoFiles
+        .filter((f) => f.type.startsWith('image/'))
+        .map((f) => ({ key: `f:${f.name}:${f.size}:${f.lastModified}`, storageId: undefined as string | undefined, file: f })),
+    ].filter((p) => !tried.has(p.key))
+    if (!fresh.length) return
+    for (const p of fresh) tried.add(p.key)
+    // Both numbers already in their boxes: nothing a reading could fill.
+    const now = draftRef.current
+    if (now.id === id && now.customerPhone && now.customerUid) return
+
+    for (const photo of fresh) {
+      setContactRead((r) => (r.id === id ? { ...r, reading: r.reading + 1 } : { id, reading: 1, phones: [], uids: [] }))
+      ;(async () => {
+        const result = photo.storageId
+          ? await readContactAi({ storageId: photo.storageId as never })
+          : await readContactAi({ jpeg: await photoAsJpeg(photo.file!) })
+        if (!result.ok) { console.warn('Reading the numbers off the photo:', result.error); return null }
+        return parseContactRead(result, SHOP.phones.map((n) => n.number))
+      })()
+        .catch((err) => { console.warn('Reading the numbers off the photo:', err); return null })
+        .then((read) => {
+          setContactRead((r) => {
+            if (r.id !== id) return r
+            const merge = (a: ReadNumber[], b: ReadNumber[]) => [...a, ...b.filter((x) => !a.some((y) => (y.number ?? y.raw) === (x.number ?? x.raw)))]
+            return { ...r, reading: Math.max(0, r.reading - 1), phones: merge(r.phones, read?.phones ?? []), uids: merge(r.uids, read?.uids ?? []) }
+          })
+          if (!read) return
+          setDraft((d) => {
+            if (d.id !== id) return d
+            const onFile = contactOnFileRef.current
+            const phone = onFile?.phone ? null : numberToFill(d.customerPhone, read.phones)
+            const uid = onFile?.uid ? null : numberToFill(d.customerUid, read.uids)
+            if (!phone && !uid) return d
+            photoFilled.current = {
+              id,
+              phone: phone ?? (photoFilled.current.id === id ? photoFilled.current.phone : ''),
+              uid: uid ?? (photoFilled.current.id === id ? photoFilled.current.uid : ''),
+            }
+            return { ...d, ...(phone ? { customerPhone: phone } : {}), ...(uid ? { customerUid: uid } : {}) }
+          })
+        })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoPicked, photoFiles, draft.id, isSupplierVoucher])
+  const readHere = contactRead.id === draft.id ? contactRead : undefined
+  const phoneFromPhoto = photoFilled.current.id === draft.id && !!draft.customerPhone && draft.customerPhone === photoFilled.current.phone
+  const uidFromPhoto = photoFilled.current.id === draft.id && !!draft.customerUid && draft.customerUid === photoFilled.current.uid
+  /** What the photo said, under the box it belongs to. A whole number is a button that puts it in the box. */
+  const photoReadLine = (read: ReadNumber[], put: (n: string) => void, showReading: boolean) => {
+    if (!read.length && !(showReading && readHere?.reading)) return null
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted tabular-nums">
+        {showReading && readHere?.reading
+          ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-label="Reading the photo" />
+          : <ScanText className="h-3.5 w-3.5 shrink-0" aria-label="Read off the photo" />}
+        {read.map((r) => r.number
+          ? (
+            <button key={r.raw} type="button" onClick={() => put(r.number!)} className="font-semibold text-stone-700 underline hover:text-stone-900 dark:text-stone-200 dark:hover:text-white">
+              {r.raw}
+            </button>
+          )
+          : <span key={r.raw} className="line-through">{r.raw}</span>)}
+      </div>
+    )
+  }
 
   const photoLabel = isMoneyVoucher ? 'Receipt photo' : 'Bill photo'
   const photoCount = (draft.attachments?.length ?? 0) + photoFiles.length + photoPicked.length
@@ -4344,6 +4439,19 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 </button>
               </div>
             )}
+            {/* A number on the photo that is not the account's, under the
+                account's own: the box is not shown, so it is shown here. */}
+            {!isSupplierVoucher && contactOnFile && (phoneKnown || uidKnown) && (
+              <div className="pl-11">
+                {photoReadLine([
+                  ...(phoneKnown ? (readHere?.phones ?? []).filter((r) => r.number !== contactOnFile.phone) : []),
+                  ...(uidKnown ? (readHere?.uids ?? []).filter((r) => r.number !== contactOnFile.uid) : []),
+                ], (n) => {
+                  setChangeContact(true)
+                  setDraft((d) => (n.length === 12 ? { ...d, customerUid: n } : { ...d, customerPhone: n }))
+                }, phoneKnown && uidKnown)}
+              </div>
+            )}
             {showCust && custMatches.length > 0 && (draft.customerName ?? '').trim() && (
               <div className="absolute top-full left-0 right-0 z-30 mt-0.5 max-h-64 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl dark:border-white/10 dark:bg-stone-800">
                 {custMatches.map((c, i) => (
@@ -4393,11 +4501,14 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 setDraft((d) => ({ ...d, customerPhone: v }))
               }}
               className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors dark:bg-stone-800 dark:text-white ${
-                (draft.customerPhone ?? '').length === 10
+                phoneFromPhoto
+                  ? 'border-[#ffcc00] bg-[#fff6c2] text-black dark:border-[#ffcc00]'
+                  : (draft.customerPhone ?? '').length === 10
                   ? 'border-green-500 bg-green-50 dark:border-green-500'
                   : 'border-stone-200 bg-white dark:border-white/10'
               }`}
             />
+            {photoReadLine(readHere?.phones ?? [], (n) => setDraft((d) => ({ ...d, customerPhone: n })), true)}
           </div>
           )}
           {/* Under the phone box, or in its place when the account's own number
@@ -4479,11 +4590,14 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 setDraft((d) => ({ ...d, customerUid: v }))
               }}
               className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors dark:bg-stone-800 dark:text-white ${
-                (draft.customerUid ?? '').length === 12
+                uidFromPhoto
+                  ? 'border-[#ffcc00] bg-[#fff6c2] text-black dark:border-[#ffcc00]'
+                  : (draft.customerUid ?? '').length === 12
                   ? 'border-green-500 bg-green-50 dark:border-green-500'
                   : 'border-stone-200 bg-white dark:border-white/10'
               }`}
             />
+            {photoReadLine(readHere?.uids ?? [], (n) => setDraft((d) => ({ ...d, customerUid: n })), phoneKnown)}
           </div>
           )}
           <div>

@@ -33,6 +33,10 @@ function bare(raw: string): string {
 
 /** A whole Indian mobile number, or null. `own` are the shop's own numbers. */
 export function parseMobile(raw: string, own: readonly string[] = []): string | null {
+  // A first group of three to five digits starting 0 is an STD code: 0651
+  // 2234567 is a Ranchi landline, and 06553 is Ramgarh's. Its 0 dropped, what
+  // is left can look just like a mobile.
+  if (/^\s*\(?0\d{2,4}[\s\-./)]/.test(raw)) return null
   let s = bare(raw)
   if (s.startsWith('+')) s = s.slice(1)
   if (!/^\d+$/.test(s)) return null

@@ -482,3 +482,103 @@ export const readNamesAhead = action({
     return { started: waiting.length };
   },
 });
+
+/* ------------------------------------------------------------------ */
+/* the customer's numbers, and nothing else                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The counter writes the customer's mobile, and often the Aadhaar, on the bill
+ * itself. Read off the photo as it is attached, they save typing two long
+ * numbers — and a sale bill with no mobile is held back from WhatsApp.
+ *
+ * The reader returns what is written and nothing more; the bill screen decides
+ * what fills a box (convex/lib/contactRead.ts), so a misread digit can only
+ * ever reach an empty box with the reading shown beside it.
+ */
+const CONTACT_TOOL: Anthropic.Tool = {
+  name: "customer_numbers",
+  description: "Give the customer's phone and Aadhaar numbers exactly as written on the slip.",
+  input_schema: {
+    type: "object",
+    properties: {
+      phones: {
+        type: "array",
+        items: { type: "string" },
+        description: "The customer's phone numbers, digits as written, '?' for any digit you cannot read. Empty when there is none.",
+      },
+      uids: {
+        type: "array",
+        items: { type: "string" },
+        description: "The customer's 12-digit Aadhaar (UID) numbers, digits as written, '?' for any digit you cannot read. Empty when there is none.",
+      },
+    },
+    required: ["phones", "uids"],
+    additionalProperties: false,
+  },
+};
+
+const CONTACT_SYSTEM = `You read a handwritten bill from a hardware shop in Ramgarh, Jharkhand, India, for one thing: the customer's phone number and Aadhaar number, where the counter has written them on it.
+
+- A phone number is ten digits, usually starting 6, 7, 8 or 9, often written near the customer's name, sometimes as "Mob", "Ph", "M" or with +91 in front. A customer may have two.
+- An Aadhaar number is twelve digits, usually written in three groups of four, sometimes labelled "Aadhar", "Adhar", "UID" or "AD".
+- Copy the digits exactly as written. Where a digit is genuinely unreadable, write ? in its place. Never fill in a digit you cannot see, never correct a number to make it look right, and never pad or drop digits to reach ten or twelve.
+- Not the customer's: phone numbers printed on a letterhead, the shop's own numbers, GSTIN, bill or serial numbers, dates, quantities, sizes, rates and amounts.
+- Leave a list empty when there is no such number on the slip.`;
+
+/** Reads one bill photo for the customer's numbers. */
+export const readContact = action({
+  args: {
+    storageId: v.optional(v.id("_storage")),
+    // A photo chosen from the computer, not yet uploaded: a JPEG, base64.
+    jpeg: v.optional(v.string()),
+  },
+  handler: async (ctx, { storageId, jpeg }): Promise<{ ok: true; phones: string[]; uids: string[] } | { ok: false; error: string }> => {
+    try {
+      let page: { data: string; media_type: ReturnType<typeof imageType> }
+      if (storageId) {
+        const blob = await ctx.storage.get(storageId);
+        if (!blob) throw new Error("That photo is no longer in storage");
+        const bytes = Buffer.from(await blob.arrayBuffer());
+        page = { data: bytes.toString("base64"), media_type: imageType(bytes) };
+      } else if (jpeg) {
+        page = { data: jpeg, media_type: imageType(Buffer.from(jpeg.slice(0, 32), "base64")) };
+      } else {
+        throw new Error("No photo given");
+      }
+
+      const apiKey = process.env.MESH_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("no api key");
+      const client = new Anthropic({ apiKey, baseURL: BASE_URL });
+
+      const response = await client.messages.create({
+        model: MODEL,
+        max_tokens: 300,
+        system: CONTACT_SYSTEM,
+        tools: [CONTACT_TOOL],
+        tool_choice: { type: "tool", name: "customer_numbers" },
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image" as const, source: { type: "base64" as const, media_type: page.media_type, data: page.data } },
+              { type: "text" as const, text: "What are the customer's phone and Aadhaar numbers on this bill?" },
+            ],
+          },
+        ],
+      });
+
+      const call = response.content.find((b) => b.type === "tool_use");
+      if (!call) throw new Error("The reader did not answer");
+      const input = (call as Anthropic.ToolUseBlock).input as { phones?: unknown; uids?: unknown };
+      const strings = (x: unknown) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === "string") : []);
+      return { ok: true, phones: strings(input.phones), uids: strings(input.uids) };
+    } catch (err: any) {
+      const message =
+        err?.status === 401 || /no api key|api[_ ]?key|authentication/i.test(err?.message ?? "")
+          ? "No key on the deployment — run: npx convex env set MESH_API_KEY <key>"
+          : err?.message ?? String(err);
+      return { ok: false, error: message };
+    }
+  },
+});
