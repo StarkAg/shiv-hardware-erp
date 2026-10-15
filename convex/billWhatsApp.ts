@@ -71,8 +71,6 @@ export const due = query({
     const sentToday = (
       await ctx.db.query('billWhatsApp').withIndex('by_at', (q) => q.gte('at', dayStart(before))).collect()
     ).filter((r) => r.status === 'sent').length
-    if (!from) return { on, sentToday, items: [] }
-
     // A person may choose one waiting bill to go now without enabling the
     // automatic sender. The request lives in the same one-row-per-voucher log
     // that records an actual send, so every device and the service see it.
@@ -80,17 +78,24 @@ export const due = query({
       .filter((row) => row.status === 'requested')
       .map((row) => String(row.voucherId)))
 
-    if (!on && requested.size === 0) return { on, sentToday, items: [] }
+    if ((!on || !from) && requested.size === 0) return { on, sentToday, items: [] }
 
     const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
     if (!sale) return { on, sentToday, items: [] }
-    // A bill's date can be set back a day or two from when it was typed.
-    const candidates = (
+    // Asked for by hand: looked up one by one, so a sale from before the
+    // sending was switched on can go too (Older bills on the panel's page).
+    const asked = (await Promise.all([...requested].map((id) => ctx.db.get(id as Id<'vouchers'>))))
+      .filter((vch): vch is Doc<'vouchers'> => !!vch && vch.typeId === sale._id && vch.status === 'final')
+      .sort((a, b) => a.createdAt - b.createdAt)
+    // The automatic queue: only sales made after it was switched on. A bill's
+    // date can be set back a day or two from when it was typed.
+    const automatic = on && from ? (
       await ctx.db.query('vouchers').withIndex('by_date', (q) => q.gte('date', from - 7 * DAY)).collect()
     ).filter((vch) => vch.typeId === sale._id && vch.status === 'final' && vch.createdAt >= from &&
-      (requested.has(String(vch._id)) || (on && Math.max(vch.createdAt, vch.updatedAt) <= before)))
-      // A specifically requested bill comes before the automatic queue.
-      .sort((a, b) => Number(requested.has(String(b._id))) - Number(requested.has(String(a._id))) || a.createdAt - b.createdAt)
+      !requested.has(String(vch._id)) && Math.max(vch.createdAt, vch.updatedAt) <= before)
+      .sort((a, b) => a.createdAt - b.createdAt) : []
+    // A specifically requested bill comes before the automatic queue.
+    const candidates = [...asked, ...automatic]
 
     const items = []
     let snapshots: Map<string, unknown> | null = null
@@ -196,10 +201,18 @@ export const queue = query({
     const from = settings?.billWhatsAppFrom ?? null
     const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
     const waiting = []
-    if (from && sale) {
-      const candidates = (
+    if (sale) {
+      const recent = from ? (
         await ctx.db.query('vouchers').withIndex('by_date', (q) => q.gte('date', from - 7 * DAY)).collect()
-      ).filter((vch) => vch.typeId === sale._id && vch.createdAt >= from).sort((a, b) => b.createdAt - a.createdAt)
+      ).filter((vch) => vch.typeId === sale._id && vch.createdAt >= from) : []
+      // An older bill asked for by hand waits here too until it has gone.
+      const seen = new Set(recent.map((vch) => String(vch._id)))
+      const asked = (await Promise.all(
+        (await ctx.db.query('billWhatsApp').collect())
+          .filter((row) => row.status === 'requested' && !seen.has(String(row.voucherId)))
+          .map((row) => ctx.db.get(row.voucherId)),
+      )).filter((vch): vch is Doc<'vouchers'> => !!vch && vch.typeId === sale._id)
+      const candidates = [...recent, ...asked].sort((a, b) => b.createdAt - a.createdAt)
       for (const vch of candidates) {
         const done = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', vch._id)).unique()
         if (done && done.status !== 'requested' && (done.status !== 'failed' || done.attempts >= TRIES)) continue
@@ -259,6 +272,39 @@ export const preview = query({
   },
 })
 
+/**
+ * One customer's sales, newest first, for sending a bill from before the
+ * automatic sending began, one at a time: each with what happened to it on
+ * WhatsApp, if anything.
+ */
+export const older = query({
+  args: { partyLedgerId: v.id('ledgers') },
+  handler: async (ctx, { partyLedgerId }) => {
+    const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
+    if (!sale) return []
+    const party = await ctx.db.get(partyLedgerId)
+    const sales = (await ctx.db.query('vouchers').withIndex('by_party', (q) => q.eq('partyLedgerId', partyLedgerId)).collect())
+      .filter((vch) => vch.typeId === sale._id)
+      .sort((a, b) => b.date - a.date || b.voucherNo - a.voucherNo)
+    return await Promise.all(sales.map(async (vch) => {
+      const done = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', vch._id)).unique()
+      return {
+        voucherId: vch._id,
+        label: label(sale.abbr, vch.voucherNo),
+        date: vch.date,
+        amount: vch.amount ?? null,
+        name: bare(party?.name),
+        phone: party?.phone ?? '',
+        needsRecipient: needsRecipient(party?.name),
+        final: vch.status === 'final',
+        status: done?.status ?? null,
+        at: done?.at ?? null,
+        markedSent: done?.markedSent === true,
+      }
+    }))
+  },
+})
+
 /** A bill sent, skipped or given up on, put back to go again. */
 export const sendAgain = mutation({
   args: { voucherId: v.id('vouchers') },
@@ -275,13 +321,13 @@ export const sendAgain = mutation({
 export const requestNow = mutation({
   args: { voucherId: v.id('vouchers'), phone: v.optional(v.string()), newNumber: v.optional(v.boolean()) },
   handler: async (ctx, { voucherId, phone, newNumber }) => {
-    const settings = await settingsOf(ctx)
-    const from = settings?.billWhatsAppFrom
+    // Any sale, however old: a person asked for this one. Only the automatic
+    // sender is held to the sales made after it was switched on.
     const [sale, voucher] = await Promise.all([
       ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique(),
       ctx.db.get(voucherId),
     ])
-    if (!from || !sale || !voucher || voucher.typeId !== sale._id || voucher.createdAt < from) throw new Error('This bill is not in the WhatsApp sending list.')
+    if (!sale || !voucher || voucher.typeId !== sale._id) throw new Error('Only a sale bill can be sent on WhatsApp.')
     if (voucher.status !== 'final') throw new Error('Enter the final amount before sending this bill.')
     const party = await ctx.db.get(voucher.partyLedgerId)
     const shared = needsRecipient(party?.name)
@@ -291,7 +337,9 @@ export const requestNow = mutation({
     if (!shared && !/\d{10}/.test(recipient)) throw new Error('Add the customer\'s mobile number before sending this bill.')
 
     const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
-    if (row?.status === 'sent' || row?.status === 'skipped') throw new Error('This bill has already been handled.')
+    if (row?.status === 'requested') throw new Error('This bill is already being sent.')
+    // A bill already sent goes again only when asked: an older bill picked
+    // from its party's list is asked for on purpose, so the earlier row gives way.
     const fields = { status: 'requested' as const, attempts: 0, at: Date.now(), greet: newNumber === true, ...(shared ? { requestedPhone } : {}) }
     if (row) await ctx.db.patch(row._id, fields)
     else await ctx.db.insert('billWhatsApp', { voucherId, ...fields })

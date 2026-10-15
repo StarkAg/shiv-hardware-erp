@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check, Eye, RotateCcw, Send } from 'lucide-react'
 import { useMutation, useQuery } from 'convex/react'
 import { Link } from 'react-router-dom'
@@ -61,6 +61,93 @@ function SeeBill({ row, onSend, onClose }: { row: Waiting; onSend: () => void; o
   )
 }
 
+/**
+ * A customer's sales from before the automatic sending, found by name and
+ * sent one at a time with Send now. Nothing here is ever sent on its own.
+ */
+function OlderBills({ linked, onSee, onSend }: {
+  linked: boolean
+  onSee: (row: Waiting) => void
+  onSend: (row: { voucherId: Id<'vouchers'>; label: string; name: string; needsRecipient: boolean; sentAt: number | null }) => void
+}) {
+  const masters = useLive(api.masters.all, {}, 'masters') as { ledgers?: { _id: Id<'ledgers'>; name: string; phone?: string; groupName: string }[] } | undefined
+  const [find, setFind] = useState('')
+  const [party, setParty] = useState<{ id: Id<'ledgers'>; name: string } | null>(null)
+  const bills = useQuery(api.billWhatsApp.older, party ? { partyLedgerId: party.id } : 'skip')
+  const matches = useMemo(() => {
+    const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (!words.length) return []
+    return (masters?.ledgers ?? [])
+      .filter((l) => l.groupName === 'Sundry Debtors' && words.every((w) => l.name.toLowerCase().includes(w) || (l.phone ?? '').includes(w)))
+      .slice(0, 8)
+  }, [masters, find])
+  const STATE: Record<string, string> = { sent: 'Sent', requested: 'Sending now', failed: 'Failed', skipped: 'Not sent' }
+
+  return (
+    <>
+      <h2 className="sectiontitle">Older bills</h2>
+      <div className="toolbar">
+        <input
+          className="partysearch"
+          type="text"
+          value={find}
+          onChange={(e) => { setFind(e.target.value); setParty(null) }}
+          placeholder="Customer name or phone"
+          aria-label="Find a customer"
+        />
+      </div>
+      {!party && matches.length > 0 && (
+        <div className="table-wrap"><div className="scroller">
+          <table className="ledger"><tbody>
+            {matches.map((l) => (
+              <tr key={l._id} className="clickable" onClick={() => { setParty({ id: l._id, name: l.name }); setFind(l.name.replace(/^m\/s\.?\s+/i, '')) }}>
+                <td className="particulars">{l.name.replace(/^m\/s\.?\s+/i, '')}<div className="ref">{l.phone || 'No phone'}</div></td>
+              </tr>
+            ))}
+          </tbody></table>
+        </div></div>
+      )}
+      {party && (bills === undefined ? <TableSkeleton cols={5} rows={3} wide={1} /> : (
+        <div className="table-wrap"><div className="scroller">
+          <table className="ledger">
+            <thead><tr><th className="w-no">Vch</th><th>Date</th><th className="num">Amount</th><th>WhatsApp</th><th className="w-acts" /></tr></thead>
+            <tbody>
+              {bills.map((b) => {
+                const noPhone = !b.needsRecipient && !/\d{10}/.test(b.phone.replace(/\D/g, ''))
+                const held = !b.final ? 'Waiting for its amount' : noPhone ? 'No mobile number on the account' : null
+                const row: Waiting = { voucherId: b.voucherId, label: b.label, name: b.name, amount: b.amount, needsRecipient: b.needsRecipient, canSend: !held && b.status !== 'requested' && linked }
+                return (
+                  <tr key={b.voucherId}>
+                    <td className="mono entryno" data-label="Vch"><Link className="link plain" to={`/bills/voucher/${b.voucherId}`}>{b.label}</Link></td>
+                    <td className="ref" data-label="Date">{new Date(b.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                    <td className="num" data-label="Amount">{rupees(b.amount)}</td>
+                    <td data-label="WhatsApp">
+                      {held ? <span className="warn">{held}</span>
+                        : b.status ? <span className={b.status === 'sent' ? 'credit' : 'warn'}>{b.markedSent ? 'Marked sent' : STATE[b.status]}{b.at ? ` · ${when(b.at)}` : ''}</span>
+                        : 'Not sent'}
+                    </td>
+                    <td className="rowacts">
+                      <button className="xbtn" title="See the bill" aria-label={`See ${b.label}`} onClick={() => onSee(row)}>
+                        <Eye size={14} aria-hidden="true" />
+                      </button>
+                      <button className="xbtn" title={b.status === 'sent' ? 'Send again' : 'Send this bill now'} aria-label={`Send ${b.label} now`}
+                        disabled={!row.canSend}
+                        onClick={() => onSend({ voucherId: b.voucherId, label: b.label, name: b.name, needsRecipient: b.needsRecipient, sentAt: b.status === 'sent' ? b.at : null })}>
+                        <Send size={14} aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+              {bills.length === 0 && <tr><td colSpan={5} className="particulars">No sales for {party.name}.</td></tr>}
+            </tbody>
+          </table>
+        </div></div>
+      ))}
+    </>
+  )
+}
+
 type Link = { status: string; me: string | null; hours?: number[]; dailyMax?: number; restMin?: number } | null
 
 /** Whether the owner's WhatsApp is linked on the service: asked every half minute. */
@@ -93,7 +180,7 @@ export function WhatsAppBills() {
   const requestNow = useMutation(api.billWhatsApp.requestNow)
   const markSent = useMutation(api.billWhatsApp.markSent)
   const [again, setAgain] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
-  const [sendingNow, setSendingNow] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string; needsRecipient: boolean } | null>(null)
+  const [sendingNow, setSendingNow] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string; needsRecipient: boolean; sentAt?: number | null } | null>(null)
   const [seeing, setSeeing] = useState<Waiting | null>(null)
   const [markingSent, setMarkingSent] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
   const [switching, setSwitching] = useState(false)
@@ -171,6 +258,8 @@ export function WhatsAppBills() {
           </div></div>
         )}
 
+        <OlderBills linked={linked} onSee={setSeeing} onSend={setSendingNow} />
+
         <h2 className="sectiontitle">Lately</h2>
         {queue && (
           <div className="table-wrap"><div className="scroller">
@@ -226,7 +315,9 @@ export function WhatsAppBills() {
         {sendingNow && (
           <Confirm
             title={`Send ${sendingNow.label} now?`}
-            body={`It will go to ${sendingNow.name || 'the customer'}'s WhatsApp now. Automatic sending stays off.`}
+            body={sendingNow.sentAt
+              ? `It was already sent on ${when(sendingNow.sentAt)}. It will go to ${sendingNow.name || 'the customer'}'s WhatsApp again now.`
+              : `It will go to ${sendingNow.name || 'the customer'}'s WhatsApp now. Automatic sending stays off.`}
             confirmLabel="Send now"
             ask={sendingNow.needsRecipient ? { label: 'Customer WhatsApp number' } : undefined}
             toggle={{ label: 'New number: send the smile, folded hands and card first' }}

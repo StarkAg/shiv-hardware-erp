@@ -101,5 +101,22 @@ describe('sale bills to the customer\'s WhatsApp', () => {
     expect((await t.query(api.billWhatsApp.queue, {})).recent.find((x) => x.voucherId === shared)).toMatchObject({ status: 'sent', markedSent: true })
     await t.mutation(api.billWhatsApp.setOn, { on: true })
     expect((await t.query(api.billWhatsApp.status, {})).from).not.toBeNull()
+
+    // An older bill: found under its customer, never sent on its own, and
+    // sent when asked for, with sending switched off.
+    expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items.map((x) => x.voucherId)).not.toContain(before)
+    const older = await t.query(api.billWhatsApp.older, { partyLedgerId: sanjay })
+    expect(older.find((o) => o.voucherId === before)).toMatchObject({ label: 'SAL-0040', final: true, status: null })
+    await t.mutation(api.billWhatsApp.setOn, { on: false })
+    await t.mutation(api.billWhatsApp.requestNow, { voucherId: before })
+    due = await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })
+    expect(due.items.map((x) => [x.label, x.onDemand])).toEqual([['SAL-0040', true]])
+    expect((await t.query(api.billWhatsApp.queue, {})).waiting.find((w) => w.voucherId === before)).toMatchObject({ requested: true })
+    await expect(t.mutation(api.billWhatsApp.requestNow, { voucherId: before })).rejects.toThrow('already being sent')
+    await t.mutation(api.billWhatsApp.record, { voucherId: before, status: 'sent', to: '918340785465@s.whatsapp.net' })
+    expect((await t.query(api.billWhatsApp.older, { partyLedgerId: sanjay })).find((o) => o.voucherId === before)).toMatchObject({ status: 'sent' })
+    // A purchase is never sendable, old or new.
+    const bought = await voucher(purchase, supplier, 8, now - 90 * MIN)
+    await expect(t.mutation(api.billWhatsApp.requestNow, { voucherId: bought })).rejects.toThrow('Only a sale bill')
   })
 })
