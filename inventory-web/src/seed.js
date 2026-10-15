@@ -6,9 +6,9 @@ const plywoodRows = [
   ['Signature', 12, '7x3', 5], ['Signature Gold', 12, '7x3', 1],
   ['Signature', 12, '7x4', 16], ['Signature Gold', 12, '7x4', 1], ['Signature', 12, '8x4', 5],
   ['Signature', 18, '7x3', 1], ['Signature', 18, '7x4', 1], ['Signature', 18, '8x4', 2],
-  ['Signature', 19, '5x4', 1], ['Signature', 19, '6x3', 3], ['Signature Gold', 19, '6x3', 2],
-  ['Signature', 19, '6x4', 1], ['Signature', 19, '7x4', 11], ['Signature Gold', 19, '7x4', 3],
-  ['Signature', 19, '8x4', 6], ['Signature Gold', 19, '8x4', 2],
+  ['Signature', 19, '5x4', 1], ['Signature', 19, '6x3', 3], ['Signature Gold', 21, '6x3', 2],
+  ['Signature', 19, '6x4', 1], ['Signature', 19, '7x4', 11], ['Signature Gold', 21, '7x4', 3],
+  ['Signature', 19, '8x4', 6], ['Signature Gold', 21, '8x4', 2],
   ['Milton', 6, '6x4', 2], ['Milton', 6, '7x3', 2], ['Milton', 6, '7x4', 2], ['Milton', 6, '8x3.5', 1], ['Milton', 6, '8x4', 1],
   ['Milton', 12, '6x3', 7], ['Milton', 12, '7x4', 11], ['Milton', 12, '8x4', 4],
   ['Milton', 18, '5x4', 1], ['Milton', 18, '6x3', 1], ['Milton', 18, '7x4', 1], ['Milton', 18, '8x4', 1],
@@ -31,7 +31,10 @@ const key = brand => brand.toLowerCase().replace(' ', '-')
 export const FALLBACK_ITEMS = rows.map(([category, brand, mm, size, stock]) => ({
   // This corrected row retains its original identity for saved counts and queued taps.
   ref: category === 'door' && brand === 'Signature Gold' && mm === 30 && size === '78x30'
-    ? 'seed:door:signature:30:78x30' : `seed:${category}:${key(brand)}:${mm}:${size}`,
+    ? 'seed:door:signature:30:78x30'
+    : category === 'ply' && brand === 'Signature Gold' && mm === 21 && ['6x3', '7x4', '8x4'].includes(size)
+      ? `seed:ply:signature-gold:19:${size}`
+      : `seed:${category}:${key(brand)}:${mm}:${size}`,
   name: `${mm}mm ${brand} ${size.replace('x', ' x ')}`,
   category,
   brand,
@@ -66,7 +69,11 @@ const seedByRef = new Map(FALLBACK_ITEMS.map(item => [item.ref, item]))
 export function hydrateStockItems(items) {
   return items.map(item => {
     const seed = seedByRef.get(item.ref)
-    return seed ? { ...seed, ...item, name: seed.name, brand: seed.brand, mm: seed.mm, size: seed.size, min: item.min ?? seed.min } : item
+    // The cloud may carry a staff-edited shelf name. Fixed identity fields
+    // still come from the seed, including corrected 21 mm Signature Gold rows.
+    const oldSignatureGoldName = item.name === `19mm Signature Gold ${seed?.size?.replace('x', ' x ')}`
+    const oldDoorName = item.ref === 'seed:door:signature:30:78x30' && item.name === '30mm Signature 78 x 30'
+    return seed ? { ...seed, ...item, name: !item.name || oldSignatureGoldName || oldDoorName ? seed.name : item.name, brand: seed.brand, mm: seed.mm, size: seed.size, min: item.min ?? seed.min } : item
   })
 }
 

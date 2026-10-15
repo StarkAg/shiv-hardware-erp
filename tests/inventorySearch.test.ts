@@ -27,7 +27,7 @@ describe('Inventory shorthand search', () => {
   })
 
   it('keeps matching size and thickness after a brand shortcut', () => {
-    expect(FALLBACK_ITEMS.filter(item => matchesStockSearch(item, 'sg 19 7x4')).map(item => item.ref))
+    expect(FALLBACK_ITEMS.filter(item => matchesStockSearch(item, 'sg 21 7x4')).map(item => item.ref))
       .toEqual(['seed:ply:signature-gold:19:7x4'])
     expect(FALLBACK_ITEMS.filter(item => matchesStockSearch(item, 'MS 8x3.5')).map(item => item.ref))
       .toEqual(['seed:ply:milton:6:8x3.5'])
@@ -35,7 +35,8 @@ describe('Inventory shorthand search', () => {
 
   it('keeps the brand headings when a live Convex row replaces the device copy', () => {
     const [live] = hydrateStockItems([{ ref: 'seed:ply:signature-gold:19:7x4', name: '19mm Signature Gold 7 x 4', stock: 9, min: null }])
-    expect(live).toMatchObject({ brand: 'Signature Gold', mm: 19, size: '7x4', stock: 9, min: 2 })
+    expect(live).toMatchObject({ brand: 'Signature Gold', mm: 21, size: '7x4', stock: 9, min: 2 })
+    expect(live.name).toBe('21mm Signature Gold 7 x 4')
   })
 
   it('corrects old device door labels without changing their reference or quantity', () => {

@@ -122,9 +122,11 @@ const PLYWOOD_SEED = [
   },
   {
     "ref": "seed:ply:signature-gold:19:6x3",
-    "name": "19mm Signature Gold 6 x 3",
+    "name": "21mm Signature Gold 6 x 3",
     "brand": "Signature Gold",
-    "mm": 19,
+    // The reference retains 19 so saved counts and past stock moves stay on
+    // this shelf row after the corrected 21 mm label goes live.
+    "mm": 21,
     "size": "6x3",
     "qty": 2
   },
@@ -146,9 +148,9 @@ const PLYWOOD_SEED = [
   },
   {
     "ref": "seed:ply:signature-gold:19:7x4",
-    "name": "19mm Signature Gold 7 x 4",
+    "name": "21mm Signature Gold 7 x 4",
     "brand": "Signature Gold",
-    "mm": 19,
+    "mm": 21,
     "size": "7x4",
     "qty": 3
   },
@@ -162,9 +164,9 @@ const PLYWOOD_SEED = [
   },
   {
     "ref": "seed:ply:signature-gold:19:8x4",
-    "name": "19mm Signature Gold 8 x 4",
+    "name": "21mm Signature Gold 8 x 4",
     "brand": "Signature Gold",
-    "mm": 19,
+    "mm": 21,
     "size": "8x4",
     "qty": 2
   },
@@ -329,5 +331,8 @@ export function seedRefForName(name: string): string | undefined {
     : /^(?:s|s ply|b board s|solid s|signature)$/.test(description) ? "Signature"
     : /^(?:milton|milton super(?: pro| gold)?|milton hs)$/.test(description) ? "Milton" : undefined;
   const size = `${height}x${width.replace(" ", ".")}`;
-  return INVENTORY_SEED.find(i => i.brand === brand && i.mm === Number(thickness) && i.size === size)?.ref;
+  // Old bills said 19 mm; the shop later corrected these Signature Gold boards
+  // to 21 mm. Both spellings belong to the same long-lived shelf references.
+  const mm = brand === "Signature Gold" && Number(thickness) === 19 ? 21 : Number(thickness);
+  return INVENTORY_SEED.find(i => i.brand === brand && i.mm === mm && i.size === size)?.ref;
 }

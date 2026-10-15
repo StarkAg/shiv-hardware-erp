@@ -104,6 +104,7 @@ describe('supplied plywood and door inventory', () => {
     expect(seedRefForName('30mm S 78 X 30')).toBeUndefined()
     expect(seedRefForName('19mm B.Board S 7 X 4')).toBe('seed:ply:signature:19:7x4')
     expect(seedRefForName('19mm Solid SG 8 X 4')).toBe('seed:ply:signature-gold:19:8x4')
+    expect(seedRefForName('21mm Solid SG 8 X 4')).toBe('seed:ply:signature-gold:19:8x4')
     expect(seedRefForName('6mm Milton 8x3.5 ft')).toBe('seed:ply:milton:6:8x3.5')
     expect(seedRefForName('30mm S 78 X 38')).toBe('seed:door:signature:30:78x38')
     for (const name of ['19mm Amron 8 X 4','18mm HDMR S 8 X 4','12mm S 5 X 3','Door Magnet']) expect(seedRefForName(name)).toBeUndefined()
