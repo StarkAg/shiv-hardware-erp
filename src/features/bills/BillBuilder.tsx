@@ -501,11 +501,28 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   }
 
   // product type search state
-  const [search, setSearch] = useState(() => {
-    if (item.category) return PRODUCT_OPTIONS.find(p => p.category === item.category)?.label ?? ''
-    if (item.customEntryId) return item.description
-    return ''
-  })
+  /**
+   * What the box shows for the line as it stands: a product's name, or the
+   * line's own words.
+   *
+   * Only picked lines used to start with their words here, so a fare, a
+   * round-off or any line typed rather than picked came back from a saved
+   * bill looking empty to the keys: Enter took it for the blank row that ends
+   * item entry and deleted it, and Up recalled an older item over it.
+   */
+  const textOf = (it: BillItem) =>
+    it.category ? PRODUCT_OPTIONS.find(p => p.category === it.category)?.label ?? '' : it.description ?? ''
+  const [search, setSearch] = useState(() => textOf(item))
+  // Undo, redo and anything else that changes the line from outside: the box
+  // follows it, rather than showing the item it held before.
+  useEffect(() => { setSearch(textOf(item)) },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [item.category, item.customEntryId, item.description])
+  /**
+   * Whether anything has been typed in the box since it was entered. Until
+   * then an open list is for looking through, and Enter passes on.
+   */
+  const [typed, setTyped] = useState(false)
   const [showDrop, setShowDrop] = useState(false)
   // First tap shows dropdown without keyboard; second tap unlocks keyboard
   const amountRef = useRef<HTMLInputElement>(null)
@@ -526,27 +543,28 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   const [addToField,    setAddToField]    = useState<string | null>(null)  // field label
   const [addToFieldVal, setAddToFieldVal] = useState('')
 
+  // A line that holds an item, opened without typing, lists everything so the
+  // item can be switched; typing filters, even on a line still holding one.
+  const browsing = (!!item.category || !!item.customEntryId) && !typed
+
   const filtered = useMemo(() => {
-    // A committed category isn't a live query — show all options so the user
-    // can switch. Filtering only kicks in once they actually type a new search.
-    if (item.category) return PRODUCT_OPTIONS
+    if (browsing) return PRODUCT_OPTIONS
     const q = search.toLowerCase().trim()
     if (!q) return PRODUCT_OPTIONS
     return PRODUCT_OPTIONS.filter(p =>
       p.label.toLowerCase().includes(q) || p.keywords.some(k => k.startsWith(q))
     )
-  }, [search, item.category])
+  }, [search, browsing])
 
   // Custom catalog entries filtered by search
   const customFiltered = useMemo(() => {
-    if (item.customEntryId) return customCatalog   // already selected → show all for switching
     // A catalogue item named like a built-in line (Bill, Fare, Cartage…) is a
     // leftover from before those were kept out of the catalogue: offered here it
     // sat above "Bill — total amount only" as a second Bill, priced at one old
     // bill's total. The built-in option is the one to use.
     const offered = customCatalog.filter((e) => !isAmountOnlyLine({ description: e.name }))
     const q = search.toLowerCase().trim()
-    if (!q) return offered
+    if (!q || browsing) return offered
     // An item folded in from a supplier's own entry keeps that wording as a
     // spelling that finds it, so an SRT bill can be typed as it is printed.
     return offered.filter(
@@ -554,7 +572,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
         e.name.toLowerCase().includes(q) ||
         (e.alsoKnownAs ?? []).some(also => also.toLowerCase().includes(q)),
     )
-  }, [search, item.customEntryId, customCatalog])
+  }, [search, browsing, customCatalog])
 
   /**
    * The dropdown's rows flattened in the order they render, so the keyboard can
@@ -568,18 +586,32 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     return customCatalog.find(e => formatItemDescription(e.name ?? '').toLowerCase() === q)
   }, [search, customCatalog])
 
+  /** The fixed row a typed word already names: "Bill", "Roundup", "Fare". */
+  const fixedKind = useMemo(() => {
+    const q = search.trim()
+    return /^bill$/i.test(q) ? 'bill' as const
+      : /^round\s*(?:up|off)?$/i.test(q) ? 'roundup' as const
+      : /^fare$/i.test(q) ? 'fare' as const
+      : null
+  }, [search])
+
   const navOptions = useMemo(() => [
     ...filtered.map(opt => ({ kind: 'category' as const, opt })),
     ...customFiltered.map(entry => ({ kind: 'custom' as const, entry })),
     // "Add <typed text>" is a row like any other, so Enter can reach it. Without
     // this, typing "19mm B" when "19mm Block Board" exists could never create
-    // the shorter name — Enter always took the match.
-    ...(search.trim() && !duplicateEntry ? [{ kind: 'add' as const }] : []),
+    // the shorter name — Enter always took the match. Not for the name of the
+    // line's own item, and not for a word that is one of the fixed rows below:
+    // "Roundup" made an item called Roundup rather than a round-off.
+    ...(search.trim() && !duplicateEntry && !browsing && !fixedKind ? [{ kind: 'add' as const }] : []),
     // Always offered, so an adjustment or a charge is one pick away.
     { kind: 'bill' as const },
     { kind: 'roundup' as const },
     { kind: 'fare' as const },
-  ], [filtered, customFiltered, search, duplicateEntry])
+  ], [filtered, customFiltered, search, duplicateEntry, browsing, fixedKind])
+
+  /** The add row's words: a charge typed (Labour, Discount, CGST 9%) is used as a charge, not filed as goods. */
+  const addLabel = isChargeName(search) ? `Use "${search.trim()}" as a charge` : `Create "${search.trim()}"`
 
   // Where each fixed row sits in navOptions, so the dropdown highlights the
   // row the keyboard and the right-hand panel mean.
@@ -614,6 +646,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     })
     setSearch(label)
     setShowDrop(false)
+    setTyped(false)
     requestAnimationFrame(() => moveBillFocus(1))
   }
 
@@ -634,6 +667,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     })
     setSearch('Roundup')
     setShowDrop(false)
+    setTyped(false)
     requestAnimationFrame(() => moveBillFocus(1))
   }
 
@@ -650,15 +684,22 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     () =>
       item.customEntryId
         ? navOptions.findIndex((o) => o.kind === 'custom' && o.entry.id === item.customEntryId)
-        : -1,
-    [navOptions, item.customEntryId],
+        : item.category
+          // A plywood or hardware line too: its row, not whatever sorts first.
+          ? navOptions.findIndex((o) => o.kind === 'category' && o.opt.category === item.category)
+          : -1,
+    [navOptions, item.customEntryId, item.category],
   )
   // The line's own item if the list is showing it; otherwise the first row —
   // which is what typing a fresh query wants, since the best match sorts first
   // and the old item has usually dropped out of the list by then.
+  // A word that is a fixed row ("Roundup") lands on that row when nothing
+  // in the lists matches it.
   useEffect(() => {
-    setHighlight(selectedIndex >= 0 ? selectedIndex : 0)
-  }, [search, navOptions.length, selectedIndex])
+    const fixedAt = fixedKind && !filtered.length && !customFiltered.length ? navOptions.findIndex((o) => o.kind === fixedKind) : -1
+    setHighlight(selectedIndex >= 0 ? selectedIndex : fixedAt >= 0 ? fixedAt : 0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, navOptions.length, selectedIndex, fixedKind])
 
   const setPanelList = useContext(ListPanelContext)
 
@@ -679,14 +720,19 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
       if (v === 'roundup') { pickRoundup(); return }
       if (v === 'bill') { pickCharge('Bill'); return }
       if (v === 'fare') { pickFare(); return }
-      if (v === 'add') { addItemFromSearch(); return }
-      if (v.startsWith('c:')) {
+      // The rest move on to the next box as Enter does; a pick here used to
+      // leave the cursor in the item box with the list shut.
+      if (v === 'add') { if (addItemFromSearch()) return }
+      else if (v.startsWith('c:')) {
         const opt = filtered.find(o => o.category === v.slice(2))
-        if (opt) selectCategory(opt)
-        return
+        if (!opt) return
+        selectCategory(opt)
+      } else {
+        const entry = customFiltered.find(e => e.id === v.slice(2))
+        if (!entry) return
+        selectCustomEntry(entry)
       }
-      const entry = customFiltered.find(e => e.id === v.slice(2))
-      if (entry) selectCustomEntry(entry)
+      requestAnimationFrame(() => moveBillFocus(1))
     }
   })
 
@@ -703,7 +749,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
         : o.kind === 'roundup' ? { value: 'roundup', label: 'Roundup (minus)' }
         : o.kind === 'bill' ? { value: 'bill', label: 'Bill — total amount only' }
         : o.kind === 'fare' ? { value: 'fare', label: 'Fare / cartage' }
-        : { value: 'add', label: `Create "${search.trim()}"` },
+        : { value: 'add', label: addLabel },
       ),
       onPick: (v) => pickFromPanel.current(v),
     })
@@ -754,6 +800,12 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   function selectCategory(opt: ProductOption) {
     setSearch(opt.label)
     setShowDrop(false)
+    // A pick ends the typing: Enter after it passes on rather than filing
+    // the product's name as a new item.
+    setTyped(false)
+    // Passing back through the line's own product keeps its brand, size and
+    // rate; picking it again used to reset them to the first brand and 8 x 4.
+    if (item.category === opt.category && !wasFigure) return
     if (HARDWARE_CATS.includes(opt.category)) {
       const defaultSize  = catSizes(opt.category)[0]  ?? ''
       const defaultBrand = opt.category !== 'mica' ? (catBrands(opt.category)[0] ?? '') : ''
@@ -856,6 +908,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     const name = formatItemDescription(entry.name)
     // "Discount", "CGST 9%", "Fare" saved in My Items are charges, not goods:
     // the line takes the name and an amount, and nothing about a quantity.
+    setTyped(false)
     if (isChargeName(name)) {
       // Passing back through a line that already is this charge is
       // navigation: keep the amount that was typed on it.
@@ -912,7 +965,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
   function recallItem(older: boolean): boolean {
     let w = walk.current
     if (!w) {
-      if (!older || search.trim() || isCatalog) return false
+      if (!older || search.trim() || item.description.trim() || isCatalog || amountOnly) return false
       const list = recallList(linesAbove, history.recent)
       if (!list.length) return false
       w = walk.current = { at: -1, list }
@@ -956,19 +1009,28 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
     })
     setSearch(description)
     setShowDrop(false)
+    setTyped(false)
   }
 
-  function addItemFromSearch() {
+  /**
+   * Returns true when the line became a charge or a round-off, which move the
+   * cursor on themselves; the caller moves it only otherwise, or it would skip
+   * a box.
+   */
+  function addItemFromSearch(): boolean {
     const name = formatItemDescription(search.trim())
-    if (!name) return
-    if (name.toLowerCase() === 'bill') { pickCharge('Bill'); return }
+    if (!name) return false
+    // A charge or a round-off typed out is that, not an item for My Items.
+    if (/^round\s*(?:up|off)?$/i.test(name)) { pickRoundup(); return true }
+    if (isChargeName(name)) { pickCharge(name.toLowerCase() === 'bill' ? 'Bill' : name); return true }
     // Already in My Items — pick it rather than creating a duplicate.
-    if (duplicateEntry) { selectCustomEntry(duplicateEntry); return }
+    if (duplicateEntry) { selectCustomEntry(duplicateEntry); return false }
     const newId = addCustomEntry(name)
     myItems.made(newId)
     selectCustomEntry({ id: newId, name, sizes: [], brands: [] })
     addingNewRef.current = false
     setShowDrop(false)
+    return false
   }
 
   function customDesc(over: { sizeIn?: string; brandName?: string; fieldValues?: Record<string,string> } = {}) {
@@ -1082,11 +1144,13 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                 onFocus={(e) => {
                   // No list on arrival — it opens once there's something to
                   // match, so Enter can simply carry on to the next box.
+                  setTyped(false)
                   if (isCatalog) e.target.select()
                 }}
                 onChange={(e) => {
                   const el = e.target
                   walk.current = null
+                  setTyped(true)
                   // Proper case is case-only, so it never disturbs the caret.
                   // The 8x4 -> 8 X 4 spacing changes length, so only apply it
                   // while typing at the end; mid-edit it would jump the cursor.
@@ -1173,8 +1237,18 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                   // A blank stock-item field is Tally's signal that item entry
                   // is over. Do not create a made-up line or make the operator
                   // erase it manually before finishing the bill.
-                  if (!search.trim() && !isCatalog) {
+                  // Blank means nothing on the line at all; a fare or a typed line
+                  // from a saved bill is not blank because the box was entered.
+                  if (!search.trim() && !item.description.trim() && !isCatalog && !Number(item.amount)) {
                     onBlankRowDone(item.id)
+                    return
+                  }
+                  // Passing through a line that has something on it, nothing
+                  // typed and no list open, goes on to the next box. It used to
+                  // file the line's words as a new item, so Enter through a
+                  // plywood line made a "Plywood" in My Items and dropped its size.
+                  if (!showDrop && !typed) {
+                    moveBillFocus(1)
                     return
                   }
                   if (search.trim().toLowerCase() === 'bill') { pickCharge('Bill'); return }
@@ -1186,14 +1260,14 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                     else if (pick.kind === 'roundup') { pickRoundup(); return }
                     else if (pick.kind === 'bill') { pickCharge('Bill'); return }
                     else if (pick.kind === 'fare') { pickFare(); return }
-                    else addItemFromSearch()
+                    else if (addItemFromSearch()) return
                     // Let the dropdown close, then carry on to quantity.
                     requestAnimationFrame(() => moveBillFocus(1))
                     return
                   }
                   // Nothing matched: save what was typed as a new item and use it.
                   if (!search.trim()) return
-                  addItemFromSearch()
+                  if (addItemFromSearch()) return
                   requestAnimationFrame(() => moveBillFocus(1))
                 }}
                 onBlur={() => {
@@ -1216,7 +1290,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                         <button
                           key={opt.category}
                           data-hl={highlight === i ? '1' : undefined}
-                          onMouseDown={() => selectCategory(opt)}
+                          onMouseDown={(e) => { e.preventDefault(); selectCategory(opt); requestAnimationFrame(() => moveBillFocus(1)) }}
                           onMouseEnter={() => setHighlight(i)}
                           className={`flex w-full min-w-0 items-center truncate px-3 py-2 text-left text-sm text-stone-700 dark:text-stone-200 ${highlight === i ? 'bg-stone-100 dark:bg-white/10' : ''}`}
                         >
@@ -1233,7 +1307,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                         <button
                           key={entry.id}
                           data-hl={highlight === filtered.length + ci ? '1' : undefined}
-                          onMouseDown={() => selectCustomEntry(entry)}
+                          onMouseDown={(e) => { e.preventDefault(); selectCustomEntry(entry); requestAnimationFrame(() => moveBillFocus(1)) }}
                           onMouseEnter={() => setHighlight(filtered.length + ci)}
                           className={`flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 dark:text-stone-200 ${highlight === filtered.length + ci ? 'bg-stone-100 dark:bg-white/10' : ''}`}
                         >
@@ -1246,14 +1320,15 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
 
                   {/* The typed name, as a row of its own: Create comes before the
                       fixed rows, as the right-hand list has it. */}
-                  {!addingNew && search.trim() && !duplicateEntry && (
+                  {!addingNew && idxOf('add') >= 0 && (
                         <button
+                          // The same as Enter on it and a pick in the right-hand
+                          // list: the item is made and the line moves on. It
+                          // used to open a form here instead, so one row did two
+                          // different things depending on how it was taken.
                           onMouseDown={(e) => {
                             e.preventDefault()
-                            addingNewRef.current = true
-                            setNewName(search.trim())
-                            setNewRate(0)
-                            setAddingNew(true)
+                            if (!addItemFromSearch()) requestAnimationFrame(() => moveBillFocus(1))
                           }}
                           data-hl={highlight === idxOf('add') ? '1' : undefined}
                           onMouseEnter={() => setHighlight(idxOf('add'))}
@@ -1262,7 +1337,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                           }`}
                         >
                           <Plus size={13} className="shrink-0" />
-                          <span className="truncate">Create "{search.trim()}"</span>
+                          <span className="truncate">{addLabel}</span>
                         </button>
                   )}
 
@@ -1302,7 +1377,7 @@ function SmartItemRow({ item, idx, onUpdate, onRemove, onRowDone, onBlankRowDone
                   {/* ── Add new / inline form ── */}
                   <div className="border-t border-stone-100 dark:border-white/5">
                     {!addingNew ? (
-                      search.trim() && !duplicateEntry ? null : (
+                      idxOf('add') >= 0 ? null : (
                         <button
                           onMouseDown={(e) => {
                             e.preventDefault()
