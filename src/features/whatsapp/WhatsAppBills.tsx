@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { RotateCcw, Send } from 'lucide-react'
+import { Check, RotateCcw, Send } from 'lucide-react'
 import { useMutation } from 'convex/react'
+import { Link } from 'react-router-dom'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { useLive } from '../ledger/lib/cache'
@@ -46,8 +47,10 @@ export function WhatsAppBills() {
   const setOn = useMutation(api.billWhatsApp.setOn)
   const sendAgain = useMutation(api.billWhatsApp.sendAgain)
   const requestNow = useMutation(api.billWhatsApp.requestNow)
+  const markSent = useMutation(api.billWhatsApp.markSent)
   const [again, setAgain] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
-  const [sendingNow, setSendingNow] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
+  const [sendingNow, setSendingNow] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string; needsRecipient: boolean } | null>(null)
+  const [markingSent, setMarkingSent] = useState<{ voucherId: Id<'vouchers'>; label: string; name: string } | null>(null)
   const [switching, setSwitching] = useState(false)
   const [error, setError] = useState('')
 
@@ -87,8 +90,8 @@ export function WhatsAppBills() {
               <tbody>
                 {queue.waiting.map((w) => (
                   <tr key={w.voucherId} className={w.held ? 'unpriced' : undefined}>
-                    <td className="mono entryno" data-label="Vch">{w.label}</td>
-                    <td className="particulars" data-label="Party">{w.name}<div className="ref">{w.phone || 'No phone'}</div></td>
+                    <td className="mono entryno" data-label="Vch"><Link className="link plain" to={`/bills/voucher/${w.voucherId}`} title={`Open ${w.label}`}>{w.label}</Link></td>
+                    <td className="particulars" data-label="Party"><Link className="link plain" to={`/ledger/customers/${w.partyLedgerId}`} title={`Open ${w.name}'s ledger`}>{w.name}</Link><div className="ref">{w.needsRecipient ? 'Ask for WhatsApp number when sending' : w.phone || 'No phone'}</div></td>
                     <td className="num" data-label="Amount">{rupees(w.amount)}</td>
                     <td className="ref" data-label="Saved">{when(w.savedAt)}</td>
                     <td data-label="Waiting">
@@ -102,8 +105,13 @@ export function WhatsAppBills() {
                     <td className="rowacts">
                       <button className="xbtn" title={w.requested ? 'This bill is being sent' : 'Send this bill now'} aria-label={`Send ${w.label} now`}
                         disabled={!!w.held || !!w.requested || !linked}
-                        onClick={() => setSendingNow({ voucherId: w.voucherId, label: w.label, name: w.name })}>
+                        onClick={() => setSendingNow({ voucherId: w.voucherId, label: w.label, name: w.name, needsRecipient: w.needsRecipient })}>
                         <Send size={14} aria-hidden="true" />
+                      </button>
+                      <button className="xbtn" title="Mark as already sent" aria-label={`Mark ${w.label} as already sent`}
+                        disabled={!!w.held || !!w.requested}
+                        onClick={() => setMarkingSent({ voucherId: w.voucherId, label: w.label, name: w.name })}>
+                        <Check size={14} aria-hidden="true" />
                       </button>
                     </td>
                   </tr>
@@ -127,7 +135,7 @@ export function WhatsAppBills() {
                     <td className="num" data-label="Amount">{rupees(r.amount)}</td>
                     <td className="ref" data-label="When">{when(r.at)}</td>
                     <td data-label="What happened">
-                      {r.status === 'sent' ? <span className="credit">Sent</span> : <span className="warn">{STATUS[r.status]}{r.reason ? `: ${r.reason}` : ''}</span>}
+                      {r.status === 'sent' ? <span className="credit">{r.markedSent ? 'Marked sent' : 'Sent'}</span> : <span className="warn">{STATUS[r.status]}{r.reason ? `: ${r.reason}` : ''}</span>}
                     </td>
                     <td className="rowacts">
                       <button className="xbtn" title="Send again" aria-label={`Send ${r.label} again`} onClick={() => setAgain({ voucherId: r.voucherId, label: r.label, name: r.name })}>
@@ -160,11 +168,25 @@ export function WhatsAppBills() {
             title={`Send ${sendingNow.label} now?`}
             body={`It will go to ${sendingNow.name || 'the customer'}'s WhatsApp now. Automatic sending stays off.`}
             confirmLabel="Send now"
+            ask={sendingNow.needsRecipient ? { label: 'Customer WhatsApp number' } : undefined}
             onClose={() => setSendingNow(null)}
-            onConfirm={async () => {
+            onConfirm={async (phone) => {
               const { voucherId } = sendingNow
               setSendingNow(null)
-              try { await requestNow({ voucherId }) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+              try { await requestNow({ voucherId, ...(phone.trim() ? { phone } : {}) }) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+            }}
+          />
+        )}
+        {markingSent && (
+          <Confirm
+            title={`Mark ${markingSent.label} as already sent?`}
+            body={`This removes it from the queue and records that it was shared with ${markingSent.name || 'the customer'} outside this sender.`}
+            confirmLabel="Mark sent"
+            onClose={() => setMarkingSent(null)}
+            onConfirm={async () => {
+              const { voucherId } = markingSent
+              setMarkingSent(null)
+              try { await markSent({ voucherId }) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
             }}
           />
         )}

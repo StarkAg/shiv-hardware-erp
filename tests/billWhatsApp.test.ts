@@ -11,7 +11,7 @@ describe('sale bills to the customer\'s WhatsApp', () => {
   it('sends final sales made after it was switched on, once each, after they have rested', async () => {
     const t = convexTest(schema, modules)
     const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
-    const { sale, purchase, sanjay, nophone, supplier } = await t.run(async (ctx) => {
+    const { sale, purchase, sanjay, nophone, supplier, wb } = await t.run(async (ctx) => {
       const groupId = await ctx.db.insert('groups', { name: 'Sundry Debtors', nature: 'asset', normalSide: 'Dr', sort: 1 })
       const ledger = (name: string, phone?: string) => ctx.db.insert('ledgers', { name, groupId, openingBalance: 0, openingSide: 'Dr', openingAsOf: 0, active: true, createdAt: 1, updatedAt: 1, ...(phone ? { phone } : {}) } as never)
       return {
@@ -19,6 +19,7 @@ describe('sale bills to the customer\'s WhatsApp', () => {
         purchase: await ctx.db.insert('voucherTypes', { name: 'Purchase', abbr: 'PUR', sort: 2 }),
         sanjay: await ledger('M/s Sanjay Mahto Ji', '83407 85465'),
         nophone: await ledger('Walk-in'),
+        wb: await ledger('WB', '7742804390'),
         supplier: await ledger('Sri Ram Trading', '9000000000'),
       }
     })
@@ -78,14 +79,24 @@ describe('sale bills to the customer\'s WhatsApp', () => {
     await t.mutation(api.billWhatsApp.sendAgain, { voucherId: withPhoto })
     expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items.map((x) => x.label)).toContain('SAL-0041')
 
+    // W/B is a shared walk-in account: its saved number is never used for an
+    // automatic bill. The counter has to enter the actual customer's number.
+    const shared = await voucher(sale, wb, 46, at(6 * MIN), { attachments: [await photo()] })
+
     // Switched off, automatic sending stops. A person can still explicitly
     // request this one voucher without turning the automatic sender on.
     await t.mutation(api.billWhatsApp.setOn, { on: false })
     expect((await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })).items).toEqual([])
-    await t.mutation(api.billWhatsApp.requestNow, { voucherId: edited })
+    const qWithShared = await t.query(api.billWhatsApp.queue, {})
+    expect(qWithShared.waiting.find((x) => x.voucherId === shared)).toMatchObject({ needsRecipient: true, phone: '' })
+    await expect(t.mutation(api.billWhatsApp.requestNow, { voucherId: shared })).rejects.toThrow('10-digit WhatsApp number')
+    await t.mutation(api.billWhatsApp.requestNow, { voucherId: shared, phone: '99345 58177' })
     due = await t.query(api.billWhatsApp.due, { before: at(20 * MIN), limit: 10 })
     expect(due.on).toBe(false)
-    expect(due.items.map((x) => [x.label, x.onDemand])).toEqual([['SAL-0045', true]])
+    expect(due.items.map((x) => [x.label, x.phone, x.onDemand])).toEqual([['SAL-0046', '9934558177', true]])
+    await t.mutation(api.billWhatsApp.markSent, { voucherId: shared })
+    expect((await t.query(api.billWhatsApp.queue, {})).waiting.map((x) => x.label)).not.toContain('SAL-0046')
+    expect((await t.query(api.billWhatsApp.queue, {})).recent.find((x) => x.voucherId === shared)).toMatchObject({ status: 'sent', markedSent: true })
     await t.mutation(api.billWhatsApp.setOn, { on: true })
     expect((await t.query(api.billWhatsApp.status, {})).from).not.toBeNull()
   })

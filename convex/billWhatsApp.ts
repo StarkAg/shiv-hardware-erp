@@ -36,6 +36,10 @@ const dayStart = (ms: number) => Math.floor((ms + IST) / DAY) * DAY - IST
 
 const bare = (name: string | undefined) => String(name ?? '').replace(/^m\/s\.?\s+/i, '').trim()
 const label = (abbr: string, no: number) => `${abbr}-${String(no).padStart(4, '0')}`
+// W/B is the walk-in account: it represents many people, not one WhatsApp
+// contact. It must always ask for the buyer's number at the time of sending.
+const needsRecipient = (name: string | undefined) => bare(name).toUpperCase() === 'WB' || bare(name).toUpperCase() === 'W/B'
+const mobile = (phone: string | undefined) => String(phone ?? '').replace(/\D/g, '')
 
 type Attachment = Doc<'vouchers'>['attachments'][number]
 async function photosOf(ctx: QueryCtx, docs: Attachment[]) {
@@ -95,7 +99,10 @@ export const due = query({
       const onDemand = done?.status === 'requested'
       if (done && !onDemand && (done.status !== 'failed' || done.attempts >= TRIES)) continue
       const party = await ctx.db.get(vch.partyLedgerId)
-      if (!party?.phone || !/\d{10}/.test(party.phone.replace(/\D/g, ''))) continue
+      const phone = onDemand ? done?.requestedPhone ?? party?.phone : party?.phone
+      // A shared walk-in account is never sent automatically. Its one-off
+      // request has the actual buyer's number supplied from the panel.
+      if (!party || (needsRecipient(party.name) && !onDemand) || !/\d{10}/.test(mobile(phone))) continue
       const photos = await photosOf(ctx, vch.attachments)
       // A bill typed in the panel has no photo: the shop PC draws the bill itself.
       let bill: unknown = null
@@ -110,7 +117,7 @@ export const due = query({
         date: vch.date,
         amount: vch.amount ?? null,
         name: bare(party.name),
-        phone: party.phone,
+        phone,
         photos,
         bill,
         tries: done?.attempts ?? 0,
@@ -192,16 +199,19 @@ export const queue = query({
         const done = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', vch._id)).unique()
         if (done && done.status !== 'requested' && (done.status !== 'failed' || done.attempts >= TRIES)) continue
         const party = await ctx.db.get(vch.partyLedgerId)
-        const mobile = !!party?.phone && /\d{10}/.test(party.phone.replace(/\D/g, ''))
+        const shared = needsRecipient(party?.name)
+        const hasMobile = !!party?.phone && /\d{10}/.test(mobile(party.phone))
         waiting.push({
           voucherId: vch._id,
+          partyLedgerId: vch.partyLedgerId,
           label: label(sale.abbr, vch.voucherNo),
           name: bare(party?.name),
-          phone: party?.phone ?? '',
+          phone: shared ? '' : party?.phone ?? '',
           amount: vch.amount ?? null,
           savedAt: Math.max(vch.createdAt, vch.updatedAt),
           // Why it is not going yet, when something stops it.
-          held: vch.status !== 'final' ? 'Waiting for its amount' : !mobile ? 'No mobile number on the account' : null,
+          held: vch.status !== 'final' ? 'Waiting for its amount' : !shared && !hasMobile ? 'No mobile number on the account' : null,
+          needsRecipient: shared,
           tries: done?.attempts ?? 0,
           lastError: done?.status === 'failed' ? done.reason ?? '' : '',
           requested: done?.status === 'requested',
@@ -218,7 +228,7 @@ export const queue = query({
         const vch = await ctx.db.get(r.voucherId)
         const party = vch ? await ctx.db.get(vch.partyLedgerId) : null
         return {
-          voucherId: r.voucherId, status: r.status, at: r.at, reason: r.reason ?? '', attempts: r.attempts,
+          voucherId: r.voucherId, status: r.status, at: r.at, reason: r.reason ?? '', attempts: r.attempts, markedSent: r.markedSent === true,
           name: bare(party?.name), label: vch && sale ? label(sale.abbr, vch.voucherNo) : 'Deleted bill',
           amount: vch?.amount ?? null,
         }
@@ -241,8 +251,8 @@ export const sendAgain = mutation({
  * WhatsApp bills. The linked service picks this request up immediately.
  */
 export const requestNow = mutation({
-  args: { voucherId: v.id('vouchers') },
-  handler: async (ctx, { voucherId }) => {
+  args: { voucherId: v.id('vouchers'), phone: v.optional(v.string()) },
+  handler: async (ctx, { voucherId, phone }) => {
     const settings = await settingsOf(ctx)
     const from = settings?.billWhatsAppFrom
     const [sale, voucher] = await Promise.all([
@@ -252,11 +262,34 @@ export const requestNow = mutation({
     if (!from || !sale || !voucher || voucher.typeId !== sale._id || voucher.createdAt < from) throw new Error('This bill is not in the WhatsApp sending list.')
     if (voucher.status !== 'final') throw new Error('Enter the final amount before sending this bill.')
     const party = await ctx.db.get(voucher.partyLedgerId)
-    if (!party?.phone || !/\d{10}/.test(party.phone.replace(/\D/g, ''))) throw new Error('Add the customer\'s mobile number before sending this bill.')
+    const shared = needsRecipient(party?.name)
+    const requestedPhone = mobile(phone)
+    const recipient = shared ? requestedPhone : mobile(party?.phone)
+    if (shared && !/\d{10}/.test(requestedPhone)) throw new Error('Enter this customer\'s 10-digit WhatsApp number.')
+    if (!shared && !/\d{10}/.test(recipient)) throw new Error('Add the customer\'s mobile number before sending this bill.')
 
     const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
     if (row?.status === 'sent' || row?.status === 'skipped') throw new Error('This bill has already been handled.')
-    const fields = { status: 'requested' as const, attempts: 0, at: Date.now() }
+    const fields = { status: 'requested' as const, attempts: 0, at: Date.now(), ...(shared ? { requestedPhone } : {}) }
+    if (row) await ctx.db.patch(row._id, fields)
+    else await ctx.db.insert('billWhatsApp', { voucherId, ...fields })
+  },
+})
+
+/** Records a bill shared outside this sender, so it leaves the waiting list. */
+export const markSent = mutation({
+  args: { voucherId: v.id('vouchers') },
+  handler: async (ctx, { voucherId }) => {
+    const settings = await settingsOf(ctx)
+    const from = settings?.billWhatsAppFrom
+    const [sale, voucher] = await Promise.all([
+      ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique(),
+      ctx.db.get(voucherId),
+    ])
+    if (!from || !sale || !voucher || voucher.typeId !== sale._id || voucher.createdAt < from || voucher.status !== 'final') throw new Error('This bill is not in the WhatsApp sending list.')
+    const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
+    if (row?.status === 'sent') return
+    const fields = { status: 'sent' as const, attempts: row?.attempts ?? 0, at: Date.now(), reason: 'Marked as already sent', markedSent: true }
     if (row) await ctx.db.patch(row._id, fields)
     else await ctx.db.insert('billWhatsApp', { voucherId, ...fields })
   },

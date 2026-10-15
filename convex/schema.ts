@@ -802,6 +802,10 @@ export default defineSchema({
     status: v.union(v.literal("requested"), v.literal("sent"), v.literal("skipped"), v.literal("failed")),
     to: v.optional(v.string()),
     reason: v.optional(v.string()),
+    // A shared walk-in account (WB) asks for this customer's number each time.
+    requestedPhone: v.optional(v.string()),
+    // Set when the counter confirms it was shared by hand, not by this service.
+    markedSent: v.optional(v.boolean()),
     attempts: v.number(),
     at: v.number(),
   })
