@@ -24,12 +24,14 @@ export function readDockSize(): DockSize {
  * phone. Its edge drags to make it wider or taller. The form makes room for
  * it rather than going under it, and typing carries on in the form.
  */
-export function BillDock({ size, onResize, children, besideList = true }: {
+export function BillDock({ size, onResize, children, besideList = true, listFolded = false }: {
   size: DockSize
   onResize: (size: DockSize) => void
   children: React.ReactNode
   /** The bill screen keeps a list panel down the right on a wide screen; the dock sits beside it. */
   besideList?: boolean
+  /** The List panel is folded to a strip, so the dock moves out to it. */
+  listFolded?: boolean
 }) {
   const drag = (event: React.PointerEvent, side: 'w' | 'h') => {
     event.preventDefault()
@@ -56,7 +58,7 @@ export function BillDock({ size, onResize, children, besideList = true }: {
   }
   return (
     <aside
-      className={`no-print fixed inset-x-0 bottom-[var(--mobile-bottom-nav-space)] z-30 h-[var(--dock-h)] px-1.5 pt-3 md:inset-x-auto md:bottom-auto md:right-0 md:top-0 md:h-screen md:w-[var(--dock-w)] md:pb-2 md:pl-3 md:pr-2 md:pt-2 ${besideList ? 'xl:right-80 2xl:right-96' : ''}`}
+      className={`no-print fixed inset-x-0 bottom-[var(--mobile-bottom-nav-space)] z-30 h-[var(--dock-h)] px-1.5 pt-3 md:inset-x-auto md:bottom-auto md:right-0 md:top-0 md:h-screen md:w-[var(--dock-w)] md:pb-2 md:pl-3 md:pr-2 md:pt-2 ${besideList ? (listFolded ? 'xl:right-7' : 'xl:right-80 2xl:right-96') : ''}`}
       style={{ '--dock-w': size.w + 'px', '--dock-h': size.h + 'px' } as React.CSSProperties}
       aria-label="Bill photo"
     >

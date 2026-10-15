@@ -5,6 +5,7 @@ import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, C
 import { WhatsAppSent } from '../../components/WhatsAppSent'
 import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
+import { setListPanelFolded, useListPanelFolded } from '../../lib/listPanelFold'
 // The ledger's own photo picker: files chosen here, and photographs the phone
 // has already sent in. One picker for the whole shop rather than a second one
 // that would drift from it.
@@ -1927,20 +1928,12 @@ type PanelList = { title: string; rows: PanelRow[]; highlight: number; onPick: (
 
 const ListPanelContext = createContext<(l: PanelList | null) => void>(() => {})
 
-/** Whether the panel was folded away on this computer. */
-const LIST_PANEL_KEY = 'shiv.billListPanel.folded'
-
 function TallyListPanel({ list }: { list: PanelList | null }) {
   const ref = useRef<HTMLDivElement>(null)
   // Folded away to a strip on the right edge, for a screen that wants the
   // room. The boxes keep their own dropdowns, so nothing is lost while it is.
-  const [folded, setFolded] = useState(() => {
-    try { return localStorage.getItem(LIST_PANEL_KEY) === '1' } catch { return false }
-  })
-  const fold = (v: boolean) => {
-    setFolded(v)
-    try { localStorage.setItem(LIST_PANEL_KEY, v ? '1' : '0') } catch { /* kept for this visit only */ }
-  }
+  const folded = useListPanelFolded()
+  const fold = setListPanelFolded
   useEffect(() => {
     ref.current?.querySelector('[data-hl="1"]')?.scrollIntoView({ block: 'nearest' })
   }, [list?.highlight, list?.rows.length, folded])
@@ -4054,7 +4047,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
       )}
 
       {photoShown != null && !photoFull && (
-        <BillDock size={dockSize} onResize={setDockSize}>
+        <BillDock size={dockSize} onResize={setDockSize} listFolded={listFolded}>
           <BillViewer
             key={dockKey}
             voucher={photoShown}
@@ -4085,8 +4078,8 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
       <div
         className={photoShown != null && !photoFull
           // Room made for the docked bill, so nothing of the form is under it.
-          ? 'max-w-2xl space-y-5 px-4 pb-[calc(var(--dock-h)+1.5rem)] pt-1 md:max-w-none md:pb-24 md:pl-6 md:pr-[calc(var(--dock-w)+1rem)] md:pt-2 xl:pl-8 xl:pr-[calc(var(--dock-w)+21rem)] 2xl:pr-[calc(var(--dock-w)+25rem)]'
-          : 'mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-1 md:pt-2 xl:max-w-none xl:pl-8 xl:pr-[21rem] 2xl:pr-[25rem]'}
+          ? `max-w-2xl space-y-5 px-4 pb-[calc(var(--dock-h)+1.5rem)] pt-1 md:max-w-none md:pb-24 md:pl-6 md:pr-[calc(var(--dock-w)+1rem)] md:pt-2 xl:pl-8 ${listFolded ? 'xl:pr-[calc(var(--dock-w)+2.75rem)]' : 'xl:pr-[calc(var(--dock-w)+21rem)] 2xl:pr-[calc(var(--dock-w)+25rem)]'}`
+          : `mx-auto max-w-2xl space-y-5 px-4 pb-24 pt-1 md:pt-2 xl:max-w-none xl:pl-8 ${listFolded ? 'xl:pr-12' : 'xl:pr-[21rem] 2xl:pr-[25rem]'}`}
         style={{ '--dock-w': dockSize.w + 'px', '--dock-h': dockSize.h + 'px' } as React.CSSProperties}
       >
 
