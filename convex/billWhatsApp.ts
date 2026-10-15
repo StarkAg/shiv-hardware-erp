@@ -76,9 +76,15 @@ export const due = query({
     // A person may choose one waiting bill to go now without enabling the
     // automatic sender. The request lives in the same one-row-per-voucher log
     // that records an actual send, so every device and the service see it.
-    const requested = new Set((await ctx.db.query('billWhatsApp').collect())
+    const log = await ctx.db.query('billWhatsApp').collect()
+    const requested = new Set(log
       .filter((row) => row.status === 'requested')
       .map((row) => String(row.voucherId)))
+    // Numbers this sender has put a bill in before. A new one is greeted
+    // first, as the shop does by hand: a smile, folded hands, the card.
+    const greeted = new Set(log
+      .filter((row) => row.status === 'sent' && !row.markedSent && row.to)
+      .map((row) => mobile(row.to).slice(-10)))
     if (!on && requested.size === 0) return { on, sentToday, items: [] }
 
     const sale = await ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique()
@@ -122,6 +128,8 @@ export const due = query({
         bill,
         tries: done?.attempts ?? 0,
         onDemand,
+        newChat: !greeted.has(mobile(phone).slice(-10)),
+        shared: needsRecipient(party.name),
       })
     }
     return { on, sentToday, items }

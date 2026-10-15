@@ -36,13 +36,16 @@
  *   BILL_WHATSAPP_REST_MIN, BILL_WHATSAPP_DAILY_MAX, BILL_WHATSAPP_HOURS (10, 40, 9-21)
  */
 import http from 'node:http'
-import { rename } from 'node:fs/promises'
+import { readFile, rename } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 
 const PORT = Number(process.env.PORT || 8080)
 const AUTH_DIR = process.env.AUTH_DIR || '/data/auth'
 const LOGIN_KEY = process.env.LOGIN_KEY || ''
 const REST_MS = Number(process.env.BILL_WHATSAPP_REST_MIN || 10) * 60_000
 const DAILY_MAX = Number(process.env.BILL_WHATSAPP_DAILY_MAX || 40)
+/** The shop's visiting card, sent once to a number before its first bill. */
+const CARD = fileURLToPath(new URL('./visiting-card.jpg', import.meta.url))
 const HOURS = String(process.env.BILL_WHATSAPP_HOURS || '9-21').split('-').map(Number)
 const GAP_MS = [60_000, 180_000]
 const COUNTRY = '91'
@@ -199,7 +202,9 @@ function jidOf(raw) {
 function caption(item) {
   const day = new Date(item.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
   const amount = item.amount != null ? ` · ₹${Math.round(item.amount).toLocaleString('en-IN')}` : ''
-  return `Thank you for purchasing with us, ${item.name}.\nHere is the bill copy for your online records.\n\nBill dated ${day}${amount}\nShiv Hardware Store`
+  // The walk-in account's name is the shop's own word for it, not the buyer's.
+  const to = item.shared ? '' : `, ${item.name}`
+  return `Thank you for purchasing with us${to}.\nHere is the bill copy for your online records.\n\nBill dated ${day}${amount}\nShiv Hardware Store`
 }
 
 const indiaHour = () => new Date(Date.now() + 19_800_000).getUTCHours()
@@ -240,6 +245,18 @@ async function sendDue() {
     }
     if (!media.length && item.bill) media.push({ image: await billPicture(item.bill) })
     if (!media.length) { await record('skipped', { reason: 'nothing to send' }); return }
+
+    // A number this sender has not written to before is greeted the way the
+    // shop does it by hand: a smile, folded hands, then the visiting card.
+    // The one place emoji are allowed (AGENTS.md), written as code points.
+    if (item.newChat) {
+      for (const text of ['\u{1F642}', '\u{1F64F}']) {
+        await sock.sendMessage(jid, { text })
+        await new Promise((resolve) => setTimeout(resolve, 1_000 + Math.random() * 1_000))
+      }
+      await sock.sendMessage(jid, { image: await readFile(CARD) })
+      await new Promise((resolve) => setTimeout(resolve, 2_000 + Math.random() * 2_000))
+    }
 
     // Every page of the bill, then the line saying which bill it is, as its
     // own message after them: the note on the first photo read as being
