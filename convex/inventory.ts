@@ -335,11 +335,12 @@ export const count = mutation({
   },
 });
 
-/** Reorder level, rack/shelf, main unit and pack sizes for one item. */
+/** Shelf name, reorder level, rack/shelf, main unit and pack sizes for one item. */
 export const setItem = mutation({
   args: {
     pin: v.optional(v.string()),
     ref: v.string(),
+    name: v.optional(v.string()),
     min: v.optional(v.union(v.number(), v.null())),
     place: v.optional(v.string()),
     unit: v.optional(v.string()),
@@ -349,7 +350,12 @@ export const setItem = mutation({
   handler: async (ctx, { pin, ref, ...patch }) => {
     requireInventoryPin(pin);
     const row = await ctx.db.query("stockItems").withIndex("by_ref", (q) => q.eq("ref", ref)).first();
+    const name = patch.name === undefined ? row?.name : patch.name.trim().replace(/\s+/g, " ");
+    if (patch.name !== undefined && (!name || name.length > 100)) {
+      throw new ConvexError("Enter an item name of 1 to 100 characters.");
+    }
     const next = {
+      name,
       min: patch.min === undefined ? row?.min : patch.min ?? undefined,
       place: patch.place === undefined ? row?.place : patch.place.trim() || undefined,
       unit: patch.unit === undefined ? row?.unit : canonicalUnit(patch.unit) || undefined,
@@ -389,12 +395,13 @@ async function seededStock(ctx: QueryCtx) {
   ];
   return catalogue.map((seed) => {
     const count = s.lastCount.get(seed.ref);
+    const item = s.items.get(seed.ref);
     // Until initialization, display the supplied opening quantity without
     // applying historical bills to a notebook date the shop hasn't confirmed.
     const baseline = count ?? { qty: seed.qty, day: today(at), at, note: "Supplied opening stock" };
     return { ...summarise(seed.ref, count ? mapped.get(seed.ref) ?? [] : [],
-      { min: 2, ...s.items.get(seed.ref), unit: "Pc" }, baseline,
-      { name: seed.name, unit: "Pc" }), brand: seed.brand, mm: seed.mm, size: seed.size, category: seed.category,
+      { min: 2, ...item, unit: "Pc" }, baseline,
+      { name: item?.name || seed.name, unit: "Pc" }), brand: seed.brand, mm: seed.mm, size: seed.size, category: seed.category,
       ...("label" in seed && seed.label ? { label: seed.label } : {}) };
   });
 }

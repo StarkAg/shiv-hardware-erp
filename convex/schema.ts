@@ -1085,6 +1085,9 @@ export default defineSchema({
   }).index("by_ref", ["ref"]),
   stockItems: defineTable({
     ref: v.string(),
+    // A shelf label may be clearer than the supplied catalogue name without
+    // changing the item's permanent reference or its past bill history.
+    name: v.optional(v.string()),
     min: v.optional(v.number()),
     place: v.optional(v.string()),
     unit: v.optional(v.string()),

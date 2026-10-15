@@ -81,6 +81,13 @@ export function rememberAddedItem(item) {
   return serial(async state => state.items.some(saved => saved.ref === item.ref)
     ? state : { ...state, items: [...state.items, copy(item)] })
 }
+/** Keep a server-saved shelf name visible on this device without replacing its counts or queued taps. */
+export function renameStoredItem(ref, name) {
+  return serial(async state => ({
+    ...state,
+    items: state.items.map(item => item.ref === ref ? { ...item, name } : item),
+  }))
+}
 /** A successful upload is kept on the device for the Sync panel. */
 export function recordConvexSync(at = Date.now()) {
   return serial(async state => ({ ...state, lastConvexSyncAt: at }))

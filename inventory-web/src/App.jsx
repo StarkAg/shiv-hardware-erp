@@ -5,7 +5,7 @@ import { anyApi } from 'convex/server'
 import { BRAND_ORDER, FALLBACK_ITEMS, hydrateStockItems, matchesStockSearch, stockBrands, stockSubtitle, compareStock } from './seed'
 import {
   acknowledgeAdjustment, hydrateFromConvexOnce, loadDeviceInventory, nextAdjustment,
-  queueAdjustment, queuedStock, recordConvexSync, rememberAddedItem,
+  queueAdjustment, queuedStock, recordConvexSync, rememberAddedItem, renameStoredItem,
 } from './localInventory'
 
 const api = anyApi.inventory
@@ -13,15 +13,10 @@ const quantity = n => Number(n).toLocaleString('en-IN', { maximumFractionDigits:
 const errorText = error => String(error?.data ?? error?.message ?? 'Could not save. Please try again.')
   .replace(/^.*Uncaught (Convex)?Error:\s*/s, '').split('\n')[0]
 const isOnline = () => typeof navigator === 'undefined' || navigator.onLine
-const brandCode = { Signature: 'S', 'Signature Gold': 'SG', Milton: 'MS' }
-
 function ItemLabel({ item }) {
-  if (item.category === 'other') return <span className="pack-item-name"><strong>{item.label || item.name}</strong><small>{item.brand} · {item.size}</small></span>
-  return <span className="item-name">
-    <span>{item.mm}mm</span>
-    <span className="item-separator">·</span>
-    <span>{item.size.replace('x', ' × ')}</span>
-    <span className="item-code">{brandCode[item.brand] || item.brand}</span>
+  return <span className="pack-item-name">
+    <strong>{item.name}</strong>
+    <small>{item.category === 'other' ? `${item.brand} · ${item.size}` : `${item.brand} · ${item.mm}mm · ${item.size.replace('x', ' × ')}`}</small>
   </span>
 }
 
@@ -167,6 +162,7 @@ export default function App() {
   const [device, setDevice] = useState(null)
   const remoteItems = useQuery(api.seedList, {})
   const adjust = useMutation(api.adjustSeed)
+  const setItem = useMutation(api.setItem)
   const [tab, setTab] = useState('stock')
   const [sort, setSort] = useState('brand')
   const [sortOpen, setSortOpen] = useState(false)
@@ -270,6 +266,18 @@ export default function App() {
     }
   }
 
+  const editName = async item => {
+    const name = window.prompt('Item name', item.name)?.trim()
+    if (!name || name === item.name) return
+    setError('')
+    try {
+      await setItem({ pin, ref: item.ref, name })
+      setDevice(await renameStoredItem(item.ref, name))
+    } catch (err) {
+      setError(errorText(err))
+    }
+  }
+
   const status = syncLabel({ queue, online, syncing, pin, blocked })
   const lastSynced = device?.lastConvexSyncAt
     ? new Date(device.lastConvexSyncAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
@@ -318,7 +326,7 @@ export default function App() {
         {!shown.length ? <p className="hint">No matching stock.</p>
           : <ul className={`stock-list ${editing ? '' : 'stock-cards'}`}>
               {shown.map(item => <li key={item.ref}>
-                {editing ? <><ItemLabel item={item} /><div className="stepper" aria-label={`Quantity for ${item.name}`}>
+                {editing ? <><ItemLabel item={item} /><button className="name-edit" onClick={() => void editName(item)}>Edit name</button><div className="stepper" aria-label={`Quantity for ${item.name}`}>
                   <button aria-label={`Decrease ${item.name}`} onClick={() => change(item, -1)}><StepIcon /></button>
                   <span className="quantity alpha-quantity" aria-live="polite"><span>α</span><span>{quantity(item.stock)}</span></span>
                   <button aria-label={`Increase ${item.name}`} onClick={() => change(item, 1)}><StepIcon plus /></button>

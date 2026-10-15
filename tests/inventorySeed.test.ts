@@ -55,6 +55,13 @@ describe('supplied plywood and door inventory', () => {
     await expect(t.mutation(api.inventory.adjustSeed, { pin, ref: 'id:door', delta: 1 })).rejects.toThrow('not in your stock list')
   })
 
+  it('renames a shelf item without changing its stock reference or quantity', async () => {
+    const t = await initialized()
+    await t.mutation(api.inventory.setItem, { pin, ref: plywoodRef, name: '6mm Signature 7 x 4 - Shop' })
+    const item = (await t.query(api.inventory.seedList, {})).find(row => row.ref === plywoodRef)
+    expect(item).toMatchObject({ ref: plywoodRef, name: '6mm Signature 7 x 4 - Shop', stock: 5 })
+  })
+
   it('applies a retried device operation only once', async () => {
     const t = await initialized()
     const ref = plywoodRef
