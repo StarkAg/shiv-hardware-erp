@@ -205,7 +205,8 @@ function caption(item) {
   // The walk-in account's name is the shop's own word for it, not the buyer's.
   const to = item.shared ? '' : `, ${item.name}`
   // A receipt thanks for the payment; a refund or a return says what it is.
-  if (item.kind === 'Receipt') return `Thank you for your payment${to}.\nHere is the receipt for your online records.\n\nReceipt dated ${day}${amount}\nShiv Hardware Store`
+  // No date or amount under a receipt: the owner asked for it to go without them.
+  if (item.kind === 'Receipt') return `Thank you for your payment${to}.\nHere is the receipt for your online records.\n\nShiv Hardware Store`
   if (item.kind && item.kind !== 'Sale') return `Namaste${to}.\nHere is the ${item.kind.toLowerCase()} copy for your online records.\n\n${item.kind} dated ${day}${amount}\nShiv Hardware Store`
   return `Thank you for purchasing with us${to}.\nHere is the bill copy for your online records.\n\nBill dated ${day}${amount}\nShiv Hardware Store`
 }
