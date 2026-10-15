@@ -163,6 +163,7 @@ export default function App() {
   const remoteItems = useQuery(api.seedList, {})
   const adjust = useMutation(api.adjustSeed)
   const setItem = useMutation(api.setItem)
+  const mergeSignatureGold21 = useMutation(api.mergeSignatureGold21)
   const [tab, setTab] = useState('stock')
   const [sort, setSort] = useState('brand')
   const [sortOpen, setSortOpen] = useState(false)
@@ -203,6 +204,9 @@ export default function App() {
     setSyncing(true)
     setBlocked(false)
     try {
+      // Once an unlocked device is online this folds the obsolete duplicate
+      // 21 mm rows into their matching supplied shelves. Later calls are no-ops.
+      await mergeSignatureGold21({ pin: pinRef.current })
       let uploaded = 0
       for (;;) {
         if (!pinRef.current || !isOnline()) break

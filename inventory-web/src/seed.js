@@ -65,6 +65,12 @@ export function compareStock(a, b, sort) {
 }
 const seedByRef = new Map(FALLBACK_ITEMS.map(item => [item.ref, item]))
 
+/** Old bill-created 21 mm rows now belong to the supplied shelf reference. */
+export function canonicalStockRef(ref) {
+  const match = String(ref).match(/^custom:ply:signature-gold:21:(6x3|7x4|8x4)$/)
+  return match ? `seed:ply:signature-gold:19:${match[1]}` : ref
+}
+
 /** Convex owns the live quantities; this adds the fixed display identity back. */
 export function hydrateStockItems(items) {
   return items.map(item => {

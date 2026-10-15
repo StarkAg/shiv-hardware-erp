@@ -119,6 +119,23 @@ describe('supplied plywood and door inventory', () => {
       .toMatchObject({ name: '30mm Signature Gold 78 x 30', brand: 'Signature Gold', stock: 9 })
   })
 
+  it('merges old duplicate 21 mm Signature Gold shelves by size', async () => {
+    const t = await initialized()
+    const duplicateRef = 'custom:ply:signature-gold:21:7x4'
+    await t.run(async ctx => {
+      await ctx.db.insert('inventoryProducts', { ref: duplicateRef, name: '21mm Signature Gold 7 x 4', category: 'ply', brand: 'Signature Gold', mm: 21, size: '7x4' })
+      await ctx.db.insert('stockCounts', { ref: duplicateRef, qty: 5, day: '2026-10-15', at: 1, note: 'Old duplicate shelf' })
+    })
+    expect((await t.query(api.inventory.seedList, {})).find(row => row.ref === 'seed:ply:signature-gold:19:7x4')?.stock).toBe(3)
+    expect((await t.query(api.inventory.seedList, {})).find(row => row.ref === duplicateRef)?.stock).toBe(5)
+    await expect(t.mutation(api.inventory.mergeSignatureGold21, { pin })).resolves.toEqual({ merged: 1 })
+    const rows = await t.query(api.inventory.seedList, {})
+    expect(rows).toHaveLength(50)
+    expect(rows.find(row => row.ref === 'seed:ply:signature-gold:19:7x4')).toMatchObject({ stock: 8, name: '21mm Signature Gold 7 x 4' })
+    await t.mutation(api.inventory.adjustSeed, { pin, ref: duplicateRef, delta: 1 })
+    expect((await t.query(api.inventory.seedList, {})).find(row => row.ref === 'seed:ply:signature-gold:19:7x4')?.stock).toBe(9)
+  })
+
   it('adds a new item with an opening count and supports later quantity edits', async () => {
     const t = await initialized()
     const input = { pin, category: 'door' as const, brand: 'Signature Gold' as const, mm: 35, height: 81, width: 32, qty: 7 }

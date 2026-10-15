@@ -1,4 +1,4 @@
-import { FALLBACK_ITEMS, hydrateStockItems } from './seed'
+import { FALLBACK_ITEMS, canonicalStockRef, hydrateStockItems } from './seed'
 
 const DATABASE = 'shiv-inventory-device'
 const STORE = 'stock'
@@ -63,7 +63,13 @@ async function save(state) {
   if (!databaseSaved && !backupSaved) throw new Error('This device could not save the change.')
   return state
 }
-function normalise(state) { return { ...state, items: hydrateStockItems(state.items) } }
+function normalise(state) {
+  return {
+    ...state,
+    items: hydrateStockItems(state.items),
+    queue: state.queue.map(operation => ({ ...operation, ref: canonicalStockRef(operation.ref) })),
+  }
+}
 function serial(change) {
   const job = writing.then(async () => save(await change(await read())))
   writing = job.catch(() => undefined)
@@ -74,7 +80,15 @@ export function saveRemoteInventory(items) { return serial(async state => ({ ...
 /** Download quantities once; discover newly added items without replacing local counts. */
 export function hydrateFromConvexOnce(items, at = Date.now()) {
   return serial(async state => state.convexHydratedAt
-    ? { ...state, items: [...state.items, ...copy(items).filter(item => !state.items.some(saved => saved.ref === item.ref))] }
+    ? {
+        ...state,
+        // A completed server merge replaces these shelf totals; pending taps
+        // are kept separately in queue and applied afterwards.
+        items: [
+          ...state.items.filter(saved => !/^(?:seed:ply:signature-gold:19|custom:ply:signature-gold:21):(6x3|7x4|8x4)$/.test(saved.ref)),
+          ...copy(items).filter(item => /^seed:ply:signature-gold:19:(6x3|7x4|8x4)$/.test(item.ref) || !state.items.some(saved => saved.ref === item.ref)),
+        ],
+      }
     : { ...state, items: copy(items), convexHydratedAt: at, lastConvexSyncAt: at })
 }
 export function rememberAddedItem(item) {

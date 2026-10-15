@@ -30,6 +30,15 @@ import { canonicalUnit } from "./lib/text";
 import { INVENTORY_SEED, seedRefForName } from "./lib/inventorySeed";
 import { requireInventoryPin } from "./lib/inventoryPin";
 
+// Before the 21 mm correction, bill-created Signature Gold rows were given a
+// separate custom reference. They are the same physical shelves as these seed
+// rows, so keep accepting the old reference while showing/counting one row.
+const legacySignatureGold21Ref = (ref: string) => {
+  const match = ref.match(/^custom:ply:signature-gold:21:(6x3|7x4|8x4)$/);
+  return match ? `seed:ply:signature-gold:19:${match[1]}` : undefined;
+};
+const canonicalStockRef = (ref: string) => legacySignatureGold21Ref(ref) ?? ref;
+
 /* ── which item a line is (same rules as src/lib/profit.ts) ─────────────── */
 
 const foldItemName = (d: unknown) =>
@@ -323,6 +332,7 @@ export const count = mutation({
   handler: async (ctx, { pin, ref, qty, note, day }) => {
     requireInventoryPin(pin);
     if (!Number.isFinite(qty) || qty < 0) throw new Error("Count must be zero or more");
+    ref = canonicalStockRef(ref);
     const at = Date.now();
     await ctx.db.insert("stockCounts", {
       ref,
@@ -349,6 +359,7 @@ export const setItem = mutation({
   },
   handler: async (ctx, { pin, ref, ...patch }) => {
     requireInventoryPin(pin);
+    ref = canonicalStockRef(ref);
     const row = await ctx.db.query("stockItems").withIndex("by_ref", (q) => q.eq("ref", ref)).first();
     const name = patch.name === undefined ? row?.name : patch.name.trim().replace(/\s+/g, " ");
     if (patch.name !== undefined && (!name || name.length > 100)) {
@@ -385,7 +396,7 @@ async function seededStock(ctx: QueryCtx) {
   const customByName = new Map(products.map(product => [foldItemName(product.name), product.ref]));
   const mapped = new Map<string, Move[]>();
   for (const move of all) {
-    const ref = move.stockRef ?? seedRefForName(move.name) ?? customByName.get(foldItemName(move.name));
+    const ref = canonicalStockRef(move.stockRef ?? seedRefForName(move.name) ?? customByName.get(foldItemName(move.name)) ?? "");
     if (ref) mapped.set(ref, [...(mapped.get(ref) ?? []), move]);
   }
   const at = Date.now();
@@ -536,6 +547,7 @@ export const adjustSeed = mutation({
   },
   handler: async (ctx, { pin, ref, delta, operationId }) => {
     requireInventoryPin(pin);
+    ref = canonicalStockRef(ref);
     if (!INVENTORY_SEED.some(i => i.ref === ref)
       && !await ctx.db.query("inventoryProducts").withIndex("by_ref", q => q.eq("ref", ref)).first()) {
       throw new ConvexError("This item is not in your stock list.");
@@ -546,7 +558,7 @@ export const adjustSeed = mutation({
         .withIndex("by_operation", q => q.eq("operationId", operationId))
         .unique();
       if (previous) {
-        if (previous.ref !== ref || previous.delta !== delta) throw new ConvexError("That device operation does not match this stock change.");
+        if (canonicalStockRef(previous.ref) !== ref || previous.delta !== delta) throw new ConvexError("That device operation does not match this stock change.");
         return { qty: previous.qty, duplicate: true };
       }
     }
@@ -561,6 +573,50 @@ export const adjustSeed = mutation({
     });
     if (operationId) await ctx.db.insert("inventorySyncOps", { operationId, ref, delta, qty, at });
     return { qty, duplicate: false };
+  },
+});
+
+/**
+ * Fold old bill-created 21 mm Signature Gold rows into their supplied shelf
+ * rows. The last count is the combined shelf quantity at merge time; bills
+ * saved afterwards (even with an old reference) are redirected above.
+ */
+export const mergeSignatureGold21 = mutation({
+  args: { pin: v.string() },
+  handler: async (ctx, { pin }) => {
+    requireInventoryPin(pin);
+    const products = await ctx.db.query("inventoryProducts").collect();
+    const duplicates = products.filter(product => legacySignatureGold21Ref(product.ref));
+    if (!duplicates.length) return { merged: 0 };
+
+    const live = new Map((await seededStock(ctx)).map(item => [item.ref, item]));
+    const settings = await ctx.db.query("stockItems").collect();
+    const at = Date.now();
+    for (const product of duplicates) {
+      const target = legacySignatureGold21Ref(product.ref)!;
+      const targetItem = live.get(target);
+      const duplicateItem = live.get(product.ref);
+      if (!targetItem || !duplicateItem) continue;
+      const qty = targetItem.stock + duplicateItem.stock;
+      await ctx.db.insert("stockCounts", {
+        ref: target, qty, day: today(at), at,
+        note: `Merged duplicate 21mm Signature Gold ${product.size}`,
+      });
+      live.set(target, { ...targetItem, stock: qty });
+
+      const sourceSetting = settings.find(item => item.ref === product.ref);
+      const targetSetting = settings.find(item => item.ref === target);
+      if (sourceSetting && !targetSetting) {
+        await ctx.db.insert("stockItems", {
+          ref: target, min: sourceSetting.min, place: sourceSetting.place,
+          unit: sourceSetting.unit, packs: sourceSetting.packs, note: sourceSetting.note,
+          updatedAt: at,
+        });
+      }
+      for (const setting of settings.filter(item => item.ref === product.ref)) await ctx.db.delete(setting._id);
+      await ctx.db.delete(product._id);
+    }
+    return { merged: duplicates.length };
   },
 });
 
