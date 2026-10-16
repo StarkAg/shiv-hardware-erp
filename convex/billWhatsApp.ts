@@ -12,7 +12,8 @@ import type { Doc, Id } from './_generated/dataModel'
  * WhatsApp) asks here for the sales that are due, sends each one, and says
  * how it went.
  *
- * - Only sales, and only once a bill has its amount (final, not pending). A
+ * - Only sales, priced or not: a bill not priced yet goes as it is, its
+ *   photo or the bill typed so far (the owner asked for that). A
  *   supplier's bill came from the supplier; it stays in the books.
  * - Only bills made after the sending was switched on: older ones are shared
  *   by hand, a party at a time (Share all bills in Shiv Accounts), because
@@ -85,7 +86,7 @@ async function settingsOf(ctx: QueryCtx) {
 }
 
 /**
- * The sales due to go, for the shop PC: final sales saved after the sending
+ * The sales due to go, for the shop PC: sales saved after the sending
  * was switched on and not touched since `before`, to a customer with a phone,
  * not yet sent. With them, whether sending is on and how many went today.
  */
@@ -141,13 +142,13 @@ export const due = query({
     // sending was switched on can go too, and a receipt (Older bills on the
     // panel's page).
     const asked = (await Promise.all([...requested].map((id) => ctx.db.get(id as Id<'vouchers'>))))
-      .filter((vch): vch is Doc<'vouchers'> => !!vch && SENDABLE.has(types.get(String(vch.typeId))?.name ?? '') && vch.status === 'final')
+      .filter((vch): vch is Doc<'vouchers'> => !!vch && SENDABLE.has(types.get(String(vch.typeId))?.name ?? ''))
       .sort((a, b) => a.createdAt - b.createdAt)
     // The automatic queue: only sales made after it was switched on. A bill's
     // date can be set back a day or two from when it was typed.
     const automatic = on && from ? (
       await ctx.db.query('vouchers').withIndex('by_date', (q) => q.gte('date', from - 7 * DAY)).collect()
-    ).filter((vch) => vch.typeId === sale._id && vch.status === 'final' && vch.createdAt >= from &&
+    ).filter((vch) => vch.typeId === sale._id && vch.createdAt >= from &&
       !requested.has(String(vch._id)) && Math.max(vch.createdAt, vch.updatedAt) <= before)
       .sort((a, b) => a.createdAt - b.createdAt) : []
     // A specifically requested bill comes before the automatic queue.
@@ -296,7 +297,7 @@ export const queue = query({
           amount: vch.amount ?? null,
           savedAt: Math.max(vch.createdAt, vch.updatedAt),
           // Why it is not going yet, when something stops it.
-          held: vch.status !== 'final' ? 'Waiting for its amount' : !shared && !hasMobile ? 'No mobile number on the account' : null,
+          held: !shared && !hasMobile ? 'No mobile number on the account' : null,
           needsRecipient: shared,
           tries: done?.attempts ?? 0,
           lastError: done?.status === 'failed' ? done.reason ?? '' : '',
@@ -401,7 +402,6 @@ export const requestNow = mutation({
     const voucher = await ctx.db.get(voucherId)
     const type = voucher ? await ctx.db.get(voucher.typeId) : null
     if (!voucher || !SENDABLE.has(type?.name ?? '')) throw new Error('Only a customer\'s bill or receipt can be sent on WhatsApp.')
-    if (voucher.status !== 'final') throw new Error('Enter the final amount before sending this bill.')
     const party = await ctx.db.get(voucher.partyLedgerId)
     const shared = needsRecipient(party?.name)
     const requestedPhone = mobile(phone)
@@ -429,7 +429,7 @@ export const markSent = mutation({
       ctx.db.query('voucherTypes').withIndex('by_name', (q) => q.eq('name', 'Sale')).unique(),
       ctx.db.get(voucherId),
     ])
-    if (!from || !sale || !voucher || voucher.typeId !== sale._id || voucher.createdAt < from || voucher.status !== 'final') throw new Error('This bill is not in the WhatsApp sending list.')
+    if (!from || !sale || !voucher || voucher.typeId !== sale._id || voucher.createdAt < from) throw new Error('This bill is not in the WhatsApp sending list.')
     const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
     if (row?.status === 'sent') return
     const fields = { status: 'sent' as const, attempts: row?.attempts ?? 0, at: Date.now(), reason: 'Marked as already sent', markedSent: true }

@@ -120,7 +120,7 @@ function OlderBills({ linked, onSee, onSend }: {
             <tbody>
               {bills.map((b) => {
                 const noPhone = !b.needsRecipient && !/\d{10}/.test(b.phone.replace(/\D/g, ''))
-                const held = !b.final ? 'Waiting for its amount' : !b.hasPicture ? 'No photo to send' : noPhone ? 'No mobile number on the account' : null
+                const held = !b.hasPicture ? 'No photo to send' : noPhone ? 'No mobile number on the account' : null
                 const row: Waiting = { voucherId: b.voucherId, label: b.label, name: b.name, amount: b.amount, needsRecipient: b.needsRecipient, canSend: !held && b.status !== 'requested' && linked }
                 return (
                   <tr key={b.voucherId}>
