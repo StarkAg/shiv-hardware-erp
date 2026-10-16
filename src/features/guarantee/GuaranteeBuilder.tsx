@@ -378,6 +378,11 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const picks = usePicks(guarantees, brandOptions)
   const rateFor = useRateLookup(guarantees, brandOptions)
   const comboOptions = useComboOptions(guarantees, brandOptions)
+  // The card's brand is picked from the Rates (quotation) list only, each name once.
+  const listedBrands = useMemo(
+    () => [...new Map(brandOptions.filter((b) => b.name.trim()).map((b) => [brandKey(b.name), b.name.trim()])).values()],
+    [brandOptions],
+  )
   const hasRows = rows.some(isRowFilled)
 
   // What the Type box's list shows beside a name ("10y"): the price list's
@@ -950,8 +955,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 </div>
               </div>
               {onCard2
-                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brand={brand2} setBrand={setBrand2} options={comboOptions} rateFor={rateFor} picks={picks} />
-                : <SizeTable key="t1" rows={rows} setRows={setRows} brand={brand1} setBrand={setBrand1} options={comboOptions} rateFor={rateFor} picks={picks} />}
+                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brand={brand2} setBrand={setBrand2} brands={listedBrands} options={comboOptions} rateFor={rateFor} picks={picks} />
+                : <SizeTable key="t1" rows={rows} setRows={setRows} brand={brand1} setBrand={setBrand1} brands={listedBrands} options={comboOptions} rateFor={rateFor} picks={picks} />}
             </Card>
           </div>
 
@@ -1495,6 +1500,7 @@ function SizeTable({
   picks,
   brand,
   setBrand,
+  brands,
 }: {
   rows: SizeRow[]
   setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void
@@ -1503,6 +1509,7 @@ function SizeTable({
   picks: Picks
   brand: string
   setBrand: (brand: string) => void
+  brands: string[]
 }) {
   const rateFor = withBrandRate(priceRate, brand)
   // The row the tap buttons fill: the one last touched, else the first still empty.
@@ -1602,7 +1609,7 @@ function SizeTable({
           <ComboBox
             value={brand}
             placeholder="Pick a brand — its rate fills every row"
-            options={typeNames}
+            options={brands}
             note={(name) => {
               const rate = priceRate(name, firstThickness)
               const years = typeYears.get(name) ?? 0
