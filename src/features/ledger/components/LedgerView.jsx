@@ -303,7 +303,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const showPhotos = (key) => onViewBill(photoStrip(stream.map((item) => {
     const row = item.r ?? item.p ?? item.g;
     if (row) return { key: item.key, vchLabel: row.vchLabel, vchType: row.vchType ? rowType(row) : row.vchType, date: row.date, amount: row.amount ?? null, refNo: row.refNo, attachmentUrls: row.attachmentUrls };
-    if (item.q) return { key: item.key, vchType: 'Quotation', vchLabel: item.q.number, date: item.date, amount: item.q.total ?? null, attachmentUrls: item.q.attachments };
+    if (item.q) return { key: item.key, vchType: item.q.workOrder ? 'Visit order' : 'Quotation', vchLabel: item.q.number, date: item.date, amount: item.q.total ?? null, attachmentUrls: item.q.attachments };
     return { key: item.key, attachmentUrls: [] };
   }), key, account?.name));
   const groupName = (masters?.ledgers ?? []).find((l) => l._id === ledgerId)?.groupName;
@@ -699,11 +699,11 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                   <tr className="quote" key={item.key}>
                     <td className="mono" data-label="Date">{shortDate(item.date)}</td>
                     <td className="mono entryno" data-label="Vch">QTN-{String(item.q.number).replace(/^Q-/, '')}</td>
-                    <td className="vchtype" data-label="Type">Quotation</td>
+                    <td className="vchtype" data-label="Type">{item.q.workOrder ? 'Visit order' : 'Quotation'}</td>
                     <td className="ref mono" data-label="Ref">{item.q.ref || '—'}</td>
                     <td className="particulars" data-label="Particulars">
                       <Goods bill={item.q} all first />
-                      <div className="ref">₹{rupees(item.q.total)} quoted · not in the balance</div>
+                      <div className="ref">{item.q.workOrder ? 'Visit order for the mechanic' : `₹${rupees(item.q.total)} quoted`} · not in the balance</div>
                     </td>
                     <td className="num" data-label="Debit" />
                     <td className="num" data-label="Quotation">

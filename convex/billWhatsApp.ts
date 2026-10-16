@@ -46,12 +46,18 @@ type Attachment = Doc<'vouchers'>['attachments'][number]
 /** "QTN-4" for quotation Q-4, as the bill screen's quotation list labels it. */
 const quoteLabel = (number: unknown) => `QTN-${String(number ?? '').replace(/^Q-/, '')}`
 
-type QuoteBill = { id: string; kind?: string; number?: string; date: string; total?: number; customerName?: string; customerPhone?: string; attachments?: unknown[]; deleted?: boolean }
+type QuoteBill = { id: string; kind?: string; number?: string; date: string; total?: number; customerName?: string; customerPhone?: string; attachments?: unknown[]; deleted?: boolean; workOrder?: boolean }
+/**
+ * An open quotation to a customer. A mechanic's visit order is kept as a
+ * quotation with no price yet (workOrder): it is the shop's own paper, not one.
+ */
+const isOpenQuote = (bill: QuoteBill | undefined): bill is QuoteBill =>
+  !!bill && bill.kind === 'quotation' && !bill.deleted && !bill.workOrder
 /** An open quotation, by its bill id; null once it is deleted or sold. */
 async function quoteBill(ctx: QueryCtx, billId: string): Promise<QuoteBill | null> {
   const row = await ctx.db.query('bills').withIndex('by_bill', (q) => q.eq('billId', billId)).unique()
   const bill = row?.bill as QuoteBill | undefined
-  return bill && bill.kind === 'quotation' && !bill.deleted ? bill : null
+  return isOpenQuote(bill) ? bill : null
 }
 async function photosOf(ctx: QueryCtx, docs: Attachment[]) {
   const out = []
@@ -461,7 +467,7 @@ export const quotes = query({
   handler: async (ctx) => {
     const open = (await ctx.db.query('bills').collect())
       .map((row) => row.bill as QuoteBill)
-      .filter((bill) => bill?.kind === 'quotation' && !bill.deleted)
+      .filter(isOpenQuote)
       .sort((a, b) => String(b.date).localeCompare(String(a.date)))
     return await Promise.all(open.map(async (bill) => {
       const done = await ctx.db.query('quoteWhatsApp').withIndex('by_bill', (q) => q.eq('billId', bill.id)).unique()

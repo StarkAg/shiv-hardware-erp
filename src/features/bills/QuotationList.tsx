@@ -30,9 +30,11 @@ export function QuotationList() {
   const [previewing, setPreviewing] = useState<Bill | null>(null)
   const [photos, setPhotos] = useState<Bill | null>(null)
 
+  // A visit order for the mechanic is a quotation without a price yet; it
+  // belongs on the Work list, not here.
   const all = useMemo(
     () => bills
-      .filter((b) => isQuotation(b) || b.fromQuote)
+      .filter((b) => (isQuotation(b) && !b.workOrder) || b.fromQuote)
       .sort((a, b) => b.date.localeCompare(a.date) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
     [bills],
   )
