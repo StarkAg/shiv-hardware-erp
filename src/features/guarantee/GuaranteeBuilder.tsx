@@ -1578,21 +1578,23 @@ function SizeTable({
     // A brand goes on the card as it is typed: the panel's proper-case rule
     // (lib/properInputs) took "DDLED" for caps lock and made it "Ddled".
     <div data-case="raw">
-      <label className="mb-2 block">
-        <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted">Brand (whole card)</span>
-        <ComboBox
-          value={cardType}
-          placeholder="Pick a brand — fills every row"
-          options={typeNames}
-          note={(name) => {
-            const rate = rateFor(name, filledRows[0]?.thickness ?? '')
-            const years = typeYears.get(name) ?? 0
-            return [rate !== '' ? `₹${rate}` : '', years ? `${years}y` : ''].filter(Boolean).join(' · ')
-          }}
-          onChange={applyBrandToAll}
-          className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
-        />
-      </label>
+      <div className="border-b border-stone-100 px-4 py-3 dark:border-white/10">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-semibold text-muted">Brand for this card</span>
+          <ComboBox
+            value={cardType}
+            placeholder="Pick a brand — fills every row"
+            options={typeNames}
+            note={(name) => {
+              const rate = rateFor(name, filledRows[0]?.thickness ?? '')
+              const years = typeYears.get(name) ?? 0
+              return [rate !== '' ? `₹${rate}` : '', years ? `${years}y` : ''].filter(Boolean).join(' · ')
+            }}
+            onChange={applyBrandToAll}
+            className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+          />
+        </label>
+      </div>
       <div
         className={`hidden gap-1 border-b border-stone-200 bg-stone-100 px-1 py-2 text-xs font-bold uppercase tracking-wide text-muted md:grid dark:border-white/10 dark:bg-white/5 ${gridCols}`}
       >
