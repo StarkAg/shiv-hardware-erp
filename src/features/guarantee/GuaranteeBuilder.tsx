@@ -1501,12 +1501,9 @@ function SizeTable({
   const filledRows = rows.filter(isRowFilled)
   const cardType = filledRows.length && filledRows.every((r) => r.type === filledRows[0].type) ? filledRows[0].type : ''
   function applyBrandToAll(type: string) {
-    setRows((prev) => {
-      const applied = prev.map((r) => applyRowEdit(r, { type }, rateFor))
-      const last = applied[applied.length - 1]
-      if (!isRowFilled(last)) return applied
-      return [...applied, { ...blankRow(), type, thickness: last.thickness, sqftRate: rateFor(type, last.thickness) }]
-    })
+    // Sets every existing row's brand — never adds or removes a row itself;
+    // a trailing blank still only appears when a row is actually filled in.
+    setRows((prev) => prev.map((r) => applyRowEdit(r, { type }, rateFor)))
   }
   const cellClass =
     'w-full min-w-0 rounded border border-stone-200 bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:text-stone-100 dark:focus:bg-stone-950 md:dark:border-transparent'
