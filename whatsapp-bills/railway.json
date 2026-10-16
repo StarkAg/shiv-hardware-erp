@@ -4,6 +4,7 @@
   "deploy": {
     "restartPolicyType": "ALWAYS",
     "healthcheckPath": "/health",
-    "healthcheckTimeout": 60
+    "healthcheckTimeout": 60,
+    "drainingSeconds": 60
   }
 }

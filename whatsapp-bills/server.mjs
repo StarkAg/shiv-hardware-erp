@@ -12,9 +12,16 @@
  * The books say what is due and keep what was sent (convex/billWhatsApp.ts):
  * final sales saved after the sending was switched on, to a customer with a
  * mobile, each once. Gently, because WhatsApp blocks numbers that send like a
- * machine: one bill at a time, a minute or three apart, in the day only, at
- * most a day's worth, and each bill only once it has rested a while after its
- * last save, so one typed wrong can be put right or deleted before it goes.
+ * machine: one bill at a time, a minute or three apart, at most a day's
+ * worth, and each bill only once it has rested a while after its last save,
+ * so one typed wrong can be put right or deleted before it goes.
+ *
+ * Nothing reaches a customer at night. Every send, Send now included, goes
+ * between 9 am and 9 pm India time; one saved or asked for outside those hours
+ * stays in the queue and goes from 9 am, oldest first, asked-for ones ahead.
+ * The queue is the books themselves (what is due and not yet recorded as
+ * sent), so a restart loses nothing; and a restart waits for a bill being
+ * sent to finish and be recorded, so none goes twice.
  * The bill's own photos go as they are; a bill typed in the panel goes as a
  * picture of the printed bill, drawn here with the shop PC's own template.
  * The pages go first, then one message saying which bill they are.
@@ -33,7 +40,7 @@
  *   SHIV_DEVICE_TOKEN   this service's key: npx convex run --prod devices:issueServerKey '{"name":"whatsapp-bills"}'
  *   LOGIN_KEY           the secret in the /login link, so only the shop sees the QR
  *   AUTH_DIR            where the WhatsApp link is kept, on the service's volume (/data/auth)
- *   BILL_WHATSAPP_REST_MIN, BILL_WHATSAPP_DAILY_MAX, BILL_WHATSAPP_HOURS (10, 40, 9-21)
+ *   BILL_WHATSAPP_REST_MIN, BILL_WHATSAPP_DAILY_MAX (10, 40)
  */
 import http from 'node:http'
 import { readFile, rename } from 'node:fs/promises'
@@ -46,7 +53,8 @@ const REST_MS = Number(process.env.BILL_WHATSAPP_REST_MIN || 10) * 60_000
 const DAILY_MAX = Number(process.env.BILL_WHATSAPP_DAILY_MAX || 40)
 /** The shop's visiting card, sent once to a number before its first bill. */
 const CARD = fileURLToPath(new URL('./visiting-card.jpg', import.meta.url))
-const HOURS = String(process.env.BILL_WHATSAPP_HOURS || '9-21').split('-').map(Number)
+/** The hours a customer can be sent anything, India time: never at night, the owner's rule. */
+const HOURS = [9, 21]
 const GAP_MS = [60_000, 180_000]
 const COUNTRY = '91'
 
@@ -211,13 +219,15 @@ function caption(item) {
 }
 
 const indiaHour = () => new Date(Date.now() + 19_800_000).getUTCHours()
+const inHours = () => indiaHour() >= HOURS[0] && indiaHour() < HOURS[1]
 let busy = false
+let stopping = false
 let nextAt = 0
 
 async function sendDue() {
-  if (busy || !sock || state.status !== 'ready') return
-  const [fromHour, toHour] = HOURS
-  const hour = indiaHour()
+  if (busy || stopping || !sock || state.status !== 'ready') return
+  // Outside the hours everything waits in the queue, Send now too.
+  if (!inHours()) return
   const db = await books().catch(() => null)
   if (!db) return
   busy = true
@@ -228,8 +238,8 @@ async function sendDue() {
     if (!due?.items?.length || due.sentToday >= DAILY_MAX) return
     item = due.items[0]
     // A person pressing Send now is intentional: it can go while the regular
-    // schedule is off, outside its hours, and without waiting for its gap.
-    if (!item.onDemand && (!due.on || hour < fromHour || hour >= toHour || Date.now() < nextAt)) return
+    // schedule is off and without waiting for its gap, but in the hours only.
+    if (!item.onDemand && (!due.on || Date.now() < nextAt)) return
     const jid = jidOf(item.phone)
     if (!jid) { await record('skipped', { reason: `not a mobile number: ${item.phone}` }); return }
     try {
@@ -348,10 +358,14 @@ setInterval(() => {
 process.on('unhandledRejection', (err) => log('[process] unhandled', err?.message ?? err))
 process.on('uncaughtException', (err) => log('[process] uncaught', err?.message ?? err))
 
-// An update or a restart: the connection is closed, never logged out, so the
-// saved link is there when the service comes back.
-process.on('SIGTERM', () => {
-  log('[process] stopping; the WhatsApp link stays saved')
+// An update or a restart: no new bill is started, one being sent is finished
+// and recorded (railway.json gives it a minute), so it neither goes half nor
+// goes again; then the connection is closed, never logged out, so the saved
+// link is there when the service comes back.
+process.on('SIGTERM', async () => {
+  stopping = true
+  log(`[process] stopping${busy ? ' once the bill being sent is recorded' : ''}; the WhatsApp link stays saved`)
+  for (let waited = 0; busy && waited < 50_000; waited += 500) await new Promise((resolve) => setTimeout(resolve, 500))
   try { sock?.end?.(undefined) } catch { /* gone */ }
   setTimeout(() => process.exit(0), 1500)
 })

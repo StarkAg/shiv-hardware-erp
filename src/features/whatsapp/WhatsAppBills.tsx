@@ -17,6 +17,11 @@ import '../ledger/ledger.css'
 const SERVICE = 'https://whatsapp-bills-production.up.railway.app'
 
 const when = (ms: number) => new Date(ms).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+/** Whether it is the sender's hours, India time: outside them a bill waits for the morning. */
+const inHours = (hours: number[] = [9, 21]) => {
+  const hour = new Date(Date.now() + 19_800_000).getUTCHours()
+  return hour >= hours[0] && hour < hours[1]
+}
 const rupees = (n: number | null) => (n == null ? '—' : `₹${Math.round(n).toLocaleString('en-IN')}`)
 const STATUS: Record<string, string> = { sent: 'Sent', skipped: 'Not sent', failed: 'Failed' }
 
@@ -81,7 +86,7 @@ function OlderBills({ linked, onSee, onSend }: {
       .filter((l) => l.groupName === 'Sundry Debtors' && words.every((w) => l.name.toLowerCase().includes(w) || (l.phone ?? '').includes(w)))
       .slice(0, 8)
   }, [masters, find])
-  const STATE: Record<string, string> = { sent: 'Sent', requested: 'Sending now', failed: 'Failed', skipped: 'Not sent' }
+  const STATE: Record<string, string> = { sent: 'Sent', requested: inHours() ? 'Sending now' : 'Goes at 9 am', failed: 'Failed', skipped: 'Not sent' }
 
   return (
     <>
@@ -187,6 +192,7 @@ export function WhatsAppBills() {
   const [error, setError] = useState('')
 
   const linked = link?.status === 'ready'
+  const open = inHours(link?.hours)
   const linkLine = link === undefined ? 'Checking the WhatsApp link…'
     : link === null ? 'The WhatsApp service is not answering'
     : linked ? `Linked to +${link.me}`
@@ -228,10 +234,11 @@ export function WhatsAppBills() {
                     <td className="ref" data-label="Saved">{when(w.savedAt)}</td>
                     <td data-label="Waiting">
                       {w.held ? <span className="warn">{w.held}</span>
-                        : w.requested ? <span className="credit">Sending now</span>
+                        : w.requested ? (open ? <span className="credit">Sending now</span> : <span className="warn">Goes at 9 am</span>)
                         : w.tries ? <span className="warn">Trying again ({w.tries} of 3): {w.lastError}</span>
                         : !queue.on ? 'Sending is off'
                         : !linked ? 'WhatsApp not linked'
+                        : !open ? 'Goes at 9 am'
                         : 'Next to go'}
                     </td>
                     <td className="rowacts">
@@ -314,11 +321,11 @@ export function WhatsAppBills() {
         )}
         {sendingNow && (
           <Confirm
-            title={`Send ${sendingNow.label} now?`}
+            title={`Send ${sendingNow.label} ${open ? 'now' : 'at 9 am'}?`}
             body={sendingNow.sentAt
-              ? `It was already sent on ${when(sendingNow.sentAt)}. It will go to ${sendingNow.name || 'the customer'}'s WhatsApp again now.`
-              : `It will go to ${sendingNow.name || 'the customer'}'s WhatsApp now. Automatic sending stays off.`}
-            confirmLabel="Send now"
+              ? `It was already sent on ${when(sendingNow.sentAt)}. It will go to ${sendingNow.name || 'the customer'}'s WhatsApp again ${open ? 'now' : 'at 9 am'}.`
+              : `It will go to ${sendingNow.name || 'the customer'}'s WhatsApp ${open ? 'now' : 'at 9 am'}. Automatic sending stays off.`}
+            confirmLabel={open ? 'Send now' : 'Send at 9 am'}
             ask={sendingNow.needsRecipient ? { label: 'Customer WhatsApp number' } : undefined}
             toggle={{ label: 'New number: send the smile, folded hands and card first' }}
             onClose={() => setSendingNow(null)}
