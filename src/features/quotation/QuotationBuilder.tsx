@@ -60,7 +60,7 @@ export function QuotationBuilder() {
   // The customer accounts the name box offers (guarantee/GuaranteeBuilder CustomerAccounts).
   const [accounts, setAccounts] = useState<CustomerAccount[]>([])
   const [customer, setCustomer] = useState(
-    existing?.customer ?? { id: uid(), name: '', mobile: '', uid: '', address: '' },
+    existing?.customer ?? { id: uid(), name: '', mobile: '', altMobile: '', uid: '', address: '' },
   )
   const [withCustomer, setWithCustomer] = useState(!!existing?.customer?.name)
   const [printState, setPrintState] = useState<null | 'printing' | 'done' | { error: string }>(null)
@@ -288,6 +288,20 @@ export function QuotationBuilder() {
                       ? 'border-green-500 bg-green-50 focus:border-green-600 focus:ring-green-600/20 dark:border-green-600 dark:bg-green-950/30'
                       : 'border-stone-300 bg-stone-50 focus:border-shiv-green focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950'
                   } dark:text-stone-100`}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-muted">2nd Mobile (optional)</span>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={customer.altMobile ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 10)
+                    setCustomer({ ...customer, altMobile: value })
+                  }}
+                  className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
                 />
               </label>
             </div>

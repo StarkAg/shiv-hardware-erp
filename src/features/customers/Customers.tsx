@@ -8,7 +8,7 @@ export function Customers() {
   const q = params.get('q') ?? ''
   const setQ = (value: string) => setParams(value ? { q: value } : {}, { replace: true })
   const filtered = customers.filter(
-    (c) => c.name.toLowerCase().includes(q.toLowerCase()) || c.mobile.includes(q),
+    (c) => c.name.toLowerCase().includes(q.toLowerCase()) || c.mobile.includes(q) || (c.altMobile ?? '').includes(q),
   )
 
   return (
@@ -24,6 +24,7 @@ export function Customers() {
               <tr>
                 <th className="px-4 py-2">M/s</th>
                 <th className="px-4 py-2">Mobile</th>
+                <th className="px-4 py-2">2nd Mobile</th>
                 <th className="px-4 py-2">UID</th>
                 <th className="px-4 py-2">Address</th>
               </tr>
@@ -33,13 +34,14 @@ export function Customers() {
                 <tr key={c.id} className="border-t border-line dark:border-white/10">
                   <td className="px-4 py-2 font-medium">{c.name}</td>
                   <td className="px-4 py-2">{c.mobile}</td>
+                  <td className="px-4 py-2">{c.altMobile || '—'}</td>
                   <td className="px-4 py-2">{c.uid || '—'}</td>
                   <td className="px-4 py-2 text-muted">{c.address || '—'}</td>
                 </tr>
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted">
                     No customers yet — they're saved automatically when you save a quotation.
                   </td>
                 </tr>

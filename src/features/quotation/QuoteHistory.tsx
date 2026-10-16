@@ -28,7 +28,8 @@ export function QuoteHistory() {
     (x) =>
       x.number.toLowerCase().includes(q.toLowerCase()) ||
       x.customer.name.toLowerCase().includes(q.toLowerCase()) ||
-      x.customer.mobile.includes(q),
+      x.customer.mobile.includes(q) ||
+      (x.customer.altMobile ?? '').includes(q),
   )
 
   return (
@@ -66,7 +67,10 @@ export function QuoteHistory() {
                   <td className="px-4 py-2">{new Date(x.date).toLocaleDateString('en-GB')}</td>
                   <td className="px-4 py-2">
                     {x.customer.name || '—'}
-                    <div className="text-xs text-muted">{x.customer.mobile}</div>
+                    <div className="text-xs text-muted">
+                      {x.customer.mobile}
+                      {x.customer.altMobile ? ` / ${x.customer.altMobile}` : ''}
+                    </div>
                   </td>
                   <td className="px-4 py-2">{CATEGORY_LABELS[x.category]}</td>
                   <td className="px-4 py-2">{formatSize(x.height, x.width, x.category) || '—'}</td>

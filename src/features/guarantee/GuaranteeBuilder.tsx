@@ -238,12 +238,18 @@ function applyRowEdit(row: SizeRow, patch: Partial<SizeRow>, rateFor: RateLookup
 }
 
 // Editing the last row auto-appends a fresh blank one, so the table always
-// has a trailing entry point (like continuing to type in Excel).
+// has a trailing entry point (like continuing to type in Excel). It starts
+// off on the same brand and thickness as the row before it — one card is
+// almost always one brand, so staff shouldn't have to pick it again on
+// every line.
 function updateSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void, id: string, rateFor: RateLookup, patch: Partial<SizeRow>) {
   setRows((prev) => {
     const next = prev.map((r) => (r.id === id ? applyRowEdit(r, patch, rateFor) : r))
     const last = next[next.length - 1]
-    if (last.id === id && isRowFilled(last)) next.push(blankRow())
+    if (last.id === id && isRowFilled(last)) {
+      const rate = rateFor(last.type, last.thickness)
+      next.push({ ...blankRow(), type: last.type, thickness: last.thickness, sqftRate: rate })
+    }
     return next
   })
 }
@@ -308,7 +314,7 @@ function cardKey(d: GuaranteeDocument): string {
 }
 
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
-  const { sets, bills, guarantees, saveGuarantee, nextGuaranteeNumber, raiseGuaranteeSeq, saveBill } = useStore()
+  const { sets, bills, guarantees, saveGuarantee, nextGuaranteeNumber, raiseGuaranteeSeq, saveBill, upsertCustomer } = useStore()
   // The bill this card was started from, so saving the card ticks that sale
   // off the Guarantee list.
   const [fromBillId, setFromBillId] = useState<string | null>(null)
@@ -602,6 +608,14 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const doc = buildGuaranteeDoc()
   const doc2 = buildSecondDoc()
 
+  // Guarantee cards share the one Customers table with quotations: the name
+  // and mobile typed here land there too, so a customer met at the guarantee
+  // counter shows up when quoting them later, and the other way round.
+  function saveCardCustomers() {
+    if (customer.name.trim()) upsertCustomer(customer)
+    if (secondCardOn && customer2.name.trim()) upsertCustomer(customer2)
+  }
+
   // Save (and enqueue for sync) each card under its freshly minted ref. The QR
   // opens <site>/<number>?k=<token>, which only resolves once the card has
   // been pushed to Convex.
@@ -616,6 +630,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       saveGuarantee(freshDoc2)
       enqueueGuaranteeSync(freshDoc2)
     }
+    saveCardCustomers()
   }
 
   // WhatsApp the customer(s) that their card is being processed. Best-effort:
@@ -719,6 +734,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     const edited = buildGuaranteeDoc(ref)
     saveGuarantee(edited)
     enqueueGuaranteeSync(edited)
+    saveCardCustomers()
     return edited
   }
 
@@ -1479,6 +1495,19 @@ function SizeTable({
     ?? (rows.find((r) => !isRowFilled(r)) ?? rows[rows.length - 1]).id
   const typeNames = useMemo(() => options.types.map((t) => t.name), [options.types])
   const typeYears = useMemo(() => new Map(options.types.map((t) => [t.name, t.years])), [options.types])
+  // One card is almost always one brand. Rather than pick it row by row,
+  // this sets every row's Type at once (and its rate/amount along with it);
+  // it shows blank when the rows on the card don't already agree on one.
+  const filledRows = rows.filter(isRowFilled)
+  const cardType = filledRows.length && filledRows.every((r) => r.type === filledRows[0].type) ? filledRows[0].type : ''
+  function applyBrandToAll(type: string) {
+    setRows((prev) => {
+      const applied = prev.map((r) => applyRowEdit(r, { type }, rateFor))
+      const last = applied[applied.length - 1]
+      if (!isRowFilled(last)) return applied
+      return [...applied, { ...blankRow(), type, thickness: last.thickness, sqftRate: rateFor(type, last.thickness) }]
+    })
+  }
   const cellClass =
     'w-full min-w-0 rounded border border-stone-200 bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:text-stone-100 dark:focus:bg-stone-950 md:dark:border-transparent'
   const sootClass =
@@ -1549,6 +1578,21 @@ function SizeTable({
     // A brand goes on the card as it is typed: the panel's proper-case rule
     // (lib/properInputs) took "DDLED" for caps lock and made it "Ddled".
     <div data-case="raw">
+      <label className="mb-2 block">
+        <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted">Brand (whole card)</span>
+        <ComboBox
+          value={cardType}
+          placeholder="Pick a brand — fills every row"
+          options={typeNames}
+          note={(name) => {
+            const rate = rateFor(name, filledRows[0]?.thickness ?? '')
+            const years = typeYears.get(name) ?? 0
+            return [rate !== '' ? `₹${rate}` : '', years ? `${years}y` : ''].filter(Boolean).join(' · ')
+          }}
+          onChange={applyBrandToAll}
+          className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
+        />
+      </label>
       <div
         className={`hidden gap-1 border-b border-stone-200 bg-stone-100 px-1 py-2 text-xs font-bold uppercase tracking-wide text-muted md:grid dark:border-white/10 dark:bg-white/5 ${gridCols}`}
       >
