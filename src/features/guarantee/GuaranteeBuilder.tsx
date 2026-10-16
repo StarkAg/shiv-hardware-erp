@@ -238,18 +238,13 @@ function applyRowEdit(row: SizeRow, patch: Partial<SizeRow>, rateFor: RateLookup
 }
 
 // Editing the last row auto-appends a fresh blank one, so the table always
-// has a trailing entry point (like continuing to type in Excel). It starts
-// off on the same brand and thickness as the row before it — one card is
-// almost always one brand, so staff shouldn't have to pick it again on
-// every line.
+// has a trailing entry point (like continuing to type in Excel). It stays
+// truly blank: anything typed into it would make it a line on the card.
 function updateSizeRow(setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void, id: string, rateFor: RateLookup, patch: Partial<SizeRow>) {
   setRows((prev) => {
     const next = prev.map((r) => (r.id === id ? applyRowEdit(r, patch, rateFor) : r))
     const last = next[next.length - 1]
-    if (last.id === id && isRowFilled(last)) {
-      const rate = rateFor(last.type, last.thickness)
-      next.push({ ...blankRow(), type: last.type, thickness: last.thickness, sqftRate: rate })
-    }
+    if (last.id === id && isRowFilled(last)) next.push(blankRow())
     return next
   })
 }
@@ -267,11 +262,17 @@ type YearsLookup = (type: string) => GuaranteeYears | undefined
 /** The card's first Type, as a key: the row that sets the card's period. */
 const firstTypeKey = (rows: SizeRow[]) => brandKey(rows.find((r) => r.type.trim())?.type ?? '')
 
-/** The card's period: the one staff selected, else what its first Type carries. */
-function cardYears(rows: SizeRow[], yearsOf: YearsLookup, selected: GuaranteeYears | ''): GuaranteeYears {
+/** The card's period: the one staff selected, else the card brand's, else what its first Type carries. */
+function cardYears(rows: SizeRow[], yearsOf: YearsLookup, selected: GuaranteeYears | '', brand: string): GuaranteeYears {
   if (selected !== '') return selected
   const first = rows.find((r) => r.type.trim())
-  return (first ? yearsOf(first.type) : undefined) ?? DEFAULT_YEARS
+  return (brand.trim() ? yearsOf(brand) : undefined) ?? (first ? yearsOf(first.type) : undefined) ?? DEFAULT_YEARS
+}
+
+/** A row's rate: its own Type's (a model already priced), else the card brand's. */
+const withBrandRate = (rateFor: RateLookup, brand: string): RateLookup => (type, thickness) => {
+  const own = rateFor(type, thickness)
+  return own !== '' || !brand.trim() ? own : rateFor(brand, thickness)
 }
 
 function rowsToItems(rows: SizeRow[], fallbackBrand: string, years: GuaranteeYears): GuaranteeCardItem[] {
@@ -337,6 +338,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // The customer accounts the name box offers (see CustomerAccounts).
   const [accounts, setAccounts] = useState<CustomerAccount[]>([])
   const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
+  // The card's brand (DDoor Sunmica): it prices the rows; each row's Type is its model number.
+  const [brand1, setBrand1] = useState('')
   // On a phone the card preview is folded away until asked for.
   const [previewOpen, setPreviewOpen] = useState(false)
   const [period1, setPeriod1] = useState<GuaranteeYears | ''>('')
@@ -353,6 +356,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const onCard2 = layout === 'card' && secondCardOn && tab === 2
   const [customer2, setCustomer2] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
   const [rows2, setRows2] = useState<SizeRow[]>(() => [blankRow()])
+  const [brand2, setBrand2] = useState('')
   const [period2, setPeriod2] = useState<GuaranteeYears | ''>('')
   const [termite2, setTermite2] = useState(true)
 
@@ -386,16 +390,16 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       return years !== undefined && (years > 0 || listed.has(key)) ? (years as GuaranteeYears) : undefined
     }
   }, [comboOptions, brandOptions])
-  const years1 = cardYears(rows, yearsOfType, period1)
-  const years2 = cardYears(rows2, yearsOfType, period2)
+  const years1 = cardYears(rows, yearsOfType, period1, brand1)
+  const years2 = cardYears(rows2, yearsOfType, period2, brand2)
 
   // A new Type on the card sets the period to that Type's own years: a period
   // chosen for the last card, or for the Type typed before, does not stay on.
   // A saved card being opened keeps the period it was saved with (see importGuarantee).
   const typeSeen1 = useRef('')
   const typeSeen2 = useRef('')
-  const type1 = firstTypeKey(rows)
-  const type2 = firstTypeKey(rows2)
+  const type1 = brandKey(brand1) || firstTypeKey(rows)
+  const type2 = brandKey(brand2) || firstTypeKey(rows2)
   useEffect(() => {
     if (typeSeen1.current === type1) return
     typeSeen1.current = type1
@@ -581,7 +585,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       height: (primary && rowDim(primary.length, primary.lengthSoot)) ?? blankDim(),
       width: (primary && rowDim(primary.height, primary.heightSoot)) ?? blankDim(),
       qty: primary && primary.qty !== '' ? Number(primary.qty) : 1,
-      items: rowsToItems(rows, DEFAULT_BRAND_LABEL, years1),
+      items: rowsToItems(rows, brand1.trim() || DEFAULT_BRAND_LABEL, years1),
       ...(termite1 ? {} : { termiteNote: false }),
     }
   }
@@ -600,7 +604,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       height: (primary && rowDim(primary.length, primary.lengthSoot)) ?? blankDim(),
       width: (primary && rowDim(primary.height, primary.heightSoot)) ?? blankDim(),
       qty: primary && primary.qty !== '' ? Number(primary.qty) : 1,
-      items: rowsToItems(rows2, DEFAULT_BRAND_LABEL, years2),
+      items: rowsToItems(rows2, brand2.trim() || DEFAULT_BRAND_LABEL, years2),
       ...(termite2 ? {} : { termiteNote: false }),
     }
   }
@@ -939,8 +943,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 </div>
               </div>
               {onCard2
-                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} options={comboOptions} rateFor={rateFor} picks={picks} />
-                : <SizeTable key="t1" rows={rows} setRows={setRows} options={comboOptions} rateFor={rateFor} picks={picks} />}
+                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brand={brand2} setBrand={setBrand2} options={comboOptions} rateFor={rateFor} picks={picks} />
+                : <SizeTable key="t1" rows={rows} setRows={setRows} brand={brand1} setBrand={setBrand1} options={comboOptions} rateFor={rateFor} picks={picks} />}
             </Card>
           </div>
 
@@ -1480,30 +1484,40 @@ function SizeTable({
   rows,
   setRows,
   options,
-  rateFor,
+  rateFor: priceRate,
   picks,
+  brand,
+  setBrand,
 }: {
   rows: SizeRow[]
   setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void
   options: ComboOptions
   rateFor: RateLookup
   picks: Picks
+  brand: string
+  setBrand: (brand: string) => void
 }) {
+  const rateFor = withBrandRate(priceRate, brand)
   // The row the tap buttons fill: the one last touched, else the first still empty.
   const [activeId, setActiveId] = useState<string | null>(null)
   const active = rows.find((r) => r.id === activeId)?.id
     ?? (rows.find((r) => !isRowFilled(r)) ?? rows[rows.length - 1]).id
   const typeNames = useMemo(() => options.types.map((t) => t.name), [options.types])
   const typeYears = useMemo(() => new Map(options.types.map((t) => [t.name, t.years])), [options.types])
-  // One card is almost always one brand. Rather than pick it row by row,
-  // this sets every row's Type at once (and its rate/amount along with it);
-  // it shows blank when the rows on the card don't already agree on one.
-  const filledRows = rows.filter(isRowFilled)
-  const cardType = filledRows.length && filledRows.every((r) => r.type === filledRows[0].type) ? filledRows[0].type : ''
-  function applyBrandToAll(type: string) {
-    // Sets every existing row's brand — never adds or removes a row itself;
-    // a trailing blank still only appears when a row is actually filled in.
-    setRows((prev) => prev.map((r) => applyRowEdit(r, { type }, rateFor)))
+  const firstThickness = rows.find(isRowFilled)?.thickness ?? ''
+  // One card is one brand: it is picked once here and prices every row whose
+  // model number has no rate of its own. A rate or amount the counter typed
+  // stays; rows are never added or removed by it.
+  function pickBrand(next: string) {
+    const now = withBrandRate(priceRate, next)
+    setBrand(next)
+    setRows((prev) => prev.map((r) => {
+      if (!isRowFilled(r) || r.amountManual) return r
+      if (r.sqftRate !== '' && r.sqftRate !== rateFor(r.type, r.thickness)) return r
+      const rate = now(r.type, r.thickness)
+      if (rate === r.sqftRate) return r
+      return applyRowEdit(r, rate === '' ? { amount: '' } : { sqftRate: rate }, now)
+    }))
   }
   const cellClass =
     'w-full min-w-0 rounded border border-stone-200 bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:text-stone-100 dark:focus:bg-stone-950 md:dark:border-transparent'
@@ -1579,15 +1593,15 @@ function SizeTable({
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-muted">Brand for this card</span>
           <ComboBox
-            value={cardType}
-            placeholder="Pick a brand — fills every row"
+            value={brand}
+            placeholder="Pick a brand — its rate fills every row"
             options={typeNames}
             note={(name) => {
-              const rate = rateFor(name, filledRows[0]?.thickness ?? '')
+              const rate = priceRate(name, firstThickness)
               const years = typeYears.get(name) ?? 0
               return [rate !== '' ? `₹${rate}` : '', years ? `${years}y` : ''].filter(Boolean).join(' · ')
             }}
-            onChange={applyBrandToAll}
+            onChange={pickBrand}
             className="w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100"
           />
         </label>
