@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Check, Eye, RotateCcw, Send } from 'lucide-react'
 import { useMutation, useQuery } from 'convex/react'
 import { Link } from 'react-router-dom'
@@ -184,12 +184,15 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
   const [sending, setSending] = useState<Quote | null>(null)
   const [marking, setMarking] = useState<Quote | null>(null)
   const STATE: Record<string, string> = { sent: 'Sent', requested: open ? 'Sending now' : 'Goes at 9 am', failed: 'Failed', skipped: 'Not sent' }
-  const shown = useMemo(() => {
+  // Still to send on top; sent or marked sent below them, the latest few
+  // unless something is being looked for.
+  const { toSend, done } = useMemo(() => {
     const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    const all = quotes ?? []
-    if (!words.length) return all.slice(0, 10)
-    return all.filter((q) => words.every((w) => [q.name, q.phone, q.label].some((s) => s.toLowerCase().includes(w))))
+    const all = (quotes ?? []).filter((q) => words.every((w) => [q.name, q.phone, q.label].some((s) => s.toLowerCase().includes(w))))
+    const sent = all.filter((q) => q.status === 'sent').sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
+    return { toSend: all.filter((q) => q.status !== 'sent'), done: words.length ? sent : sent.slice(0, 5) }
   }, [quotes, find])
+  const shown = [...toSend, ...done]
   const hasPhone = (q: Quote) => /\d{10}/.test(q.phone.replace(/\D/g, ''))
 
   return (
@@ -204,8 +207,11 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
           <table className="ledger">
             <thead><tr><th className="w-no">Quotation</th><th>Customer</th><th>Date</th><th className="num">Amount</th><th>WhatsApp</th><th className="w-acts" /></tr></thead>
             <tbody>
-              {shown.map((q) => (
-                <tr key={q.billId}>
+              {shown.length > 0 && toSend.length === 0 && !find.trim() && <tr><td colSpan={6} className="particulars">Nothing to send: every open quotation has gone.</td></tr>}
+              {shown.map((q, i) => (
+                <Fragment key={q.billId}>
+                {i === toSend.length && <tr className="grouprow"><td colSpan={6}>Sent</td></tr>}
+                <tr>
                   <td className="mono entryno" data-label="Quotation"><Link className="link plain" to={`/bills/${q.billId}`}>{q.label}</Link></td>
                   <td className="particulars" data-label="Customer">{q.name || '—'}<div className="ref">{q.phone || 'No phone: asked when sending'}</div></td>
                   <td className="ref" data-label="Date">{new Date(q.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
@@ -227,9 +233,9 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
                     </button>
                   </td>
                 </tr>
+                </Fragment>
               ))}
-              {shown.length === 0 && <tr><td colSpan={6} className="particulars">{find.trim() ? 'No quotation matches that.' : 'No open quotations.'}</td></tr>}
-            </tbody>
+              {shown.length === 0 && <tr><td colSpan={6} className="particulars">{find.trim() ? 'No quotation matches that.' : 'No open quotations.'}</td></tr>}            </tbody>
           </table>
         </div></div>
       )}
