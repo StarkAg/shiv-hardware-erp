@@ -830,6 +830,8 @@ export default defineSchema({
     reason: v.optional(v.string()),
     requestedPhone: v.optional(v.string()),
     greet: v.optional(v.boolean()),
+    // Shared by hand, outside this sender: the counter marked it sent.
+    markedSent: v.optional(v.boolean()),
     attempts: v.number(),
     at: v.number(),
   })

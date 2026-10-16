@@ -475,8 +475,23 @@ export const quotes = query({
         status: done?.status ?? null,
         at: done?.at ?? null,
         reason: done?.reason ?? '',
+        markedSent: done?.markedSent === true,
       }
     }))
+  },
+})
+
+/** Records a quotation shared outside this sender, so it shows as sent. */
+export const markQuoteSent = mutation({
+  args: { billId: v.string() },
+  handler: async (ctx, { billId }) => {
+    if (!(await quoteBill(ctx, billId))) throw new Error('This quotation is no longer open: it was deleted or sold.')
+    const row = await ctx.db.query('quoteWhatsApp').withIndex('by_bill', (q) => q.eq('billId', billId)).unique()
+    if (row?.status === 'requested') throw new Error('This quotation is being sent now.')
+    if (row?.status === 'sent') return
+    const fields = { status: 'sent' as const, attempts: row?.attempts ?? 0, at: Date.now(), reason: 'Marked as already sent', markedSent: true }
+    if (row) await ctx.db.patch(row._id, fields)
+    else await ctx.db.insert('quoteWhatsApp', { billId, ...fields })
   },
 })
 
@@ -501,7 +516,7 @@ export const requestQuote = mutation({
     if (!/\d{10}/.test(requestedPhone)) throw new Error('Enter the customer\'s 10-digit WhatsApp number.')
     const row = await ctx.db.query('quoteWhatsApp').withIndex('by_bill', (q) => q.eq('billId', billId)).unique()
     if (row?.status === 'requested') throw new Error('This quotation is already being sent.')
-    const fields = { status: 'requested' as const, attempts: 0, at: Date.now(), greet: newNumber === true, requestedPhone, reason: undefined }
+    const fields = { status: 'requested' as const, attempts: 0, at: Date.now(), greet: newNumber === true, requestedPhone, reason: undefined, markedSent: undefined }
     if (row) await ctx.db.patch(row._id, fields)
     else await ctx.db.insert('quoteWhatsApp', { billId, ...fields })
   },

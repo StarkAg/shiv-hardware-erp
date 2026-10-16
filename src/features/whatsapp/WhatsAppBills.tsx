@@ -153,7 +153,7 @@ function OlderBills({ linked, onSee, onSend }: {
   )
 }
 
-type Quote = { billId: string; label: string; name: string; phone: string; date: string; amount: number | null; status: string | null; at: number | null; reason: string }
+type Quote = { billId: string; label: string; name: string; phone: string; date: string; amount: number | null; status: string | null; at: number | null; reason: string; markedSent: boolean }
 
 /** A quotation as it will go: its photos, or drawn as it prints. */
 function SeeQuote({ quote, canSend, onSend, onClose }: { quote: Quote; canSend: boolean; onSend: () => void; onClose: () => void }) {
@@ -178,9 +178,11 @@ function SeeQuote({ quote, canSend, onSend, onClose }: { quote: Quote; canSend: 
 function Quotations({ linked, open, onError }: { linked: boolean; open: boolean; onError: (message: string) => void }) {
   const quotes = useLive(api.billWhatsApp.quotes, {}, 'whatsapp-quotes') as Quote[] | undefined
   const requestQuote = useMutation(api.billWhatsApp.requestQuote)
+  const markQuoteSent = useMutation(api.billWhatsApp.markQuoteSent)
   const [find, setFind] = useState('')
   const [seeing, setSeeing] = useState<Quote | null>(null)
   const [sending, setSending] = useState<Quote | null>(null)
+  const [marking, setMarking] = useState<Quote | null>(null)
   const STATE: Record<string, string> = { sent: 'Sent', requested: open ? 'Sending now' : 'Goes at 9 am', failed: 'Failed', skipped: 'Not sent' }
   const shown = useMemo(() => {
     const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -209,7 +211,7 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
                   <td className="ref" data-label="Date">{new Date(q.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                   <td className="num" data-label="Amount">{rupees(q.amount)}</td>
                   <td data-label="WhatsApp">
-                    {q.status ? <span className={q.status === 'sent' ? 'credit' : 'warn'}>{STATE[q.status]}{q.at ? ` · ${when(q.at)}` : ''}{q.status !== 'sent' && q.reason ? `: ${q.reason}` : ''}</span> : 'Not sent'}
+                    {q.status ? <span className={q.status === 'sent' ? 'credit' : 'warn'}>{q.markedSent ? 'Marked sent' : STATE[q.status]}{q.at ? ` · ${when(q.at)}` : ''}{q.status !== 'sent' && q.reason ? `: ${q.reason}` : ''}</span> : 'Not sent'}
                   </td>
                   <td className="rowacts">
                     <button className="xbtn" title="See the quotation" aria-label={`See ${q.label}`} onClick={() => setSeeing(q)}>
@@ -218,6 +220,10 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
                     <button className="xbtn" title={q.status === 'sent' ? 'Send again' : 'Send this quotation'} aria-label={`Send ${q.label}`}
                       disabled={!linked || q.status === 'requested'} onClick={() => setSending(q)}>
                       <Send size={14} aria-hidden="true" />
+                    </button>
+                    <button className="xbtn" title="Mark as already sent" aria-label={`Mark ${q.label} as already sent`}
+                      disabled={q.status === 'requested' || q.status === 'sent'} onClick={() => setMarking(q)}>
+                      <Check size={14} aria-hidden="true" />
                     </button>
                   </td>
                 </tr>
@@ -243,6 +249,19 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
             const { billId } = sending
             setSending(null)
             try { await requestQuote({ billId, ...(phone.trim() ? { phone } : {}), ...(newNumber ? { newNumber } : {}) }) } catch (err) { onError(err instanceof Error ? err.message : String(err)) }
+          }}
+        />
+      )}
+      {marking && (
+        <Confirm
+          title={`Mark ${marking.label} as already sent?`}
+          body={`This records that it was shared with ${marking.name || 'the customer'} outside this sender. Nothing is sent.`}
+          confirmLabel="Mark sent"
+          onClose={() => setMarking(null)}
+          onConfirm={async () => {
+            const { billId } = marking
+            setMarking(null)
+            try { await markQuoteSent({ billId }) } catch (err) { onError(err instanceof Error ? err.message : String(err)) }
           }}
         />
       )}
