@@ -103,9 +103,11 @@
   padding: 12px 14px; white-space: nowrap; border-bottom: 1px solid var(--line);}
 .ledger-root .ledger td{padding: 13px 14px; border-bottom: 1px solid var(--line); vertical-align: middle;}
 .ledger-root .ledger tbody tr:last-child td{border-bottom: none;}
-.ledger-root .ledger tbody tr.unpriced{background: var(--amber-tint);}
-/* A bill the books refused. Louder than an unpriced one: it is not waiting
-   for a price, it is out of the accounts until somebody posts it. */
+/* An unpriced bill is marked red like a refused one: either way the amount
+   is not in the accounts yet, and the shop wants both to catch the eye. */
+.ledger-root .ledger tbody tr.unpriced{background: var(--amber-tint); box-shadow: inset 3px 0 0 var(--red);}
+.ledger-root .ledger tbody tr.unpriced td.num{color: var(--red);}
+/* A bill the books refused: out of the accounts until somebody posts it. */
 .ledger-root .ledger tbody tr.unposted{background: var(--amber-tint); box-shadow: inset 3px 0 0 var(--red);}
 .ledger-root .ledger tr.opening td{background: var(--card2); font-weight: 800;}
 .ledger-root .num{text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700;}
