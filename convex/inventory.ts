@@ -422,6 +422,31 @@ export const seedList = query({
   handler: seededStock,
 });
 
+/**
+ * What one saved bill's stock lines already did to each shelf count, as
+ * seedList counts them (only moves after an item's last count): +1 a piece
+ * put on, -1 a piece taken off. The bill screen takes it back out before
+ * showing "stock after this bill", or a saved bill is counted twice there.
+ */
+export const countedForBill = query({
+  args: { billId: v.string() },
+  handler: async (ctx, { billId }) => {
+    const [all, s, products] = await Promise.all([moves(ctx), settings(ctx), ctx.db.query("inventoryProducts").collect()]);
+    const customByName = new Map(products.map(product => [foldItemName(product.name), product.ref]));
+    const out: Record<string, number> = {};
+    for (const move of all) {
+      if (move.billId !== billId || !move.stockRef) continue;
+      const ref = canonicalStockRef(move.stockRef ?? seedRefForName(move.name) ?? customByName.get(foldItemName(move.name)) ?? "");
+      const count = ref ? s.lastCount.get(ref) : undefined;
+      if (!count || !afterCount(move, count)) continue;
+      const q = inMain(move, canonicalUnit("Pc"), s.items.get(ref)?.packs);
+      if (q === null) continue;
+      out[ref] = (out[ref] ?? 0) + (move.kind === "in" ? q : -q);
+    }
+    return out;
+  },
+});
+
 /** New shelf items belong to the inventory catalogue, with an opening count. */
 export const addItem = mutation({
   args: {

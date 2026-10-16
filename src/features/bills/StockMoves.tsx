@@ -171,6 +171,8 @@ export function StockMoves({ bill, out, onChange }: {
   onChange: (patch: Partial<Bill>) => void
 }) {
   const list = useLive(api.inventory.seedList, {}, 'inventory:seed') as StockRow[] | undefined
+  // A saved bill is already in the shelf counts; this is what it took off or put on.
+  const counted = useLive(api.inventory.countedForBill, { billId: bill.id }, `inventory:bill:${bill.id}`) as Record<string, number> | undefined
   const lines = bill.stock ?? []
   const billLine = bill.items.find(isBillLine)
   const showTotal = !hasGoodsLines(bill.items)
@@ -199,6 +201,16 @@ export function StockMoves({ bill, out, onChange }: {
   }
 
   const byRef = new Map((list ?? []).map((r) => [r.ref, r]))
+  // Stock after this bill, line by line: the count without this bill, then
+  // each line in turn, so an item on two lines comes off once for both.
+  const running = new Map<string, number>()
+  const afterOf = lines.map((l) => {
+    const row = byRef.get(l.ref)
+    if (!row) return null
+    const moved = (running.get(l.ref) ?? 0) + (out ? -1 : 1) * (Number(l.qty) || 0)
+    running.set(l.ref, moved)
+    return row.stock - (counted?.[l.ref] ?? 0) + moved
+  })
 
   // The row whose item is being written in rather than picked, and what is typed.
   const addFromBill = useMutation(api.inventory.addFromBill)
@@ -252,8 +264,7 @@ export function StockMoves({ bill, out, onChange }: {
       {lines.length > 0 && (
         <div className="mt-2 space-y-1.5">
           {lines.map((l, at) => {
-            const row = byRef.get(l.ref)
-            const after = row ? row.stock + (out ? -1 : 1) * (Number(l.qty) || 0) : null
+            const after = afterOf[at]
             return (
               <div key={at} className="flex items-center gap-2">
                 {writing?.at === at ? (
