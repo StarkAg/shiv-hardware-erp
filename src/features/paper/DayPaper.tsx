@@ -195,7 +195,9 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
               )}
             </>
           )
-          const tone = r.unpaid ? 'text-red-700 bg-red-50/70 hover:bg-red-100' : 'text-stone-800 hover:bg-amber-100'
+          // Red: a sale not paid for, or a bill with no price on it yet.
+          const unpriced = r.amount === null
+          const tone = r.unpaid || unpriced ? 'text-red-700 bg-red-50/70 hover:bg-red-100' : 'text-stone-800 hover:bg-amber-100'
           const cls = `group/line flex items-end justify-between gap-3 rounded-sm pl-9 pr-1 text-sm transition-colors ${tone}`
           return (
             <li key={r.key} style={{ height: LINE }}>
@@ -203,7 +205,7 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
                 <Link
                   to={r.to}
                   onClick={(e) => e.stopPropagation()}
-                  title={r.unpaid ? `${r.party}: ${r.unpaid}` : `Open ${r.party}'s account`}
+                  title={r.unpaid ? `${r.party}: ${r.unpaid}` : unpriced ? `${r.party}: not priced yet` : `Open ${r.party}'s account`}
                   className={`${cls} h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-shiv-green`}
                 >
                   {body}
@@ -288,7 +290,7 @@ function Others({ lines }: { lines?: Line[] }) {
           <li key={r.key}>
             <Link
               to={r.to ?? '#'}
-              className="flex items-center gap-2 rounded-sm px-1 py-1.5 text-sm text-stone-800 hover:bg-amber-100"
+              className={`flex items-center gap-2 rounded-sm px-1 py-1.5 text-sm ${r.amount === null ? 'bg-red-50/70 text-red-700 hover:bg-red-100' : 'text-stone-800 hover:bg-amber-100'}`}
             >
               {r.tag && (
                 <span className="shrink-0 rounded border border-stone-300 px-1 text-[10px] font-bold leading-4 text-stone-600">{r.tag}</span>
