@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Paperclip, ReceiptText } from 'lucide-react'
+import { Paperclip, ReceiptText, X } from 'lucide-react'
 import { useStore } from '../../lib/store'
+import Confirm from '../ledger/components/Confirm'
+import { toast } from '../../components/Toast'
 import type { Bill } from '../../lib/types'
 import { isQuotation } from '../../lib/types'
 import { rupees, shortDate } from '../ledger/lib/format'
@@ -29,6 +31,8 @@ export function QuotationList() {
   const [show, setShow] = useState<'open' | 'all'>('open')
   const [previewing, setPreviewing] = useState<Bill | null>(null)
   const [photos, setPhotos] = useState<Bill | null>(null)
+  const deleteBill = useStore((s) => s.deleteBill)
+  const [deleting, setDeleting] = useState<Bill | null>(null)
 
   // A visit order for the mechanic is a quotation without a price yet; it
   // belongs on the Work list, not here.
@@ -114,6 +118,9 @@ export function QuotationList() {
                           <>
                             <button className="btn small" onClick={() => navigate(`/bills/${b.id}`)}>Open</button>
                             <button className="btn small on" onClick={() => navigate(`/bills/${b.id}?convert=sale`)}>Convert to sale</button>
+                            <button className="xbtn del" title="Delete this quotation" aria-label={`Delete ${quoteLabel(b.number)}`} onClick={() => setDeleting(b)}>
+                              <X size={14} aria-hidden="true" />
+                            </button>
                           </>
                         ) : (
                           <button className="btn small" onClick={() => navigate(`/bills/${b.id}`)}>Open bill</button>
@@ -127,6 +134,21 @@ export function QuotationList() {
           </div></div>
         )}
         {previewing && <VoucherBillPreview bill={previewing} onClose={() => setPreviewing(null)} />}
+        {deleting && (
+          <Confirm
+            title={`Delete ${quoteLabel(deleting.number)}?`}
+            body={`The quotation for ${deleting.customerName || 'this customer'} goes to the bill trash, where it can be restored.`}
+            confirmLabel="Delete"
+            danger
+            onClose={() => setDeleting(null)}
+            onConfirm={async () => {
+              const b = deleting
+              setDeleting(null)
+              const gone = await deleteBill(b.id)
+              toast(gone ? `${quoteLabel(b.number)} deleted` : 'Not deleted: the books could not be reached. Try again.', gone ? 'ok' : 'error')
+            }}
+          />
+        )}
         {photos && <BillViewer voucher={{ party: photos.customerName, vchLabel: quoteLabel(photos.number), date: Date.parse(photos.date), attachmentUrls: photos.attachments }} onClose={() => setPhotos(null)} />}
       </div>
     </div>

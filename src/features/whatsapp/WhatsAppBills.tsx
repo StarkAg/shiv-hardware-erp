@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Check, Eye, RotateCcw, Send } from 'lucide-react'
+import { Check, Eye, RotateCcw, Send, X } from 'lucide-react'
 import { useMutation, useQuery } from 'convex/react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { useLive } from '../ledger/lib/cache'
+import { useStore } from '../../lib/store'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import Confirm from '../ledger/components/Confirm'
 import { TableSkeleton } from '../ledger/components/Skeleton'
@@ -183,6 +184,8 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
   const [seeing, setSeeing] = useState<Quote | null>(null)
   const [sending, setSending] = useState<Quote | null>(null)
   const [marking, setMarking] = useState<Quote | null>(null)
+  const deleteBill = useStore((s) => s.deleteBill)
+  const [deleting, setDeleting] = useState<Quote | null>(null)
   const STATE: Record<string, string> = { sent: 'Sent', requested: open ? 'Sending now' : 'Goes at 9 am', failed: 'Failed', skipped: 'Not sent' }
   // Still to send on top; sent or marked sent below them, the latest few
   // unless something is being looked for.
@@ -231,6 +234,10 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
                       disabled={q.status === 'requested' || q.status === 'sent'} onClick={() => setMarking(q)}>
                       <Check size={14} aria-hidden="true" />
                     </button>
+                    <button className="xbtn del" title="Delete this quotation" aria-label={`Delete ${q.label}`}
+                      disabled={q.status === 'requested'} onClick={() => setDeleting(q)}>
+                      <X size={14} aria-hidden="true" />
+                    </button>
                   </td>
                 </tr>
                 </Fragment>
@@ -255,6 +262,20 @@ function Quotations({ linked, open, onError }: { linked: boolean; open: boolean;
             const { billId } = sending
             setSending(null)
             try { await requestQuote({ billId, ...(phone.trim() ? { phone } : {}), ...(newNumber ? { newNumber } : {}) }) } catch (err) { onError(err instanceof Error ? err.message : String(err)) }
+          }}
+        />
+      )}
+      {deleting && (
+        <Confirm
+          title={`Delete ${deleting.label}?`}
+          body={`The quotation for ${deleting.name || 'this customer'} goes to the bill trash, where it can be restored.`}
+          confirmLabel="Delete"
+          danger
+          onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            const { billId } = deleting
+            setDeleting(null)
+            if (!(await deleteBill(billId))) onError('Not deleted: the books could not be reached. Try again.')
           }}
         />
       )}
