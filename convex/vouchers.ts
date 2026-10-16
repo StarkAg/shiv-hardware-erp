@@ -1,6 +1,6 @@
 import { mutation, query } from "./lib/guarded";
 import { v, ConvexError } from "convex/values";
-import type { MutationCtx } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { round2, fyOf, lastPostableDate } from "./lib/money";
 import { record, money, day } from "./lib/history";
@@ -1220,5 +1220,31 @@ export const lastPaper = query({
       vchLabel: `${type?.abbr ?? "VCH"}-${String(newest.voucherNo).padStart(4, "0")}`,
       attachmentUrls: await describeAttachments(ctx, (newest.attachments ?? []).filter((a: any) => typeof a === "string" || a.kind !== "receipt") as never),
     };
+  },
+});
+
+/**
+ * Gives one voucher the next free number in its series, and nothing else
+ * changes (admin only — `npx convex run --prod vouchers:giveFreshNumber`).
+ * For a number the books found used twice: the later of the two moves on.
+ */
+export const giveFreshNumber = internalMutation({
+  args: { id: v.id("vouchers") },
+  handler: async (ctx, { id }) => {
+    const voucher = await ctx.db.get(id);
+    if (!voucher) throw new Error(`No voucher ${id}`);
+    const type = await ctx.db.get(voucher.typeId);
+    if (!type) throw new Error(`Voucher ${id} has no type`);
+    const twin = (await ctx.db
+      .query("vouchers")
+      .withIndex("by_type_fy", (q) => q.eq("typeId", voucher.typeId).eq("fy", voucher.fy))
+      .collect()).find((x) => x._id !== id && x.voucherNo === voucher.voucherNo);
+    if (!twin) throw new Error(`${type.abbr}-${voucher.voucherNo} ${voucher.fy} is not used twice — left as it is`);
+    const voucherNo = await nextVoucherNo(ctx, type, voucher.fy);
+    await ctx.db.patch(id, { voucherNo, updatedAt: Date.now() });
+    const from = `${type.abbr}-${String(voucher.voucherNo).padStart(4, "0")}`;
+    const to = `${type.abbr}-${String(voucherNo).padStart(4, "0")}`;
+    await record(ctx, "voucher.update", `Renumbered ${from} ${voucher.fy} to ${to}: ${from} was used twice`, { entity: "voucher", entityId: id });
+    return { from, to };
   },
 });

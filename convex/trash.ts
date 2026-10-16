@@ -4,6 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { record, money } from "./lib/history";
 import { requirePin } from "./lib/pin";
+import { nextVoucherNo } from "./lib/numbering";
 import { linkTrashRows } from './lib/trashLinks';
 import { api } from "./_generated/api";
 import { attachmentIds, deleteUnreferencedFiles, describeAttachments } from './lib/attachmentFiles';
@@ -121,10 +122,11 @@ export const restore = mutation({
     const bill = [...linkTrashRows(deletedBills, deletedVouchers)].find(([, voucherTrashId]) => voucherTrashId === id);
     if (bill) {
       await ctx.runMutation(api.bills.restore, { id: bill[0] });
+      // Found by its bill, not its number: it may have come back under a new one.
       const back = await ctx.db.query('vouchers')
-        .filter((q) => q.eq(q.field('voucherNo'), row.voucherNo))
-        .filter((q) => q.eq(q.field('typeId'), row.typeId))
-        .filter((q) => q.eq(q.field('fy'), row.fy)).first();
+        .withIndex('by_type_fy', (q) => q.eq('typeId', row.typeId).eq('fy', row.fy))
+        .filter((q) => q.eq(q.field('refNo'), row.refNo))
+        .filter((q) => q.eq(q.field('partyLedgerId'), row.partyLedgerId)).first();
       return back?._id ?? null;
     }
 
@@ -166,6 +168,15 @@ export async function restoreVoucher(ctx: MutationCtx, row: Doc<"trash">) {
 /** Writes a deleted voucher back, lines and all, and takes it out of the trash. */
 async function putBack(ctx: MutationCtx, row: Doc<"trash">) {
   const { _id, _creationTime, entries, deletedAt, ...voucher } = row;
+  // It comes back under its own number unless a live voucher holds that
+  // number now (books numbered before deleted ones counted as used) — then
+  // it takes the next free one rather than making a duplicate.
+  const held = (await ctx.db
+    .query("vouchers")
+    .withIndex("by_type_fy", (q) => q.eq("typeId", voucher.typeId).eq("fy", voucher.fy))
+    .collect()).some((x) => x.voucherNo === voucher.voucherNo);
+  const type = await ctx.db.get(voucher.typeId);
+  if (held && type) voucher.voucherNo = await nextVoucherNo(ctx, type, voucher.fy);
   const voucherId = await ctx.db.insert("vouchers", voucher);
   for (const line of entries) {
     await ctx.db.insert("voucherEntries", {
@@ -176,7 +187,6 @@ async function putBack(ctx: MutationCtx, row: Doc<"trash">) {
       date: voucher.date,
     });
   }
-  const type = await ctx.db.get(voucher.typeId);
   const party = await ctx.db.get(voucher.partyLedgerId);
   await ctx.db.delete(_id);
   await record(
