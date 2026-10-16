@@ -1284,6 +1284,25 @@ to{opacity: 0}}
 .ledger-root .waited.due{color: var(--amber-text);}
 .ledger-root .waited.late{color: var(--red);}
 
+/* What the supplier said about a delivery's bill, under its goods */
+.ledger-root .billnote, .ledger-root .billnote-add{display: inline-flex; align-items: flex-start; gap: 6px;
+  margin-top: 6px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--card2); color: var(--fg); font: inherit; font-size: 12.5px; font-weight: 500;
+  text-align: left; cursor: pointer; max-width: 100%;}
+.ledger-root .billnote svg{flex: none; margin-top: 2px;}
+.ledger-root .billnote strong{font-weight: 700; font-variant-numeric: tabular-nums;}
+.ledger-root .billnote .billnote-edit{opacity: 0.5;}
+.ledger-root .billnote:hover .billnote-edit{opacity: 1;}
+.ledger-root .billnote.due strong{color: var(--amber-text);}
+.ledger-root .billnote.late strong{color: var(--red);}
+.ledger-root .billnote-add{align-items: center; gap: 4px; border-style: dashed; background: transparent;
+  color: var(--muted); font-size: 12px;}
+.ledger-root .billnote-add:hover, .ledger-root .billnote:hover{border-color: var(--brass); color: var(--fg);}
+.ledger-root .billnote-form{display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px;}
+.ledger-root .billnote-form input[type='text']{flex: 1 1 180px; min-width: 0; padding: 5px 10px; font-size: 13px;}
+.ledger-root .billnote-form input[type='date']{flex: none; padding: 5px 8px; font-size: 13px;}
+.ledger-root .billnote-error{flex-basis: 100%; color: var(--red); font-size: 12px; font-weight: 700;}
+
 /* ── The scanning screen ───────────────────────────────────────────────────
  *
  * One shutter and a count, over as much viewfinder as the screen will give.

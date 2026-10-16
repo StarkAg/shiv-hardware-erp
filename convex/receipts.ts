@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { internalMutation } from './_generated/server'
-import { query } from './lib/guarded'
+import { mutation, query } from './lib/guarded'
 import type { Doc } from './_generated/dataModel'
 import { fyOf } from './lib/money'
 import { nextVoucherNo } from './lib/numbering'
@@ -62,6 +62,8 @@ export const open = query({
         refNo: grn.refNo ?? '',
         narration: grn.narration ?? '',
         receivedBy: grn.receivedBy ?? '',
+        billNote: grn.billNote ?? '',
+        billDue: grn.billDue ?? null,
         billedHere: mine,
         billId: bill?.id ?? null,
         items: est.items,
@@ -82,6 +84,38 @@ export const open = query({
       count: waiting.length,
       total: Math.round(waiting.reduce((t, r) => t + r.estimate, 0) * 100) / 100,
     }
+  },
+})
+
+/**
+ * What the supplier said about a delivery's bill, and the day it should come.
+ * An empty note and no day clear it.
+ */
+export const setBillNote = mutation({
+  args: {
+    voucherId: v.id('vouchers'),
+    note: v.string(),
+    due: v.union(v.number(), v.null()),
+  },
+  handler: async (ctx, { voucherId, note, due }) => {
+    const grn = await ctx.db.get(voucherId)
+    const type = await grnType(ctx)
+    if (!grn || !type || grn.typeId !== type._id) throw new Error('Not a delivery')
+    const text = note.trim().slice(0, 300)
+    await ctx.db.patch(voucherId, {
+      billNote: text || undefined,
+      billDue: due ?? undefined,
+      updatedAt: Date.now(),
+    })
+    const when = due ? new Date(due).toISOString().slice(0, 10) : ''
+    await record(
+      ctx,
+      'grn.billNote',
+      text || when
+        ? `${label(grn.voucherNo)} bill note: ${[text, when && `expected ${when}`].filter(Boolean).join(', ')}`
+        : `${label(grn.voucherNo)} bill note cleared`,
+      { entity: 'voucher', entityId: String(voucherId) },
+    )
   },
 })
 

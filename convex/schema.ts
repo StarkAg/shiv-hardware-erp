@@ -50,6 +50,10 @@ const receiptFields = {
   // reference. The reference, not the voucher id, because a voucher put back
   // from the trash comes back under a new id and its bill number does not.
   paysFor: v.optional(v.string()),
+  // On a delivery: what the supplier said about the bill ("bill with next
+  // load", "sending Monday") and the day it is expected, for Bills to Come.
+  billNote: v.optional(v.string()),
+  billDue: v.optional(v.number()),
 };
 
 export default defineSchema({
