@@ -204,11 +204,11 @@ function caption(item) {
   const amount = item.amount != null ? ` · ₹${Math.round(item.amount).toLocaleString('en-IN')}` : ''
   // The walk-in account's name is the shop's own word for it, not the buyer's.
   const to = item.shared ? '' : `, ${item.name}`
-  // A receipt thanks for the payment; a refund or a return says what it is.
+  // No thank-you line on a bill or a receipt: the owner asked for it to go.
   // No date or amount under a receipt: the owner asked for it to go without them.
-  if (item.kind === 'Receipt') return `Thank you for your payment${to}.\nHere is the receipt for online records.\n\nShiv Hardware Store`
+  if (item.kind === 'Receipt') return `Here is the receipt for online records.\n\nShiv Hardware Store`
   if (item.kind && item.kind !== 'Sale') return `Namaste${to}.\nHere is the ${item.kind.toLowerCase()} copy for online records.\n\n${item.kind} dated ${day}${amount}\nShiv Hardware Store`
-  return `Thank you for purchasing with us${to}.\nHere is the bill copy for online records.\n\nBill dated ${day}${amount}\nShiv Hardware Store`
+  return `Here is the bill copy for online records.\n\nBill dated ${day}${amount}\nShiv Hardware Store`
 }
 
 const indiaHour = () => new Date(Date.now() + 19_800_000).getUTCHours()
