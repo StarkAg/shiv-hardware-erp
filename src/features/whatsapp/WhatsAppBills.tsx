@@ -153,6 +153,103 @@ function OlderBills({ linked, onSee, onSend }: {
   )
 }
 
+type Quote = { billId: string; label: string; name: string; phone: string; date: string; amount: number | null; status: string | null; at: number | null; reason: string }
+
+/** A quotation as it will go: its photos, or drawn as it prints. */
+function SeeQuote({ quote, canSend, onSend, onClose }: { quote: Quote; canSend: boolean; onSend: () => void; onClose: () => void }) {
+  const what = useQuery(api.billWhatsApp.quotePreview, { billId: quote.billId })
+  const send = (
+    <button type="button" className="btn" onClick={onSend} disabled={!canSend}>
+      <Send size={15} aria-hidden="true" /> Send
+    </button>
+  )
+  if (what === undefined) return null
+  if (what?.photos.length) {
+    return <BillViewer voucher={{ vchLabel: quote.label, party: quote.name, amount: quote.amount, attachmentUrls: what.photos }} onClose={onClose} toolsBefore={send} />
+  }
+  if (what?.bill) return <VoucherBillPreview bill={what.bill as unknown as Bill} onClose={onClose} actions={send} />
+  return <Confirm title={`${quote.label} is no longer open`} body="It was deleted or sold, so it is not sent." confirmLabel="Close" onClose={onClose} onConfirm={onClose} />
+}
+
+/**
+ * The open quotations, sent one at a time by hand: never on their own. The
+ * newest few show; the find box reaches the rest.
+ */
+function Quotations({ linked, open, onError }: { linked: boolean; open: boolean; onError: (message: string) => void }) {
+  const quotes = useLive(api.billWhatsApp.quotes, {}, 'whatsapp-quotes') as Quote[] | undefined
+  const requestQuote = useMutation(api.billWhatsApp.requestQuote)
+  const [find, setFind] = useState('')
+  const [seeing, setSeeing] = useState<Quote | null>(null)
+  const [sending, setSending] = useState<Quote | null>(null)
+  const STATE: Record<string, string> = { sent: 'Sent', requested: open ? 'Sending now' : 'Goes at 9 am', failed: 'Failed', skipped: 'Not sent' }
+  const shown = useMemo(() => {
+    const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    const all = quotes ?? []
+    if (!words.length) return all.slice(0, 10)
+    return all.filter((q) => words.every((w) => [q.name, q.phone, q.label].some((s) => s.toLowerCase().includes(w))))
+  }, [quotes, find])
+  const hasPhone = (q: Quote) => /\d{10}/.test(q.phone.replace(/\D/g, ''))
+
+  return (
+    <>
+      <h2 className="sectiontitle">Quotations</h2>
+      <div className="toolbar">
+        <input className="partysearch" type="text" value={find} onChange={(e) => setFind(e.target.value)}
+          placeholder="Customer, phone or QTN number" aria-label="Find a quotation" />
+      </div>
+      {quotes === undefined ? <TableSkeleton cols={5} rows={3} wide={1} /> : (
+        <div className="table-wrap"><div className="scroller">
+          <table className="ledger">
+            <thead><tr><th className="w-no">Quotation</th><th>Customer</th><th>Date</th><th className="num">Amount</th><th>WhatsApp</th><th className="w-acts" /></tr></thead>
+            <tbody>
+              {shown.map((q) => (
+                <tr key={q.billId}>
+                  <td className="mono entryno" data-label="Quotation"><Link className="link plain" to={`/bills/${q.billId}`}>{q.label}</Link></td>
+                  <td className="particulars" data-label="Customer">{q.name || '—'}<div className="ref">{q.phone || 'No phone: asked when sending'}</div></td>
+                  <td className="ref" data-label="Date">{new Date(q.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                  <td className="num" data-label="Amount">{rupees(q.amount)}</td>
+                  <td data-label="WhatsApp">
+                    {q.status ? <span className={q.status === 'sent' ? 'credit' : 'warn'}>{STATE[q.status]}{q.at ? ` · ${when(q.at)}` : ''}{q.status !== 'sent' && q.reason ? `: ${q.reason}` : ''}</span> : 'Not sent'}
+                  </td>
+                  <td className="rowacts">
+                    <button className="xbtn" title="See the quotation" aria-label={`See ${q.label}`} onClick={() => setSeeing(q)}>
+                      <Eye size={14} aria-hidden="true" />
+                    </button>
+                    <button className="xbtn" title={q.status === 'sent' ? 'Send again' : 'Send this quotation'} aria-label={`Send ${q.label}`}
+                      disabled={!linked || q.status === 'requested'} onClick={() => setSending(q)}>
+                      <Send size={14} aria-hidden="true" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {shown.length === 0 && <tr><td colSpan={6} className="particulars">{find.trim() ? 'No quotation matches that.' : 'No open quotations.'}</td></tr>}
+            </tbody>
+          </table>
+        </div></div>
+      )}
+      {seeing && (
+        <SeeQuote quote={seeing} canSend={linked && seeing.status !== 'requested'} onClose={() => setSeeing(null)}
+          onSend={() => { const q = seeing; setSeeing(null); setSending(q) }} />
+      )}
+      {sending && (
+        <Confirm
+          title={`Send ${sending.label} ${open ? 'now' : 'at 9 am'}?`}
+          body={`It goes to ${sending.name || 'the customer'}'s WhatsApp${hasPhone(sending) ? ` (${sending.phone})` : ''} ${open ? 'now' : 'at 9 am'}, as the quotation page alone.${sending.status === 'sent' && sending.at ? ` It was already sent on ${when(sending.at)}.` : ''}`}
+          confirmLabel={open ? 'Send now' : 'Send at 9 am'}
+          ask={hasPhone(sending) ? undefined : { label: 'Customer WhatsApp number' }}
+          toggle={{ label: 'New number: send the smile, folded hands and card first' }}
+          onClose={() => setSending(null)}
+          onConfirm={async (phone, newNumber) => {
+            const { billId } = sending
+            setSending(null)
+            try { await requestQuote({ billId, ...(phone.trim() ? { phone } : {}), ...(newNumber ? { newNumber } : {}) }) } catch (err) { onError(err instanceof Error ? err.message : String(err)) }
+          }}
+        />
+      )}
+    </>
+  )
+}
+
 type Link = { status: string; me: string | null; hours?: number[]; dailyMax?: number; restMin?: number } | null
 
 /** Whether the owner's WhatsApp is linked on the service: asked every half minute. */
@@ -264,6 +361,8 @@ export function WhatsAppBills() {
             </table>
           </div></div>
         )}
+
+        <Quotations linked={linked} open={open} onError={setError} />
 
         <OlderBills linked={linked} onSee={setSeeing} onSend={setSendingNow} />
 

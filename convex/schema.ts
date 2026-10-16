@@ -820,6 +820,23 @@ export default defineSchema({
     .index("by_at", ["at"]),
 
   /**
+   * A quotation sent to the customer's WhatsApp, by hand only. Quotations are
+   * never posted, so they have no voucher: the row names the bill instead.
+   */
+  quoteWhatsApp: defineTable({
+    billId: v.string(),
+    status: v.union(v.literal("requested"), v.literal("sent"), v.literal("skipped"), v.literal("failed")),
+    to: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    requestedPhone: v.optional(v.string()),
+    greet: v.optional(v.boolean()),
+    attempts: v.number(),
+    at: v.number(),
+  })
+    .index("by_bill", ["billId"])
+    .index("by_at", ["at"]),
+
+  /**
    * Papers that are not vouchers.
    *
    * A supplier's statement of account is the case this was made for: it is

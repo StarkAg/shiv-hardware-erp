@@ -42,6 +42,17 @@ const needsRecipient = (name: string | undefined) => bare(name).toUpperCase() ==
 const mobile = (phone: string | undefined) => String(phone ?? '').replace(/\D/g, '')
 
 type Attachment = Doc<'vouchers'>['attachments'][number]
+
+/** "QTN-4" for quotation Q-4, as the bill screen's quotation list labels it. */
+const quoteLabel = (number: unknown) => `QTN-${String(number ?? '').replace(/^Q-/, '')}`
+
+type QuoteBill = { id: string; kind?: string; number?: string; date: string; total?: number; customerName?: string; customerPhone?: string; attachments?: unknown[]; deleted?: boolean }
+/** An open quotation, by its bill id; null once it is deleted or sold. */
+async function quoteBill(ctx: QueryCtx, billId: string): Promise<QuoteBill | null> {
+  const row = await ctx.db.query('bills').withIndex('by_bill', (q) => q.eq('billId', billId)).unique()
+  const bill = row?.bill as QuoteBill | undefined
+  return bill && bill.kind === 'quotation' && !bill.deleted ? bill : null
+}
 async function photosOf(ctx: QueryCtx, docs: Attachment[]) {
   const out = []
   for (const d of docs) {
@@ -87,8 +98,35 @@ export const due = query({
     const requested = new Set((await ctx.db.query('billWhatsApp').collect())
       .filter((row) => row.status === 'requested')
       .map((row) => String(row.voucherId)))
+    // Quotations asked for by hand go first, in the order they were asked.
+    const quoteAsks = (await ctx.db.query('quoteWhatsApp').collect())
+      .filter((row) => row.status === 'requested')
+      .sort((a, b) => a.at - b.at)
 
-    if ((!on || !from) && requested.size === 0) return { on, sentToday, items: [] }
+    if ((!on || !from) && requested.size === 0 && !quoteAsks.length) return { on, sentToday, items: [] }
+
+    const items = []
+    for (const ask of quoteAsks) {
+      if (items.length >= limit) break
+      const bill = await quoteBill(ctx, ask.billId)
+      if (!bill || !/\d{10}/.test(mobile(ask.requestedPhone))) continue
+      const photos = await photosOf(ctx, (bill.attachments ?? []) as Attachment[])
+      items.push({
+        billId: ask.billId,
+        label: quoteLabel(bill.number),
+        kind: 'Quotation',
+        date: Date.parse(bill.date),
+        amount: typeof bill.total === 'number' ? bill.total : null,
+        name: bare(bill.customerName),
+        phone: ask.requestedPhone,
+        photos,
+        bill: photos.length ? null : bill,
+        tries: ask.attempts,
+        onDemand: true,
+        newChat: ask.greet === true,
+        shared: false,
+      })
+    }
 
     const types = await typesOf(ctx)
     const sale = [...types.values()].find((t) => t.name === 'Sale')
@@ -109,7 +147,6 @@ export const due = query({
     // A specifically requested bill comes before the automatic queue.
     const candidates = [...asked, ...automatic]
 
-    const items = []
     let snapshots: Map<string, unknown> | null = null
     for (const vch of candidates) {
       if (items.length >= limit) break
@@ -153,18 +190,26 @@ export const due = query({
   },
 })
 
-/** How a bill's sending went, from the shop PC. */
+/** How a bill's sending went, from the shop PC: a voucher's, or a quotation's by its bill. */
 export const record = mutation({
   args: {
-    voucherId: v.id('vouchers'),
+    voucherId: v.optional(v.id('vouchers')),
+    billId: v.optional(v.string()),
     status: v.union(v.literal('sent'), v.literal('skipped'), v.literal('failed')),
     to: v.optional(v.string()),
     reason: v.optional(v.string()),
   },
-  handler: async (ctx, { voucherId, status, to, reason }) => {
-    const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
+  handler: async (ctx, { voucherId, billId, status, to, reason }) => {
     const at = Date.now()
     const fields = { status, at, ...(to ? { to } : {}), reason: reason?.slice(0, 300) }
+    if (billId) {
+      const row = await ctx.db.query('quoteWhatsApp').withIndex('by_bill', (q) => q.eq('billId', billId)).unique()
+      if (row) await ctx.db.patch(row._id, { ...fields, attempts: row.attempts + 1 })
+      else await ctx.db.insert('quoteWhatsApp', { billId, ...fields, attempts: 1 })
+      return
+    }
+    if (!voucherId) throw new Error('Say which bill this was.')
+    const row = await ctx.db.query('billWhatsApp').withIndex('by_voucher', (q) => q.eq('voucherId', voucherId)).unique()
     if (row) await ctx.db.patch(row._id, { ...fields, attempts: row.attempts + 1 })
     else await ctx.db.insert('billWhatsApp', { voucherId, ...fields, attempts: 1 })
   },
@@ -405,3 +450,59 @@ export async function sentAt(ctx: QueryCtx, voucherIds: Id<'vouchers'>[]) {
   }
   return out
 }
+
+/**
+ * The open quotations, newest first, for sending one by hand: each with the
+ * customer's number and what happened to it on WhatsApp, if anything. A
+ * quotation is never sent on its own.
+ */
+export const quotes = query({
+  args: {},
+  handler: async (ctx) => {
+    const open = (await ctx.db.query('bills').collect())
+      .map((row) => row.bill as QuoteBill)
+      .filter((bill) => bill?.kind === 'quotation' && !bill.deleted)
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    return await Promise.all(open.map(async (bill) => {
+      const done = await ctx.db.query('quoteWhatsApp').withIndex('by_bill', (q) => q.eq('billId', bill.id)).unique()
+      return {
+        billId: bill.id,
+        label: quoteLabel(bill.number),
+        name: bare(bill.customerName),
+        phone: bill.customerPhone ?? '',
+        date: bill.date,
+        amount: typeof bill.total === 'number' ? bill.total : null,
+        status: done?.status ?? null,
+        at: done?.at ?? null,
+        reason: done?.reason ?? '',
+      }
+    }))
+  },
+})
+
+/** What one quotation will go as: its photos, or the quotation drawn as it prints. */
+export const quotePreview = query({
+  args: { billId: v.string() },
+  handler: async (ctx, { billId }) => {
+    const bill = await quoteBill(ctx, billId)
+    if (!bill) return null
+    const photos = await photosOf(ctx, (bill.attachments ?? []) as Attachment[])
+    return { photos, bill: photos.length ? null : bill }
+  },
+})
+
+/** Send one quotation to the customer's WhatsApp: the number typed, else the one on it. */
+export const requestQuote = mutation({
+  args: { billId: v.string(), phone: v.optional(v.string()), newNumber: v.optional(v.boolean()) },
+  handler: async (ctx, { billId, phone, newNumber }) => {
+    const bill = await quoteBill(ctx, billId)
+    if (!bill) throw new Error('This quotation is no longer open: it was deleted or sold.')
+    const requestedPhone = mobile(phone) || mobile(bill.customerPhone)
+    if (!/\d{10}/.test(requestedPhone)) throw new Error('Enter the customer\'s 10-digit WhatsApp number.')
+    const row = await ctx.db.query('quoteWhatsApp').withIndex('by_bill', (q) => q.eq('billId', billId)).unique()
+    if (row?.status === 'requested') throw new Error('This quotation is already being sent.')
+    const fields = { status: 'requested' as const, attempts: 0, at: Date.now(), greet: newNumber === true, requestedPhone, reason: undefined }
+    if (row) await ctx.db.patch(row._id, fields)
+    else await ctx.db.insert('quoteWhatsApp', { billId, ...fields })
+  },
+})

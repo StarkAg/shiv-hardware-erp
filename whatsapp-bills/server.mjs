@@ -212,9 +212,9 @@ function caption(item) {
   const amount = item.amount != null ? ` · ₹${Math.round(item.amount).toLocaleString('en-IN')}` : ''
   // The walk-in account's name is the shop's own word for it, not the buyer's.
   const to = item.shared ? '' : `, ${item.name}`
-  // A bill or a receipt goes as its pages alone, no text: the owner asked for
-  // that. A refund or a return still says what it is.
-  if (!item.kind || item.kind === 'Sale' || item.kind === 'Receipt') return ''
+  // A bill, a receipt or a quotation goes as its pages alone, no text: the
+  // owner asked for that. A refund or a return still says what it is.
+  if (!item.kind || item.kind === 'Sale' || item.kind === 'Receipt' || item.kind === 'Quotation') return ''
   return `Namaste${to}.\nHere is the ${item.kind.toLowerCase()} copy for online records.\n\n${item.kind} dated ${day}${amount}\nShiv Hardware Store`
 }
 
@@ -232,7 +232,9 @@ async function sendDue() {
   if (!db) return
   busy = true
   let item = null
-  const record = (status, extra = {}) => db.mutation(anyApi.billWhatsApp.record, { voucherId: item.voucherId, status, ...extra })
+  // A quotation has no voucher: its sending is recorded against its bill.
+  const record = (status, extra = {}) => db.mutation(anyApi.billWhatsApp.record,
+    { ...(item.billId ? { billId: item.billId } : { voucherId: item.voucherId }), status, ...extra })
   try {
     const due = await db.query(anyApi.billWhatsApp.due, { before: Date.now() - REST_MS, limit: 1 })
     if (!due?.items?.length || due.sentToday >= DAILY_MAX) return
