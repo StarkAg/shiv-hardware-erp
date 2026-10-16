@@ -206,8 +206,8 @@ async function inWords<T>(run: () => Promise<T>): Promise<T> {
 }
 
 export const ensureParty = mutation({
-  args: { name: v.string(), phone: v.optional(v.string()) },
-  handler: async (ctx, { name, phone }) => openParty(ctx, name, { phone }),
+  args: { name: v.string(), phone: v.optional(v.string()), aadhaar: v.optional(v.string()) },
+  handler: async (ctx, { name, phone, aadhaar }) => openParty(ctx, name, { phone, aadhaar }),
 })
 
 export const postBill = mutation({

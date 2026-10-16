@@ -1,6 +1,7 @@
 import type React from 'react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useMutation } from 'convex/react'
 import { Camera, Check, Copy, Eye, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
@@ -316,6 +317,7 @@ function cardKey(d: GuaranteeDocument): string {
 
 export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const { sets, bills, guarantees, saveGuarantee, nextGuaranteeNumber, raiseGuaranteeSeq, saveBill, upsertCustomer } = useStore()
+  const ensureParty = useMutation(api.billLedger.ensureParty)
   // The bill this card was started from, so saving the card ticks that sale
   // off the Guarantee list.
   const [fromBillId, setFromBillId] = useState<string | null>(null)
@@ -612,12 +614,17 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const doc = buildGuaranteeDoc()
   const doc2 = buildSecondDoc()
 
-  // Guarantee cards share the one Customers table with quotations: the name
-  // and mobile typed here land there too, so a customer met at the guarantee
-  // counter shows up when quoting them later, and the other way round.
+  // A card's customer goes into the books too, the way a bill's does: their
+  // Customers account is opened if there is none, and a mobile or UID it
+  // lacks is filled in (one already there is never overwritten).
   function saveCardCustomers() {
-    if (customer.name.trim()) upsertCustomer(customer)
-    if (secondCardOn && customer2.name.trim()) upsertCustomer(customer2)
+    for (const c of [customer, ...(secondCardOn ? [customer2] : [])]) {
+      const name = c.name.trim()
+      if (!name) continue
+      upsertCustomer(c)
+      ensureParty({ name, phone: c.mobile.trim() || undefined, aadhaar: c.uid.trim() || undefined })
+        .catch((err) => toast(`${name} not added to the books: ${err instanceof Error ? err.message : String(err)}`, 'error'))
+    }
   }
 
   // Save (and enqueue for sync) each card under its freshly minted ref. The QR
