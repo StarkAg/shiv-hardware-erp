@@ -204,11 +204,10 @@ function caption(item) {
   const amount = item.amount != null ? ` · ₹${Math.round(item.amount).toLocaleString('en-IN')}` : ''
   // The walk-in account's name is the shop's own word for it, not the buyer's.
   const to = item.shared ? '' : `, ${item.name}`
-  // No thank-you line on a bill or a receipt: the owner asked for it to go.
-  // No date or amount under a receipt: the owner asked for it to go without them.
-  if (item.kind === 'Receipt') return `Here is the receipt for online records.\n\nShiv Hardware Store`
-  if (item.kind && item.kind !== 'Sale') return `Namaste${to}.\nHere is the ${item.kind.toLowerCase()} copy for online records.\n\n${item.kind} dated ${day}${amount}\nShiv Hardware Store`
-  return `Here is the bill copy for online records.\n\nBill dated ${day}${amount}\nShiv Hardware Store`
+  // A bill or a receipt goes as its pages alone, no text: the owner asked for
+  // that. A refund or a return still says what it is.
+  if (!item.kind || item.kind === 'Sale' || item.kind === 'Receipt') return ''
+  return `Namaste${to}.\nHere is the ${item.kind.toLowerCase()} copy for online records.\n\n${item.kind} dated ${day}${amount}\nShiv Hardware Store`
 }
 
 const indiaHour = () => new Date(Date.now() + 19_800_000).getUTCHours()
@@ -262,14 +261,15 @@ async function sendDue() {
       await new Promise((resolve) => setTimeout(resolve, 2_000 + Math.random() * 2_000))
     }
 
-    // Every page of the bill, then the line saying which bill it is, as its
-    // own message after them: the note on the first photo read as being
-    // about that page alone.
+    // Every page of the bill, then (a refund or a return only) the line saying
+    // what it is, as its own message after them: a note on the first photo
+    // read as being about that page alone.
     for (const m of media) {
       await sock.sendMessage(jid, m)
       await new Promise((resolve) => setTimeout(resolve, 2_000 + Math.random() * 2_000))
     }
-    await sock.sendMessage(jid, { text: caption(item) })
+    const note = caption(item)
+    if (note) await sock.sendMessage(jid, { text: note })
     await record('sent', { to: jid })
     state.lastSent = { at: new Date().toISOString(), label: item.label, name: item.name }
     log(`[bills] sent ${item.label} to ${item.name}, ${media.length} ${media.length === 1 ? 'page' : 'pages'}`)
