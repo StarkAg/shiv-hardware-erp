@@ -14,12 +14,14 @@ const MAX_SIDE = 1800
 const QUALITY = 0.72
 const canvasBlob = (canvas, type) => new Promise((resolve) => canvas.toBlob(resolve, type, QUALITY))
 
-async function compress(drawable, width, height) {
-  const scale = Math.min(1, MAX_SIDE / Math.max(width, height))
+/** `area`, when given, is the part of the picture to keep: { x, y, w, h } in its own pixels. */
+async function compress(drawable, width, height, area) {
+  const { x, y, w, h } = area ?? { x: 0, y: 0, w: width, h: height }
+  const scale = Math.min(1, MAX_SIDE / Math.max(w, h))
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(width * scale)
-  canvas.height = Math.round(height * scale)
-  canvas.getContext('2d').drawImage(drawable, 0, 0, canvas.width, canvas.height)
+  canvas.width = Math.round(w * scale)
+  canvas.height = Math.round(h * scale)
+  canvas.getContext('2d').drawImage(drawable, x, y, w, h, 0, 0, canvas.width, canvas.height)
   const webp = await canvasBlob(canvas, 'image/webp')
   return webp?.type === 'image/webp' ? webp : canvasBlob(canvas, 'image/jpeg')
 }
@@ -36,6 +38,100 @@ async function shrink(file) {
   } catch {
     return file
   }
+}
+
+/**
+ * The live crop: a box over the camera, in fractions of the camera's frame on
+ * screen, that the shutter keeps and the rest it leaves out — the table, the
+ * hand holding the bill. Dragged by its corners to size it and by its middle
+ * to move it. The box and whether it is on are remembered on this phone.
+ */
+const CROP_KEY = 'voucher-crop'
+const START_BOX = { l: 0.09, t: 0.12, r: 0.91, b: 0.94 }
+const MIN_SIDE = 0.15
+function loadCrop() {
+  try {
+    const kept = JSON.parse(localStorage.getItem(CROP_KEY) ?? 'null')
+    if (kept && ['l', 't', 'r', 'b'].every((k) => Number.isFinite(kept.box?.[k]))) return kept
+  } catch { /* private window, or nothing kept */ }
+  return { on: true, box: START_BOX }
+}
+function keepCrop(crop) {
+  try { localStorage.setItem(CROP_KEY, JSON.stringify(crop)) } catch { /* not kept; still works */ }
+}
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
+
+/**
+ * Where the box falls on the camera's own picture. The video fills its frame
+ * with `object-fit: cover`, so part of the picture runs off two edges; the box
+ * is worked back through that scale and offset into the picture's pixels.
+ */
+function cropArea(video, box) {
+  const vw = video.videoWidth
+  const vh = video.videoHeight
+  const cw = video.clientWidth
+  const ch = video.clientHeight
+  if (!vw || !vh || !cw || !ch) return undefined
+  const scale = Math.max(cw / vw, ch / vh)
+  const ox = (cw - vw * scale) / 2
+  const oy = (ch - vh * scale) / 2
+  const x = clamp((box.l * cw - ox) / scale, 0, vw)
+  const y = clamp((box.t * ch - oy) / scale, 0, vh)
+  const r = clamp((box.r * cw - ox) / scale, 0, vw)
+  const b = clamp((box.b * ch - oy) / scale, 0, vh)
+  return r - x > 8 && b - y > 8 ? { x, y, w: r - x, h: b - y } : undefined
+}
+
+/** The crop box, with a handle at each corner. */
+function CropBox({ box, onChange, onDone }) {
+  const drag = useRef(null)
+  const start = (part) => (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const frame = event.currentTarget.closest('.camera').getBoundingClientRect()
+    drag.current = { part, frame, x: event.clientX, y: event.clientY, box }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+  const move = (event) => {
+    const d = drag.current
+    if (!d) return
+    const dx = (event.clientX - d.x) / d.frame.width
+    const dy = (event.clientY - d.y) / d.frame.height
+    const was = d.box
+    let next
+    if (d.part === 'move') {
+      const w = was.r - was.l
+      const h = was.b - was.t
+      const l = clamp(was.l + dx, 0, 1 - w)
+      const t = clamp(was.t + dy, 0, 1 - h)
+      next = { l, t, r: l + w, b: t + h }
+    } else {
+      next = { ...was }
+      if (d.part.includes('l')) next.l = clamp(was.l + dx, 0, was.r - MIN_SIDE)
+      if (d.part.includes('r')) next.r = clamp(was.r + dx, was.l + MIN_SIDE, 1)
+      if (d.part.includes('t')) next.t = clamp(was.t + dy, 0, was.b - MIN_SIDE)
+      if (d.part.includes('b')) next.b = clamp(was.b + dy, was.t + MIN_SIDE, 1)
+    }
+    onChange(next)
+  }
+  const end = () => {
+    if (!drag.current) return
+    drag.current = null
+    onDone()
+  }
+  const handlers = { onPointerMove: move, onPointerUp: end, onPointerCancel: end }
+  return (
+    <div
+      className="crop-box"
+      style={{ left: `${box.l * 100}%`, top: `${box.t * 100}%`, width: `${(box.r - box.l) * 100}%`, height: `${(box.b - box.t) * 100}%` }}
+      onPointerDown={start('move')}
+      {...handlers}
+    >
+      {['tl', 'tr', 'bl', 'br'].map((corner) => (
+        <span key={corner} className={`crop-handle ${corner}`} onPointerDown={start(corner)} {...handlers} />
+      ))}
+    </div>
+  )
 }
 
 const newGroup = () => `voucher-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -63,6 +159,9 @@ export default function App() {
   const [cameraError, setCameraError] = useState('')
   const [pages, setPages] = useState(0)
   const [outgoing, setOutgoing] = useState([])
+  const [crop, setCrop] = useState(loadCrop)
+  const cropRef = useRef(crop)
+  cropRef.current = crop
 
   useEffect(() => {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
@@ -147,7 +246,9 @@ export default function App() {
     if (!source?.videoWidth) return
     const groupId = group.current
     setPages((count) => count + 1)
-    compress(source, source.videoWidth, source.videoHeight).then((blob) => {
+    const { on, box } = cropRef.current
+    const area = on ? cropArea(source, box) : undefined
+    compress(source, source.videoWidth, source.videoHeight, area).then((blob) => {
       if (blob) enqueue(asFile(blob), groupId)
       else setCameraError('The photo could not be prepared. Please try again.')
     })
@@ -184,7 +285,33 @@ export default function App() {
 
         <section className="camera" aria-label="Voucher bill camera">
           <video ref={video} playsInline muted autoPlay />
-          {cameraReady && <span className="camera-corners" aria-hidden="true" />}
+          {cameraReady && crop.on && (
+            <CropBox
+              box={crop.box}
+              onChange={(box) => setCrop((c) => ({ ...c, box }))}
+              onDone={() => keepCrop(cropRef.current)}
+            />
+          )}
+          {cameraReady && (
+            <div className="crop-keys">
+              <button
+                type="button"
+                className={crop.on ? 'on' : ''}
+                aria-pressed={crop.on}
+                onClick={() => setCrop((c) => { const next = { ...c, on: !c.on }; keepCrop(next); return next })}
+              >
+                {crop.on ? 'Crop on' : 'Crop off'}
+              </button>
+              {crop.on && (
+                <button
+                  type="button"
+                  onClick={() => setCrop((c) => { const next = { ...c, box: START_BOX }; keepCrop(next); return next })}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          )}
           {cameraError && <div className="camera-message">{cameraError}</div>}
           {!cameraReady && !cameraError && <div className="camera-message">Opening camera…</div>}
         </section>
