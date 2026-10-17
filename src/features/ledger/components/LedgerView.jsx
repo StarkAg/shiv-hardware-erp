@@ -5,6 +5,7 @@ import { sendWhatsAppDocument } from '../../../lib/printServer'
 import { statementPdf } from '../lib/pdf'
 import { WhatsAppSent } from '../../../components/WhatsAppSent'
 import { useStore } from '../../../lib/store'
+import { toast } from '../../../components/Toast'
 import VoucherBillPreview from './VoucherBillPreview'
 import { photoStrip } from './BillViewer'
 import { api } from '../../../../convex/_generated/api';
@@ -24,6 +25,8 @@ const goodsOn = (bill) =>
   (bill?.items ?? []).filter(
     (i) => String(i?.description ?? '').trim() && !i.isRoundup && !i.isDiscount && !i.auto && !i.amountOnly
   );
+
+const quoteLabel = (q) => `QTN-${String(q?.number ?? '').replace(/^Q-/, '')}`;
 
 const figure = (n) => Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
@@ -110,6 +113,10 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   // button here can stay a plain setEditing.
   function openEdit(p) { setEditing(p._id); }
   const [deleting, setDeleting] = useState(null);
+  // A quotation or visit order is a bill, not a voucher: it goes to the bill
+  // trash the way the Quotations list deletes it.
+  const deleteBill = useStore((st) => st.deleteBill);
+  const [deletingQuote, setDeletingQuote] = useState(null);
   const [editParty, setEditParty] = useState(false);
   const removeVoucher = useMutation(api.vouchers.remove);
   const dropSettlement = useMutation(api.vouchers.dropSettlement);
@@ -731,6 +738,9 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                       <button className="xbtn" onClick={() => navigate(`/bills/${item.q.id}`)} aria-label="Edit">
                         <Pencil size={14} aria-hidden="true" />
                       </button>
+                      <button className="xbtn del" onClick={() => setDeletingQuote(item.q)} aria-label="Delete">
+                        <X size={14} aria-hidden="true" />
+                      </button>
                     </td>
                   </tr>
                 ) : item.kind === 'pending' ? (
@@ -938,6 +948,24 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
           danger
           onConfirm={() => removeVoucher({ id: deleting.voucherId ?? deleting._id })}
           onClose={() => setDeleting(null)}
+        />
+      )}
+
+      {deletingQuote && (
+        <Confirm
+          title={`Delete ${quoteLabel(deletingQuote)}?`}
+          body={`${account?.name} · ${shortDate(deletingQuote.date)}. The ${
+            deletingQuote.workOrder ? 'visit order' : 'quotation'
+          } goes to the bill trash, where it can be restored. The balance does not change.`}
+          confirmLabel="Delete"
+          danger
+          onClose={() => setDeletingQuote(null)}
+          onConfirm={async () => {
+            const q = deletingQuote;
+            setDeletingQuote(null);
+            const gone = await deleteBill(q.id);
+            toast(gone ? `${quoteLabel(q)} deleted` : 'Not deleted: the books could not be reached. Try again.', gone ? 'ok' : 'error');
+          }}
         />
       )}
 
