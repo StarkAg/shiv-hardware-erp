@@ -162,6 +162,13 @@ export default function App() {
   const [crop, setCrop] = useState(loadCrop)
   const cropRef = useRef(crop)
   cropRef.current = crop
+  // The photo whose Discard was tapped once; a second tap throws it away.
+  const [discarding, setDiscarding] = useState(null)
+  useEffect(() => {
+    if (!discarding) return
+    const t = setTimeout(() => setDiscarding(null), 4000)
+    return () => clearTimeout(t)
+  }, [discarding])
 
   useEffect(() => {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
@@ -178,6 +185,9 @@ export default function App() {
     }).then(async (opened) => {
       if (ended) return opened.getTracks().forEach((track) => track.stop())
       stream = opened
+      // The phone can end the stream with the page still showing (another
+      // app took the camera); `stop()` below does not fire this, so it is only that.
+      opened.getVideoTracks().forEach((track) => track.addEventListener('ended', wake))
       if (video.current) {
         video.current.srcObject = opened
         await video.current.play()
@@ -188,8 +198,32 @@ export default function App() {
         ? 'Allow camera access in your browser, then tap Retry camera.'
         : 'The camera could not open. You can choose photos below.')
     })
+    /*
+     * A phone pauses the live picture whenever something covers the page — a
+     * browser dialog, the app switcher, a call — and does not always start it
+     * again, which left the camera frozen on its last frame. When the page is
+     * back in front: play a paused video, and open the camera afresh if the
+     * phone has ended its stream.
+     */
+    const wake = () => {
+      if (ended || document.hidden || !stream) return
+      if (stream.getVideoTracks().some((track) => track.readyState === 'ended')) {
+        setCameraAttempt((n) => n + 1)
+        return
+      }
+      if (video.current?.paused) video.current.play().catch(() => {})
+    }
+    const el = video.current
+    document.addEventListener('visibilitychange', wake)
+    window.addEventListener('focus', wake)
+    window.addEventListener('pageshow', wake)
+    el?.addEventListener('pause', wake)
     return () => {
       ended = true
+      document.removeEventListener('visibilitychange', wake)
+      window.removeEventListener('focus', wake)
+      window.removeEventListener('pageshow', wake)
+      el?.removeEventListener('pause', wake)
       stream?.getTracks().forEach((track) => track.stop())
     }
   }, [cameraAttempt])
@@ -354,9 +388,13 @@ export default function App() {
           {rows.map((row) => <div className="tile" key={row._id}>
             <a href={row.url} target="_blank" rel="noreferrer"><img src={row.url} alt="Bill photo waiting to be attached" /></a>
             <span>{row.queueNo == null ? '' : `#${queueLabel(row.queueNo)} · `}{ago(row.at)}</span>
-            <button onClick={() => {
-              if (window.confirm('Discard this bill photo?')) discard({ id: row._id })
-            }}>Discard</button>
+            {/* Asked on the page, not with the browser's confirm box: that
+                box paused the live camera and it stayed frozen after. */}
+            <button className={discarding === row._id ? 'sure' : ''} onClick={() => {
+              if (discarding !== row._id) { setDiscarding(row._id); return }
+              setDiscarding(null)
+              discard({ id: row._id })
+            }}>{discarding === row._id ? 'Sure? Discard' : 'Discard'}</button>
           </div>)}
         </div>}
       </section>

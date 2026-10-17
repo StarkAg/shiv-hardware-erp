@@ -69,6 +69,7 @@ h1, h2 { margin: 0; }
 .tile > button { display: block; width: 100%; min-height: 44px; background: var(--key); color: var(--ink); font: 700 17px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
 /* Red is delete and nothing else: throwing a photo away. */
 .waiting .tile > button { color: var(--stop); }
+.waiting .tile > button.sure { background: var(--stop); color: #fff; }
 .tile > button:active { background: var(--line); }
 
 @media (max-height: 570px) and (orientation: landscape) {
