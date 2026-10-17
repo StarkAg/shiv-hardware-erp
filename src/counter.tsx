@@ -25,6 +25,10 @@ import { startProperInputs } from './lib/properInputs'
 import { startEnterFlow } from './lib/enterFlow'
 import { startOfflineSync } from './lib/offlineSync'
 import { hydrateStore, useStore } from './lib/store'
+import { watchForNewBuild } from './lib/staleBuild'
+
+// The PDF and print code still load on first use; a tab from before a deploy reloads.
+watchForNewBuild()
 
 // The counter opens on the quotation chooser; the recovery screens' Home
 // button goes there, not to the panel's /home.

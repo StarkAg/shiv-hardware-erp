@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Navigate, useLocation, useNavigate, useParams, useRouteError, isRouteErrorResponse } from 'react-router-dom'
 import { AlertTriangle, Home, RotateCw } from 'lucide-react'
+import { isStaleBuild, reloadForNewBuild } from '../lib/staleBuild'
 
 /**
  * Where a link goes when the page behind it has moved or gone.
@@ -70,6 +71,10 @@ export function AppError() {
     : error instanceof Error
       ? error.message
       : String(error ?? 'Something went wrong')
+  // A screen left over from before the last deploy: the reload is the fix,
+  // so it is done rather than asked for (once — see staleBuild).
+  const stale = isStaleBuild(error)
+  useEffect(() => { if (stale) reloadForNewBuild() }, [stale])
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center gap-4 px-4 text-center">

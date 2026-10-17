@@ -17,6 +17,9 @@ import { startOfflineSync } from './lib/offlineSync'
 import { startProperInputs } from './lib/properInputs'
 import { hydrateStore, useStore } from './lib/store'
 import { convexEnabled, pushBillsToConvex } from './lib/convexSync'
+import { isStaleBuild, reloadForNewBuild, watchForNewBuild } from './lib/staleBuild'
+
+watchForNewBuild()
 
 /**
  * Each screen is fetched when it is first opened, not with the panel. The
@@ -25,7 +28,16 @@ import { convexEnabled, pushBillsToConvex } from './lib/convexSync'
  * editor, opened all day, come with the panel.
  */
 function page<K extends string>(load: () => Promise<{ [k in K]: unknown }>, name: K) {
-  const Lazy = React.lazy(async () => ({ default: (await load())[name] as React.ComponentType }))
+  const Lazy = React.lazy(async () => {
+    try {
+      return { default: (await load())[name] as React.ComponentType }
+    } catch (error) {
+      // A screen from before the last deploy: reload onto the new one.
+      // The promise is left hanging while the page reloads, so no error flashes.
+      if (isStaleBuild(error) && reloadForNewBuild()) return new Promise<never>(() => {})
+      throw error
+    }
+  })
   return () => <React.Suspense fallback={null}><Lazy /></React.Suspense>
 }
 const PrintDemo = page(() => import('./features/print/PrintDemo'), 'PrintDemo')
