@@ -1,7 +1,7 @@
 import { useState, useDeferredValue, useRef, useCallback, useLayoutEffect, useMemo, useEffect, createContext, useContext, Fragment } from 'react'
 import { confirmPostingDate } from '../../lib/dateCheck'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, IndianRupee, Loader2, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, ScanText, Trash2, Truck, Undo2, X } from 'lucide-react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, BookOpen, Camera, Download, FolderOpen, RotateCcw, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, IndianRupee, Loader2, Lock, Minus, Paperclip, Pencil, Plus, Printer, ReceiptText, Redo2, RefreshCw, ScanText, Trash2, Truck, Undo2, X } from 'lucide-react'
 import { WhatsAppSent } from '../../components/WhatsAppSent'
 import { useStore } from '../../lib/store'
 import { useShortcuts } from '../../lib/useShortcuts'
@@ -2786,6 +2786,9 @@ export function BillBuilder() {
     if (!row) return null
     return { amount: Number(row.closing) || 0, side: String(row.closingSide ?? 'Dr'), ledgerId: row.ledger?._id ? String(row.ledger._id) : '' }
   }, [partyBook, draft.customerName])
+  /** The account the name on the bill is, for the "Open ledger" link beside it. */
+  const partyLedgerId = partyBalance?.ledgerId || (namedAccount?._id ? String(namedAccount._id) : '')
+  const partyTab = (namedAccount?.groupName ?? sideGroup) === 'Sundry Creditors' ? 'suppliers' : 'customers'
 
   /**
    * `/bills/voucher/<id>` — editing a voucher that has no bill behind it: one
@@ -4512,16 +4515,31 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             {/* What this account already stands at, and which ledger the
                 voucher posts against — the two lines Tally puts here, so the
                 counter can see the position without leaving the voucher. */}
-            {partyBalance && (
+            {(partyBalance || partyLedgerId) && (
               /* Spans the field rather than trailing its own label: the figure
                  lands on the box's right edge, so it sits in the same place on
                  every voucher instead of wandering with the label's width.
                  Tabular digits keep the columns of a figure lined up. */
               <div className="mt-1 flex items-baseline gap-2 pl-11 text-xs">
-                <span className="italic text-muted">Current balance</span>
-                <span className="font-semibold tabular-nums text-stone-700 dark:text-stone-300">
-                  {balanceText(partyBalance.amount, partyBalance.side)}
-                </span>
+                {partyBalance && (
+                  <>
+                    <span className="italic text-muted">Current balance</span>
+                    <span className="font-semibold tabular-nums text-stone-700 dark:text-stone-300">
+                      {balanceText(partyBalance.amount, partyBalance.side)}
+                    </span>
+                  </>
+                )}
+                {/* The party's whole account, one tap away. The bill is kept
+                    as a draft, so Back returns to it as it was. */}
+                {partyLedgerId && (
+                  <Link
+                    to={`/ledger/${partyTab}/${partyLedgerId}`}
+                    className="ml-auto inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline dark:text-blue-400"
+                    title="Open this party's ledger"
+                  >
+                    <BookOpen size={12} aria-hidden="true" /> Open ledger
+                  </Link>
+                )}
               </div>
             )}
             {!isSupplierVoucher && (phoneKnown || uidKnown) && contactOnFile && (
