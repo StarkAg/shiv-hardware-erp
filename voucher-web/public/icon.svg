@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#0054b4"/>
+  <!-- A camera, and the bill it is pointed at in its lens. -->
+  <path d="M20 34 H35 L40 26 H60 L65 34 H80 V74 H20 Z" fill="#ffffff"/>
+  <circle cx="50" cy="53" r="15" fill="#0054b4"/>
+  <rect x="43" y="44" width="14" height="18" fill="#ffffff"/>
+  <rect x="46" y="48" width="8" height="2.5" fill="#0054b4"/>
+  <rect x="46" y="53" width="8" height="2.5" fill="#0054b4"/>
+  <rect x="46" y="58" width="5" height="2.5" fill="#0054b4"/>
+</svg>

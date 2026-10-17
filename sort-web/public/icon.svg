@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#0054b4"/>
+  <!-- A stack of bill slips, each with its name tab stepped along: sorted. -->
+  <path d="M22 21 H39 V28 H78 V38 H22 Z" fill="#ffffff"/>
+  <path d="M41.5 41 H58.5 V48 H78 V58 H22 V48 H41.5 Z" fill="#ffffff"/>
+  <path d="M61 61 H78 V78 H22 V68 H61 Z" fill="#ffffff"/>
+</svg>
