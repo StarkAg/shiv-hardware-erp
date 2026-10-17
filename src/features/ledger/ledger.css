@@ -19,7 +19,10 @@
    styles without its page background. */
 .ledger-root.portal{background: none; min-height: 0;}
 .ledger-root button{font-family: inherit; cursor: pointer;}
-.ledger-root .app{max-width: 1280px; margin: 0 auto; padding: 12px 12px 64px;}
+/* Wide enough to use a shop monitor: at 1280px a quotation's particulars
+   wrapped onto two lines and the photo buttons were squeezed under the
+   pinned edit column. */
+.ledger-root .app{max-width: 1800px; margin: 0 auto; padding: 12px 12px 64px;}
 @media (min-width: 640px){.ledger-root .app{padding: 16px 18px 72px;}}
 /* Amounts are read by running an eye down the column, which only works if the
    digits are all one width. */
@@ -129,7 +132,11 @@
 .ledger-root .w-no{width: 86px;}
 .ledger-root .w-date{width: 100px;}
 .ledger-root .w-ref{width: 132px;}
-.ledger-root .w-clip{width: 64px;}
+/* A row can carry two keys here — the bill and its photos — side by side.
+   At a fixed 64px they stacked and the lower one slid under the pinned
+   edit column. */
+.ledger-root .w-clip{width: 1%; min-width: 64px; white-space: nowrap;}
+.ledger-root td.w-clip .clip + .clip{margin-left: 6px;}
 /* The commission tick. Only drawn on accounts that name somebody to pay, so
    the column is absent — not empty — on every other ledger. */
 .ledger-root .w-comm{width: 58px; text-align: center; white-space: nowrap;}
