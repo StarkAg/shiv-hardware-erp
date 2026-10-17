@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery } from 'convex/react';
 
 /**
@@ -49,11 +49,12 @@ const write = (key, value) => {
  */
 export function useLive(fnRef, args, key) {
   const live = useQuery(fnRef, args ?? {});
-  const [cached, setCached] = useState(() => read(key));
-
   // A different key is a different slot — switch to it rather than showing
-  // one party's figures under another party's name.
-  useEffect(() => setCached(read(key)), [key]);
+  // one party's figures under another party's name. Read in the same render
+  // as the key changes: switching in an effect left one render answering the
+  // new party with the old party's figures, and the ledger page remembers its
+  // newest bill photo off that answer — under the new party's id.
+  const cached = useMemo(() => read(key), [key]);
 
   useEffect(() => {
     if (live !== undefined) write(key, live);

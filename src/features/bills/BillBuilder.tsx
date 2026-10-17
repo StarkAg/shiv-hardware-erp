@@ -2788,7 +2788,7 @@ export function BillBuilder() {
   }, [partyBook, draft.customerName])
   /** The account the name on the bill is, for the "Open ledger" link beside it. */
   const partyLedgerId = partyBalance?.ledgerId || (namedAccount?._id ? String(namedAccount._id) : '')
-  const partyTab = (namedAccount?.groupName ?? sideGroup) === 'Sundry Creditors' ? 'suppliers' : 'customers'
+  const ledgerTab = (namedAccount?.groupName ?? sideGroup) === 'Sundry Creditors' ? 'suppliers' : 'customers'
 
   /**
    * `/bills/voucher/<id>` — editing a voucher that has no bill behind it: one
@@ -3456,6 +3456,14 @@ export function BillBuilder() {
   /** Set to true whenever the bill is explicitly committed (save / print / cancel) so the
    *  unmount cleanup doesn't double-save. */
   const committedRef = useRef(false)
+  /**
+   * The draft save still waiting to run. The save below waits 600ms for the
+   * typing to stop, and leaving inside that wait — the "Open ledger" link,
+   * the menu, a shortcut — dropped whatever was typed last; so it also runs
+   * when the screen closes. Not after a save or a discard: those end the
+   * draft on purpose (quiet).
+   */
+  const pendingDraft = useRef<null | (() => void)>(null)
 
   /**
    * Keeps the typing as it happens, so leaving by any route — the menu, a
@@ -3464,6 +3472,7 @@ export function BillBuilder() {
    * it was opened.
    */
   useEffect(() => {
+    pendingDraft.current = null
     if (view !== 'form' || readOnly || quiet.current) return
     const isNew = !voucherId && !bills.some((b) => b.id === draft.id)
     const key = draftKey({ billId: draft.id, voucherId, kind: draft.kind, isNew })
@@ -3472,16 +3481,20 @@ export function BillBuilder() {
       clearFormDraft(lastDraftKey.current)
     }
     lastDraftKey.current = key
-    const timer = setTimeout(() => {
+    const keep = () => {
+      pendingDraft.current = null
       const typed = isNew
         ? hasMeaningfulContent(draft)
         : !!opened.current && JSON.stringify(draft) !== JSON.stringify(opened.current)
       if (typed) saveFormDraft(key, draft)
       else clearFormDraft(key)
-    }, 600)
+    }
+    pendingDraft.current = keep
+    const timer = setTimeout(keep, 600)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, view, readOnly])
+  useEffect(() => () => { if (!quiet.current) pendingDraft.current?.() }, [])
 
   // Leaving the page files nothing: an unsaved bill was never written down,
   // and half of one is not a bill.
@@ -4533,7 +4546,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                     as a draft, so Back returns to it as it was. */}
                 {partyLedgerId && (
                   <Link
-                    to={`/ledger/${partyTab}/${partyLedgerId}`}
+                    to={`/ledger/${ledgerTab}/${partyLedgerId}`}
                     className="ml-auto inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline dark:text-blue-400"
                     title="Open this party's ledger"
                   >
