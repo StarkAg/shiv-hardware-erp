@@ -71,12 +71,12 @@ function useSaveToPhone() {
   const suppliers = useQuery(api.reports.outstanding, {})
   const [progress, setProgress] = useState(null)
   const state = useRef({ running: false, again: false, rows: [], runs: 0 })
-  // "All saved" stays a few seconds, then goes; and is remembered, so it is not said again.
+  // The line goes the moment the saving is done, and a phone that has had
+  // everything once is not told so again.
   useEffect(() => {
-    if (progress?.step !== 'done') return undefined
+    if (progress?.step !== 'done') return
     write('allSaved', true)
-    const t = setTimeout(() => setProgress(null), 4000)
-    return () => clearTimeout(t)
+    setProgress(null)
   }, [progress])
   useEffect(() => {
     if (!customers || !suppliers) return
@@ -189,7 +189,8 @@ export default function App() {
  * the bill photos the rest.
  */
 function Saving({ saving }) {
-  if (!saving || saving.step === 'paused') return null
+  // Shown only while something is being saved: once it is done, the line goes.
+  if (!saving || saving.step === 'paused' || saving.step === 'done') return null
   const share = saving.total ? saving.done / saving.total : 1
   const [text, part] =
     saving.step === 'accounts' ? [`Saving accounts on this phone: ${saving.done} of ${saving.total}`, share * 0.1]
