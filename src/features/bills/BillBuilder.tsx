@@ -5353,7 +5353,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   }, `daybook:${from}:${to}`) as any[] | undefined
   const loading = vouchers === undefined
   // Sales that have gone to the customer's WhatsApp (convex/billWhatsApp.ts).
-  const sentList = useQuery(api.billWhatsApp.sent, {})
+  const sentList = useLive(api.billWhatsApp.sent, {}, 'whatsapp-sent')
   const whatsappAt = useMemo(() => new Map((sentList ?? []).map((r) => [String(r.voucherId), r.at])), [sentList])
 
   /**
@@ -5361,7 +5361,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
    * next yellow (look again), then red (wrong), then clear. Shared by every PC,
    * and shown at once here before the server answers.
    */
-  const markList = useQuery(api.dayBookMarks.list, {})
+  const markList = useLive(api.dayBookMarks.list, {}, 'daybook-marks')
   const setMarkRemote = useMutation(api.dayBookMarks.set)
   const [markLocal, setMarkLocal] = useState<Record<string, MarkColor | null>>({})
   const marks = useMemo(() => {
@@ -5390,7 +5390,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
 
   // Whose side a bill not yet in the books is on: its kind says, except a
   // goods return, which goes by the group of the account it names.
-  const masters = useQuery(api.masters.all, {})
+  const masters = useLive(api.masters.all, {}, 'masters')
   const billSide = (b: Bill): 'customers' | 'suppliers' => {
     const side = PARTY_SIDE[b.kind ?? 'sale']
     if (side !== 'both') return side === 'supplier' ? 'suppliers' : 'customers'

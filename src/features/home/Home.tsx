@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation } from 'convex/react'
 import { useLive } from '../ledger/lib/cache'
 import { Link } from 'react-router-dom'
 import { api } from '../../../convex/_generated/api'
@@ -174,7 +174,7 @@ function FromTheBooks() {
  * voucher to put right; "Check again" runs it there and then.
  */
 function BooksCheck() {
-  const report = useQuery(api.integrity.latest, {})
+  const report = useLive(api.integrity.latest, {}, 'integrity-latest')
   const runNow = useMutation(api.integrity.runNow)
   const [checking, setChecking] = useState(false)
   if (!report || report.problems.length === 0) return null

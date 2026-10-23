@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation } from 'convex/react'
 import { useLive } from '../ledger/lib/cache'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CreditCard, DoorClosed, DoorOpen, IndianRupee, Package, ReceiptText, type LucideIcon } from 'lucide-react'
@@ -381,8 +381,8 @@ function Others({ lines }: { lines?: Line[] }) {
 const isTuesday = (day: string) => new Date(startOf(day)).getDay() === 2
 
 function useShopClosed(day: string) {
-  const staff = useQuery(api.attendance.getStaff, {}) as string[] | undefined
-  const month = useQuery(api.attendance.getMonth, { month: day.slice(0, 7) }) as { date: string; marks: Record<string, string>; shopOpen?: boolean }[] | undefined
+  const staff = useLive(api.attendance.getStaff, {}, 'attendance-staff') as string[] | undefined
+  const month = useLive(api.attendance.getMonth, { month: day.slice(0, 7) }, `attendance-month:${day.slice(0, 7)}`) as { date: string; marks: Record<string, string>; shopOpen?: boolean }[] | undefined
   const setDay = useMutation(api.attendance.setDay)
   const setShopOpen = useMutation(api.attendance.setShopOpen)
   const row = month?.find((d) => d.date === day)

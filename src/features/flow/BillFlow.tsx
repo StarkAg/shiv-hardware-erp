@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Camera, Check, Circle } from 'lucide-react'
-import { useAction, useMutation, useQuery } from 'convex/react'
+import { useAction, useMutation } from 'convex/react'
+import { useLive } from '../ledger/lib/cache'
 import { anyApi } from 'convex/server'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
@@ -288,7 +289,7 @@ function FlowDetail({ flow, onClose }: { flow: Flow; onClose: () => void }) {
 
 export function BillFlow() {
   const dark = useLedgerTheme()
-  const rows = useQuery(anyApi.billFlow.list, {}) as Flow[] | undefined
+  const rows = useLive(anyApi.billFlow.list, {}, 'bill-flow') as Flow[] | undefined
   const [tab, setTab] = useState<'intake' | 'flow'>('intake')
   const [filter, setFilter] = useState('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)

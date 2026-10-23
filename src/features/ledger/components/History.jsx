@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useConvex, useMutation, useQuery } from 'convex/react';
+import { useConvex, useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { shortDate } from '../lib/format';
@@ -94,7 +94,7 @@ function BitcoinLine({ anchor, inBitcoin }) {
 }
 
 function ChainBar() {
-  const chain = useQuery(api.chain.latest, {});
+  const chain = useLive(api.chain.latest, {}, 'chain-latest');
   const check = useMutation(api.chain.check);
   const accept = useMutation(api.chain.accept);
   const [accepting, setAccepting] = useState(false);
