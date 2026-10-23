@@ -57,6 +57,20 @@ export const claim = mutation({
   },
 })
 
+/**
+ * Pages shot as one bill that are really separate bills: each gets a group of
+ * its own, so each waits as its own photo to be filed against its own voucher.
+ */
+export const split = mutation({
+  args: { ids: v.array(v.id('voucherInbox')) },
+  handler: async (ctx, { ids }) => {
+    for (const id of ids) {
+      const row = await ctx.db.get(id)
+      if (row) await ctx.db.patch(id, { groupId: `${row.groupId}~${id}` })
+    }
+  },
+})
+
 export const discard = mutation({
   args: { id: v.id('voucherInbox') },
   handler: async (ctx, { id }) => {

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from 'convex/react';
-import { Check, Paperclip, Unlink, X } from 'lucide-react'
+import { Check, Paperclip, Ungroup, Unlink, X } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { shortDate } from '../lib/format';
@@ -45,6 +45,8 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
   const legacyPhotos = legacyPhotosLive ?? [];
   const discardVoucher = useMutation(api.voucherInbox.discard);
   const discardLegacy = useMutation(api.inbox.discard);
+  const splitVoucher = useMutation(api.voucherInbox.split);
+  const splitLegacy = useMutation(api.inbox.split);
   const fromPhone = useMemo(() => [
     ...voucherPhotos.map((row) => ({ ...row, source: 'voucher' })),
     ...legacyPhotos.filter((row) => !row.stack).map((row) => ({ ...row, source: 'legacy' })),
@@ -211,6 +213,20 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
     }
   };
 
+  /** A stack that is really several bills becomes one tile per page. */
+  const [splitting, setSplitting] = useState(null);
+  const splitUnit = async (unit) => {
+    setHovered(null);
+    setSplitting(unit.key);
+    try {
+      const ids = (source) => unit.pages.filter((page) => page.source === source).map((page) => page._id);
+      if (ids('voucher').length) await splitVoucher({ ids: ids('voucher') });
+      if (ids('legacy').length) await splitLegacy({ ids: ids('legacy') });
+    } finally {
+      setSplitting(null);
+    }
+  };
+
   const shots = useMemo(
     () =>
       files.map((file) => ({
@@ -302,7 +318,17 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
                   </button>
                   {cover.queueNo != null && <span className="shot-queue" title={queueNumbers(unit).map((number) => `#${queueLabel(number)}`).join(', ')}>{queueSummary(unit)}</span>}
                   {many && (
-                    <span className="shot-page">{unit.pages.length} pages</span>
+                    <div className="shot-stackbar">
+                      <span className="shot-page">{unit.pages.length} pages</span>
+                      <button type="button" className="shot-split"
+                        title="Split into separate photos"
+                        aria-label={`Split ${unit.pages.length} pages into separate photos`}
+                        disabled={splitting === unit.key}
+                        onClick={() => splitUnit(unit)}>
+                        <Ungroup size={13} aria-hidden="true" />
+                        <span>{splitting === unit.key ? 'Splitting' : 'Split'}</span>
+                      </button>
+                    </div>
                   )}
                   <span className="shot-when">{shortDate(cover.at)}</span>
                   {isPicked(unit) && <span className="shot-tick"><Check size={12} aria-hidden="true" /></span>}

@@ -805,7 +805,18 @@ to{opacity: 0}}
   padding: 3px 6px; border-radius: 7px; background: var(--brass);
   color: var(--brass-ink); font-size: 11px; font-weight: 900;
   font-variant-numeric: tabular-nums; pointer-events: none;}
-.ledger-root .fromphone .shot-page{top: 36px; left: 6px;}
+.ledger-root .fromphone .shot-stackbar{position: absolute; top: 36px; left: 6px; right: 62px; z-index: 3;
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;}
+.ledger-root .fromphone .shot-stackbar .shot-page{position: static;}
+/* Several bills shot as one: split them back into a photo each. */
+.ledger-root .fromphone .shot-split{display: inline-flex; align-items: center; gap: 4px;
+  min-height: 28px; padding: 0 9px; border: 1px solid rgba(255,255,255,.35); border-radius: 8px;
+  background: rgba(20,18,16,.88); color: #fff; cursor: pointer;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.02em;}
+.ledger-root .fromphone .shot-split:hover,
+.ledger-root .fromphone .shot-split:focus-visible{background: var(--brass); color: var(--brass-ink);}
+.ledger-root .fromphone .shot-split:focus-visible{outline: 3px solid var(--brass); outline-offset: 2px;}
+.ledger-root .fromphone .shot-split:disabled{opacity: .6; cursor: progress;}
 .ledger-root .fromphone .shot-tick{top: 55px; right: 6px; z-index: 3;}
 .ledger-root .fromphone .shot-tile.stack .shot-tick{right: 14px;}
 /* Taking a file off the bill it is attached to: a small button on its corner. */

@@ -71,6 +71,17 @@ export const claim = mutation({
   },
 });
 
+/** Pages shot as one bill that are really separate bills: each waits on its own. */
+export const split = mutation({
+  args: { ids: v.array(v.id("inbox")) },
+  handler: async (ctx, { ids }) => {
+    for (const id of ids) {
+      if (await ctx.db.get(id)) await ctx.db.patch(id, { groupId: undefined });
+    }
+    await record(ctx, "inbox.split", `Split ${ids.length} phone photos into separate bills`);
+  },
+});
+
 /** Throws away a photo nobody wants, and the file with it. */
 export const discard = mutation({
   args: { id: v.id("inbox") },
