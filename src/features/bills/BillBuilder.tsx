@@ -5275,6 +5275,14 @@ type DayRow = {
   quote?: boolean
 }
 
+const DAYBOOK_KEPT = 'daybook:kept'
+const readKept = (): { type?: string; mark?: string } => {
+  try { return JSON.parse(localStorage.getItem(DAYBOOK_KEPT) || '{}') ?? {} } catch { return {} }
+}
+const writeKept = (kept: { type: string; mark: string }) => {
+  try { localStorage.setItem(DAYBOOK_KEPT, JSON.stringify(kept)) } catch { /* storage blocked: it just is not kept */ }
+}
+
 type MarkColor = 'green' | 'yellow' | 'red'
 const MARK_NEXT: Record<MarkColor | 'none', MarkColor | null> = { none: 'green', green: 'yellow', yellow: 'red', red: null }
 const MARK_TITLE: Record<MarkColor | 'none', string> = {
@@ -5308,8 +5316,28 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     if (t) next.to = t
     if (dated) next.order = 'date'
     if (type) next.type = type
+    const mark = params.get('mark')
+    if (mark) next.mark = mark
     setParams(next, { replace: true })
   }
+
+  /**
+   * The type and the mark picked stay picked: coming back to the Day Book from
+   * a ledger or a bill opens on the same Sales (or Not marked) it was left on,
+   * until the × beside it takes it off. Kept on this PC.
+   */
+  useEffect(() => {
+    const keep = readKept()
+    const next = new URLSearchParams(params)
+    let changed = false
+    if (!params.has('type') && keep.type) { next.set('type', keep.type); changed = true }
+    if (!params.has('mark') && keep.mark) { next.set('mark', keep.mark); changed = true }
+    if (changed) setParams(next, { replace: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    writeKept({ type: params.get('type') ?? '', mark: params.get('mark') ?? '' })
+  }, [params])
   const setPeriod = (f: string, t: string) => setView(f, t, byDate)
   const setSeries = (type: string) => setView(from, to, byDate, type)
 
@@ -5553,12 +5581,22 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
               <option value="yellow">Look again · {markCounts.yellow}</option>
               <option value="red">Wrong · {markCounts.red}</option>
             </select>
+            {markFilter && (
+              <button type="button" className="btn ghost small" onClick={() => setMarkFilter('')} title="Show every mark again" aria-label="Remove the mark filter">
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
             <select value={series} onChange={(e) => setSeries(e.target.value)} aria-label="Voucher type">
               <option value="">All types</option>
               {seriesOptions.map((o) => (
                 <option key={o.abbr} value={o.abbr}>{o.name} ({o.abbr}) · {o.count}</option>
               ))}
             </select>
+            {series && (
+              <button type="button" className="btn ghost small" onClick={() => setSeries('')} title="Show every type again" aria-label="Remove the type filter">
+                <X size={14} aria-hidden="true" /> Remove
+              </button>
+            )}
             <input type="date" value={from} onChange={(e) => setPeriod(e.target.value, to)} />
             <input type="date" value={to} onChange={(e) => setPeriod(from, e.target.value)} />
             {chips.map((c) => (
