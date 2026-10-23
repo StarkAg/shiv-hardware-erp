@@ -364,6 +364,9 @@ function Party({ party, onBack }) {
   const [profile, setProfile] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [adding, setAdding] = useState(false)
+  // A box held down: the entry asked to be deleted, waiting for the PIN.
+  const [deleting, setDeleting] = useState(null)
+  const hold = useLongPress((target) => setDeleting(target))
   const end = useRef(null)
   const thread = useRef(null)
   useEffect(() => {
@@ -482,7 +485,8 @@ function Party({ party, onBack }) {
           if (it.p) {
             const shots = (it.p.attachmentUrls ?? []).filter((a) => a.url)
             return (
-              <div key={it.key} data-key={it.key} className={`bubble ${pendingOurs ? 'right' : 'left'} pending`}>
+              <div key={it.key} data-key={it.key} className={`bubble ${pendingOurs ? 'right' : 'left'} pending`}
+                {...hold({ id: it.p._id, label: it.p.vchLabel ?? 'this bill', what: 'bill with no amount' })}>
                 <div className="kind">{SENT[it.p.vchType] ?? 'Bill'} · {it.p.vchLabel ?? ''} · amount not added yet</div>
                 <Photos shots={shots} onOpen={(page) => openPhotos(it.key, page)} />
               </div>
@@ -492,7 +496,8 @@ function Party({ party, onBack }) {
             const g = it.g
             const shots = (g.attachmentUrls ?? []).filter((a) => a.url)
             return (
-              <div key={it.key} data-key={it.key} className={`bubble left grn${g.open ? ' pending' : ''}`}>
+              <div key={it.key} data-key={it.key} className={`bubble left grn${g.open ? ' pending' : ''}`}
+                {...hold({ id: g._id, label: g.vchLabel, what: 'delivery' })}>
                 <div className="kind">Goods received · {g.vchLabel}{g.refNo ? ` · ${g.refNo}` : ''}</div>
                 <div className="line"><span className="grnstate">{grnStatus(g)}</span></div>
                 {g.receivedBy && <div className="narr">Checked by {g.receivedBy}</div>}
@@ -505,7 +510,8 @@ function Party({ party, onBack }) {
           const right = r.side === ours
           const shots = (r.attachmentUrls ?? []).filter((a) => a.url)
           return (
-            <div key={it.key} data-key={it.key} className={`bubble ${right ? 'right' : 'left'}`}>
+            <div key={it.key} data-key={it.key} className={`bubble ${right ? 'right' : 'left'}`}
+              {...hold({ id: r.voucherId, label: r.vchLabel, what: rupees(r.amount), settlement: r.settlement })}>
               <div className="kind">{kindOf(r)} · {r.vchLabel}{r.refNo ? ` · ${r.refNo}` : ''}</div>
               <div className="line">
                 <span className="money">{rupees(r.amount)}</span>
@@ -537,6 +543,7 @@ function Party({ party, onBack }) {
       )}
       {sharing && <ShareAll party={party} bills={bills} onClose={() => setSharing(false)} />}
       {adding && <AddEntry party={party} onClose={() => setAdding(false)} />}
+      {deleting && <DeleteEntry entry={deleting} onClose={() => setDeleting(null)} />}
       {viewer && <Viewer key={viewer.opened} bills={viewer.bills} bill={viewer.bill} page={viewer.page} onBill={showBubble} onClose={() => window.history.back()} />}
       {profile && (
         <Profile
@@ -1040,6 +1047,102 @@ function AddEntry({ party, onClose }) {
         <div className="sheetbtns">
           <button type="button" className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="button" className="solid" onClick={() => void save()} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Hold a box to delete it. Returns the handlers to spread on the box: held
+ * still for a little over half a second it calls `onHold` with that box's
+ * entry, and the tap that ends the hold does not also open a photo. Moving
+ * the finger (a scroll) lets go of it.
+ */
+const HOLD_MS = 550
+function useLongPress(onHold) {
+  const timer = useRef(null)
+  const start = useRef(null)
+  const fired = useRef(false)
+  const cancel = () => { if (timer.current) clearTimeout(timer.current); timer.current = null }
+  useEffect(() => cancel, [])
+  return (target) => ({
+    onPointerDown: (e) => {
+      if (e.button !== undefined && e.button !== 0) return
+      fired.current = false
+      start.current = { x: e.clientX, y: e.clientY }
+      cancel()
+      timer.current = setTimeout(() => {
+        timer.current = null
+        fired.current = true
+        navigator.vibrate?.(30)
+        onHold(target)
+      }, HOLD_MS)
+    },
+    onPointerMove: (e) => {
+      if (!timer.current || !start.current) return
+      if (Math.abs(e.clientX - start.current.x) > 10 || Math.abs(e.clientY - start.current.y) > 10) cancel()
+    },
+    onPointerUp: cancel,
+    onPointerLeave: cancel,
+    onPointerCancel: cancel,
+    onContextMenu: (e) => e.preventDefault(),
+    onClickCapture: (e) => {
+      if (!fired.current) return
+      fired.current = false
+      e.preventDefault()
+      e.stopPropagation()
+    },
+  })
+}
+
+/**
+ * Deleting an entry from the phone, behind the shop's PIN. It goes the way the
+ * panel deletes one (vouchers.remove): to the Trash, with the bill it was
+ * written from, so the panel can put both back.
+ */
+const DELETE_PIN = '2611'
+function DeleteEntry({ entry, onClose }) {
+  const convex = useConvex()
+  const [pin, setPin] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const field = useRef(null)
+  useEffect(() => { field.current?.focus() }, [])
+
+  const remove = async () => {
+    if (pin !== DELETE_PIN) { setError('Wrong PIN.'); setPin(''); field.current?.focus(); return }
+    setBusy(true)
+    setError('')
+    try {
+      await convex.mutation(api.vouchers.remove, { id: entry.id })
+      onClose()
+    } catch (err) {
+      setError(err?.data?.message ?? err?.data ?? err?.message ?? 'Could not delete. Try again.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="sheetback" onClick={busy ? undefined : onClose}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={`Delete ${entry.label}`} onClick={(e) => e.stopPropagation()}>
+        <b className="sheettitle">Delete {entry.label}?</b>
+        <p>
+          {entry.settlement
+            ? 'This payment was taken with its bill, so the bill goes too.'
+            : `The ${entry.what} comes off this account.`}
+          {' '}It goes to the Trash in the panel, where it can be put back.
+        </p>
+        <label className="addfield">
+          <span>PIN</span>
+          <input ref={field} type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={pin}
+            onChange={(e) => { setPin(e.target.value.replace(/\D/g, '')); setError('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') void remove() }} />
+        </label>
+        {error && <p className="adderror" role="alert">{error}</p>}
+        <div className="sheetbtns">
+          <button type="button" className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="solid danger" onClick={() => void remove()} disabled={busy || !pin}>{busy ? 'Deleting…' : 'Delete'}</button>
         </div>
       </div>
     </div>
