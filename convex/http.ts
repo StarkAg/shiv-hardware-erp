@@ -91,4 +91,61 @@ http.route({
   }),
 })
 
+/**
+ * Contact backups from the Contact Fixer app (convex/contactBackups.ts).
+ * Both routes want `Authorization: Bearer <CONTACTS_BACKUP_KEY>`.
+ */
+const backupKeyOk = (request: Request) => {
+  const want = process.env.CONTACTS_BACKUP_KEY
+  const got = (request.headers.get('Authorization') ?? '').replace(/^Bearer /, '')
+  if (!want || got.length !== want.length) return false
+  let diff = 0
+  for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ got.charCodeAt(i)
+  return diff === 0
+}
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+
+http.route({
+  path: '/contacts-backup',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    if (!backupKeyOk(request)) return json({ error: 'Not allowed' }, 401)
+    const contacts = Number(request.headers.get('X-Contacts'))
+    const numbers = Number(request.headers.get('X-Numbers'))
+    const blob = await request.blob()
+    if (!blob.size || !Number.isFinite(contacts) || !Number.isFinite(numbers)) {
+      return json({ error: 'Empty backup' }, 400)
+    }
+    const file = await ctx.storage.store(blob)
+    const result = await ctx.runMutation(internal.contactBackups.save, {
+      file,
+      bytes: blob.size,
+      contacts,
+      numbers,
+      device: request.headers.get('X-Device') ?? undefined,
+    })
+    return json({ ok: true, ...result })
+  }),
+})
+
+http.route({
+  path: '/contacts-backup/latest',
+  method: 'GET',
+  handler: httpAction(async (ctx, request) => {
+    if (!backupKeyOk(request)) return json({ error: 'Not allowed' }, 401)
+    const row = await ctx.runQuery(internal.contactBackups.latest, {})
+    const blob = row && (await ctx.storage.get(row.file))
+    if (!row || !blob) return json({ error: 'No backup yet' }, 404)
+    return new Response(blob, {
+      headers: {
+        'Content-Type': 'application/gzip',
+        'X-Backup-At': String(row.at),
+        'X-Contacts': String(row.contacts),
+      },
+    })
+  }),
+})
+
 export default http

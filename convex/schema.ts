@@ -953,6 +953,22 @@ export default defineSchema({
   }).index("by_at", ["at"]),
 
   /**
+   * Weekly copies of the owner's phone contacts, sent by the Contact Fixer app
+   * (Desktop/Code PlayGround/ContactFixer). The file itself is a gzipped vCard
+   * in file storage; see convex/contactBackups.ts.
+   */
+  contactBackups: defineTable({
+    at: v.number(),
+    file: v.id("_storage"),
+    bytes: v.number(),
+    contacts: v.number(),
+    numbers: v.number(),
+    device: v.optional(v.string()),
+    /** Saved, but holding noticeably fewer contacts than the copy before it. */
+    warning: v.optional(v.string()),
+  }).index("by_at", ["at"]),
+
+  /**
    * Two My Items entries the shop has said are one item.
    *
    * The same board is bought and sold under different names — SRT bills it
