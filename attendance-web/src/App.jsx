@@ -579,7 +579,7 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
               <tr>
                 <th className="stick">Staff</th>
                 {days.map((d) => (
-                  <th key={d.getDate()} className={`${isTue(d) || shut(d) ? 'tue' : ''} ${d.getDay() === 0 ? 'sun' : ''}`}>
+                  <th key={d.getDate()} className={`${isTue(d) ? 'tue' : shut(d) ? 'closedday' : ''} ${d.getDay() === 0 ? 'sun' : ''}`}>
                     <span className="dnum">{d.getDate()}</span>
                     <span className="dwd">{WD[d.getDay()][0]}</span>
                   </th>
@@ -596,7 +596,7 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
                     if (shut(d)) {
                       if (row > 0) return null
                       return (
-                        <td key={d.getDate()} rowSpan={staff.length} className="tuecol">
+                        <td key={d.getDate()} rowSpan={staff.length} className={isTue(d) ? 'tuecol' : 'tuecol closedcol'}>
                           <button
                             className="tuecell"
                             style={{ '--rows': staff.length }}
