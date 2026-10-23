@@ -131,7 +131,7 @@ export const getMonth = openQuery({
       .query('attendanceDays')
       .withIndex('by_date', (q) => q.gte('date', `${month}-01`).lte('date', `${month}-31`))
       .collect()
-    return rows.map((r) => ({ date: r.date, marks: r.marks ?? {}, locked: r.locked === true }))
+    return rows.map((r) => ({ date: r.date, marks: r.marks ?? {}, locked: r.locked === true, shopOpen: r.shopOpen === true }))
   },
 })
 
@@ -215,6 +215,21 @@ export const setDay = openMutation({
         changes,
       })
     }
+  },
+})
+
+// A Tuesday the shop opened (open: true), or shut again. Tuesdays are closed by
+// default, so opening one is said in so many words rather than by its marks.
+export const setShopOpen = openMutation({
+  args: { date: v.string(), open: v.boolean() },
+  handler: async (ctx, { date, open }) => {
+    const existing = await ctx.db
+      .query('attendanceDays')
+      .withIndex('by_date', (q) => q.eq('date', date))
+      .unique()
+    if (existing) await ctx.db.patch(existing._id, { shopOpen: open || undefined, updatedAt: Date.now() })
+    else if (open) await ctx.db.insert('attendanceDays', { date, marks: {}, shopOpen: true, updatedAt: Date.now() })
+    await logChange(ctx, { date, action: 'shop', summary: open ? 'Shop opened on this day' : 'Shop closed on this day' })
   },
 })
 

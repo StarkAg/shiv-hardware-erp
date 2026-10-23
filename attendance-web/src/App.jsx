@@ -316,6 +316,14 @@ export default function App() {
     for (const d of days || []) m[d.date] = d.marks || {}
     return m
   }, [days])
+  // Tuesdays the shop opened after all (marked open on the Day Paper).
+  const shopOpenByDate = useMemo(() => {
+    const m = {}
+    for (const d of days || []) if (d.shopOpen) m[d.date] = true
+    return m
+  }, [days])
+  // The weekly day off: a Tuesday, unless the shop opened on it.
+  const dayOff = (d) => isTue(d) && !shopOpenByDate[dateKey(d)]
   const lockedByDate = useMemo(() => {
     const m = {}
     for (const d of days || []) m[d.date] = !!d.locked
@@ -355,7 +363,7 @@ export default function App() {
   const statusFor = (d, name) => {
     const rec = marksByDate[dateKey(d)]?.[name]
     if (rec) return rec
-    if (isTue(d)) return 'C'
+    if (dayOff(d)) return 'C'
     return ''
   }
 
@@ -413,9 +421,9 @@ export default function App() {
       ) : mode === 'month' ? (
         <MonthView
           cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
-          canEdit={canEdit} unlockThen={unlockThen} todayKey={todayKey}
+          canEdit={canEdit} unlockThen={unlockThen} todayKey={todayKey} dayOff={dayOff}
           onCycle={(d, name) => {
-            const cur = marksByDate[dateKey(d)]?.[name] || (isTue(d) ? 'C' : '')
+            const cur = marksByDate[dateKey(d)]?.[name] || (dayOff(d) ? 'C' : '')
             const order = ['P', 'N', 'H', 'C', '']
             const next = order[(order.indexOf(cur) + 1) % order.length]
             setMark(dateKey(d), name, next)
@@ -423,7 +431,7 @@ export default function App() {
         />
       ) : mode === 'stats' ? (
         <StatsView
-          cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
+          cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading} dayOff={dayOff}
           unlockThen={unlockThen}
           onAddStaff={(name) => changeStaff([...staff, name])}
           onRemoveStaff={(name) => changeStaff(staff.filter((s) => s !== name))}
@@ -547,7 +555,7 @@ function Summary({ staff, statusFor, cursor }) {
   )
 }
 
-function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlockThen, onCycle, todayKey }) {
+function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlockThen, onCycle, todayKey, dayOff }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const dim = daysInMonth(y, m0 + 1)
@@ -561,7 +569,7 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
   // A day the shop was shut is one column for everyone: every Tuesday that
   // nobody was marked on, and any other day marked Shop closed for all staff.
   const shut = (d) => !opened.has(dateKey(d)) && staff.length > 0
-    && staff.every((name) => (statusFor(d, name) || (isTue(d) ? 'C' : '')) === 'C')
+    && staff.every((name) => (statusFor(d, name) || (dayOff(d) ? 'C' : '')) === 'C')
 
   return (
     <div className="card">
@@ -831,7 +839,7 @@ function PayRatesModal({ staff, rates, onSetRate, onClose }) {
   )
 }
 
-function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, onAddStaff, onRemoveStaff }) {
+function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, onAddStaff, onRemoveStaff, dayOff }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const dim = daysInMonth(y, m0 + 1)
@@ -853,7 +861,7 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, o
     return { name, p, n, h, counted, pct }
   })
   let closed = 0
-  for (const d of days) if (statusFor(d, staff[0]) === 'C' || isTue(d)) closed++
+  for (const d of days) if (statusFor(d, staff[0]) === 'C' || dayOff(d)) closed++
   const workingDays = dim - closed
 
   const addStaff = () => {

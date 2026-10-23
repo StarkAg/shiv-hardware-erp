@@ -370,29 +370,41 @@ function Others({ lines }: { lines?: Line[] }) {
 
 /**
  * Whether the shop was shut that day, from attendance: every staff member
- * marked C. Marking it closed marks them all C (the attendance app's "Shop
- * closed"); opening it again clears the day's marks for the attendance app to
- * fill in. A day with anyone already marked present asks first.
+ * marked C. A Tuesday is the weekly day off, so it is shut unless it was
+ * opened (Mark open) or someone is marked on it, the attendance app's own rule.
+ *
+ * Marking a day closed marks every staff member C (the attendance app's "Shop
+ * closed"). Opening a Tuesday says so on the day and leaves the marks for the
+ * attendance app; opening any other day clears its C marks to be filled in.
+ * A day with anyone already marked present asks before it is closed.
  */
+const isTuesday = (day: string) => new Date(startOf(day)).getDay() === 2
+
 function useShopClosed(day: string) {
   const staff = useQuery(api.attendance.getStaff, {}) as string[] | undefined
-  const month = useQuery(api.attendance.getMonth, { month: day.slice(0, 7) }) as { date: string; marks: Record<string, string> }[] | undefined
+  const month = useQuery(api.attendance.getMonth, { month: day.slice(0, 7) }) as { date: string; marks: Record<string, string>; shopOpen?: boolean }[] | undefined
   const setDay = useMutation(api.attendance.setDay)
-  const marks = month?.find((d) => d.date === day)?.marks ?? {}
+  const setShopOpen = useMutation(api.attendance.setShopOpen)
+  const row = month?.find((d) => d.date === day)
+  const marks = row?.marks ?? {}
+  const tue = isTuesday(day)
   const ready = staff !== undefined && month !== undefined
-  const closed = ready && staff.length > 0 && staff.every((name) => marks[name] === 'C')
+  const closed = ready && staff.length > 0 && !(tue && row?.shopOpen)
+    && staff.every((name) => marks[name] === 'C' || (tue && !marks[name]))
   const marked = Object.values(marks).filter((m) => m === 'P' || m === 'H').length
   const toggle = async () => {
     if (!ready) return
     if (closed) {
+      if (tue) { await setShopOpen({ date: day, open: true }); return }
       if (!window.confirm('Mark the shop open on this day? Attendance for the day is cleared, to be marked again.')) return
       await setDay({ date: day, marks: {} })
       return
     }
     if (marked > 0 && !window.confirm(`${marked} staff ${marked === 1 ? 'is' : 'are'} marked present on this day. Mark the shop closed anyway?`)) return
     await setDay({ date: day, marks: Object.fromEntries(staff.map((name) => [name, 'C'])) })
+    if (tue && row?.shopOpen) await setShopOpen({ date: day, open: false })
   }
-  return { ready, closed, toggle }
+  return { ready, closed, tue, toggle }
 }
 
 /** Marks the day Shop closed, or open again. Only with a deployment to write to. */
@@ -408,7 +420,9 @@ function ShopClosedButton({ day }: { day: string }) {
       type="button"
       onClick={() => void toggle()}
       disabled={!shop.ready || busy}
-      title={shop.closed ? 'The shop was open on this day after all' : 'Mark every staff member C for this day, as the attendance app does'}
+      title={shop.closed
+        ? (shop.tue ? 'Tuesdays are closed. The shop opened on this one' : 'The shop was open on this day after all')
+        : 'Mark every staff member C for this day, as the attendance app does'}
       className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold disabled:opacity-50 ${shop.closed
         ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-400/40 dark:bg-red-950/40 dark:text-red-200'
         : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100 dark:border-white/15 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700'}`}
