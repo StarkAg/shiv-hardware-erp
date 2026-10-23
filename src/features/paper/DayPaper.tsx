@@ -1,6 +1,8 @@
+import { useLayoutEffect, useRef, useState } from 'react'
+import { useMutation, useQuery } from 'convex/react'
 import { useLive } from '../ledger/lib/cache'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CreditCard, IndianRupee, Package, ReceiptText, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CreditCard, DoorClosed, DoorOpen, IndianRupee, Package, ReceiptText, type LucideIcon } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import { convexEnabled } from '../../lib/convexSync'
 import { rupees } from '../ledger/lib/format'
@@ -18,6 +20,11 @@ import { PageHeader } from '../../components/ui'
  *
  * The arrows turn to the day before or after, the way the pile of old sheets
  * is leafed through. The day is kept in the address, so a reload stays on it.
+ *
+ * The sheet fills the window and never scrolls: each quarter writes as many
+ * lines as fit and counts the rest ("+3"). A day the shop did not open can be
+ * marked Shop closed here; that is the attendance app's own "Shop closed"
+ * (every staff member marked C), so the two always agree.
  */
 
 type Kind = 'purchase' | 'payment' | 'receipt' | 'sale'
@@ -38,7 +45,6 @@ const FOLDS = [
 ]
 
 const LINE = 28 // px between rules
-const LINES = 12 // rules drawn on each quarter
 
 /** Ruled paper: blue rules, and the red margin line down the left. */
 const RULED: React.CSSProperties = {
@@ -46,7 +52,47 @@ const RULED: React.CSSProperties = {
     'linear-gradient(to right, transparent 26px, #f1b4b4 26px, #f1b4b4 27px, transparent 27px)',
     `repeating-linear-gradient(to bottom, transparent 0, transparent ${LINE - 1}px, #d5e1ee ${LINE - 1}px, #d5e1ee ${LINE}px)`,
   ].join(', '),
-  minHeight: LINE * LINES,
+}
+
+/** How many ruled lines fit in an element, kept up to date as it is resized. */
+function useLinesThatFit<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [lines, setLines] = useState(8)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return undefined
+    const measure = () => setLines(Math.max(1, Math.floor(el.clientHeight / LINE)))
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
+  return [ref, lines] as const
+}
+
+/**
+ * The height from an element's top to the bottom of the window, so what is in
+ * it fits in one view whatever the header above it measures.
+ */
+function useFillWindow<T extends HTMLElement>(gap = 12) {
+  const ref = useRef<T>(null)
+  const [height, setHeight] = useState<number>()
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = ref.current
+      if (!el) return
+      // On a phone the panel's nav sits along the foot, inside main's padding.
+      const main = el.closest('main')
+      const foot = main ? parseFloat(getComputedStyle(main).paddingBottom) || 0 : 0
+      setHeight(Math.max(360, Math.floor(window.innerHeight - el.getBoundingClientRect().top - foot - gap)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    const watch = new ResizeObserver(measure)
+    watch.observe(document.body)
+    return () => { window.removeEventListener('resize', measure); watch.disconnect() }
+  }, [gap])
+  return [ref, height] as const
 }
 
 type Line = {
@@ -153,7 +199,8 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
   const Icon = q.icon
   const navigate = useNavigate()
   const rows = lines ?? []
-  const shown = rows.slice(0, LINES)
+  const [ruled, fit] = useLinesThatFit<HTMLOListElement>()
+  const shown = rows.slice(0, fit)
   const more = rows.length - shown.length
   const total = rows.reduce((t, r) => t + (r.amount ?? 0), 0)
   const fresh = `/bills?new=${q.kind}`
@@ -163,7 +210,7 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
   return (
     <div
       onClick={() => navigate(fresh)}
-      className={`group flex cursor-pointer flex-col border-dashed border-stone-300 p-4 transition-colors hover:bg-amber-50/60 ${FOLDS[index]}`}
+      className={`group flex min-h-0 cursor-pointer flex-col border-dashed border-stone-300 p-3 transition-colors hover:bg-amber-50/60 ${FOLDS[index]}`}
     >
       <Link
         to={fresh}
@@ -176,7 +223,7 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
         <span className="ml-auto rounded border border-stone-300 px-1.5 text-[11px] font-semibold text-stone-500">{q.key}</span>
       </Link>
 
-      <ol className="flex-1" style={RULED}>
+      <ol ref={ruled} className="min-h-0 flex-1 overflow-hidden" style={RULED}>
         {shown.map((r) => {
           const body = (
             <>
@@ -219,7 +266,7 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
       </ol>
 
       <div className="flex items-center justify-between border-t border-stone-400 pt-1 text-sm">
-        <span className="text-xs text-stone-500">{more > 0 ? `+${more}` : ''}</span>
+        <span className="text-xs font-semibold text-stone-500" title={more > 0 ? `${more} more not shown; open the Day Book for all of them` : undefined}>{more > 0 ? `+${more} more` : ''}</span>
         <span className="font-bold tabular-nums text-stone-900">{rupees(total)}</span>
       </div>
     </div>
@@ -228,6 +275,7 @@ function Quarter({ index, lines }: { index: number; lines?: Line[] }) {
 
 /** One day's vouchers, sorted onto their quarters in the order they were entered. */
 function PaperFor({ day }: { day: string }) {
+  const { closed } = useShopClosed(day)
   const from = startOf(day)
   const vouchers = useLive(api.reports.dayBook, { from, to: from + 86_399_999 }, `daypaper:${from}`)
 
@@ -263,45 +311,105 @@ function PaperFor({ day }: { day: string }) {
 
   return (
     <>
-      <Sheet lines={(i) => byType.get(QUARTERS[i].type)} />
+      <Sheet lines={(i) => byType.get(QUARTERS[i].type)} closed={closed} />
       <Others lines={byType.get(OTHER)} />
     </>
   )
 }
 
-function Sheet({ lines }: { lines: (index: number) => Line[] | undefined }) {
+function Sheet({ lines, closed }: { lines: (index: number) => Line[] | undefined; closed?: boolean }) {
   return (
-    <div className="mx-auto grid max-w-5xl grid-cols-1 overflow-hidden rounded-sm bg-[#fffdf8] shadow-md ring-1 ring-stone-300 md:grid-cols-2">
+    <div className="relative mx-auto grid min-h-0 w-full max-w-5xl flex-1 grid-cols-2 grid-rows-2 overflow-hidden rounded-sm bg-[#fffdf8] shadow-md ring-1 ring-stone-300">
       {QUARTERS.map((q, i) => (
         <Quarter key={q.kind} index={i} lines={lines(i)} />
       ))}
+      {/* Stamped across the sheet, the way a closed day's paper is crossed out. */}
+      {closed && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
+          <span className="-rotate-12 rounded-md border-4 border-red-700/70 bg-[#fffdf8]/80 px-6 py-2 text-3xl font-black uppercase tracking-[0.2em] text-red-700/80 md:text-5xl">
+            Shop closed
+          </span>
+        </div>
+      )}
     </div>
   )
 }
 
-/** The day's other entries, under the sheet — only when there are any. */
+/**
+ * The day's other entries, under the sheet, only when there are any: one row
+ * of chips, so the sheet keeps its one view. What does not fit is counted.
+ */
 function Others({ lines }: { lines?: Line[] }) {
   if (!lines?.length) return null
+  const shown = lines.slice(0, 6)
+  const more = lines.length - shown.length
   return (
-    <div className="mx-auto mt-3 max-w-5xl rounded-sm bg-[#fffdf8] p-4 shadow-sm ring-1 ring-stone-300">
-      <div className="pb-1 text-sm font-bold text-stone-900">Other entries</div>
-      <ul className="divide-y divide-dashed divide-stone-200">
-        {lines.map((r) => (
-          <li key={r.key}>
-            <Link
-              to={r.to ?? '#'}
-              className={`flex items-center gap-2 rounded-sm px-1 py-1.5 text-sm ${r.amount === null ? 'bg-red-50/70 text-red-700 hover:bg-red-100' : 'text-stone-800 hover:bg-amber-100'}`}
-            >
-              {r.tag && (
-                <span className="shrink-0 rounded border border-stone-300 px-1 text-[10px] font-bold leading-4 text-stone-600">{r.tag}</span>
-              )}
-              <span className="min-w-0 flex-1 truncate">{r.party}</span>
-              <span className="shrink-0 tabular-nums">{r.amount === null ? '—' : rupees(r.amount)}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <div className="mx-auto mt-2 flex w-full max-w-5xl flex-none items-center gap-2 overflow-hidden rounded-sm bg-[#fffdf8] px-3 py-1.5 shadow-sm ring-1 ring-stone-300">
+      <span className="shrink-0 text-sm font-bold text-stone-900">Other</span>
+      {shown.map((r) => (
+        <Link
+          key={r.key}
+          to={r.to ?? '#'}
+          className={`flex min-w-0 shrink items-center gap-1.5 rounded border px-1.5 py-0.5 text-xs ${r.amount === null ? 'border-red-200 bg-red-50/70 text-red-700 hover:bg-red-100' : 'border-stone-200 text-stone-800 hover:bg-amber-100'}`}
+        >
+          {r.tag && <span className="shrink-0 text-[10px] font-bold text-stone-500">{r.tag}</span>}
+          <span className="min-w-0 truncate">{r.party}</span>
+          <span className="shrink-0 tabular-nums">{r.amount === null ? '—' : rupees(r.amount)}</span>
+        </Link>
+      ))}
+      {more > 0 && <span className="shrink-0 text-xs font-semibold text-stone-500">+{more}</span>}
     </div>
+  )
+}
+
+/**
+ * Whether the shop was shut that day, from attendance: every staff member
+ * marked C. Marking it closed marks them all C (the attendance app's "Shop
+ * closed"); opening it again clears the day's marks for the attendance app to
+ * fill in. A day with anyone already marked present asks first.
+ */
+function useShopClosed(day: string) {
+  const staff = useQuery(api.attendance.getStaff, {}) as string[] | undefined
+  const month = useQuery(api.attendance.getMonth, { month: day.slice(0, 7) }) as { date: string; marks: Record<string, string> }[] | undefined
+  const setDay = useMutation(api.attendance.setDay)
+  const marks = month?.find((d) => d.date === day)?.marks ?? {}
+  const ready = staff !== undefined && month !== undefined
+  const closed = ready && staff.length > 0 && staff.every((name) => marks[name] === 'C')
+  const marked = Object.values(marks).filter((m) => m === 'P' || m === 'H').length
+  const toggle = async () => {
+    if (!ready) return
+    if (closed) {
+      if (!window.confirm('Mark the shop open on this day? Attendance for the day is cleared, to be marked again.')) return
+      await setDay({ date: day, marks: {} })
+      return
+    }
+    if (marked > 0 && !window.confirm(`${marked} staff ${marked === 1 ? 'is' : 'are'} marked present on this day. Mark the shop closed anyway?`)) return
+    await setDay({ date: day, marks: Object.fromEntries(staff.map((name) => [name, 'C'])) })
+  }
+  return { ready, closed, toggle }
+}
+
+/** Marks the day Shop closed, or open again. Only with a deployment to write to. */
+function ShopClosedButton({ day }: { day: string }) {
+  const shop = useShopClosed(day)
+  const [busy, setBusy] = useState(false)
+  const toggle = async () => {
+    setBusy(true)
+    try { await shop.toggle() } catch (err) { window.alert(err instanceof Error ? err.message : String(err)) } finally { setBusy(false) }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void toggle()}
+      disabled={!shop.ready || busy}
+      title={shop.closed ? 'The shop was open on this day after all' : 'Mark every staff member C for this day, as the attendance app does'}
+      className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold disabled:opacity-50 ${shop.closed
+        ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-400/40 dark:bg-red-950/40 dark:text-red-200'
+        : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100 dark:border-white/15 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700'}`}
+    >
+      {shop.closed ? <DoorOpen size={16} aria-hidden="true" /> : <DoorClosed size={16} aria-hidden="true" />}
+      {shop.closed ? 'Mark open' : 'Shop closed'}
+    </button>
   )
 }
 
@@ -324,6 +432,7 @@ export function DayPaper() {
   const label = new Date(startOf(day)).toLocaleDateString('en-GB', {
     weekday: 'long', day: '2-digit', month: 'short', year: 'numeric',
   })
+  const [fill, height] = useFillWindow<HTMLDivElement>()
 
   return (
     <div>
@@ -332,6 +441,7 @@ export function DayPaper() {
         subtitle={onToday ? `Today · ${label}` : label}
         actions={
           <div className="flex items-center gap-2">
+            {convexEnabled() && <ShopClosedButton day={day} />}
             <button type="button" className={ARROW} onClick={() => go(shift(day, -1))} aria-label="Previous day" title="Previous day">
               <ChevronLeft size={18} aria-hidden="true" />
             </button>
@@ -350,7 +460,7 @@ export function DayPaper() {
           </div>
         }
       />
-      <div className="p-3 md:p-6">
+      <div ref={fill} className="flex flex-col overflow-hidden px-3 pt-3 md:px-6 md:pt-4" style={{ height }}>
         {/* The offline build has no deployment to ask, so it gets the blank sheet. */}
         {convexEnabled() ? <PaperFor day={day} /> : <Sheet lines={() => undefined} />}
       </div>
