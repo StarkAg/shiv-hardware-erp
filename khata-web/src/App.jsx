@@ -12,9 +12,10 @@ import { SCREEN, THUMB, saveEverything, saveLedger, savedLedger, sized } from '.
  * one reads the account like a chat: every bill and payment a bubble, newest
  * at the bottom, with the bill's photos to tap open. What the shop sent sits
  * on the right, what the party sent on the left, and what the account comes
- * to (to get / to pay) stays in a box at the foot. Nothing here changes the
- * books; the one thing it sends anywhere is a bill's photos to the shop's
- * printer, when asked and confirmed.
+ * to (to get / to pay) stays in a box at the foot. Two things go out from
+ * here: a bill's photos to the shop's printer, when asked and confirmed, and
+ * a bill or payment added from inside an account with the + key (AddEntry),
+ * posted the way the panel's voucher form posts it.
  *
  * Live: every figure is a Convex subscription, so a bill saved at the counter
  * shows here within a second or two with the app left open — the light in the
@@ -362,6 +363,7 @@ function Party({ party, onBack }) {
   const [viewer, setViewer] = useState(null)
   const [profile, setProfile] = useState(false)
   const [sharing, setSharing] = useState(false)
+  const [adding, setAdding] = useState(false)
   const end = useRef(null)
   const thread = useRef(null)
   useEffect(() => {
@@ -461,6 +463,7 @@ function Party({ party, onBack }) {
           <b>{party.name}</b>
           <small>{closing}</small>
         </span>
+        <button type="button" className="call add" onClick={() => setAdding(true)} aria-label={`Add a bill or payment for ${party.name}`}><PlusIcon /></button>
         {bills.length > 0 && (
           <button type="button" className="call" onClick={() => setSharing(true)} aria-label="Share all bills"><ShareIcon /></button>
         )}
@@ -533,6 +536,7 @@ function Party({ party, onBack }) {
         </footer>
       )}
       {sharing && <ShareAll party={party} bills={bills} onClose={() => setSharing(false)} />}
+      {adding && <AddEntry party={party} onClose={() => setAdding(false)} />}
       {viewer && <Viewer key={viewer.opened} bills={viewer.bills} bill={viewer.bill} page={viewer.page} onBill={showBubble} onClose={() => window.history.back()} />}
       {profile && (
         <Profile
@@ -560,6 +564,9 @@ function Photos({ shots, onOpen }) {
   )
 }
 
+const PlusIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+)
 const CloseIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
 )
@@ -871,4 +878,140 @@ function PrintStatus({ id }) {
     : status === 'failed' ? `Not printed: ${live.error || 'the printer refused it'}`
     : status === 'claimed' || status === 'printing' ? 'Printing at the shop'
     : 'Sent. Waiting for the shop PC'
+}
+
+/**
+ * A bill or a payment for this account, added from the phone: what the
+ * panel's voucher form writes, with the same ledgers on either side. A
+ * customer's bill is a sale on credit and their payment a receipt; a
+ * supplier's bill is a purchase and the shop's payment to them a payment.
+ * A bill may go in with no amount (priced later at the counter, where it waits
+ * as "amount not added yet"; a supplier's becomes a delivery waiting for its
+ * bill); a payment needs one, and says whether it was cash or bank.
+ */
+const ENTRY = {
+  customers: {
+    bill: { label: 'Bill', fn: 'createSale', account: 'salesLedgerId', groups: ['Sales Accounts'], doc: 'bill', priced: false },
+    pay: { label: 'Payment received', fn: 'createReceipt', account: 'receivedIntoLedgerId', groups: ['Cash-in-Hand', 'Bank Accounts'], doc: 'receipt', priced: true },
+  },
+  suppliers: {
+    bill: { label: 'Bill', fn: 'createPurchase', account: 'purchaseLedgerId', groups: ['Purchase Accounts'], doc: 'bill', priced: false },
+    pay: { label: 'Payment made', fn: 'createPayment', account: 'paidFromLedgerId', groups: ['Cash-in-Hand', 'Bank Accounts'], doc: 'receipt', priced: true },
+  },
+}
+// The shop's day, not the phone's: vouchers are dated midnight UTC of India's date.
+const indiaToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+const asVoucherDate = (str) => { const [y, m, d] = str.split('-').map(Number); return Date.UTC(y, m - 1, d) }
+
+function AddEntry({ party, onClose }) {
+  const convex = useConvex()
+  const masters = useQuery(api.masters.all, {})
+  const kinds = ENTRY[party.tab] ?? ENTRY.customers
+  const [which, setWhich] = useState('bill')
+  const spec = kinds[which]
+  const accounts = useMemo(
+    () => (masters?.ledgers ?? []).filter((l) => spec.groups.includes(l.groupName)),
+    [masters, spec]
+  )
+  const [accountId, setAccountId] = useState('')
+  useEffect(() => {
+    if (!accounts.some((a) => a._id === accountId)) setAccountId(accounts[0]?._id ?? '')
+  }, [accounts, accountId])
+  const [amount, setAmount] = useState('')
+  const [refNo, setRefNo] = useState('')
+  const [note, setNote] = useState('')
+  const [date, setDate] = useState(indiaToday)
+  const [files, setFiles] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const picker = useRef(null)
+  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files])
+  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews])
+
+  const save = async () => {
+    setError('')
+    const value = amount.trim() === '' ? undefined : Number(amount.replace(/,/g, ''))
+    if (value !== undefined && !(value > 0)) return setError('Enter an amount above zero.')
+    if (spec.priced && value === undefined) return setError('Enter the amount.')
+    if (!accountId) return setError(masters ? 'No account to post this to. Add one in the panel.' : 'Still loading. Try again in a moment.')
+    if (date > indiaToday()) return setError('That date has not come yet.')
+    setBusy(true)
+    try {
+      const attachments = []
+      for (const file of files) {
+        const blob = file.type === 'application/pdf' ? file : await asJpeg(file)
+        const url = await convex.mutation(api.files.generateUploadUrl, {})
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob })
+        if (!res.ok) throw new Error('A photo did not upload. Try again.')
+        const { storageId } = await res.json()
+        attachments.push({ storageId, kind: spec.doc })
+      }
+      await convex.mutation(api.vouchers[spec.fn], {
+        date: asVoucherDate(date),
+        partyLedgerId: party.id,
+        [spec.account]: accountId,
+        amount: value,
+        refNo: refNo.trim() || undefined,
+        narration: note.trim() || undefined,
+        attachments,
+      })
+      onClose()
+    } catch (err) {
+      setError(err?.data?.message ?? err?.message ?? 'Could not save. Try again.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="sheetback" onClick={busy ? undefined : onClose}>
+      <div className="sheet addsheet" role="dialog" aria-modal="true" aria-label={`Add for ${party.name}`} onClick={(e) => e.stopPropagation()}>
+        <b className="sheettitle">Add for {party.name}</b>
+        <div className="addkinds" role="radiogroup" aria-label="What to add">
+          {Object.entries(kinds).map(([id, k]) => (
+            <button key={id} type="button" role="radio" aria-checked={which === id} className={which === id ? 'on' : ''} onClick={() => setWhich(id)}>{k.label}</button>
+          ))}
+        </div>
+        <label className="addfield">
+          <span>Amount</span>
+          <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={spec.priced ? '0' : 'Leave empty to add later'} />
+        </label>
+        {spec.priced && accounts.length > 1 && (
+          <div className="addkinds small" role="radiogroup" aria-label="Paid how">
+            {accounts.map((a) => (
+              <button key={a._id} type="button" role="radio" aria-checked={accountId === a._id} className={accountId === a._id ? 'on' : ''} onClick={() => setAccountId(a._id)}>{a.name}</button>
+            ))}
+          </div>
+        )}
+        <div className="addrow">
+          <label className="addfield">
+            <span>Date</span>
+            <input type="date" value={date} max={indiaToday()} onChange={(e) => setDate(e.target.value || indiaToday())} />
+          </label>
+          <label className="addfield">
+            <span>{which === 'bill' ? 'Bill no.' : 'Ref no.'}</span>
+            <input value={refNo} onChange={(e) => setRefNo(e.target.value)} />
+          </label>
+        </div>
+        <label className="addfield">
+          <span>Note</span>
+          <input value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        <div className="addphotos">
+          {previews.map((u, i) => (
+            <button key={u} type="button" className="addthumb" aria-label={`Remove photo ${i + 1}`} onClick={() => setFiles(files.filter((_, n) => n !== i))}>
+              {files[i].type === 'application/pdf' ? <span>PDF</span> : <img src={u} alt="" />}
+              <i><CloseIcon /></i>
+            </button>
+          ))}
+          <button type="button" className="addthumb new" onClick={() => picker.current?.click()} aria-label="Add a photo"><PlusIcon /><span>Photo</span></button>
+          <input ref={picker} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])]); e.target.value = '' }} />
+        </div>
+        {error && <p className="adderror" role="alert">{error}</p>}
+        <div className="sheetbtns">
+          <button type="button" className="ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="solid" onClick={() => void save()} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  )
 }
