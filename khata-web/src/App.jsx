@@ -149,6 +149,12 @@ async function asJpeg(blob) {
 const SENT = { Sale: 'Bill sent', Purchase: 'Bill sent', Receipt: 'Payment sent', Payment: 'Payment sent' }
 // The money taken with a sale or purchase is a payment, not the bill again.
 const kindOf = (r) => (r.settlement ? 'Payment sent' : SENT[r.vchType] ?? r.vchType)
+/** Where a delivery stands: still waiting for the supplier's bill, or billed. */
+const grnStatus = (g) => {
+  if (!g.open) return `Billed in ${g.billedLabel}`
+  const days = Math.floor((Date.now() - g.date) / 86400000)
+  return `Waiting for bill${days > 0 ? ` · ${days} day${days === 1 ? '' : 's'}` : ''}`
+}
 
 export default function App() {
   const [tab, setTab] = useState(() => read('tab') ?? 'customers')
@@ -375,6 +381,9 @@ function Party({ party, onBack }) {
     const list = [
       ...(data?.rows ?? []).map((r) => ({ key: `${r.voucherId}-${r.side}-${r.date}`, date: r.date, r })),
       ...(data?.pending ?? []).map((p) => ({ key: `p-${p._id}`, date: p.date, p })),
+      // Goods the supplier delivered (GRNs): no amount, so no balance; the
+      // open ones are waiting for the supplier's bill.
+      ...(data?.received ?? []).map((g) => ({ key: `g-${g._id}`, date: g.date, g })),
     ].sort((a, b) => a.date - b.date)
     const out = []
     let lastDay = ''
@@ -395,7 +404,7 @@ function Party({ party, onBack }) {
     const at = new Map()
     for (const it of items) {
       if (it.day) continue
-      const v = it.r ?? it.p
+      const v = it.r ?? it.p ?? it.g
       const shots = (v.attachmentUrls ?? []).filter((a) => a.url && !isPdf(a))
       if (!shots.length) continue
       const id = it.r ? v.voucherId : v._id
@@ -404,10 +413,10 @@ function Party({ party, onBack }) {
         key: it.key,
         shots,
         label: `${label} ${party.name}`,
-        title: it.r ? `${kindOf(v)} · ${label}` : `${SENT[v.vchType] ?? 'Bill'} · ${label}`,
-        who: (it.r ? v.side === ours : pendingOurs) ? 'Shop' : party.name,
+        title: it.r ? `${kindOf(v)} · ${label}` : it.g ? `Goods received · ${label}` : `${SENT[v.vchType] ?? 'Bill'} · ${label}`,
+        who: it.g ? party.name : (it.r ? v.side === ours : pendingOurs) ? 'Shop' : party.name,
         date: it.date,
-        amount: it.r ? rupees(v.amount) : 'Amount not added yet',
+        amount: it.r ? rupees(v.amount) : it.g ? grnStatus(v) : 'Amount not added yet',
       }
       if (!at.has(id)) { at.set(id, out.length); out.push(bill) }
       else if (it.r && !v.settlement) out[at.get(id)] = bill
@@ -417,7 +426,7 @@ function Party({ party, onBack }) {
   const keyOf = useMemo(() => {
     const m = new Map()
     for (const it of items) {
-      const v = it.r ?? it.p
+      const v = it.r ?? it.p ?? it.g
       if (v) m.set(it.key, it.r ? v.voucherId : v._id)
     }
     return m
@@ -476,6 +485,19 @@ function Party({ party, onBack }) {
               </div>
             )
           }
+          if (it.g) {
+            const g = it.g
+            const shots = (g.attachmentUrls ?? []).filter((a) => a.url)
+            return (
+              <div key={it.key} data-key={it.key} className={`bubble left grn${g.open ? ' pending' : ''}`}>
+                <div className="kind">Goods received · {g.vchLabel}{g.refNo ? ` · ${g.refNo}` : ''}</div>
+                <div className="line"><span className="grnstate">{grnStatus(g)}</span></div>
+                {g.receivedBy && <div className="narr">Checked by {g.receivedBy}</div>}
+                {g.narration && <div className="narr">{g.narration}</div>}
+                <Photos shots={shots} onOpen={(page) => openPhotos(it.key, page)} />
+              </div>
+            )
+          }
           const r = it.r
           const right = r.side === ours
           const shots = (r.attachmentUrls ?? []).filter((a) => a.url)
@@ -504,6 +526,10 @@ function Party({ party, onBack }) {
           <small>{data.closing < 0.5 ? SETTLED : data.closingSide === 'Dr' ? 'To get' : 'To pay'}</small>
           <b>{data.closing < 0.5 ? rupees(0) : rupees(data.closing)}</b>
           {data.pendingCount > 0 && <span>+ {data.pendingCount} bill{data.pendingCount === 1 ? '' : 's'} with no amount</span>}
+          {(() => {
+            const waiting = (data.received ?? []).filter((g) => g.open).length
+            return waiting > 0 && <span>{waiting} deliver{waiting === 1 ? 'y' : 'ies'} waiting for a bill</span>
+          })()}
         </footer>
       )}
       {sharing && <ShareAll party={party} bills={bills} onClose={() => setSharing(false)} />}

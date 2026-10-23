@@ -113,6 +113,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .bubble.left { align-self: flex-start; background: var(--card); border-top-left-radius: 4px; }
 .bubble.right { align-self: flex-end; background: var(--mine); border-top-right-radius: 4px; }
 .bubble.pending { border-style: dashed; border-color: var(--brass); }
+/* A delivery (GRN): goods, not money, so it says where its bill stands. */
+.grnstate { font-size: 14px; font-weight: 700; }
 .kind { font-size: 11px; font-weight: 700; color: var(--brass); text-transform: uppercase; letter-spacing: .05em; }
 /* Amount and the balance after it on one line, to keep a bubble short. */
 .line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
