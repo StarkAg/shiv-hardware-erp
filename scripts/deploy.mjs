@@ -77,6 +77,7 @@ const TARGETS = [
   site('khata', 'khata-web', 'shivhardware-khata', 'shivhardware-khata.vercel.app', 'Shiv Accounts (accounts to read)'),
   site('mechanic', 'mechanic-web', 'shivhardware-mechanic', 'shivhardware-mechanic.vercel.app', 'Shiv Mechanic (site sizes)'),
   site('pay', 'pay-web', 'shivhardware-pay', 'shivhardware-pay.vercel.app', 'QR Pay (QR photo to a UPI app)'),
+  site('money', 'money-web', 'shivhardware-money', 'shivhardware-money.vercel.app', 'Shiv Money (is the business making money)'),
   // One folder, two sites: the address says which app it is (workshop-web/src/side.js).
   site('workshop', 'workshop-web', 'shivhardware-workshop', 'shivhardware-workshop.vercel.app', 'Shiv Workshop (Gopal & Bandhu)'),
   site('workshop-counter', 'workshop-web', 'shivhardware-workshop-counter', 'shivhardware-workshop-counter.vercel.app', 'Shiv Workshop Counter (work orders in photos)'),

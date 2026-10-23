@@ -70,6 +70,7 @@ import type * as masters from "../masters.js";
 import type * as merge from "../merge.js";
 import type * as mica from "../mica.js";
 import type * as migrateLedger from "../migrateLedger.js";
+import type * as money from "../money.js";
 import type * as monthly from "../monthly.js";
 import type * as photos from "../photos.js";
 import type * as prices from "../prices.js";
@@ -159,6 +160,7 @@ declare const fullApi: ApiFromModules<{
   merge: typeof merge;
   mica: typeof mica;
   migrateLedger: typeof migrateLedger;
+  money: typeof money;
   monthly: typeof monthly;
   photos: typeof photos;
   prices: typeof prices;

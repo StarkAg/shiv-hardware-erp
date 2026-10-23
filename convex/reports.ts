@@ -421,7 +421,7 @@ export const dayBook = query({
  * no receipt is allocated against a particular bill, because neither the
  * suppliers' statements nor the shop's own slips work that way.
  */
-async function partyRows(ctx: QueryCtx, groupName: string) {
+export async function partyRows(ctx: QueryCtx, groupName: string) {
   const { ledgers, groupById } = await context(ctx);
   const parties = ledgers.filter((l) => groupById.get(l.groupId)?.name === groupName);
 

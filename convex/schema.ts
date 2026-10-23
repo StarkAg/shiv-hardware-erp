@@ -1324,4 +1324,31 @@ export default defineSchema({
     color: v.union(v.literal('green'), v.literal('yellow'), v.literal('red')),
     at: v.number(),
   }).index('by_key', ['key']),
+
+  /**
+   * Shiv Money (money-web): the places the shop keeps money, in their order —
+   * cash in the shop, cash at home, each bank account, MSwipe — and any money
+   * owed that the books do not hold (a loan). See convex/money.ts.
+   */
+  moneyPlaces: defineTable({
+    name: v.string(),
+    kind: v.union(v.literal('have'), v.literal('owe')),
+    sort: v.number(),
+    createdAt: v.number(),
+  }),
+  /**
+   * A count saved in Shiv Money: what each place held, and what the books
+   * said was to pay to suppliers and to get from customers, at that moment.
+   * Read one against another to see whether the business is making money.
+   */
+  moneyCounts: defineTable({
+    at: v.number(),
+    places: v.array(v.object({ name: v.string(), kind: v.union(v.literal('have'), v.literal('owe')), amount: v.number() })),
+    toPay: v.number(),     // suppliers' balances to pay, from the books
+    toGet: v.number(),     // customers' balances to get, from the books
+    advancesPaid: v.number(),     // suppliers paid ahead (to get back)
+    advancesTaken: v.number(),    // customers paid ahead (to give back)
+    net: v.number(),
+    note: v.optional(v.string()),
+  }).index('by_at', ['at']),
 })

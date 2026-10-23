@@ -1,0 +1,77 @@
+/* Shiv Money, in the Signs look (DESIGN.md). Money keeps the account books'
+ * colours: green is money to come, red is money to pay, on figures only. */
+@import "./signs/signs.css";
+
+html, body, #root { height: 100%; }
+body { background: var(--wall); }
+.app { max-width: 640px; height: 100dvh; margin: 0 auto; display: flex; flex-direction: column; background: var(--wall); }
+input { font: inherit; color: inherit; border-radius: 0; }
+
+.top { flex: none; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 4px solid var(--ink); }
+.brand { font: 800 28px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 10px; }
+.tabs button { min-height: 48px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.tabs button.on { background: var(--ink); color: #fff; box-shadow: none; }
+
+.body { flex: 1; overflow-y: auto; padding: 0 12px 20px; }
+.note { margin: 24px 0; color: var(--dim); font-size: 16px; line-height: 1.45; }
+.small { margin-top: 8px; color: var(--dim); font-size: 14px; }
+.error { margin-top: 10px; color: var(--stop); font-weight: 700; }
+
+.in { color: var(--safe); }
+.out { color: var(--stop); }
+
+/* The one figure the screen is for. */
+.worth { padding: 16px 0 14px; border-bottom: 2px solid var(--ink); }
+.worth .label { font: 700 15px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.worth .big { margin-top: 4px; font: 800 64px/1 var(--sign); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.worth.small .big { font-size: 44px; }
+.worth .since { margin-top: 6px; font: 700 20px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .03em; color: var(--dim); }
+.worth .since.in { color: var(--safe); }
+.worth .since.out { color: var(--stop); }
+
+section { margin-top: 18px; }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0; padding-bottom: 6px; border-bottom: 2px solid var(--ink); font: 800 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.head b { font-variant-numeric: tabular-nums; }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; border-bottom: 1px solid var(--line); width: 100%; text-align: left; }
+.row .name { flex: 1; min-width: 0; padding: 10px 0; font: 700 22px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .02em; text-align: left; overflow-wrap: anywhere; }
+.row .name.plain { font: 600 17px/1.25 var(--text); text-transform: none; letter-spacing: 0; }
+.row .amount { flex: none; width: 46%; max-width: 220px; height: 48px; padding: 0 10px; border: 2px solid var(--ink); background: var(--wall); text-align: right; font: 600 20px/1 var(--text); font-variant-numeric: tabular-nums; }
+.row .amount.out { color: var(--stop); }
+.row .amount:focus-visible { outline-offset: 0; }
+.row .figure { font: 600 20px/1 var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.add { width: 100%; margin-top: 10px; }
+
+.field { display: block; margin-top: 12px; }
+.field span { display: block; margin-bottom: 4px; font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.field input { width: 100%; height: 48px; padding: 0 10px; border: 2px solid var(--ink); background: var(--wall); font-size: 16px; }
+
+/* The saved counts: when, what it was worth, and how much it moved. */
+.saved { margin-top: 14px; border-top: 2px solid var(--ink); }
+.savedrow { padding: 10px 0; }
+.savedrow .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.savedrow .who b { font: 700 19px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.savedrow .who small { color: var(--dim); font-size: 14px; overflow-wrap: anywhere; }
+.figs { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.figs b { font: 600 20px/1 var(--text); font-variant-numeric: tabular-nums; }
+.figs small { font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; color: var(--dim); font-variant-numeric: tabular-nums; }
+.figs small.in { color: var(--safe); }
+.figs small.out { color: var(--stop); }
+
+.total { display: flex; align-items: baseline; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 2px solid var(--ink); }
+.total span { font: 800 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.total b { font: 800 34px/1 var(--sign); font-variant-numeric: tabular-nums; }
+
+/* A sheet over the screen. */
+.sheetback { position: fixed; inset: 0; z-index: 20; background: rgba(14, 19, 24, .55); display: flex; align-items: flex-end; justify-content: center; }
+.sheet { width: 100%; max-width: 640px; max-height: 92dvh; display: flex; flex-direction: column; padding: 16px 12px calc(env(safe-area-inset-bottom) + 12px); background: var(--wall); border-top: 4px solid var(--ink); }
+.sheettitle { margin: 0; font: 800 26px/1.05 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.sheetscroll { overflow-y: auto; margin-top: 6px; }
+.sheetkeys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.key.stop { background: var(--stop); color: #fff; }
+.key.stoptext { color: var(--stop); }
+.choice { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 12px; }
+.choice button { min-height: 48px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 700 18px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .02em; padding: 0 6px; }
+.choice button.on { background: var(--ink); color: #fff; box-shadow: none; }
