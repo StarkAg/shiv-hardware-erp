@@ -24,6 +24,7 @@ import type * as chain from "../chain.js";
 import type * as clearPile from "../clearPile.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
+import type * as dayBookMarks from "../dayBookMarks.js";
 import type * as deviceKeys from "../deviceKeys.js";
 import type * as devices from "../devices.js";
 import type * as documents from "../documents.js";
@@ -112,6 +113,7 @@ declare const fullApi: ApiFromModules<{
   clearPile: typeof clearPile;
   crons: typeof crons;
   customers: typeof customers;
+  dayBookMarks: typeof dayBookMarks;
   deviceKeys: typeof deviceKeys;
   devices: typeof devices;
   documents: typeof documents;

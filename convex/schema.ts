@@ -304,6 +304,9 @@ export default defineSchema({
     marks: v.any(),
     unpaidLeaves: v.optional(v.any()), // leave is an unpaid N in the older attendance app
     locked: v.optional(v.boolean()), // true once saved — edits then need the password
+    // A Tuesday the shop opened after all. Tuesdays are closed unless this is
+    // set (or someone is marked); set from the Day Paper's Mark open.
+    shopOpen: v.optional(v.boolean()),
     updatedAt: v.number(),
   }).index('by_date', ['date']),
 
@@ -1309,4 +1312,16 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index('by_status_updated', ['status', 'updatedAt']),
+
+  /**
+   * The Day Book's checking marks: a colour put on a line while going down the
+   * book, one click each (convex/dayBookMarks.ts). Keyed by the row's key, the
+   * voucher id (or a bill's id while it is not yet in the books), and shared
+   * by every PC so a check made at one desk shows at the other.
+   */
+  dayBookMarks: defineTable({
+    key: v.string(),
+    color: v.union(v.literal('green'), v.literal('yellow'), v.literal('red')),
+    at: v.number(),
+  }).index('by_key', ['key']),
 })

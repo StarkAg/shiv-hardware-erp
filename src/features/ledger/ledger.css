@@ -1492,3 +1492,14 @@ to{transform: scale(1); color: #fff}}
    customer's name and number never wrap into the next button. */
 .ledger-root .sendto-choices{display: flex; flex-direction: column; gap: 8px; margin-top: 14px;}
 .ledger-root .sendto-choices .btn{justify-content: center; width: 100%; overflow-wrap: anywhere;}
+
+/* Day Book checking marks: a dot at the head of each line, one click per colour. */
+.ledger-root .ledger th.w-mark, .ledger-root .ledger td.w-mark { width: 34px; padding-left: 8px; padding-right: 0; }
+.ledger-root .markdot { display: block; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line, #c9c2b6); background: transparent; cursor: pointer; padding: 0; }
+.ledger-root .markdot:hover { border-color: #16a34a; }
+.ledger-root .markdot.green { background: #16a34a; border-color: #16a34a; }
+.ledger-root .markdot.yellow { background: #eab308; border-color: #eab308; }
+.ledger-root .markdot.red { background: #dc2626; border-color: #dc2626; }
+.ledger-root .ledger tr.marked-green > td { background: rgba(22, 163, 74, 0.10); }
+.ledger-root .ledger tr.marked-yellow > td { background: rgba(234, 179, 8, 0.16); }
+.ledger-root .ledger tr.marked-red > td { background: rgba(220, 38, 38, 0.12); }

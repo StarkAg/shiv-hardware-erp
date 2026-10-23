@@ -5275,6 +5275,15 @@ type DayRow = {
   quote?: boolean
 }
 
+type MarkColor = 'green' | 'yellow' | 'red'
+const MARK_NEXT: Record<MarkColor | 'none', MarkColor | null> = { none: 'green', green: 'yellow', yellow: 'red', red: null }
+const MARK_TITLE: Record<MarkColor | 'none', string> = {
+  none: 'Not checked. Click to mark it checked',
+  green: 'Checked. Click to mark it to look again',
+  yellow: 'Look again. Click to mark it wrong',
+  red: 'Wrong. Click to clear the mark',
+}
+
 function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   bills: Bill[]
   onNew: (kind?: BillKind) => void
@@ -5318,6 +5327,35 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   // Sales that have gone to the customer's WhatsApp (convex/billWhatsApp.ts).
   const sentList = useQuery(api.billWhatsApp.sent, {})
   const whatsappAt = useMemo(() => new Map((sentList ?? []).map((r) => [String(r.voucherId), r.at])), [sentList])
+
+  /**
+   * Checking marks: one click on a line's dot marks it green (checked), the
+   * next yellow (look again), then red (wrong), then clear. Shared by every PC,
+   * and shown at once here before the server answers.
+   */
+  const markList = useQuery(api.dayBookMarks.list, {})
+  const setMarkRemote = useMutation(api.dayBookMarks.set)
+  const [markLocal, setMarkLocal] = useState<Record<string, MarkColor | null>>({})
+  const marks = useMemo(() => {
+    const m = new Map<string, MarkColor>((markList ?? []).map((r) => [r.key, r.color as MarkColor]))
+    for (const [k, c] of Object.entries(markLocal)) { if (c) m.set(k, c); else m.delete(k) }
+    return m
+  }, [markList, markLocal])
+  const cycleMark = (key: string) => {
+    const now = marks.get(key) ?? null
+    const next = MARK_NEXT[now ?? 'none']
+    setMarkLocal((prev) => ({ ...prev, [key]: next }))
+    setMarkRemote({ key, color: next }).catch(() => {
+      setMarkLocal((prev) => ({ ...prev, [key]: now }))
+      toast('The mark did not save. Try again.', 'error')
+    })
+  }
+  const markFilter = params.get('mark') ?? ''
+  const setMarkFilter = (value: string) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set('mark', value); else next.delete('mark')
+    setParams(next, { replace: true })
+  }
 
   // Every bill is a bill: there are no drafts to keep apart any more.
   const finished = bills
@@ -5411,9 +5449,19 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
 
   // One type of voucher at a time when asked — the purchases of a month, the
   // goods received today. The count, the total and each day's line follow it.
-  const rows = useMemo(
+  const typed = useMemo(
     () => (series ? allRows.filter((r) => seriesOf(r.label) === series) : allRows),
     [allRows, series],
+  )
+  // And by checking mark: the lines not yet looked at, or only the ones marked a colour.
+  const markCounts = useMemo(() => {
+    const c = { none: 0, green: 0, yellow: 0, red: 0 }
+    for (const r of typed) c[marks.get(r.key) ?? 'none'] += 1
+    return c
+  }, [typed, marks])
+  const rows = useMemo(
+    () => (markFilter ? typed.filter((r) => (marks.get(r.key) ?? 'none') === markFilter) : typed),
+    [typed, marks, markFilter],
   )
   // The types this period has, in the books' own order, each with how many;
   // the chosen one stays listed even when the period has none of it.
@@ -5498,6 +5546,13 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
             {loading ? 'Loading…' : `${rows.length} vouchers · ${rupees(total)}`}
           </div>
           <div className="actions">
+            <select value={markFilter} onChange={(e) => setMarkFilter(e.target.value)} aria-label="Checking mark">
+              <option value="">All marks</option>
+              <option value="none">Not marked · {markCounts.none}</option>
+              <option value="green">Checked · {markCounts.green}</option>
+              <option value="yellow">Look again · {markCounts.yellow}</option>
+              <option value="red">Wrong · {markCounts.red}</option>
+            </select>
             <select value={series} onChange={(e) => setSeries(e.target.value)} aria-label="Voucher type">
               <option value="">All types</option>
               {seriesOptions.map((o) => (
@@ -5533,6 +5588,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
               <table className="ledger">
                 <thead>
                   <tr>
+                    <th className="w-mark" aria-label="Checking mark" />
                     <th className="w-no">Vch</th>
                     <th>Party</th>
                     <th className="w-ref">Ref</th>
@@ -5547,13 +5603,22 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                     <Fragment key={day.date}>
                       {byDate && (
                         <tr className="grouprow">
-                          <td colSpan={4}>{dayLabel(day.date)}</td>
+                          <td colSpan={5}>{dayLabel(day.date)}</td>
                           <td className="num">{rupees(day.total)}</td>
                           <td colSpan={2} />
                         </tr>
                       )}
                       {day.rows.map((r) => (
-                    <tr key={r.key} className={r.problem ? 'unposted' : r.amount === null ? 'unpriced' : undefined}>
+                    <tr key={r.key} className={[r.problem ? 'unposted' : r.amount === null ? 'unpriced' : '', marks.get(r.key) ? `marked-${marks.get(r.key)}` : ''].filter(Boolean).join(' ') || undefined}>
+                      <td className="w-mark" data-label="">
+                        <button
+                          type="button"
+                          className={`markdot ${marks.get(r.key) ?? ''}`}
+                          onClick={() => cycleMark(r.key)}
+                          title={MARK_TITLE[marks.get(r.key) ?? 'none']}
+                          aria-label={`${r.label}: ${MARK_TITLE[marks.get(r.key) ?? 'none']}`}
+                        />
+                      </td>
                       <td className="mono entryno" data-label="Vch">
                         {r.label}
                         {whatsappAt.has(r.key) && <WhatsAppSent at={whatsappAt.get(r.key)!} />}
@@ -5636,8 +5701,8 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
 
                   {!rows.length && (
                     <tr>
-                      <td colSpan={7} className="particulars">
-                        {from || to ? 'No vouchers in this period.' : 'No vouchers yet.'}
+                      <td colSpan={8} className="particulars">
+                        {markFilter ? 'No lines with this mark.' : from || to ? 'No vouchers in this period.' : 'No vouchers yet.'}
                       </td>
                     </tr>
                   )}
