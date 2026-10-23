@@ -293,9 +293,11 @@ function Lists({ tab, setTab, onOpen, saving }) {
         <nav className="tabs">
           <button className={tab === 'customers' ? 'on' : ''} onClick={() => setTab('customers')}>Customers</button>
           <button className={tab === 'suppliers' ? 'on' : ''} onClick={() => setTab('suppliers')}>Suppliers</button>
+          <button className={tab === 'quotes' ? 'on' : ''} onClick={() => setTab('quotes')}>Quotations</button>
         </nav>
         <Saving saving={saving} />
       </header>
+      {tab === 'quotes' ? <Quotes /> : <>
       <div className="summary">
         {!book ? 'Loading…' : tab === 'customers' ? (
           <>
@@ -344,6 +346,7 @@ function Lists({ tab, setTab, onOpen, saving }) {
         })}
         {book && !rows.length && <li className="empty">{q ? 'No one by that name.' : filter !== 'all' ? 'No one here.' : 'No one yet.'}</li>}
       </ul>
+      </>}
       {profile && <Profile {...profile} onClose={() => setProfile(null)} onOpen={() => { setProfile(null); onOpen(profile.party) }} />}
     </div>
   )
@@ -1154,6 +1157,142 @@ function DeleteEntry({ entry, onClose }) {
           <button type="button" className="solid danger" onClick={() => void remove()} disabled={busy || !pin}>{busy ? 'Deleting…' : 'Delete'}</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The shop's quotations, to go through on the phone: a list (open ones, or
+ * all with what became of them), and a tap opens one whole — its lines, total
+ * and photos — with arrows and a swipe to the one before or after, so a pile
+ * of them is read one after another without going back to the list.
+ */
+const quoteDate = (iso) => {
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''
+}
+
+function Quotes() {
+  const list = useCached(api.reports.quotations, {}, 'quotations')
+  const [show, setShow] = useState(() => read('quotesShow') ?? 'open')
+  const [q, setQ] = useState('')
+  const [at, setAt] = useState(null)
+  useEffect(() => { write('quotesShow', show) }, [show])
+  const all = list ?? []
+  const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return all
+      .filter((x) => show === 'all' || x.open)
+      .filter((x) => !needle || [x.customerName, x.customerPhone, x.label, ...x.lines.map((l) => l.description)]
+        .some((v) => String(v ?? '').toLowerCase().includes(needle)))
+  }, [all, show, q])
+  const openCount = all.filter((x) => x.open).length
+
+  // The phone's Back closes a quotation, as it closes an account.
+  useEffect(() => {
+    const onPop = (e) => { if (!e.state?.quote) setAt(null) }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  const openAt = (i) => { window.history.pushState({ quote: true }, ''); setAt(i) }
+
+  return (
+    <>
+      <div className="qtoggle">
+        <button type="button" className={show === 'open' ? 'on' : ''} onClick={() => setShow('open')}>Open ({openCount})</button>
+        <button type="button" className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>All ({all.length})</button>
+      </div>
+      <div className="searchbar">
+        <input type="search" placeholder="Search name, phone, item or number" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <ul className="chats quotes">
+        {rows.map((x, i) => (
+          <li key={x.id}>
+            <button type="button" className="row" onClick={() => openAt(i)}>
+              <span className="who">
+                <b>{x.customerName || 'No name'}</b>
+                <small>{x.label} · {quoteDate(x.date)}{x.lines[0] ? ` · ${x.lines[0].description}${x.lines.length > 1 ? ` +${x.lines.length - 1}` : ''}` : ''}</small>
+              </span>
+              <span className="qside">
+                <span className="amt">{rupees(x.total)}</span>
+                <span className={`qstate ${x.open ? '' : 'sold'}`}>{x.open ? 'Open' : `Sold · Bill ${x.soldAs}`}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+        {!list && <li className="empty">Loading…</li>}
+        {list && !rows.length && <li className="empty">{q ? 'No quotation matches.' : show === 'open' ? 'No open quotations.' : 'No quotations yet.'}</li>}
+      </ul>
+      {at !== null && rows[at] && <QuoteReader rows={rows} at={at} onAt={setAt} onClose={() => window.history.back()} />}
+    </>
+  )
+}
+
+function QuoteReader({ rows, at, onAt, onClose }) {
+  const x = rows[at]
+  const [viewer, setViewer] = useState(null)
+  const touch = useRef(null)
+  const go = (by) => { const next = at + by; if (next >= 0 && next < rows.length) onAt(next) }
+  useEffect(() => {
+    const onKey = (e) => {
+      if (viewer) return
+      if (e.key === 'ArrowRight') go(1)
+      else if (e.key === 'ArrowLeft') go(-1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+  const shots = (x.attachmentUrls ?? []).filter((a) => a.url)
+  const pages = shots.filter((a) => !isPdf(a))
+  const asBill = { key: x.id, shots: pages, label: `${x.label} ${x.customerName}`, title: `Quotation · ${x.label}`, who: x.customerName || 'Customer', date: Date.parse(x.date), amount: rupees(x.total) }
+
+  return (
+    <div className="qreader" role="dialog" aria-modal="true" aria-label={`${x.label} for ${x.customerName}`}
+      onTouchStart={(e) => { const t = e.touches[0]; touch.current = { x: t.clientX, y: t.clientY } }}
+      onTouchEnd={(e) => {
+        const s0 = touch.current; touch.current = null
+        if (!s0) return
+        const t = e.changedTouches[0]
+        const dx = t.clientX - s0.x
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(t.clientY - s0.y) * 1.5) go(dx < 0 ? 1 : -1)
+      }}>
+      <header className="top chathead">
+        <button type="button" className="back" onClick={onClose} aria-label="Back">‹</button>
+        <span className="who">
+          <b>{x.customerName || 'No name'}</b>
+          <small>{x.label} · {quoteDate(x.date)}</small>
+        </span>
+        {x.customerPhone && (
+          <a className="call" href={`tel:${x.customerPhone}`} aria-label={`Call ${x.customerName}`}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />
+            </svg>
+          </a>
+        )}
+      </header>
+      <main className="qbody">
+        <div className={`qstate big ${x.open ? '' : 'sold'}`}>{x.open ? 'Open quotation' : `Sold · became Bill ${x.soldAs}`}</div>
+        {x.lines.length ? (
+          <ol className="qlines">
+            {x.lines.map((l, i) => (
+              <li key={i}>
+                <span className="qdesc">{l.description}</span>
+                <span className="qqty">{l.qty ? `${l.qty} ${l.unit}`.trim() : ''}</span>
+                <span className="qamt">{l.amount ? rupees(l.amount) : '—'}</span>
+              </li>
+            ))}
+          </ol>
+        ) : <p className="note">No lines written on this quotation.</p>}
+        <div className="qtotal"><small>Total</small><b>{rupees(x.total)}</b></div>
+        {x.notes && <div className="narr">{x.notes}</div>}
+        <Photos shots={shots} onOpen={(page) => setViewer({ page })} />
+      </main>
+      <footer className="qnav">
+        <button type="button" onClick={() => go(-1)} disabled={at === 0} aria-label="Previous quotation">‹</button>
+        <span>{at + 1} of {rows.length}</span>
+        <button type="button" onClick={() => go(1)} disabled={at === rows.length - 1} aria-label="Next quotation">›</button>
+      </footer>
+      {viewer && pages.length > 0 && <Viewer bills={[asBill]} bill={0} page={viewer.page} onBill={() => {}} onClose={() => setViewer(null)} />}
     </div>
   )
 }

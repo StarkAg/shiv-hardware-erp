@@ -796,3 +796,40 @@ export const dashboard = query({
     };
   },
 });
+
+/**
+ * The shop's quotations, for the accounts app to leaf through on a phone:
+ * every one given (a mechanic's visit order is not one), newest first, with
+ * its goods lines, total and photos — and whether it is still open or became
+ * a sale, and which bill. Only what the screen shows, not every bill.
+ */
+export const quotations = query({
+  args: {},
+  handler: async (ctx) => {
+    const bills = (await allBills(ctx))
+      .filter((b: any) => (b?.kind === "quotation" && !b?.workOrder) || b?.fromQuote)
+      .sort((a: any, b: any) =>
+        String(b.date ?? "").localeCompare(String(a.date ?? "")) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    return Promise.all(bills.map(async (b: any) => {
+      const open = b.kind === "quotation";
+      return {
+        id: String(b.id),
+        label: `QTN-${String((open ? b.number : b.fromQuote) ?? "").replace(/^Q-/i, "")}`,
+        date: String(b.date ?? ""),
+        customerName: String(b.customerName ?? ""),
+        customerPhone: String(b.customerPhone ?? ""),
+        lines: (Array.isArray(b.items) ? b.items : []).filter(isGoods).map((i: any) => ({
+          description: String(i.description ?? ""),
+          qty: Number(i.qty) || 0,
+          unit: String(i.unit ?? ""),
+          amount: Number(i.amount) || 0,
+        })),
+        total: round2(Number(b.total) || 0),
+        notes: String(b.notes ?? ""),
+        open,
+        soldAs: open ? null : String(b.number ?? ""),
+        attachmentUrls: await urlsFor(ctx, b.attachments ?? []),
+      };
+    }));
+  },
+});

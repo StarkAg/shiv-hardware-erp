@@ -133,7 +133,24 @@ export function QuotationList() {
             </table>
           </div></div>
         )}
-        {previewing && <VoucherBillPreview bill={previewing} onClose={() => setPreviewing(null)} />}
+        {previewing && (() => {
+          // The arrows leaf through the list as it stands (search and Open/All).
+          const at = rows.findIndex((b) => b.id === previewing.id)
+          const label = quoteLabel(isQuotation(previewing) ? previewing.number : previewing.fromQuote)
+          return (
+            <VoucherBillPreview
+              key={previewing.id}
+              bill={previewing}
+              title={label}
+              onClose={() => setPreviewing(null)}
+              step={at < 0 ? null : {
+                prev: at > 0 ? () => setPreviewing(rows[at - 1]) : null,
+                next: at < rows.length - 1 ? () => setPreviewing(rows[at + 1]) : null,
+                at: `${at + 1} of ${rows.length}`,
+              }}
+            />
+          )
+        })()}
         {deleting && (
           <Confirm
             title={`Delete ${quoteLabel(deleting.number)}?`}

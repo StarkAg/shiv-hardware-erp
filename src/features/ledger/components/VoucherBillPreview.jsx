@@ -24,7 +24,17 @@ const NARROW = 600;
 const SIDE_NARROW = 8;
 const FOOT = 44;
 
-export default function VoucherBillPreview({ bill, onClose, actions = null }) {
+/**
+ * `step` (optional) lets the arrows go on past a bill's own pages to the one
+ * before or after it in a list — the quotations, leafed through one by one:
+ * { prev, next, at } where prev/next are null at the ends and `at` is said
+ * between the arrows ("3 of 12").
+ *
+ * @param {{ bill: any, onClose: () => void, actions?: any,
+ *   step?: { prev: (() => void) | null, next: (() => void) | null, at?: string } | null,
+ *   title?: string | null }} props
+ */
+export default function VoucherBillPreview({ bill, onClose, actions = null, step = null, title = null }) {
   const frameRef = useRef(null);
   const bodyRef = useRef(null);
   const srcDoc = useMemo(() => buildBillHtml(bill), [bill]);
@@ -72,7 +82,14 @@ export default function VoucherBillPreview({ bill, onClose, actions = null }) {
     frameRef.current?.contentWindow?.scrollTo(0, target ? target.offsetTop : 0);
   }, [page, pages, srcDoc]);
 
-  const turn = (by) => setPage((now) => Math.min(pages - 1, Math.max(0, now + by)));
+  const turn = (by) => {
+    if (by > 0 && page >= pages - 1) { step?.next?.(); return; }
+    if (by < 0 && page <= 0) { step?.prev?.(); return; }
+    setPage((now) => Math.min(pages - 1, Math.max(0, now + by)));
+  };
+  const canBack = page > 0 || Boolean(step?.prev);
+  const canOn = page < pages - 1 || Boolean(step?.next);
+  const arrows = pages > 1 || Boolean(step);
 
   // Esc closes it, like every other thing this screen opens over itself; the
   // arrow keys turn the page.
@@ -85,7 +102,7 @@ export default function VoucherBillPreview({ bill, onClose, actions = null }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, pages]);
+  }, [onClose, pages, page, step]);
 
   /**
    * Print the frame itself rather than the page around it, so the bill comes
@@ -102,7 +119,7 @@ export default function VoucherBillPreview({ bill, onClose, actions = null }) {
     <div className="billpeek" role="dialog" aria-modal="true" aria-label={`Bill ${bill.number ?? ''}`}>
       <div className="billpeek-head">
         <h2>
-          {bill.number ? `Bill ${bill.number}` : 'Bill'}
+          {title ?? (bill.number ? `Bill ${bill.number}` : 'Bill')}
           {bill.customerName ? ` · ${bill.customerName}` : ''}
         </h2>
         <div className="billpeek-acts">
@@ -116,12 +133,12 @@ export default function VoucherBillPreview({ bill, onClose, actions = null }) {
         </div>
       </div>
       <div className="billpeek-body" ref={bodyRef}>
-        {pages > 1 && (
+        {arrows && (
           <button
             className="billpeek-turn prev"
             onClick={() => turn(-1)}
-            disabled={page === 0}
-            aria-label="Previous page"
+            disabled={!canBack}
+            aria-label={page > 0 ? 'Previous page' : 'Previous one'}
           >
             <ChevronLeft size={26} aria-hidden="true" />
           </button>
@@ -138,20 +155,22 @@ export default function VoucherBillPreview({ bill, onClose, actions = null }) {
           />
         </div>
 
-        {pages > 1 && (
+        {arrows && (
           <button
             className="billpeek-turn next"
             onClick={() => turn(1)}
-            disabled={page === pages - 1}
-            aria-label="Next page"
+            disabled={!canOn}
+            aria-label={page < pages - 1 ? 'Next page' : 'Next one'}
           >
             <ChevronRight size={26} aria-hidden="true" />
           </button>
         )}
 
-        {pages > 1 && (
+        {(pages > 1 || step?.at) && (
           <div className="billpeek-count" aria-live="polite">
-            Page <b>{page + 1}</b> of {pages}
+            {step?.at && <span>{step.at}</span>}
+            {step?.at && pages > 1 && ' · '}
+            {pages > 1 && <>Page <b>{page + 1}</b> of {pages}</>}
           </div>
         )}
       </div>
