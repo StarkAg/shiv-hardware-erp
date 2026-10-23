@@ -558,7 +558,10 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
   // shop did work; a Tuesday with any mark on it is shown as an ordinary day.
   const [opened, setOpened] = useState(() => new Set())
   useEffect(() => { setOpened(new Set()) }, [y, m0])
-  const shut = (d) => isTue(d) && !opened.has(dateKey(d)) && staff.every((name) => (statusFor(d, name) || 'C') === 'C')
+  // A day the shop was shut is one column for everyone: every Tuesday that
+  // nobody was marked on, and any other day marked Shop closed for all staff.
+  const shut = (d) => !opened.has(dateKey(d)) && staff.length > 0
+    && staff.every((name) => (statusFor(d, name) || (isTue(d) ? 'C' : '')) === 'C')
 
   return (
     <div className="card">
@@ -576,7 +579,7 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
               <tr>
                 <th className="stick">Staff</th>
                 {days.map((d) => (
-                  <th key={d.getDate()} className={`${isTue(d) ? 'tue' : ''} ${d.getDay() === 0 ? 'sun' : ''}`}>
+                  <th key={d.getDate()} className={`${isTue(d) || shut(d) ? 'tue' : ''} ${d.getDay() === 0 ? 'sun' : ''}`}>
                     <span className="dnum">{d.getDate()}</span>
                     <span className="dwd">{WD[d.getDay()][0]}</span>
                   </th>
@@ -598,10 +601,10 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
                             className="tuecell"
                             style={{ '--rows': staff.length }}
                             disabled={future}
-                            aria-label={`Tuesday ${d.getDate()} ${MON[m0]}, shop closed${future ? '' : '. Open to mark it'}`}
+                            aria-label={`${WD[d.getDay()]} ${d.getDate()} ${MON[m0]}, shop closed${future ? '' : '. Open to mark it'}`}
                             onClick={() => setOpened((prev) => new Set(prev).add(dateKey(d)))}
                           >
-                            <span>{staff.length >= 3 ? 'Tuesday' : 'Tue'}</span>
+                            <span>{isTue(d) ? (staff.length >= 3 ? 'Tuesday' : 'Tue') : 'Closed'}</span>
                           </button>
                         </td>
                       )
