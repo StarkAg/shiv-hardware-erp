@@ -7,9 +7,10 @@ import { anyApi } from 'convex/server'
  *
  * The money the shop has is counted by hand, place by place: cash in the
  * shop, cash at home, each bank account, MSwipe, and any other place added.
- * What it owes suppliers and is owed by customers comes live from the books
- * (convex/money.ts, added up as Shiv Accounts adds them). Together they say
- * what the business is worth today.
+ * What it owes suppliers comes live from the books (convex/money.ts, added up
+ * as Shiv Accounts adds them). Together they say what the business is worth
+ * today. Customers' balances are left out: the books do not hold them
+ * accurately enough to count on.
  *
  * Save keeps the count whole, with the books' figures at that moment, so a
  * later count can be read against it: worth more than last time is money
@@ -37,8 +38,17 @@ const amountOf = (text) => {
 const when = (ms) => new Date(ms).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 const day = (ms) => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
-/** What the business is worth: money held and owed to it, less what it owes. */
-const worth = (have, owe, b) => have + (b?.toGet ?? 0) + (b?.advancesPaid ?? 0) - (b?.toPay ?? 0) - (b?.advancesTaken ?? 0) - owe
+/** What the business is worth: money held, less what it owes suppliers and others. */
+const worth = (have, owe, b) => have + (b?.advancesPaid ?? 0) - (b?.toPay ?? 0) - owe
+/**
+ * A saved count's worth, worked out the same way every time from what it
+ * kept. Counts saved before customers were left out had them in their `net`.
+ */
+const worthOf = (c) => worth(
+  c.places.filter((p) => p.kind === 'have').reduce((t, p) => t + p.amount, 0),
+  c.places.filter((p) => p.kind === 'owe').reduce((t, p) => t + p.amount, 0),
+  c,
+)
 
 export default function App() {
   const [tab, setTab] = useState(() => read('tab') ?? 'count')
@@ -95,7 +105,7 @@ function Count({ places, books, counts, onSaved }) {
   const have = haves.reduce((t, p) => t + amountOf(valueOf(p)), 0)
   const owe = owes.reduce((t, p) => t + amountOf(valueOf(p)), 0)
   const net = worth(have, owe, books)
-  const change = last ? net - last.net : null
+  const change = last ? net - worthOf(last) : null
 
   const save = async () => {
     setError('')
@@ -143,10 +153,8 @@ function Count({ places, books, counts, onSaved }) {
         <section>
           <h2 className="head"><span>From the books</span></h2>
           <ul className="rows">
-            <BookRow label="To get from customers" amount={books?.toGet} tone="in" />
-            <BookRow label="Paid ahead to suppliers" amount={books?.advancesPaid} tone="in" />
             <BookRow label="To pay suppliers" amount={books?.toPay} tone="out" />
-            <BookRow label="Customers paid ahead" amount={books?.advancesTaken} tone="out" />
+            <BookRow label="Paid ahead to suppliers" amount={books?.advancesPaid} tone="in" />
           </ul>
         </section>
 
@@ -297,7 +305,7 @@ function Saved({ counts }) {
   if (!counts) return <main className="body"><p className="note">Loading...</p></main>
   if (!counts.length) return <main className="body"><p className="note">No count saved yet. Fill in the Count screen and save it; the next one is read against it.</p></main>
   const first = counts[counts.length - 1]
-  const overall = counts[0].net - first.net
+  const overall = worthOf(counts[0]) - worthOf(first)
   return (
     <main className="body">
       {counts.length > 1 && (
@@ -309,7 +317,8 @@ function Saved({ counts }) {
       <ul className="rows saved">
         {counts.map((c, i) => {
           const before = counts[i + 1]
-          const change = before ? c.net - before.net : null
+          const net = worthOf(c)
+          const change = before ? net - worthOf(before) : null
           return (
             <li key={c.id}>
               <button type="button" className="row savedrow" onClick={() => setOpen(c)}>
@@ -318,7 +327,7 @@ function Saved({ counts }) {
                   {c.note && <small>{c.note}</small>}
                 </span>
                 <span className="figs">
-                  <b className={c.net < 0 ? 'out' : ''}>{c.net < 0 ? '-' : ''}{rupees(c.net)}</b>
+                  <b className={net < 0 ? 'out' : ''}>{net < 0 ? '-' : ''}{rupees(net)}</b>
                   {change !== null && (
                     <small className={change > 0.5 ? 'in' : change < -0.5 ? 'out' : ''}>
                       {Math.abs(change) < 0.5 ? 'Same' : `${change > 0 ? 'Up' : 'Down'} ${rupees(change)}`}
@@ -354,13 +363,11 @@ function CountSheet({ count, before, onClose }) {
       <div className="sheetscroll">
         <ul className="rows">
           {count.places.filter((p) => p.kind === 'have').map((p) => line(p.name, p.amount, '', was(p.name)))}
-          {line('To get from customers', count.toGet, 'in', before?.toGet)}
-          {line('Paid ahead to suppliers', count.advancesPaid, 'in', before?.advancesPaid)}
           {line('To pay suppliers', count.toPay, 'out', before?.toPay)}
-          {line('Customers paid ahead', count.advancesTaken, 'out', before?.advancesTaken)}
+          {line('Paid ahead to suppliers', count.advancesPaid, 'in', before?.advancesPaid)}
           {count.places.filter((p) => p.kind === 'owe').map((p) => line(p.name, p.amount, 'out', was(p.name)))}
         </ul>
-        <div className="total"><span>Worth</span><b className={count.net < 0 ? 'out' : ''}>{count.net < 0 ? '-' : ''}{rupees(count.net)}</b></div>
+        <div className="total"><span>Worth</span><b className={worthOf(count) < 0 ? 'out' : ''}>{worthOf(count) < 0 ? '-' : ''}{rupees(worthOf(count))}</b></div>
         {count.note && <p className="small">{count.note}</p>}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
