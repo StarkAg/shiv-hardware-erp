@@ -604,7 +604,12 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
                             aria-label={`${WD[d.getDay()]} ${d.getDate()} ${MON[m0]}, shop closed${future ? '' : '. Open to mark it'}`}
                             onClick={() => setOpened((prev) => new Set(prev).add(dateKey(d)))}
                           >
-                            <span>{isTue(d) ? (staff.length >= 3 ? 'Tuesday' : 'Tue') : 'Closed'}</span>
+                            {(() => {
+                              const word = isTue(d) ? (staff.length >= 3 ? 'Tuesday' : 'Tue') : 'Closed'
+                              // Each upright letter takes a line; shrink them to fit a short column.
+                              const fit = Math.floor((staff.length * 41 - 12) / (word.length * 1.15))
+                              return <span style={{ '--fs': `${Math.max(9, Math.min(15, fit))}px` }}>{word}</span>
+                            })()}
                           </button>
                         </td>
                       )
