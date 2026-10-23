@@ -134,9 +134,10 @@ export const save = mutation({
     const b = await booksNow(ctx)
     const have = clean.filter((p) => p.kind === 'have').reduce((t, p) => t + p.amount, 0)
     const owe = clean.filter((p) => p.kind === 'owe').reduce((t, p) => t + p.amount, 0)
-    // Customers' balances are left out of the worth: the books do not hold
-    // them accurately enough to count on (kept on the count, not added in).
-    const net = round2(have + b.advancesPaid - b.toPay - owe)
+    // Only what is to pay suppliers goes into the worth. Customers' balances
+    // and suppliers paid ahead are not held accurately enough in the books to
+    // count on (kept on the count, not added in).
+    const net = round2(have - b.toPay - owe)
     return ctx.db.insert('moneyCounts', { at: Date.now(), places: clean, ...b, net, note: note?.trim() || undefined })
   },
 })

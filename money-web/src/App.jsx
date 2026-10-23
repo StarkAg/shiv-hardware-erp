@@ -9,8 +9,8 @@ import { anyApi } from 'convex/server'
  * shop, cash at home, each bank account, MSwipe, and any other place added.
  * What it owes suppliers comes live from the books (convex/money.ts, added up
  * as Shiv Accounts adds them). Together they say what the business is worth
- * today. Customers' balances are left out: the books do not hold them
- * accurately enough to count on.
+ * today. Customers' balances and suppliers paid ahead are left out: the
+ * books do not hold them accurately enough to count on.
  *
  * Save keeps the count whole, with the books' figures at that moment, so a
  * later count can be read against it: worth more than last time is money
@@ -39,10 +39,10 @@ const when = (ms) => new Date(ms).toLocaleString('en-IN', { weekday: 'short', da
 const day = (ms) => new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
 /** What the business is worth: money held, less what it owes suppliers and others. */
-const worth = (have, owe, b) => have + (b?.advancesPaid ?? 0) - (b?.toPay ?? 0) - owe
+const worth = (have, owe, b) => have - (b?.toPay ?? 0) - owe
 /**
  * A saved count's worth, worked out the same way every time from what it
- * kept. Counts saved before customers were left out had them in their `net`.
+ * kept. Counts saved earlier had customers and supplier advances in their `net`.
  */
 const worthOf = (c) => worth(
   c.places.filter((p) => p.kind === 'have').reduce((t, p) => t + p.amount, 0),
@@ -154,7 +154,6 @@ function Count({ places, books, counts, onSaved }) {
           <h2 className="head"><span>From the books</span></h2>
           <ul className="rows">
             <BookRow label="To pay suppliers" amount={books?.toPay} tone="out" />
-            <BookRow label="Paid ahead to suppliers" amount={books?.advancesPaid} tone="in" />
           </ul>
         </section>
 
@@ -364,7 +363,6 @@ function CountSheet({ count, before, onClose }) {
         <ul className="rows">
           {count.places.filter((p) => p.kind === 'have').map((p) => line(p.name, p.amount, '', was(p.name)))}
           {line('To pay suppliers', count.toPay, 'out', before?.toPay)}
-          {line('Paid ahead to suppliers', count.advancesPaid, 'in', before?.advancesPaid)}
           {count.places.filter((p) => p.kind === 'owe').map((p) => line(p.name, p.amount, 'out', was(p.name)))}
         </ul>
         <div className="total"><span>Worth</span><b className={worthOf(count) < 0 ? 'out' : ''}>{worthOf(count) < 0 ? '-' : ''}{rupees(worthOf(count))}</b></div>
