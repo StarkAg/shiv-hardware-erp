@@ -71,6 +71,13 @@ function useSaveToPhone() {
   const suppliers = useQuery(api.reports.outstanding, {})
   const [progress, setProgress] = useState(null)
   const state = useRef({ running: false, again: false, rows: [], runs: 0 })
+  // "All saved" stays a few seconds, then goes; and is remembered, so it is not said again.
+  useEffect(() => {
+    if (progress?.step !== 'done') return undefined
+    write('allSaved', true)
+    const t = setTimeout(() => setProgress(null), 4000)
+    return () => clearTimeout(t)
+  }, [progress])
   useEffect(() => {
     if (!customers || !suppliers) return
     const s = state.current
@@ -86,8 +93,9 @@ function useSaveToPhone() {
             rows: s.rows,
             fetchLedger: (ledgerId) => convex.query(api.reports.ledger, { ledgerId }),
             onProgress: setProgress,
-            // Only the first look says "all saved"; a later one that finds nothing new says nothing.
-            announce: s.runs++ === 0,
+            // "All saved" is said once on this phone, the first time it is all
+            // there; after that, opening the app finds nothing new and says nothing.
+            announce: s.runs++ === 0 && !read('allSaved'),
           })
         } catch { /* a phone that keeps nothing still reads everything live */ }
       } while (s.again)

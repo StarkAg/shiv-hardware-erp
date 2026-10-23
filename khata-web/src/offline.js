@@ -14,12 +14,14 @@
  *
  * `saveEverything` fills both in the background each time the app opens, and
  * again whenever the books change while it is open. After the first time it
- * fetches only what has changed, and says nothing unless there is something
- * to fetch: the lists change every few minutes in a working shop, and a bar
- * counting through photos already kept looked like saving them all over again.
+ * fetches only what has changed, and says nothing unless that is a lot: the
+ * lists change every few minutes in a working shop, and a bar counting
+ * through photos already kept looked like saving them all over again.
  */
 
 export const PHOTOS = 'khata-photos-v1'
+// Up to this many changed accounts are fetched without a progress bar.
+const QUIET = 10
 
 /** A photo brought down to the width it is shown at (see vercel.json "images"). */
 export const sized = (url, width) => `/_vercel/image?url=${encodeURIComponent(url)}&w=${width}&q=70`
@@ -62,9 +64,9 @@ export const signature = (row) => [row.closingSide, row.closing, row.voucherCoun
 
 // ── The photos ───────────────────────────────────────────────────────────────
 const isPdf = (a) => /pdf/i.test(a?.contentType ?? '')
-/** Every photo on an account's page, newest bill first. */
+/** Every photo on an account's page (bills, payments, deliveries), newest first. */
 function photosOf(data) {
-  const lines = [...(data?.rows ?? []), ...(data?.pending ?? [])].sort((a, b) => (b.date ?? 0) - (a.date ?? 0))
+  const lines = [...(data?.rows ?? []), ...(data?.pending ?? []), ...(data?.received ?? [])].sort((a, b) => (b.date ?? 0) - (a.date ?? 0))
   return lines.flatMap((line) => (line.attachmentUrls ?? []).filter((a) => a.url && !isPdf(a)).map((a) => a.url))
 }
 
@@ -113,25 +115,30 @@ export async function saveEverything({ rows, fetchLedger, onProgress, cancelled 
 
   const parties = rows.filter((r) => r.ledger).sort((a, b) => (b.lastDate ?? 0) - (a.lastDate ?? 0))
   const urls = []
+  // What is already saved, read first: only the accounts that changed are
+  // fetched, and only they are counted ("2 of 2", not "12 of 300").
+  const saved = await Promise.all(parties.map((row) => savedLedger(row.ledger._id)))
+  const stale = []
+  parties.forEach((row, i) => {
+    const rec = saved[i]
+    if (rec?.data && rec.sig === signature(row)) urls.push(...photosOf(rec.data))
+    else stale.push(row)
+  })
+  // A few changed accounts (a bill saved at the counter) are caught up
+  // quietly; the bar is for real work, like the first time.
+  const loud = stale.length > QUIET
+  const fetching = stale.length > 0
   let n = 0
-  // Said only once an account really has to be fetched.
-  let fetching = false
-  await each(parties, 3, async (row) => {
+  await each(stale, 3, async (row) => {
     if (cancelled()) return false
     const id = row.ledger._id
-    const sig = signature(row)
-    let rec = await savedLedger(id)
-    if (!rec || rec.sig !== sig) {
-      fetching = true
-      try {
-        const data = await fetchLedger(id)
-        await saveLedger(id, data, sig)
-        rec = { data }
-      } catch { /* offline, or the books are busy: this one waits for the next run */ }
-    }
-    if (rec?.data) urls.push(...photosOf(rec.data))
+    try {
+      const data = await fetchLedger(id)
+      await saveLedger(id, data, signature(row))
+      urls.push(...photosOf(data))
+    } catch { /* offline, or the books are busy: this one waits for the next run */ }
     n += 1
-    if (fetching) onProgress({ step: 'accounts', done: n, total: parties.length })
+    if (loud) onProgress({ step: 'accounts', done: n, total: stale.length })
     return true
   })
   if (cancelled()) return
@@ -148,12 +155,16 @@ export async function saveEverything({ rows, fetchLedger, onProgress, cancelled 
   try { have = new Set((await cache.keys()).map((request) => request.url)) } catch { /* then each is asked for in turn */ }
   const missing = wanted.filter((url) => !have.has(new URL(url, location.origin).href))
   if (!missing.length) {
-    if (fetching || announce) onProgress({ step: 'done', done: wanted.length, total: wanted.length })
+    if (loud || announce) onProgress({ step: 'done', done: wanted.length, total: wanted.length })
     return
   }
-  let kept = wanted.length - missing.length
+  // Counted from the photos still to get, so a few new ones are not shown as
+  // "1,180 of 1,184", which read as saving them all over again.
+  const total = missing.length
+  const shout = loud || announce || total > QUIET * 2
+  let kept = 0
   let failed = 0
-  onProgress({ step: 'photos', done: kept, total: wanted.length })
+  if (shout) onProgress({ step: 'photos', done: 0, total })
   const all = await each(missing, 4, async (url) => {
     if (cancelled()) return false
     let ok = false
@@ -163,9 +174,9 @@ export async function saveEverything({ rows, fetchLedger, onProgress, cancelled 
     // point asking for the other thousand. They are picked up on a later run.
     if (failed >= 8) return false
     // Only a photo that is really kept is counted.
-    if (ok) onProgress({ step: 'photos', done: ++kept, total: wanted.length })
+    if (ok) { kept += 1; if (shout) onProgress({ step: 'photos', done: kept, total }) }
     return true
   })
   // Anything that could not be had waits, unsaid, for a later run.
-  if (!cancelled()) onProgress({ step: all && kept === wanted.length ? 'done' : 'paused', done: kept, total: wanted.length })
+  if (!cancelled() && shout) onProgress({ step: all && kept === total ? 'done' : 'paused', done: kept, total })
 }
