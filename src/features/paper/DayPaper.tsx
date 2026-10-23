@@ -323,12 +323,18 @@ function Sheet({ lines, closed }: { lines: (index: number) => Line[] | undefined
       {QUARTERS.map((q, i) => (
         <Quarter key={q.kind} index={i} lines={lines(i)} />
       ))}
-      {/* Stamped across the sheet, the way a closed day's paper is crossed out. */}
+      {/* Crossed out corner to corner, the way a closed day's sheet is cut by hand. */}
       {closed && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
-          <span className="-rotate-12 rounded-md border-4 border-red-700/70 bg-[#fffdf8]/80 px-6 py-2 text-3xl font-black uppercase tracking-[0.2em] text-red-700/80 md:text-5xl">
-            Shop closed
-          </span>
+        <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+          <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+            <line x1="0" y1="0" x2="100" y2="100" stroke="#b91c1c" strokeOpacity="0.75" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+            <line x1="100" y1="0" x2="0" y2="100" stroke="#b91c1c" strokeOpacity="0.75" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="rounded-md border-2 border-red-700/70 bg-[#fffdf8] px-4 py-1.5 text-2xl font-black uppercase tracking-[0.2em] text-red-700 md:text-4xl">
+              Shop closed
+            </span>
+          </div>
         </div>
       )}
     </div>
