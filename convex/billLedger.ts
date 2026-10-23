@@ -231,6 +231,12 @@ export const postBill = mutation({
      * old copy over a newer save from another counter. Left out, no check.
      */
     expectedRev: v.optional(v.union(v.number(), v.null())),
+    /**
+     * The account to post to, when the caller already has it open (the
+     * accounts app adding a bill from inside an account). Without it the
+     * party is found, or opened, by the bill's name as before.
+     */
+    partyLedgerId: v.optional(v.id('ledgers')),
   },
   // Said in the server's own words: production hides a plain Error behind
   // "Server Error", and the counter has to know why a bill did not save.
@@ -408,7 +414,9 @@ export const postBill = mutation({
       throw new Error(`The "${discountAccountName}" account is missing — set it up in Account Masters before taking a discount on this voucher.`)
     }
 
-    const ledgerId = await openParty(ctx, customerName, {
+    const pinned = args.partyLedgerId ? await ctx.db.get(args.partyLedgerId) : null
+    if (args.partyLedgerId && !pinned) throw new Error('That account is no longer in the books.')
+    const ledgerId = pinned ? pinned._id : await openParty(ctx, customerName, {
       phone: bill.customerPhone || undefined,
       aadhaar: bill.customerUid || undefined,
       group: spec.group,

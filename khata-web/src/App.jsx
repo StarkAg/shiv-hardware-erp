@@ -315,7 +315,7 @@ function Lists({ tab, setTab, onOpen, saving }) {
           const what = zero ? SETTLED
             : tab === 'customers' ? (toCome ? 'To get' : 'Advance, to pay')
             : (toCome ? 'Advance, to get' : 'To pay')
-          const party = { id: r.ledger._id, name, phone: r.ledger.phone ?? '', tab }
+          const party = { id: r.ledger._id, name, fullName: r.ledger.name, phone: r.ledger.phone ?? '', tab }
           return (
             <li key={r.ledger._id} className={changed.has(r.ledger._id) ? 'changed' : undefined}>
               {/* The round letter is its own button: the whole name, which the row cuts short. */}
@@ -891,14 +891,35 @@ function PrintStatus({ id }) {
  */
 const ENTRY = {
   customers: {
-    bill: { label: 'Bill', fn: 'createSale', account: 'salesLedgerId', groups: ['Sales Accounts'], doc: 'bill', priced: false },
+    bill: { label: 'Bill', billKind: 'sale', doc: 'bill', priced: false },
     pay: { label: 'Payment received', fn: 'createReceipt', account: 'receivedIntoLedgerId', groups: ['Cash-in-Hand', 'Bank Accounts'], doc: 'receipt', priced: true },
   },
   suppliers: {
-    bill: { label: 'Bill', fn: 'createPurchase', account: 'purchaseLedgerId', groups: ['Purchase Accounts'], doc: 'bill', priced: false },
+    bill: { label: 'Bill', billKind: 'purchase', doc: 'bill', priced: false },
     pay: { label: 'Payment made', fn: 'createPayment', account: 'paidFromLedgerId', groups: ['Cash-in-Hand', 'Bank Accounts'], doc: 'receipt', priced: true },
   },
 }
+/**
+ * A bill goes in the way the counter's Bill Builder posts one, so it takes the
+ * shop's next bill number (BILL-n), is in the panel's list of bills, and has
+ * its voucher written by the same code: one line for the whole amount, which
+ * the counter can open and itemise later.
+ */
+const phoneBill = ({ kind, party, date, amount, refNo, note }) => ({
+  id: `phone-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+  number: '',
+  ...(kind === 'sale' ? {} : { kind }),
+  date,
+  customerName: party.fullName || party.name,
+  customerPhone: '',
+  ref: refNo,
+  items: amount === undefined ? [] : [{ id: 'l1', description: kind === 'sale' ? 'Goods' : 'Purchase', qty: 1, unit: 'Pc', amount }],
+  total: amount ?? 0,
+  paid: false,
+  paymentMode: 'cash',
+  upiRef: '',
+  notes: note,
+})
 // The shop's day, not the phone's: vouchers are dated midnight UTC of India's date.
 const indiaToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 const asVoucherDate = (str) => { const [y, m, d] = str.split('-').map(Number); return Date.UTC(y, m - 1, d) }
@@ -910,7 +931,7 @@ function AddEntry({ party, onClose }) {
   const [which, setWhich] = useState('bill')
   const spec = kinds[which]
   const accounts = useMemo(
-    () => (masters?.ledgers ?? []).filter((l) => spec.groups.includes(l.groupName)),
+    () => (spec.groups ? (masters?.ledgers ?? []).filter((l) => spec.groups.includes(l.groupName)) : []),
     [masters, spec]
   )
   const [accountId, setAccountId] = useState('')
@@ -933,7 +954,7 @@ function AddEntry({ party, onClose }) {
     const value = amount.trim() === '' ? undefined : Number(amount.replace(/,/g, ''))
     if (value !== undefined && !(value > 0)) return setError('Enter an amount above zero.')
     if (spec.priced && value === undefined) return setError('Enter the amount.')
-    if (!accountId) return setError(masters ? 'No account to post this to. Add one in the panel.' : 'Still loading. Try again in a moment.')
+    if (spec.groups && !accountId) return setError(masters ? 'No account to post this to. Add one in the panel.' : 'Still loading. Try again in a moment.')
     if (date > indiaToday()) return setError('That date has not come yet.')
     setBusy(true)
     try {
@@ -946,15 +967,24 @@ function AddEntry({ party, onClose }) {
         const { storageId } = await res.json()
         attachments.push({ storageId, kind: spec.doc })
       }
-      await convex.mutation(api.vouchers[spec.fn], {
-        date: asVoucherDate(date),
-        partyLedgerId: party.id,
-        [spec.account]: accountId,
-        amount: value,
-        refNo: refNo.trim() || undefined,
-        narration: note.trim() || undefined,
-        attachments,
-      })
+      if (spec.billKind) {
+        await convex.mutation(api.billLedger.postBill, {
+          bill: phoneBill({ kind: spec.billKind, party, date, amount: value, refNo: refNo.trim(), note: note.trim() }),
+          attachments,
+          keepAsBill: true,
+          partyLedgerId: party.id,
+        })
+      } else {
+        await convex.mutation(api.vouchers[spec.fn], {
+          date: asVoucherDate(date),
+          partyLedgerId: party.id,
+          [spec.account]: accountId,
+          amount: value,
+          refNo: refNo.trim() || undefined,
+          narration: note.trim() || undefined,
+          attachments,
+        })
+      }
       onClose()
     } catch (err) {
       setError(err?.data?.message ?? err?.message ?? 'Could not save. Try again.')

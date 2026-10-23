@@ -192,11 +192,16 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .addkinds button.on { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
 .addkinds.small { flex-wrap: wrap; margin-top: 8px; }
 .addkinds.small button { flex: 1 1 auto; padding: 8px 10px; font-size: 13px; }
-.addrow { display: flex; gap: 8px; }
-.addrow .addfield { flex: 1; min-width: 0; }
+.addrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.addrow .addfield { min-width: 0; }
 .addfield { display: block; margin-top: 10px; }
 .addfield span { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.addfield input { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font-size: 16px; }
+.addfield input { display: block; width: 100%; min-width: 0; max-width: 100%; height: 48px; box-sizing: border-box; margin: 0; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); font: inherit; font-size: 16px; line-height: 48px; -webkit-appearance: none; appearance: none; }
+/* iPhone draws a date box wider and taller than a text box, and centres it:
+   made to sit level with the Bill no. box beside it, read from the left. */
+.addfield input[type="date"] { text-align: left; }
+.addfield input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+.addfield input[type="date"]::-webkit-calendar-picker-indicator { margin: 0; }
 .addphotos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .addthumb { position: relative; width: 64px; height: 64px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .addthumb img { width: 100%; height: 100%; object-fit: cover; }
