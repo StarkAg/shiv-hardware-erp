@@ -2,7 +2,7 @@
 import { convexTest } from './trustedConvex'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import schema from '../convex/schema'
-import { api } from '../convex/_generated/api'
+import { api, internal } from '../convex/_generated/api'
 
 const modules = import.meta.glob('../convex/**/*.ts')
 
@@ -128,6 +128,44 @@ describe('shared trash', () => {
     await t.mutation(api.trash.restore, { id: bill.voucherTrashId! })
     await t.mutation(api.bills.restore, { id: bill._id })
     expect(await t.run(ctx => ctx.db.query('vouchers').collect())).toHaveLength(1)
+    expect(await t.run(ctx => ctx.db.query('voucherEntries').collect())).toHaveLength(2)
+  })
+
+  it('points a restored bill at its voucher\'s new id, so deleting the voucher again takes the bill (bill 556)', async () => {
+    const { t, voucherId } = await fixture()
+    await t.run(async ctx => {
+      const store = (await ctx.db.query('billsStore').collect())[0]
+      await ctx.db.patch(store._id, { bills: store.bills!.map((b: any) => ({ ...b, voucherId })) })
+    })
+    await t.mutation(api.vouchers.remove, { id: voucherId })
+    const [binned] = await t.run(ctx => ctx.db.query('billsTrash').collect())
+    await t.mutation(api.bills.restore, { id: binned._id })
+    const [back] = await t.run(ctx => ctx.db.query('vouchers').collect())
+    expect(back._id).not.toBe(voucherId)
+    expect((await t.query(api.bills.get, {}))?.bills[0].voucherId).toBe(back._id)
+    await t.mutation(api.vouchers.remove, { id: back._id })
+    expect((await t.query(api.bills.get, {}))?.bills).toHaveLength(0)
+    expect(await t.query(api.trash.all, { pin: CODE })).toHaveLength(1)
+  })
+
+  it('tidies a bill left naming a deleted voucher into the Trash, linked to that voucher', async () => {
+    const { t, voucherId } = await fixture()
+    // As restores did before the fix: the bill names an id no voucher has.
+    await t.run(async ctx => {
+      const store = (await ctx.db.query('billsStore').collect())[0]
+      await ctx.db.patch(store._id, { bills: store.bills!.map((b: any) => ({ ...b, voucherId: 'p970d197y9s70fa3417q1k3k6d8gvd87' })) })
+    })
+    await t.mutation(api.vouchers.remove, { id: voucherId })
+    expect((await t.query(api.bills.get, {}))?.bills).toHaveLength(1)
+    expect(await t.mutation(internal.bills.tidyOrphans, { dryRun: true })).toEqual({ relinked: [], removed: ['7 Test Customer 125 (with BILL-7 from the Trash)'] })
+    await t.mutation(internal.bills.tidyOrphans, { dryRun: false })
+    expect((await t.query(api.bills.get, {}))?.bills).toHaveLength(0)
+    const rows = await t.query(api.trash.all, { pin: CODE })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ source: 'bill', linkedVoucher: 'SAL-0007' })
+    await t.mutation(api.bills.restore, { id: rows[0]._id })
+    const [back] = await t.run(ctx => ctx.db.query('vouchers').collect())
+    expect((await t.query(api.bills.get, {}))?.bills[0].voucherId).toBe(back._id)
     expect(await t.run(ctx => ctx.db.query('voucherEntries').collect())).toHaveLength(2)
   })
 

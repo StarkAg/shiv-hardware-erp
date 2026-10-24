@@ -364,6 +364,12 @@ export const restore = mutation({
       ctx.db.query('billsTrash').collect(), ctx.db.query('trash').collect(),
     ])
     const voucherTrashId = linkTrashRows(deletedBills, deletedVouchers).get(id)
+    /*
+     * A voucher comes out of the trash under a new id, so the bill is pointed
+     * at it. Put back naming the old one, bill 556 (23 Oct 2026) was not found
+     * when PUR-0192 was deleted again, and stayed "Posted" with no voucher.
+     */
+    let voucherId: Id<'vouchers'> | null = null
     if (row.voucherRef && !voucherTrashId) {
       // It may already have been restored through the old ledger trash screen.
       const live = await ctx.db.query('vouchers')
@@ -374,10 +380,11 @@ export const restore = mutation({
         || (typeof row.bill?.total === 'number' && live[0].amount !== row.bill.total)) {
         throw new Error('The linked accounting voucher is missing or ambiguous. Review it before restoring this bill.')
       }
+      voucherId = live[0]._id
     }
     if (voucherTrashId) {
       const voucher = await ctx.db.get(voucherTrashId)
-      if (voucher) await restoreVoucher(ctx, voucher)
+      if (voucher) voucherId = await restoreVoucher(ctx, voucher)
     }
     // It is back on the books, so it is no longer deleted anywhere.
     const tombstone = await ctx.db
@@ -385,7 +392,7 @@ export const restore = mutation({
       .withIndex('by_bill', (q) => q.eq('billId', row.billId))
       .unique()
     if (tombstone) await ctx.db.delete(tombstone._id)
-    const bill = { ...row.bill, updatedAt: Date.now() }
+    const bill = { ...row.bill, ...(voucherId ? { voucherId } : {}), updatedAt: Date.now() }
     await writeBills(ctx, [bill], Number(bill.number) || 0)
     await ctx.db.delete(id)
     await record(ctx, 'bill.restore', `Restored bill ${bill.number}`, { entity: 'bill', entityId: row.billId })
@@ -471,7 +478,8 @@ export const trashLeftVoucher = internalMutation({
  * A bill whose sale is still in the books under its BILL-n reference, for the
  * same customer, only names an old entry: it is pointed at the live one. Any
  * other is taken off every counter as a bill deleted is (to the bills' Trash,
- * with a tombstone), leaving the books as they are. `dryRun` says what would
+ * with a tombstone, linked to its voucher when that is in the Trash), leaving
+ * the books as they are. `dryRun` says what would
  * be done and does nothing.
  *
  *   npx convex run bills:tidyOrphans '{"dryRun":true}' --prod
@@ -501,13 +509,25 @@ export const tidyOrphans = internalMutation({
         }
         continue
       }
-      removed.push(what)
+      // Its voucher still in the Trash, and no other binned bill's: binned
+      // linked to it, so restoring either brings both back.
+      const binned = await ctx.db.query('billsTrash').collect()
+      const inTrash = bill.ledgerId
+        ? (await ctx.db.query('trash').collect()).filter((t) => t.refNo === ref &&
+            String(t.partyLedgerId) === String(bill.ledgerId) &&
+            !binned.some((b) => b.voucherTrashId === t._id))
+        : []
+      const voucherTrash = inTrash.length === 1 ? inTrash[0] : null
+      removed.push(voucherTrash ? `${what} (with ${ref} from the Trash)` : what)
       if (dryRun) continue
       const deletedAt = Date.now()
       if (!(await ctx.db.query('billTombstones').withIndex('by_bill', (q) => q.eq('billId', bill.id)).unique())) {
         await ctx.db.insert('billTombstones', { billId: bill.id, number: bill.number ? String(bill.number) : undefined, deletedAt })
       }
-      await ctx.db.insert('billsTrash', { billId: bill.id, bill, deletedAt })
+      await ctx.db.insert('billsTrash', {
+        billId: bill.id, bill, deletedAt,
+        ...(voucherTrash ? { voucherRef: ref, voucherTrashId: voucherTrash._id } : {}),
+      })
       await dropBill(ctx, bill.id)
     }
     if (!dryRun && (relinked.length || removed.length)) {
