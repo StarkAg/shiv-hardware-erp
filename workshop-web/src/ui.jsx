@@ -180,6 +180,8 @@ export function useHold(onHold) {
 /**
  * The question before anything is deleted, with the delete PIN typed under
  * it. `run(pin)` does the deleting; a PIN the books refuse is asked for again.
+ * With a PIN the books took a moment ago the sheet shuts at once and the
+ * thing is gone from the phone while the books catch up.
  */
 export function DeleteSheet({ title, children, run, onClose }) {
   const [pin, setPin] = useState('')
@@ -188,6 +190,11 @@ export function DeleteSheet({ title, children, run, onClose }) {
   const confirm = async () => {
     const code = pinStillGood() ? heldPin.pin : pin.trim()
     if (!code || checking) return
+    if (pinStillGood()) {
+      onClose()
+      run(code).catch(() => { heldPin.until = 0 })
+      return
+    }
     setChecking(true)
     setError('')
     try {

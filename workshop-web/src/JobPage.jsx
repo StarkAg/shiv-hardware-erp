@@ -44,8 +44,8 @@ const marksOf = (m) => !!(m.text || m.boards != null || m.assemble != null || m.
  */
 export default function JobPage({ job, onBack }) {
   const seen = useMutation(api.workshop.seen).withOptimisticUpdate(atOnce.seen)
-  const removeMessage = useMutation(api.workshop.removeMessage)
-  const removePhoto = useMutation(api.workshop.removePhoto)
+  const removeMessage = useMutation(api.workshop.removeMessage).withOptimisticUpdate(atOnce.removeMessage)
+  const removePhoto = useMutation(api.workshop.removePhoto).withOptimisticUpdate(atOnce.removePhoto)
   const setCustomer = useMutation(api.workshop.setCustomer).withOptimisticUpdate(atOnce.setCustomer)
   const setPriority = useMutation(api.workshop.setPriority).withOptimisticUpdate(atOnce.setPriority)
   const setNeeds = useMutation(api.workshop.setNeeds).withOptimisticUpdate(atOnce.setNeeds)
@@ -311,7 +311,8 @@ export default function JobPage({ job, onBack }) {
   /* ── everything sent so far, step by step ───────────────────────────────── */
   const sections = DOWN.map((tag) => ({
     tag,
-    items: job.messages.filter((m) => tagOf(m) === tag),
+    // What is still on its way is in the job (outbox.js `ahead`) and shown as sending, below.
+    items: job.messages.filter((m) => !m.pending && tagOf(m) === tag),
     pending: outgoing.filter((item) => (item.step ?? 'visit') === tag),
   })).filter((s) => s.items.length || s.pending.length)
 
@@ -424,7 +425,9 @@ export default function JobPage({ job, onBack }) {
                   {!item.previews.length && <p className="mark">{lineOf(item, job)}</p>}
                   {item.state === 'failed' ? (
                     <p className="state bad">
-                      <button type="button" onClick={() => void deliver(item)}>Not sent. Tap to try again</button>
+                      {item.refused
+                        ? <span>Not sent. {item.error}</span>
+                        : <button type="button" onClick={() => void deliver(item)}>Not sent. Tap to try again</button>}
                       <button type="button" className="x" onClick={() => discard(item)} aria-label="Do not send this"><CloseIcon size={14} /></button>
                     </p>
                   ) : (

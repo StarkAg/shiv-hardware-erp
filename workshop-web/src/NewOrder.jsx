@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api, contactsOf } from './flow.js'
+import { useKept } from './offline.js'
 import { post } from './outbox.js'
 import { CameraIcon, CloseIcon, FlagIcon, PersonIcon, PhoneIcon, PhotosIcon, Picked, PlusIcon, Sheet, TickIcon, usePicked } from './ui.jsx'
 import Camera from './Camera.jsx'
@@ -12,7 +13,7 @@ import Camera from './Camera.jsx'
  * to ring, added here one at a time.
  */
 export function CustomerPicker({ value, onChange, disabled }) {
-  const customers = useQuery(api.workshop.customers, {})
+  const customers = useKept('workshop:customers', useQuery(api.workshop.customers, {}))
   const [q, setQ] = useState(value && !value.ledgerId ? value.name : '')
   const phones = value?.phones ?? []
 

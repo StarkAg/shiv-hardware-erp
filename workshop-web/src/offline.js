@@ -1,3 +1,18 @@
+import { useEffect, useState } from 'react'
+
+/**
+ * A live read, kept on the phone: the last copy is what shows from the moment
+ * the app opens, before the books have answered, and with no line at all.
+ */
+export function useKept(key, live) {
+  const [kept] = useState(() => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? undefined } catch { return undefined } })
+  useEffect(() => {
+    if (live === undefined) return
+    try { localStorage.setItem(key, JSON.stringify(live)) } catch { /* storage full: it just opens cold */ }
+  }, [key, live])
+  return live ?? kept
+}
+
 /**
  * Every photo kept on the phone, so a thread opens at once and can be read on
  * a site with no signal.
@@ -16,8 +31,11 @@
 const PHOTOS = 'workshop-photos-v1'
 const RECENT = 30 * 86400000
 
-/** A photo brought down to the width it is shown at (see vercel.json "images"). */
-export const sized = (url, width) => `/_vercel/image?url=${encodeURIComponent(url)}&w=${width}&q=70`
+/**
+ * A photo brought down to the width it is shown at (see vercel.json "images").
+ * One still on its way up is the phone's own copy, and is shown as it is.
+ */
+export const sized = (url, width) => (url.startsWith('blob:') ? url : `/_vercel/image?url=${encodeURIComponent(url)}&w=${width}&q=70`)
 export const SMALL = 256
 export const BUBBLE = 640
 

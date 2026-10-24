@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useConvex, useQuery } from 'convex/react'
 import { APP_NAME, SIDE } from './side.js'
-import { savePhotos } from './offline.js'
+import { savePhotos, useKept } from './offline.js'
 import { api, newIn } from './flow.js'
-import { outbox } from './outbox.js'
+import { ahead, start, useOutbox } from './outbox.js'
 import JobList from './JobList.jsx'
 import JobPage from './JobPage.jsx'
 import NewOrder from './NewOrder.jsx'
@@ -24,12 +24,11 @@ import NewOrder from './NewOrder.jsx'
  * is sent goes through the outbox (outbox.js), and the rules are the books'
  * (convex/workshop.ts). Everything is a live read, so nothing needs
  * refreshing; every photo is also saved on the phone (offline.js).
+ *
+ * Nothing waits on the books. The last list is kept on the phone, so the app
+ * opens on it at once, signal or none; what this phone sends is in the jobs
+ * the moment it is tapped (`ahead`), and goes up behind.
  */
-
-// The last list is kept on the phone, so the app opens on it at once.
-const KEY = `workshop:${SIDE}:jobs`
-const kept = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null') ?? undefined } catch { return undefined } }
-const keep = (jobs) => { try { localStorage.setItem(KEY, JSON.stringify(jobs)) } catch { /* storage full: it just opens cold */ } }
 
 /**
  * Saves every photo to the phone, in the background, each time the list
@@ -58,12 +57,12 @@ function useSavePhotos(jobs) {
 
 export default function App() {
   const convex = useConvex()
-  useEffect(() => { outbox.convex = convex }, [convex])
   const live = useQuery(api.workshop.list, {})
+  useEffect(() => { start(convex, live) }, [convex, live])
   const saving = useSavePhotos(live)
-  const [cached] = useState(kept)
-  useEffect(() => { if (live) keep(live) }, [live])
-  const jobs = live ?? cached
+  const sending = useOutbox()
+  const kept = useKept(`workshop:${SIDE}:jobs`, live)
+  const jobs = useMemo(() => ahead(kept, sending), [kept, sending])
   const [openId, setOpenId] = useState(null)
   const [making, setMaking] = useState(false)
   const open = openId ? jobs?.find((j) => j.id === openId) : null

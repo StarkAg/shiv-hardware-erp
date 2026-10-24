@@ -3,7 +3,7 @@ import { useMutation } from 'convex/react'
 import { APP_NAME, ICON, SIDE } from './side.js'
 import { SMALL } from './offline.js'
 import { STAGES, addressOf, api, finished, lineOf, myTurn, nameOf, newIn, stageId, stageNo, stageOf, titleOf, whenOf } from './flow.js'
-import { deliver, discard, useOutbox } from './outbox.js'
+import { atOnce, deliver, discard, useOutbox } from './outbox.js'
 import { AllIcon, CloseIcon, DeleteSheet, FlagIcon, LiveLight, Pieces, PlusIcon, STEP_ICONS, Saving, Shot, StepTracker, TickIcon, TodoIcon, useHold } from './ui.jsx'
 
 /**
@@ -35,7 +35,7 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
     .sort((a, b) => Number(!!b.priority && !finished(b)) - Number(!!a.priority && !finished(a)) || b.updatedAt - a.updatedAt), [jobs, q, filter])
   // New orders still on their way: shown at the head of the list from the moment they are sent.
   const sending = useOutbox().filter((item) => !item.jobId)
-  const remove = useMutation(api.workshop.remove)
+  const remove = useMutation(api.workshop.remove).withOptimisticUpdate(atOnce.remove)
   // The work order about to be deleted, once a finger has been held on it.
   const [deleting, setDeleting] = useState(null)
   const holdToDelete = useHold(setDeleting)

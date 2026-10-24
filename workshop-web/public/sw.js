@@ -4,11 +4,12 @@
 //     server) is answered from the phone when it is kept there, and kept when
 //     it is first fetched. A photo never changes, so a kept copy is always
 //     right, and a thread read once opens at once the next time.
-//   - The app itself is network-first, so a deploy is picked up immediately;
-//     the last copy is kept only to open with when there is no internet.
+//   - The app itself opens from the copy kept on the phone, with no wait on
+//     the line; the network's copy is fetched behind it, and a deploy is in
+//     use from the next time the app opens (or comes back after a while).
 //
 // Bump SW_VERSION on deploys that must force every client onto the newest app shell.
-const SW_VERSION = '2026-10-11d-shiv-workshop'
+const SW_VERSION = '2026-10-24a-shiv-workshop'
 const SHELL = `workshop-shell-${SW_VERSION}`
 // Not versioned: the photos outlive every deploy.
 const PHOTOS = 'workshop-photos-v1'
@@ -43,22 +44,43 @@ async function photo(request, fromBooks) {
   return res
 }
 
-/** The app's own files: the network's copy, and the last one kept to open with when there is no internet. */
-async function shell(request) {
-  try {
-    const res = await fetch(request)
-    if (res.ok) caches.open(SHELL).then((cache) => cache.put(request, res.clone())).catch(() => {})
+/**
+ * The app's own files: the copy kept on the phone, at once, and the network's
+ * fetched behind it for the next time. Nothing waits on the line to open.
+ * A new app found that way is told to the open windows (main.jsx), and its
+ * files are fetched ahead so it too opens from the phone.
+ */
+const offline = () => new Response('Offline. Please reconnect and try again.', {
+  status: 503,
+  statusText: 'Service Unavailable',
+  headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+})
+async function shell(event) {
+  const { request } = event
+  const nav = request.mode === 'navigate'
+  // Every address of the app is the one page.
+  const key = nav ? '/' : request
+  const cache = await caches.open(SHELL)
+  const kept = await cache.match(key)
+  const before = nav && kept ? kept.clone().text() : null
+  const fresh = fetch(request).then(async (res) => {
+    if (!res.ok || res.type === 'opaqueredirect') return res
+    await cache.put(key, res.clone())
+    if (before) {
+      const page = await res.clone().text()
+      if (page !== await before) {
+        const files = [...page.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1])
+        await Promise.all(files.map((f) => cache.add(f).catch(() => {})))
+        for (const client of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) client.postMessage({ type: 'fresh' })
+      }
+    }
     return res
-  } catch {
-    const cache = await caches.open(SHELL)
-    const kept = (await cache.match(request)) ?? (request.mode === 'navigate' ? await cache.match('/') : undefined)
-    // respondWith() must always receive a Response.
-    return kept ?? new Response('Offline. Please reconnect and try again.', {
-      status: 503,
-      statusText: 'Service Unavailable',
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
-    })
+  })
+  if (kept) {
+    event.waitUntil(fresh.catch(() => {}))
+    return kept
   }
+  try { return await fresh } catch { return nav ? ((await cache.match('/')) ?? offline()) : offline() }
 }
 
 self.addEventListener('fetch', (event) => {
@@ -67,6 +89,6 @@ self.addEventListener('fetch', (event) => {
   const own = url.origin === self.location.origin
   const fromBooks = url.hostname.endsWith('.convex.cloud') && url.pathname.startsWith('/api/storage/')
   if (fromBooks || (own && url.pathname === '/_vercel/image')) event.respondWith(photo(event.request, fromBooks))
-  else if (own) event.respondWith(shell(event.request))
+  else if (own) event.respondWith(shell(event))
   // Anything else (the books' live line, uploads) goes straight to the network.
 })
