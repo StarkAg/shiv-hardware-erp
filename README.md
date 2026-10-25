@@ -84,7 +84,6 @@ must use the hosted app rather than the plain HTTP address.
 **Backend**
 
 ```bash
-npx convex dev                 # schema + functions against the dev deployment
 npm run deploy:convex          # push to production (refuses if either computer has unsaved work)
 ```
 
@@ -97,9 +96,8 @@ npm run sync                   # start of work: pull main, list the other comput
 Each computer runs StarkAg/wip-backups (set up once per computer, see its README), which
 copies every repo's uncommitted work to that private repo every 5 minutes.
 
-> `npx convex dev` rewrites `VITE_CONVEX_URL` in `.env.local` to the dev deployment.
-> Put it back before building, or the build ships an app that writes to the wrong
-> database.
+> There is no dev deployment: the CLI works against prod. Do not run `npx convex dev`;
+> it would push functions to prod without `deploy:convex`'s checks.
 
 **The shop machine**
 

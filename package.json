@@ -11,7 +11,7 @@
     "start": "vite preview --host 0.0.0.0 --port ${PORT:-4173}",
     "desktop:dev": "npm run build && node electron/run-dev.cjs",
     "cloud:api": "npm --prefix cloud-api run dev",
-    "convex:dev": "convex dev",
+    "convex:dev": "echo \"No dev deployment: push with npm run deploy:convex\" && exit 1",
     "print:server": "node print-server/server.mjs",
     "shop": "concurrently -n panel,print -c cyan,yellow \"vite --host 0.0.0.0\" \"node print-server/server.mjs\"",
     "dist:win": "npm run build && electron-builder --win nsis --x64",
