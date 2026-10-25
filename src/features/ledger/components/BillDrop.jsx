@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useMutation, useQuery } from 'convex/react';
+import { useQuery } from 'convex/react';
 import { Check, Paperclip, Ungroup, Unlink, X } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
-import { useLive } from '../lib/cache';
 import { shortDate } from '../lib/format';
 import Confirm from './Confirm';
 import PhotoHoverZoom, { placeZoomPane, zoomGeometry } from './PhotoHoverZoom';
 import BillViewer from './BillViewer';
 import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
+import { usePhoneQueue, usePhonePhotoActions } from '../../../lib/phonePhotos';
 
 const OK = (f) => f.type.startsWith('image/') || f.type === 'application/pdf';
 const key = (f) => `${f.name}:${f.size}:${f.lastModified}`;
@@ -37,20 +37,11 @@ const queueSummary = (unit) => {
  */
 export default function BillDrop({ files, onChange, picked = [], onPick, onViewBill, attached = [], stepRef, onPosition, onWaiting, onDetach }) {
   const saved = useQuery(api.files.describe, attached.length ? { storageIds: attached.map((file) => file.storageId) } : 'skip');
-  // The voucher shooter has its own queue. Keep older unstacked photos from
-  // the panel camera; lettered stacks belong to the sorting site.
-  const voucherPhotosLive = useLive(api.voucherInbox.list, {}, 'voucher-inbox');
-  const legacyPhotosLive = useLive(api.inbox.list, {}, 'inbox');
-  const voucherPhotos = voucherPhotosLive ?? [];
-  const legacyPhotos = legacyPhotosLive ?? [];
-  const discardVoucher = useMutation(api.voucherInbox.discard);
-  const discardLegacy = useMutation(api.inbox.discard);
-  const splitVoucher = useMutation(api.voucherInbox.split);
-  const splitLegacy = useMutation(api.inbox.split);
-  const fromPhone = useMemo(() => [
-    ...voucherPhotos.map((row) => ({ ...row, source: 'voucher' })),
-    ...legacyPhotos.filter((row) => !row.stack).map((row) => ({ ...row, source: 'legacy' })),
-  ].sort((a, b) => b.at - a.at), [voucherPhotos, legacyPhotos]);
+  // Both phone queues as one list, read and acted on as every screen does
+  // (lib/phonePhotos): a photo filed or thrown away leaves it at once.
+  const queue = usePhoneQueue();
+  const fromPhone = useMemo(() => queue ?? [], [queue]);
+  const phonePhotos = usePhonePhotoActions();
   /**
    * A bill of several sheets is one thing to file, so it is one thing here —
    * a stack, not three loose photos scattered down a newest-first list where
@@ -130,7 +121,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
    * different one: null when nothing waits. A new voucher opens it beside the
    * form, so the entry starts from the paper without a click.
    */
-  const queueLoaded = voucherPhotosLive !== undefined && legacyPhotosLive !== undefined;
+  const queueLoaded = queue !== undefined;
   const firstWaiting = units[0]?.key ?? '';
   useEffect(() => {
     if (!onWaiting || !queueLoaded) return;
@@ -204,10 +195,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
   const deleteUnit = async (unit) => {
     const removed = new Set();
     try {
-      for (const page of unit.pages) {
-        await (page.source === 'voucher' ? discardVoucher : discardLegacy)({ id: page._id });
-        removed.add(page._id);
-      }
+      await phonePhotos.discard(unit.pages, (id) => removed.add(id));
     } finally {
       if (removed.size) onPick?.(picked.filter((page) => !removed.has(page._id)));
     }
@@ -219,9 +207,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
     setHovered(null);
     setSplitting(unit.key);
     try {
-      const ids = (source) => unit.pages.filter((page) => page.source === source).map((page) => page._id);
-      if (ids('voucher').length) await splitVoucher({ ids: ids('voucher') });
-      if (ids('legacy').length) await splitLegacy({ ids: ids('legacy') });
+      await phonePhotos.split(unit.pages);
     } finally {
       setSplitting(null);
     }
@@ -289,7 +275,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
       {onPick && (
         <div className="fromphone">
           <div className="fromphone-head">From the phone</div>
-          {voucherPhotosLive === undefined || legacyPhotosLive === undefined
+          {queue === undefined
             ? <p className="hint" role="status">Loading phone photos…</p>
             : units.length === 0
               ? <p className="hint">No bill photos are waiting. Take photos in the voucher shooter, then return here.</p>

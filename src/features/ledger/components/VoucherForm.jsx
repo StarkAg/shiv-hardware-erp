@@ -12,6 +12,8 @@ import { inputDate, today, fromInputDate, longDate } from '../lib/format';
 import { confirmPostingDate } from '../../../lib/dateCheck';
 import { groupLabel } from '../lib/groups';
 import { nextStep } from '../lib/walk';
+import { usePhonePhotoActions } from '../../../lib/phonePhotos';
+import { toast } from '../../../components/Toast';
 
 /**
  * The four vouchers this shop writes. Each is the same form — a party, an
@@ -168,9 +170,16 @@ export default function VoucherForm({
   const editVoucher = useMutation(api.vouchers.edit);
   const addAttachments = useMutation(api.vouchers.addAttachments);
   const removeAttachment = useMutation(api.vouchers.removeAttachment);
-  const claimFromPhone = useMutation(api.inbox.claim);
-  const claimVoucherPhoto = useMutation(api.voucherInbox.claim);
+  const phonePhotos = usePhonePhotoActions();
   const upload = useUploader();
+  /**
+   * The phone photos this voucher took, off the queue. The voucher is saved by
+   * now, so a queue that will not let go is said, not thrown: thrown, it kept
+   * the form open over a voucher already in the books, asking to be saved twice.
+   */
+  const filePicked = async () => {
+    if (!(await phonePhotos.file(picked))) toast('Voucher saved, but its photo is still in the phone queue.', 'error');
+  };
 
   // The account is safe to default, and does so once the masters arrive on a
   // device opening the app for the first time. The party never is.
@@ -229,10 +238,7 @@ export default function VoucherForm({
         if (attachments.length) {
           await addAttachments({ id: edit._id, documents: attachments });
         }
-        for (const p of picked) {
-          if (p.source === 'voucher') await claimVoucherPhoto({ id: p._id });
-          else await claimFromPhone({ id: p._id });
-        }
+        await filePicked();
         onClose();
         return undefined;
       }
@@ -253,10 +259,7 @@ export default function VoucherForm({
       } else {
         await createReceipt({ ...common, receivedIntoLedgerId: accountId, amount: value });
       }
-      for (const p of picked) {
-        if (p.source === 'voucher') await claimVoucherPhoto({ id: p._id });
-        else await claimFromPhone({ id: p._id });
-      }
+      await filePicked();
       onClose();
     } catch (err) {
       setError(err.message ?? String(err));

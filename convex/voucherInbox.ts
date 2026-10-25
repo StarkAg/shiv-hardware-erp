@@ -58,6 +58,21 @@ export const claim = mutation({
 })
 
 /**
+ * Every photo a saved bill took, off both queues in one go. One at a time,
+ * each its own round trip, a bill of several pages left the last of them
+ * under From the phone for seconds after Save. A row already gone (claimed
+ * from another counter) is no failure: it is off the queue, which is the point.
+ */
+export const claimAll = mutation({
+  args: { ids: v.array(v.id('voucherInbox')), legacyIds: v.optional(v.array(v.id('inbox'))) },
+  handler: async (ctx, { ids, legacyIds = [] }) => {
+    for (const id of [...ids, ...legacyIds]) {
+      if (await ctx.db.get(id)) await ctx.db.delete(id)
+    }
+  },
+})
+
+/**
  * Pages shot as one bill that are really separate bills: each gets a group of
  * its own, so each waits as its own photo to be filed against its own voucher.
  */

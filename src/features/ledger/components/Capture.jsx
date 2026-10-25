@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
+import { useLegacyShots, usePhonePhotoActions } from '../../../lib/phonePhotos';
 import { useUploadQueue } from '../lib/queue';
 import LiveCamera from './LiveCamera';
 import AutoTag from './AutoTag';
@@ -24,8 +25,10 @@ const ago = (ms) => {
  * an account.
  */
 export default function Capture() {
-  const shots = useLive(api.inbox.list, {}, 'inbox') ?? [];
-  const discard = useMutation(api.inbox.discard);
+  // Read and thrown away as every screen does (lib/phonePhotos): a shot
+  // thrown away leaves the list at once.
+  const shots = useLegacyShots() ?? [];
+  const phonePhotos = usePhonePhotoActions();
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
   const { items, push, retry, clearDone, pending, failed } = useUploadQueue();
   const [noCamera, setNoCamera] = useState('');
@@ -199,7 +202,7 @@ export default function Capture() {
       {viewing && <BillViewer voucher={viewing} onClose={() => setViewing(null)} />}
       {deleting && <Confirm title="Delete this photo?" body="This removes the waiting photo permanently."
         confirmLabel="Delete photo" danger requireText="delete" requireLabel="Type delete to confirm"
-        onConfirm={() => discard({ id: deleting._id })} onClose={() => setDeleting(null)} />}
+        onConfirm={() => phonePhotos.discard([{ _id: deleting._id, source: 'legacy' }])} onClose={() => setDeleting(null)} />}
     </div>
   );
 }

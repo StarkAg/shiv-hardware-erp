@@ -100,6 +100,7 @@ import { indiaDate, indiaToday } from '../../lib/businessDate'
 /** How long Save waits for the books before saying there was no answer. */
 const POST_WAIT_MS = 25_000
 import { clearFormDraft, draftKey, loadFormDraft, saveFormDraft } from '../../lib/formDrafts'
+import { usePhonePhotoActions } from '../../lib/phonePhotos'
 
 /**
  * Square-foot pricing for boards and doors is parked, not removed.
@@ -2968,8 +2969,7 @@ export function BillBuilder() {
   const postToLedger = useMutation(api.billLedger.postBill)
   const ensureParty = useMutation(api.billLedger.ensureParty)
   const syncQuote = useMutation(api.bills.save)
-  const claimFromPhone = useMutation(api.inbox.claim)
-  const claimVoucherPhoto = useMutation(api.voucherInbox.claim)
+  const phonePhotos = usePhonePhotoActions()
   const requeuePhoto = useMutation(api.voucherInbox.add)
   const removeFromBooks = useMutation(api.bills.removeImage)
   const upload = useUploader()
@@ -3873,23 +3873,17 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   async function claimPhotos() {
-    const claimed = new Set<string>()
-    let failed = 0
-    for (const p of photoPicked) {
-      try {
-        if (p.source === 'voucher') await claimVoucherPhoto({ id: p._id as never })
-        else await claimFromPhone({ id: p._id as never })
-        claimed.add(p._id)
-      } catch {
-        failed++
-      }
+    const filing = photoPicked
+    if (!(await phonePhotos.file(filing))) {
+      toast('Bill saved, but its photo is still in the phone queue.', 'error')
+      return
     }
     // Only the ones filed come off the list. Setting the list outright put a
     // photo whose filing failed back as chosen on whatever bill was open by
     // then, the next one, which would take it on Save; and wiped any photo
     // already chosen there.
+    const claimed = new Set(filing.map((p) => p._id))
     setPhotoPicked((now) => now.filter((p) => !claimed.has(p._id)))
-    if (failed) toast('Bill saved, but its photo is still in the phone queue.', 'error')
   }
 
   /**
