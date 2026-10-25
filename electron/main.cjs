@@ -501,7 +501,22 @@ ipcMain.handle('card:print-backs', async (event, payload = {}) => {
     '-ScalePercent', String(config.scalePercent),
   ]
   if (one && two) args.push('-ImagePath2', two)
-  const output = await runCardScript(args)
-  console.log(`[card-backs] ${printer} ${one ? path.basename(one) : '-'} | ${two ? path.basename(two) : '-'}`, output)
-  return { ok: true, printer }
+  // The installer's screens sit inside app.asar, which PowerShell can't read:
+  // the designs go to temp files first (Electron's fs reads the asar).
+  const temps = []
+  try {
+    for (const flag of ['-ImagePath', '-ImagePath2']) {
+      const i = args.indexOf(flag)
+      if (i < 0) continue
+      const temp = path.join(os.tmpdir(), `shiv-back-${Date.now()}-${temps.length + 1}-${path.basename(args[i + 1])}`)
+      fs.writeFileSync(temp, fs.readFileSync(args[i + 1]))
+      temps.push(temp)
+      args[i + 1] = temp
+    }
+    const output = await runCardScript(args)
+    console.log(`[card-backs] ${printer} ${one ? path.basename(one) : '-'} | ${two ? path.basename(two) : '-'}`, output)
+    return { ok: true, printer }
+  } finally {
+    for (const f of temps) fs.rmSync(f, { force: true })
+  }
 })
