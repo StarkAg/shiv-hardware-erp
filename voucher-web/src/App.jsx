@@ -406,6 +406,8 @@ export default function App() {
               if (discarding !== row._id) { setDiscarding(row._id); return }
               setDiscarding(null)
               discard({ id: row._id })
+              // A page of the bill in hand, thrown away: it is no longer one of its pages.
+              if (row.groupId === group.current) setPages((count) => Math.max(0, count - 1))
             }}>{discarding === row._id ? 'Sure? Discard' : 'Discard'}</button>
           </div>)}
         </div>}
