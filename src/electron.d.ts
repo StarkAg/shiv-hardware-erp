@@ -35,6 +35,8 @@ declare global {
         slot?: 1 | 2
         copies?: number
       }) => Promise<{ ok: true; printer: string }>
+      /** Card backs into tray slot 1 / slot 2 (file names from cardBacks.json; null = leave empty). */
+      printCardBacksDirect?: (payload: { files: (string | null)[] }) => Promise<{ ok: true; printer: string }>
       getUpdateState?: () => Promise<DesktopUpdateState>
       checkForUpdates?: () => Promise<DesktopUpdateState>
       installUpdate?: () => Promise<void>

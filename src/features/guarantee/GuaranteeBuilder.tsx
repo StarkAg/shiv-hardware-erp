@@ -2,7 +2,7 @@ import type React from 'react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation } from 'convex/react'
-import { Camera, Check, Copy, Eye, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
+import { Camera, Check, Copy, CreditCard, Eye, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
@@ -871,6 +871,11 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 <Button variant="outline" onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: location.pathname } })} disabled={generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
                   <FileText size={20} /> From a bill
                 </Button>
+                {layout === 'card' && (
+                  <Button variant="outline" onClick={() => navigate('/guarantee/backs')} disabled={generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
+                    <CreditCard size={20} /> Card backs
+                  </Button>
+                )}
               </div>
             )}
             <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">

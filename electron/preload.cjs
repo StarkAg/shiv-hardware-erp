@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('shivDesktop', {
   printGuaranteeCardsDirect: process.platform === 'win32'
     ? (payload) => ipcRenderer.invoke('card:print-direct', payload)
     : undefined,
+  // Card backs (designs from the screens' card-backs/ folder) into tray slot 1 and/or 2.
+  printCardBacksDirect: process.platform === 'win32'
+    ? (payload) => ipcRenderer.invoke('card:print-backs', payload)
+    : undefined,
   // Auto-update bridge
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),

@@ -3,7 +3,7 @@ const path = require('node:path')
 const fs = require('node:fs')
 const os = require('node:os')
 const { execFile } = require('node:child_process')
-const { pathToFileURL } = require('node:url')
+const { pathToFileURL, fileURLToPath } = require('node:url')
 const { autoUpdater } = require('electron-updater')
 const screens = require('./screens.cjs')
 
@@ -454,4 +454,54 @@ ipcMain.handle('card:print-direct', async (event, payload = {}) => {
   } finally {
     for (const f of pngs) fs.rmSync(f, { force: true })
   }
+})
+
+// ── Card backs (the Card backs screen) ───────────────────────────────────────
+// The design side of a blank PVC card, from the screens' own card-backs/ folder
+// (scripts/export-card-backs.ps1). Each design is the card plus a 3 mm bleed,
+// so it is drawn 60 x 92 mm, 3 mm up and left of the slot: a card sitting a
+// little off in the tray still prints to its edge. The tray canvas (about
+// 204 x 291 mm) has room for the bleed round both slots.
+const CARD_BACK_BLEED_MM = 3
+
+// payload: { files: [slot1File | null, slot2File | null] }
+ipcMain.handle('card:print-backs', async (event, payload = {}) => {
+  if (process.platform !== 'win32') throw new Error('Card back printing needs Windows')
+  const pageUrl = event.sender.getURL()
+  // Beside the page being shown (the installer's dist/ or newer screens); public/ in dev.
+  const dir = pageUrl.startsWith('file:')
+    ? path.join(path.dirname(fileURLToPath(pageUrl)), 'card-backs')
+    : appPath('public', 'card-backs')
+  const pick = (name) => {
+    if (!name) return null
+    if (!/^[\w.-]+\.jpg$/.test(String(name))) throw new Error(`Not a card back: ${name}`)
+    const file = path.join(dir, name)
+    if (!fs.existsSync(file)) throw new Error(`Card back not found: ${name}`)
+    return file
+  }
+  const [one, two] = (payload.files || []).slice(0, 2).map(pick)
+  if (!one && !two) throw new Error('No card back chosen')
+
+  const config = cardPrintConfig()
+  const { CARD_W_MM, CARD_H_MM } = await import(pathToFileURL(appPath('print-server', 'template.mjs')).href)
+  const printer = await findCardPrinter(config, event.sender)
+  const b = CARD_BACK_BLEED_MM
+  // Slot 2 alone: its image goes first, drawn at the slot-2 position.
+  const left = one ? config.slotLeftMm : config.slot2LeftMm
+  const top = one ? config.slotTopMm : config.slot2TopMm
+  const args = [
+    '-ImagePath', one || two,
+    '-PrinterName', printer,
+    '-DevmodeFile', unpackedPath('print-server', 'data', 'epson-card.devmode'),
+    '-JobName', 'Shiv card backs',
+    '-SlotLeftMm', String(left - b), '-SlotTopMm', String(top - b),
+    '-Slot2LeftMm', String(config.slot2LeftMm - b), '-Slot2TopMm', String(config.slot2TopMm - b),
+    '-CardWidthMm', String(CARD_W_MM + 2 * b), '-CardHeightMm', String(CARD_H_MM + 2 * b),
+    '-OffsetXmm', String(config.offsetXmm), '-OffsetYmm', String(config.offsetYmm),
+    '-ScalePercent', String(config.scalePercent),
+  ]
+  if (one && two) args.push('-ImagePath2', two)
+  const output = await runCardScript(args)
+  console.log(`[card-backs] ${printer} ${one ? path.basename(one) : '-'} | ${two ? path.basename(two) : '-'}`, output)
+  return { ok: true, printer }
 })
