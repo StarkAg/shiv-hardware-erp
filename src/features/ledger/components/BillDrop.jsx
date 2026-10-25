@@ -308,12 +308,15 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
                       before anyone reads the count. */}
                   {many && <span className="stack-leaf two" aria-hidden="true" />}
                   {many && <span className="stack-leaf one" aria-hidden="true" />}
+                  {/* The photo opens to be read; only the tick box puts it on
+                      the voucher. A click on the picture used to pick it, so
+                      looking at a bill attached it. */}
                   <button type="button" className="shot-pick"
-                    aria-label={`Select ${many ? `${unit.pages.length} phone photos` : 'phone photo'} ${queueNumbers(unit).map((number) => `#${queueLabel(number)}`).join(', ')}`}
+                    aria-label={`See ${many ? `${unit.pages.length} phone photos` : 'phone photo'} ${queueNumbers(unit).map((number) => `#${queueLabel(number)}`).join(', ')} bigger`}
                     onPointerEnter={(event) => showMagnifier(event, unit)}
                     onPointerMove={(event) => showMagnifier(event, unit)}
                     onPointerLeave={hideMagnifier}
-                    onClick={() => toggle(unit)}>
+                    onClick={() => openViewer(unit)}>
                     <img src={cover.url} alt="" loading="lazy" />
                   </button>
                   {cover.queueNo != null && <span className="shot-queue" title={queueNumbers(unit).map((number) => `#${queueLabel(number)}`).join(', ')}>{queueSummary(unit)}</span>}
@@ -331,10 +334,12 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
                     </div>
                   )}
                   <span className="shot-when">{shortDate(cover.at)}</span>
-                  {isPicked(unit) && <span className="shot-tick"><Check size={12} aria-hidden="true" /></span>}
-                  <button type="button" className="shot-zoom"
-                    aria-label={many ? 'See all pages' : 'See it bigger'}
-                    onClick={() => openViewer(unit)}>⤢</button>
+                  <button type="button" role="checkbox" aria-checked={isPicked(unit)}
+                    className={`shot-check${isPicked(unit) ? ' on' : ''}`}
+                    aria-label={`Use ${many ? `these ${unit.pages.length} photos` : 'this photo'} on the voucher`}
+                    onClick={() => toggle(unit)}>
+                    {isPicked(unit) && <Check size={18} strokeWidth={3} aria-hidden="true" />}
+                  </button>
                   <button type="button" className="shot-delete"
                     aria-label={`Delete phone photo ${cover.queueNo == null ? '' : `#${queueLabel(cover.queueNo)}`}`}
                     onClick={() => { setHovered(null); setToDelete(unit); }}>

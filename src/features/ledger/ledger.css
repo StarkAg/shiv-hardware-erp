@@ -564,18 +564,21 @@
 .ledger-root .fromphone-head{font-size: 10px; font-weight: 800; letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--muted);}
 .ledger-root .shot-tile.pickable{border: 1px solid var(--line); padding: 0;}
-.ledger-root .shot-pick{border: none; padding: 0; background: none; display: block; width: 100%; height: 100%; cursor: pointer;}
+.ledger-root .shot-pick{border: none; padding: 0; background: none; display: block; width: 100%; height: 100%; cursor: zoom-in;}
 .ledger-root .shot-pick img{width: 100%; height: 100%; object-fit: cover; display: block;}
-.ledger-root .shot-zoom{position: absolute; left: 4px; bottom: 4px; width: 22px; height: 22px;
-  border: none; border-radius: 7px; background: rgba(10, 9, 8, 0.66);
-  color: #f3f0ea; font-size: 12px; line-height: 1;
-  display: flex; align-items: center; justify-content: center;}
-.ledger-root .shot-zoom:hover{background: var(--brass); color: var(--brass-ink);}
 .ledger-root .shot-tile.pickable.on{border-color: var(--brass); box-shadow: inset 0 0 0 2px var(--brass);}
-.ledger-root .shot-tick{position: absolute; top: 5px; right: 5px; width: 21px; height: 21px;
-  border-radius: 50%; background: var(--brass); color: var(--brass-ink);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 900;}
+/* The tick box that puts a photo on the voucher: always there, empty until
+   ticked, on a 44px target so it is hit and the photo is not. */
+.ledger-root .shot-check{position: absolute; left: 0; bottom: 0; z-index: 4;
+  width: 44px; height: 44px; padding: 0; border: none; background: none; cursor: pointer;
+  display: grid; place-items: center; color: var(--brass-ink);}
+.ledger-root .shot-check::before{content: ""; position: absolute; width: 26px; height: 26px;
+  border: 2px solid #fff; border-radius: 7px; background: rgba(10, 9, 8, 0.55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);}
+.ledger-root .shot-check svg{position: relative;}
+.ledger-root .shot-check.on::before{background: var(--brass); border-color: var(--brass);}
+.ledger-root .shot-check:hover::before{border-color: var(--brass);}
+.ledger-root .shot-check:focus-visible{outline: 3px solid var(--brass); outline-offset: -6px; border-radius: 10px;}
 .ledger-root .capture{min-height: 100vh; padding: 20px 16px 40px;
   display: flex; flex-direction: column; align-items: center; gap: 18px;}
 .ledger-root .capture-head{display: flex; align-items: center; gap: 11px; align-self: flex-start;}
@@ -773,14 +776,6 @@ to{opacity: 0}}
   padding: 12px 7px 5px; font-size: 10px; font-weight: 700; color: #f3f0ea;
   background: linear-gradient(transparent, rgba(10, 9, 8, 0.72));
   text-align: right; pointer-events: none; letter-spacing: 0.02em;}
-.ledger-root .fromphone .shot-zoom{width: 26px; height: 26px; font-size: 14px;
-  opacity: 0; transition: opacity 90ms ease;}
-.ledger-root .fromphone .shot-tile:hover .shot-zoom,
-.ledger-root .fromphone .shot-zoom:focus-visible{opacity: 1;}
-/* Touch has no hover: there, the button is simply always there. */
-@media (hover: none){
-  .ledger-root .fromphone .shot-zoom{opacity: 1;}
-}
 .ledger-root .shot-tile.stack{position: relative; background: transparent; border: none; overflow: visible;}
 .ledger-root .stack-leaf{position: absolute; inset: 0 9px 9px 0; border-radius: 11px;
   background: var(--card2); border: 1px solid var(--line);
@@ -796,8 +791,7 @@ to{opacity: 0}}
   background: var(--brass); color: var(--brass-ink);
   font-size: 10px; font-weight: 900; letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;}
-.ledger-root .shot-tile.stack .shot-tick{z-index: 2; top: 5px; right: 14px;}
-.ledger-root .shot-tile.stack .shot-zoom{z-index: 2; left: 4px; bottom: 13px;}
+.ledger-root .shot-tile.stack .shot-check{bottom: 9px;}
 .ledger-root .voucher-shooter-link{margin: 0 0 12px; color: var(--muted); font-size: 12px;}
 .ledger-root .voucher-shooter-link a{color: var(--brass-text); font-weight: 800;}
 .ledger-root .fromphone .shot-queue{position: absolute; top: 6px; left: 6px; z-index: 3;
@@ -817,8 +811,6 @@ to{opacity: 0}}
 .ledger-root .fromphone .shot-split:focus-visible{background: var(--brass); color: var(--brass-ink);}
 .ledger-root .fromphone .shot-split:focus-visible{outline: 3px solid var(--brass); outline-offset: 2px;}
 .ledger-root .fromphone .shot-split:disabled{opacity: .6; cursor: progress;}
-.ledger-root .fromphone .shot-tick{top: 55px; right: 6px; z-index: 3;}
-.ledger-root .fromphone .shot-tile.stack .shot-tick{right: 14px;}
 /* Taking a file off the bill it is attached to: a small button on its corner. */
 .ledger-root .saved-attachments .shot-detach{position: absolute; top: 3px; right: 3px; z-index: 2;
   display: grid; place-items: center; width: 30px; height: 30px;
