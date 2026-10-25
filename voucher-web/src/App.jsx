@@ -162,6 +162,9 @@ export default function App() {
   const [crop, setCrop] = useState(loadCrop)
   // Counts shots; each new value replays the white flash over the screen.
   const [shot, setShot] = useState(0)
+  // The last shot was Page: the screen stays green while the bill in hand
+  // takes its 2nd, 3rd, 4th page, until the shutter starts a new bill.
+  const [adding, setAdding] = useState(false)
   const cropRef = useRef(crop)
   cropRef.current = crop
   // The photo whose Discard was tapped once; a second tap throws it away.
@@ -290,6 +293,7 @@ export default function App() {
     const groupId = group.current
     setPages((count) => (fresh ? 1 : count + 1))
     setShot((n) => n + 1)
+    setAdding(!fresh)
     navigator.vibrate?.(fresh ? 20 : [12, 40, 12])
     const { on, box } = cropRef.current
     const area = on ? cropArea(source, box) : undefined
@@ -413,8 +417,8 @@ export default function App() {
         </div>}
       </section>
 
-      {/* Over the whole screen, letting taps through: green while photos are going up, a flash at each shot. */}
-      <div className={`queue-tint${pending ? ' on' : ''}`} aria-hidden="true" />
+      {/* Over the whole screen, letting taps through: green while pages are being added to one bill, a flash at each shot. */}
+      <div className={`adding-tint${adding && pages > 0 ? ' on' : ''}`} aria-hidden="true" />
       {shot > 0 && <div key={shot} className="flash" aria-hidden="true" />}
     </main>
   )

@@ -76,9 +76,9 @@ h1, h2 { margin: 0; }
 .waiting .tile > button.sure { background: var(--stop); color: #fff; }
 .tile > button:active { background: var(--line); }
 
-/* The whole screen goes green while photos are still going up. */
-.queue-tint { position: fixed; inset: 0; z-index: 50; pointer-events: none; background: rgba(0, 122, 61, .2); box-shadow: inset 0 0 0 6px var(--safe); opacity: 0; transition: opacity .2s; }
-.queue-tint.on { opacity: 1; }
+/* The whole screen goes green while Page is adding to the bill in hand. */
+.adding-tint { position: fixed; inset: 0; z-index: 50; pointer-events: none; background: rgba(0, 122, 61, .2); box-shadow: inset 0 0 0 6px var(--safe); opacity: 0; transition: opacity .2s; }
+.adding-tint.on { opacity: 1; }
 /* A white flash at each shot, so a tap is seen to have taken. */
 .flash { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: #fff; opacity: 0; animation: flash .22s ease-out; }
 @keyframes flash { from { opacity: .85; } to { opacity: 0; } }
