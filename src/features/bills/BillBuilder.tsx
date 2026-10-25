@@ -2749,6 +2749,9 @@ export function BillBuilder() {
       customerPhone: c.mobile,
       customerPhone2: '',
       customerUid: c.uid ?? '',
+      // Found again by its name when posted: the account the bill was on is
+      // no longer the one it names (see postBill).
+      ledgerId: undefined,
     }))
     setShowCust(false)
   }
@@ -2908,7 +2911,7 @@ export function BillBuilder() {
         // Moving into or out of a quotation moves between the two series.
         ...(isQuotation({ kind }) !== isQuotation(d) ? { number: numberFor(kind) } : {}),
         ...(newParty
-          ? { customerName: toProperCase(newParty) }
+          ? { customerName: toProperCase(newParty), ledgerId: undefined }
           : crossed
             ? { customerName: '', customerPhone: '', customerPhone2: '', customerUid: '', ledgerId: undefined }
             : {}),
@@ -4517,6 +4520,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 setDraft((d) => ({
                   ...d,
                   customerName: name,
+                  ledgerId: undefined,
                   customerPhone: match ? match.mobile : someoneElses('mobile', d.customerPhone) ? '' : d.customerPhone,
                   ...(match ? { customerPhone2: '' } : {}),
                   customerUid: match ? (match.uid ?? '') : someoneElses('uid', d.customerUid) ? '' : d.customerUid,

@@ -6,7 +6,7 @@
  * RCT with no amount and an "Enter rates" button.
  */
 import { convexTest } from './trustedConvex'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'
 
@@ -57,4 +57,60 @@ describe('a money voucher with a goods line left on it', () => {
     expect(v?.status).toBe('final')
     expect(v?.amount).toBe(4000)
   })
+})
+
+/**
+ * Re-saving bill 21 (7 Sep) opened a second account: the bill still said
+ * "Santosh Singh Ji, Purnimandap" while the account had become "M/s Santosh
+ * Singh Jee, Purni Mandap", and posting looked the party up by the bill's name
+ * alone. A bill that already has its account keeps it when its name answers to
+ * no account; a name that is someone else's still moves it there.
+ */
+describe('a bill saved again after its account was renamed', () => {
+  async function posted(t: Awaited<ReturnType<typeof shop>>) {
+    const out = await t.mutation(api.billLedger.postBill, {
+      bill: {
+        id: 'b21', number: '21', date: '2026-09-07', customerName: 'Santosh Singh Ji, Purnimandap', kind: 'receipt',
+        items: [], moneyAmount: 1000, total: 1000, paid: false, paymentMode: 'cash',
+      },
+    } as any)
+    await t.run((ctx) => ctx.db.patch(out.ledgerId, { name: 'M/s Santosh Singh Jee, Purni Mandap' }))
+    return out
+  }
+  const accounts = (t: Awaited<ReturnType<typeof shop>>) =>
+    t.run(async (ctx) => (await ctx.db.query('ledgers').collect()).filter((l) => /santosh|other/i.test(l.name)).length)
+
+  test('stays on its account instead of opening a second one', async () => {
+    const t = await shop()
+    const first = await posted(t)
+    const again = await t.mutation(api.billLedger.postBill, { bill: first.bill } as any)
+    expect(again.ledgerId).toBe(first.ledgerId)
+    expect(await accounts(t)).toBe(1)
+  })
+
+  test('a name with no ledger id goes by the name, as a new bill does', async () => {
+    const t = await shop()
+    const first = await posted(t)
+    const again = await t.mutation(api.billLedger.postBill, {
+      bill: { ...first.bill, customerName: 'Some Other Customer', ledgerId: undefined },
+    } as any)
+    expect(again.ledgerId).not.toBe(first.ledgerId)
+  })
+})
+
+/** Undoing that second account: removing it gave its bookmark back only by hand. */
+test('removing an empty account gives its bookmark back', async () => {
+  vi.stubEnv('LEDGER_PIN', 'test-pin')
+  const t = await shop()
+  const id = await t.run(async (ctx) => {
+    const debtors = (await ctx.db.query('groups').collect()).find((g) => g.name === 'Sundry Debtors')!
+    const id = await ctx.db.insert('ledgers', {
+      name: 'M/s Duplicate', groupId: debtors._id, openingBalance: 0, openingSide: 'Dr', openingAsOf: 1, active: true, createdAt: 1, updatedAt: 1,
+    })
+    await ctx.db.insert('filingHolds', { partyLedgerId: id, slot: 298, at: 1 })
+    return id
+  })
+  await t.mutation(api.masters.removeLedger, { pin: 'test-pin', id } as any)
+  expect(await t.run((ctx) => ctx.db.query('filingHolds').collect())).toEqual([])
+  vi.unstubAllEnvs()
 })

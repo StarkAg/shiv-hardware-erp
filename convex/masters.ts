@@ -293,6 +293,11 @@ export const removeLedger = mutation({
 
     const ledger = await ctx.db.get(id);
     await ctx.db.delete(id);
+    // Its bookmark goes back on the table: a hold left behind kept the number
+    // taken by nobody, for good.
+    for (const hold of await ctx.db.query("filingHolds").collect()) {
+      if (hold.partyLedgerId === id) await ctx.db.delete(hold._id);
+    }
     const alsoGone = binned.length + binnedBills.length;
     await record(
       ctx,

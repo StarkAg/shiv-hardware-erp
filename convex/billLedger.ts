@@ -422,7 +422,17 @@ export const postBill = mutation({
 
     const pinned = args.partyLedgerId ? await ctx.db.get(args.partyLedgerId) : null
     if (args.partyLedgerId && !pinned) throw new Error('That account is no longer in the books.')
-    const ledgerId = pinned ? pinned._id : await openParty(ctx, customerName, {
+    /**
+     * A bill saved again keeps the account it is already on when its name
+     * answers to no account at all: the account was renamed after it. Bill 21
+     * still said "Santosh Singh Ji, Purnimandap" under "M/s Santosh Singh Jee,
+     * Purni Mandap", and looking it up by name alone opened a second account.
+     * A name changed on the counter clears the bill's account (BillBuilder), so
+     * this is only ever a name nobody touched.
+     */
+    const ownId = !pinned && bill.ledgerId ? ctx.db.normalizeId('ledgers', String(bill.ledgerId)) : null
+    const own = ownId && !(await findParty(ctx, customerName)) ? await ctx.db.get(ownId) : null
+    const ledgerId = pinned ? pinned._id : own ? own._id : await openParty(ctx, customerName, {
       phone: bill.customerPhone || undefined,
       aadhaar: bill.customerUid || undefined,
       group: spec.group,
