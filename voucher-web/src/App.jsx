@@ -160,6 +160,8 @@ export default function App() {
   const [pages, setPages] = useState(0)
   const [outgoing, setOutgoing] = useState([])
   const [crop, setCrop] = useState(loadCrop)
+  // Counts shots; each new value replays the white flash over the screen.
+  const [shot, setShot] = useState(0)
   const cropRef = useRef(crop)
   cropRef.current = crop
   // The photo whose Discard was tapped once; a second tap throws it away.
@@ -275,11 +277,20 @@ export default function App() {
     pumpRef.current?.()
   }, [])
 
-  const take = useCallback(() => {
+  /**
+   * One photo. `fresh` starts a new bill with it as page 1 (the shutter: most
+   * bills are one page); otherwise it is the next page of the bill in hand.
+   * A flash and a buzz say it was taken; a new bill buzzes once, a page twice,
+   * so the two can be told apart without looking.
+   */
+  const take = useCallback((fresh) => {
     const source = video.current
     if (!source?.videoWidth) return
+    if (fresh) group.current = newGroup()
     const groupId = group.current
-    setPages((count) => count + 1)
+    setPages((count) => (fresh ? 1 : count + 1))
+    setShot((n) => n + 1)
+    navigator.vibrate?.(fresh ? 20 : [12, 40, 12])
     const { on, box } = cropRef.current
     const area = on ? cropArea(source, box) : undefined
     compress(source, source.videoWidth, source.videoHeight, area).then((blob) => {
@@ -353,10 +364,11 @@ export default function App() {
         <section className="controls">
           <p className="eyebrow" aria-live="polite">Current bill · {pages} {pages === 1 ? 'page' : 'pages'}</p>
           <div className="buttons">
-            <button type="button" className="secondary" onClick={() => { group.current = newGroup(); setPages(0) }}>
-              New bill
+            <button type="button" className="secondary page" aria-label="Add a page to this bill" disabled={!cameraReady} onClick={() => take(false)}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15h6" /></svg>
+              Page
             </button>
-            <button type="button" className="shutter" aria-label="Take bill photo" disabled={!cameraReady} onClick={take} />
+            <button type="button" className="shutter" aria-label="Take a new bill" disabled={!cameraReady} onClick={() => take(true)} />
             <button type="button" className="secondary" onClick={() => fileInput.current?.click()}>Choose photo</button>
             <input ref={fileInput} hidden type="file" accept="image/*" multiple onChange={(event) => {
               choose(event.target.files ?? [])
@@ -398,6 +410,10 @@ export default function App() {
           </div>)}
         </div>}
       </section>
+
+      {/* Over the whole screen, letting taps through: green while photos are going up, a flash at each shot. */}
+      <div className={`queue-tint${pending ? ' on' : ''}`} aria-hidden="true" />
+      {shot > 0 && <div key={shot} className="flash" aria-hidden="true" />}
     </main>
   )
 }
