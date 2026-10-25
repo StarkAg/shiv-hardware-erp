@@ -14,15 +14,20 @@ import { useMutation } from 'convex/react';
 import { useNavigate } from 'react-router-dom';
 import { rupees, shortDate, aadhaarGroups, phoneDisplay, rowType } from '../lib/format';
 import { rememberPapers, rememberPartyPaper, warm } from '../../../lib/paperUrls';
+import { MONEY_BILL_KINDS } from '../../../lib/types';
 import PriceDialog from './PriceDialog';
 import Confirm from './Confirm';
 import { Bar, TableSkeleton } from './Skeleton';
 
 const BackIcon = () => <ChevronLeft size={18} aria-hidden="true" />;
 
-/** The goods on a bill — not its fare, discount, tax or round-off. */
+/**
+ * The goods on a bill — not its fare, discount, tax or round-off. A receipt,
+ * payment or refund has none: a line left on one is not goods waiting for a
+ * rate (RCT-0232 showed "15000 1 Pc" with Enter rates).
+ */
 const goodsOn = (bill) =>
-  (bill?.items ?? []).filter(
+  MONEY_BILL_KINDS.includes(bill?.kind) ? [] : (bill?.items ?? []).filter(
     (i) => String(i?.description ?? '').trim() && !i.isRoundup && !i.isDiscount && !i.auto && !i.amountOnly
   );
 

@@ -257,6 +257,12 @@ export const postBill = mutation({
     if (!customerName) throw new Error('This bill has no customer name, so there is no account to post it to.')
 
     let total = round2(Number(bill.total) || 0)
+    // A receipt, payment or refund is the money itself, as the bill screen
+    // works it, and a goods line left on one from before its kind was changed
+    // is no part of it. Kept, that line read as unpriced below: BILL-593, a
+    // ₹15,000 UPI receipt with a stray "15000 × 1 Pc", went into the books as
+    // a pending receipt with no amount, asking for rates.
+    if (KINDS[bill.kind as BillKind]?.settles) bill.items = []
     // A bill photograph or an unpriced delivery can be filed before its amount
     // is known. It becomes a pending voucher with no entries, so no balance is
     // changed until a real amount is entered later.

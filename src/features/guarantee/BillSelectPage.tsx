@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { useStore } from '../../lib/store'
+import { MONEY_BILL_KINDS } from '../../lib/types'
 
 export function BillSelectPage() {
   const navigate = useNavigate()
@@ -11,9 +12,10 @@ export function BillSelectPage() {
     (location.state as { returnTo?: string })?.returnTo ?? '/guarantee/card'
 
   // Every bill is a saved bill now — there are no drafts to leave out, and
-  // filtering on the old flag would hide bills written before it went.
+  // filtering on the old flag would hide bills written before it went. A
+  // receipt, payment or refund is money, not goods, so it carries no guarantee.
   const savedBills = bills
-    .slice()
+    .filter((b) => !MONEY_BILL_KINDS.includes(b.kind ?? 'sale'))
     .sort((a, b) => b.date.localeCompare(a.date))
 
   function openBill(billId: string) {
