@@ -17,6 +17,17 @@ import { useLedgerTheme } from './useLedgerTheme'
  *  - it reads the same Convex deployment as everything else, so the books it
  *    shows are the books the bills post into
  */
+/** The tabs Party Accounts covers; Trial Balance and the rest have their own links. */
+const PARTY_TABS = ['all', 'customers', 'suppliers']
+const KEPT = 'shiv-panel:ledger-open'
+// Kept for this window only, and a private window may refuse it.
+function keepOpen(path: string) {
+  try { sessionStorage.setItem(KEPT, path) } catch { /* not kept; the list opens instead */ }
+}
+function openKept() {
+  try { return sessionStorage.getItem(KEPT) } catch { return null }
+}
+
 export function Ledger() {
   const dark = useLedgerTheme()
 
@@ -26,6 +37,11 @@ export function Ledger() {
   const { tab, partyId } = useParams()
   const navigate = useNavigate()
 
+  // `?new=sale` opens that voucher form — how the sidebar's Vouchers menu and
+  // the phone's home-screen shortcuts both get in. Cleared once it has opened,
+  // so a refresh or a back step doesn't pop the form up again.
+  const [params, setParams] = useSearchParams()
+
   // The ledger's own day book was the same vouchers in the same table, one tab
   // deep. It is the panel's Day Book now, so old links go there.
   useEffect(() => {
@@ -33,13 +49,17 @@ export function Ledger() {
   }, [tab, navigate])
   const onRoute = useCallback((nextTab: string, nextParty: string | null) => {
     const path = `/ledger/${nextTab}${nextParty ? `/${nextParty}` : ''}`
+    if (PARTY_TABS.includes(nextTab)) keepOpen(path)
     if (path !== window.location.hash.replace(/^#/, '')) navigate(path, { replace: true })
   }, [navigate])
 
-  // `?new=sale` opens that voucher form — how the sidebar's Vouchers menu and
-  // the phone's home-screen shortcuts both get in. Cleared once it has opened,
-  // so a refresh or a back step doesn't pop the form up again.
-  const [params, setParams] = useSearchParams()
+  // Party Accounts in the sidebar is the bare /ledger: it comes back to the
+  // account that was open, so a look at Home or a bill does not lose it. A link
+  // to a tab or an account still lands where it says, and Back closes it.
+  const kept = !tab && !partyId && !params.toString() ? openKept() : null
+  useEffect(() => {
+    if (kept) navigate(kept, { replace: true })
+  }, [kept, navigate])
   const newVoucher = params.get('new')
   const consumeNew = useCallback(() => {
     setParams({}, { replace: true })
@@ -60,6 +80,10 @@ export function Ledger() {
     })
     navigate(`/bills?${query}`)
   }, [navigate])
+
+  // Not drawn on the way back: it would open on its first tab and write that
+  // over what was kept.
+  if (kept) return null
 
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
