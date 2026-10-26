@@ -48,6 +48,18 @@ const APP_TITLE = IS_QUOTATION_APP ? 'Shiv Counter' : 'Shiv Hardware Panel'
 // a new folder would have started it empty — cards, settings and all.
 if (IS_QUOTATION_APP) app.setPath('userData', path.join(app.getPath('appData'), 'Shiv Quotation'))
 
+// One window per app: opened again (the shortcut clicked twice), the window
+// already open comes to the front instead of a second copy starting. The lock
+// goes by the data folder, so Shiv Counter and the panel don't stop each other.
+const FIRST_COPY = app.requestSingleInstanceLock()
+if (!FIRST_COPY) app.quit()
+app.on('second-instance', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+})
+
 function appIconPath() {
   const icon = IS_QUOTATION_APP ? 'quotation-icon.ico' : 'favicon.ico'
   return app.isPackaged
@@ -250,6 +262,7 @@ function setupAutoUpdater() {
 }
 
 app.whenReady().then(() => {
+  if (!FIRST_COPY) return
   createWindow()
   setupAutoUpdater()
 
