@@ -172,6 +172,23 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
     viewBill(shownOf(unit));
   };
 
+  // A click on a phone photo opens it, a double click picks it. The open waits
+  // a moment so the second click of a double can call it off; a key press
+  // (detail 0) opens at once.
+  const clickOpen = useRef(null);
+  const cancelClickOpen = () => { if (clickOpen.current) clearTimeout(clickOpen.current); clickOpen.current = null; };
+  useEffect(() => cancelClickOpen, []);
+  const clickPhoto = (event, unit) => {
+    cancelClickOpen();
+    if (event.detail === 0) { openViewer(unit); return; }
+    if (event.detail > 1) return;
+    clickOpen.current = setTimeout(() => { clickOpen.current = null; openViewer(unit); }, 250);
+  };
+  const doubleClickPhoto = (unit) => {
+    cancelClickOpen();
+    toggle(unit);
+  };
+
   const showMagnifier = (event, unit) => {
     if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
     clearHoverClose();
@@ -294,15 +311,16 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
                       before anyone reads the count. */}
                   {many && <span className="stack-leaf two" aria-hidden="true" />}
                   {many && <span className="stack-leaf one" aria-hidden="true" />}
-                  {/* The photo opens to be read; only the tick box puts it on
-                      the voucher. A click on the picture used to pick it, so
-                      looking at a bill attached it. */}
+                  {/* A click opens the photo to be read; a double click or the
+                      tick box puts it on the voucher. A single click used to
+                      pick it, so looking at a bill attached it. */}
                   <button type="button" className="shot-pick"
                     aria-label={`See ${many ? `${unit.pages.length} phone photos` : 'phone photo'} ${queueNumbers(unit).map((number) => `#${queueLabel(number)}`).join(', ')} bigger`}
                     onPointerEnter={(event) => showMagnifier(event, unit)}
                     onPointerMove={(event) => showMagnifier(event, unit)}
                     onPointerLeave={hideMagnifier}
-                    onClick={() => openViewer(unit)}>
+                    onClick={(event) => clickPhoto(event, unit)}
+                    onDoubleClick={() => doubleClickPhoto(unit)}>
                     <img src={cover.url} alt="" loading="lazy" />
                   </button>
                   {cover.queueNo != null && <span className="shot-queue" title={queueNumbers(unit).map((number) => `#${queueLabel(number)}`).join(', ')}>{queueSummary(unit)}</span>}
