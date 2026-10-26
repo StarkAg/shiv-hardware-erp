@@ -108,7 +108,7 @@ type Props = {
 }
 
 /** How close a photo opens: a little more than the whole page. */
-const OPEN_ZOOM = 1.5
+const OPEN_ZOOM = 1.25
 
 /** What a photo shown among others is on (BillViewer photoStrip). */
 type Entry = { type: string; number: string; date: string; amount: string; refNo: string; party: string; paper: string }
