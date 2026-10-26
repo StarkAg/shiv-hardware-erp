@@ -56,6 +56,11 @@ function fmtDim(d) {
 function itemSize(it) {
   return (it.sizeLabel && String(it.sizeLabel).trim()) || fmtSize(it.height, it.width)
 }
+/** The size in its columns: the bill's own words in one, else height and width apart. */
+function sizeParts(it) {
+  const label = it.sizeLabel && String(it.sizeLabel).trim()
+  return label ? { label } : { h: fmtDim(it.height), w: fmtDim(it.width) }
+}
 function fmtSize(h, w) {
   const a = fmtDim(h)
   const b = fmtDim(w)
@@ -227,11 +232,20 @@ function CardView({ doc, number, token, claims, onClaimed }) {
                 ) : null}
                 {g.items.map((it, j) => {
                   const qty = Number(it.qty) || 0
-                  const spec = [fmtThickness(it.thickness), itemSize(it), qty ? `${qty} ${qty === 1 ? 'pc' : 'pcs'}` : ''].filter(Boolean)
+                  const thick = fmtThickness(it.thickness)
+                  const size = sizeParts(it)
+                  const hasSize = Boolean(size.label || size.h || size.w)
+                  const pcs = qty ? `${qty} ${qty === 1 ? 'pc' : 'pcs'}` : ''
                   return (
                     <li key={j}>
-                      {/* Each part kept whole: a line breaks between "81″ × 36″" and "4 pcs", never inside one. */}
-                      <span className="spec">{spec.length ? spec.map((s, k) => <span key={k}>{k ? ' · ' : ''}<span>{s}</span></span>) : '—'}</span>
+                      {/* One cell per part, so the ×, the widths and the pieces stand in columns down the card. */}
+                      <span className="c c-t">{thick || (hasSize || pcs ? '' : '—')}</span>
+                      {size.label ? <span className="c c-s">{size.label}</span> : <>
+                        <span className="c c-h">{size.h}</span>
+                        <span className="c c-x">{size.h && size.w ? '×' : ''}</span>
+                        <span className="c c-w">{size.w}</span>
+                      </>}
+                      <span className="c c-q">{pcs}</span>
                       {Number(it.amount) ? <span className="amt">{rupees(it.amount)}</span> : null}
                     </li>
                   )
