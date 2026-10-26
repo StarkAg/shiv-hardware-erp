@@ -72,10 +72,11 @@ function maskUid(uid) {
   const digits = String(uid || '').replace(/\D/g, '')
   return digits.length >= 4 ? `XXXX XXXX ${digits.slice(-4)}` : uid || 'N/A'
 }
-// The wax seals (public/assets, the web versions from the shop site's card page). One goes
-// on the card by the total, pressed at the angle a hand would leave it. The angle comes
-// from the card number, so a card looks the same every time it is opened. A period with
-// no seal of its own has none: the years stamped on the wood already say it.
+// The wax seals (public/assets, the web versions from the shop site's card page, as WebP:
+// an eighth of the PNG's weight on a slow line). One goes on the card by the total,
+// pressed at the angle a hand would leave it. The angle comes from the card number, so a
+// card looks the same every time it is opened. A period with no seal of its own has none:
+// the years stamped on the wood already say it.
 const SEAL_YEARS = [1, 3, 7, 10, 20, 25]
 function stampPose(seed) {
   // -span/2 .. +span/2, from its own FNV-1a hash per value so they vary independently.
@@ -96,7 +97,7 @@ function Seal({ years, seed }) {
   if (!SEAL_YEARS.includes(years)) return null
   const { turn, x, y } = stampPose(seed)
   const style = { '--turn': `${turn.toFixed(1)}deg`, '--dx': `${x}px`, '--dy': `${y}px` }
-  return <img className="gc-seal" style={style} src={`/assets/seal-${years}yr.png`} alt={`${years} year guarantee seal`} width="264" height="264" />
+  return <img className="gc-seal" style={style} src={`/assets/seal-${years}yr.webp`} alt={`${years} year guarantee seal`} width="264" height="264" decoding="async" />
 }
 const rupees = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
 // Rows of one brand (and one guarantee period) together, in the card's order: the brand
