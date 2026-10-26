@@ -16,6 +16,12 @@ copy of the tool there).
   which spent Vercel's 100 deployments a day; `vercel.json` turns that off.
   Everything goes live with `npm run deploy` (it sends only the parts that
   changed; `-- --only panel` for the panel alone).
+- The guarantee card is rendered by TWO separate apps that share one design: the
+  gcvf QR link here (`qr-redirect/`, deployed with `npm run deploy -- --only qr`)
+  and the Shiv Hardware shop site (separate repo StarkAg/shivhardware,
+  `app/Gaurantee/[number]/page.jsx`, which auto-deploys on push). Any change to the
+  guarantee card must be shipped to BOTH, or one link shows the old card: push for
+  the shop site (its deploy is automatic) AND `npm run deploy -- --only qr` here.
 - No emojis anywhere in the project: not in any app's screens, printed bills,
   generated HTML, WhatsApp text or log lines. Use an icon: lucide-react in the
   panel (`src/`), the app's own inline SVG icons in cash-web, order-web, sort-web
