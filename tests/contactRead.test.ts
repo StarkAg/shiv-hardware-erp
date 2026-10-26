@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { numberToFill, parseAadhaar, parseContactRead, parseMobile, verhoeffValid } from '../convex/lib/contactRead'
+import { nameToFill, numberToFill, parseAadhaar, parseContactRead, parseMobile, verhoeffValid } from '../convex/lib/contactRead'
 import { SHOP } from '../src/lib/types'
 
 /**
@@ -114,5 +114,31 @@ describe('numberToFill', () => {
 
   it('fills nothing when nothing read is whole', () => {
     expect(numberToFill('', parseContactRead({ phones: ['98765?3210'] }).phones)).toBeNull()
+  })
+})
+
+describe('nameToFill', () => {
+  const fold = (s: string) => s.toLowerCase().replace(/^m\/s\s*/, '').replace(/\s+/g, ' ').trim()
+  const nutan = { name: 'M/s Nutan Jewellers, Gola', mobile: '9693991196' }
+  const ravi = { name: 'Ravi Kumar', mobile: '7004416864', uid: '234123412346' }
+  const accounts = [nutan, ravi]
+
+  it('names the account that holds the mobile read off a slip with no name on it', () => {
+    expect(nameToFill('', parseContactRead({ phones: ['96939 91196'] }, OWN), accounts, fold)).toBe(nutan)
+  })
+
+  it('names the account that holds the Aadhaar read', () => {
+    expect(nameToFill('', parseContactRead({ uids: ['2341 2341 2346'] }, OWN), accounts, fold)).toBe(ravi)
+  })
+
+  it('takes a written name as the account spells it, or as written when there is none', () => {
+    expect(nameToFill('', parseContactRead({ name: 'nutan jewellers,  gola' }, OWN), accounts, fold)).toBe(nutan)
+    expect(nameToFill('', parseContactRead({ name: 'Sunil Sahu' }, OWN), accounts, fold)).toEqual({ name: 'Sunil Sahu', mobile: '' })
+  })
+
+  it('never names over a name in the box, nor by a number two accounts share', () => {
+    expect(nameToFill('Someone', parseContactRead({ phones: ['9693991196'] }, OWN), accounts, fold)).toBeNull()
+    const twin = { name: 'Gola Traders', mobile: '9693991196' }
+    expect(nameToFill('', parseContactRead({ phones: ['9693991196'] }, OWN), [...accounts, twin], fold)).toBeNull()
   })
 })

@@ -24,7 +24,8 @@ export type ReadNumber = {
   number: string | null
 }
 
-export type ContactRead = { phones: ReadNumber[]; uids: ReadNumber[] }
+/** `name`: the customer's name as written on the slip, when one is. */
+export type ContactRead = { phones: ReadNumber[]; uids: ReadNumber[]; name?: string }
 
 /** The digits of a number as written: spaces, dashes, dots and brackets go. */
 function bare(raw: string): string {
@@ -93,9 +94,10 @@ export function parseAadhaar(raw: string): string | null {
  * The same number read twice is listed once; the shop's own (`own`) not at all.
  */
 export function parseContactRead(
-  read: { phones?: readonly string[]; uids?: readonly string[] },
+  read: { phones?: readonly string[]; uids?: readonly string[]; name?: string },
   own: readonly string[] = [],
 ): ContactRead {
+  const name = String(read.name ?? '').replace(/\s+/g, ' ').trim()
   const list = (raws: readonly string[] | undefined, parse: (raw: string) => string | null) => {
     const seen = new Set<string>()
     const out: ReadNumber[] = []
@@ -116,7 +118,34 @@ export function parseContactRead(
   return {
     phones: list(read.phones, (raw) => parseMobile(raw)),
     uids: list(read.uids, parseAadhaar),
+    ...(name ? { name } : {}),
   }
+}
+
+/** An account as the name box offers it. */
+export type NamedAccount = { name: string; mobile: string; uid?: string }
+
+/**
+ * The customer to put in an empty name box from what a photo said. Most slips
+ * carry only a number, so the number comes first: the one account holding a
+ * mobile or Aadhaar read off it. Then a name written on the slip, as the
+ * account of that name (spelt as the account has it) or, with none, as written.
+ * A number two accounts share names neither. `fold` sets case, spacing and
+ * "M/s" aside (convex/lib/text foldName).
+ */
+export function nameToFill(
+  current: string | undefined,
+  read: ContactRead,
+  accounts: readonly NamedAccount[],
+  fold: (name: string) => string,
+): NamedAccount | null {
+  if ((current ?? '').trim()) return null
+  const numbers = new Set([...read.phones, ...read.uids].map((r) => r.number).filter(Boolean))
+  const holders = accounts.filter((a) => (a.mobile && numbers.has(a.mobile)) || (a.uid && numbers.has(a.uid)))
+  if (new Set(holders.map((a) => fold(a.name))).size === 1) return holders[0]
+  const written = read.name ?? ''
+  if (!fold(written)) return null
+  return accounts.find((a) => fold(a.name) === fold(written)) ?? { name: written, mobile: '' }
 }
 
 /**

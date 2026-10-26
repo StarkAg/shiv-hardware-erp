@@ -2652,7 +2652,8 @@ async function mustBeOnWhatsApp(jid, rawMobile) {
 
 // A file (an account statement as a PDF) into a customer's chat, from the
 // shop's number. Sent when someone presses the button, never on its own.
-// `rawMobile` 'group' sends to the shop's own group ("Shiv Hardware").
+// `rawMobile` 'group' sends to the shop's own group ("Shiv Hardware"). A JPG
+// (a bill photo from the viewer) goes as a photo, seen in the chat, not a file.
 async function sendWhatsAppDocumentTo(rawMobile, { data, fileName, mimetype = 'application/pdf', caption = '' }) {
   const buffer = Buffer.from(String(data ?? ''), 'base64')
   if (!buffer.length) throw new Error('Nothing to send.')
@@ -2663,7 +2664,10 @@ async function sendWhatsAppDocumentTo(rawMobile, { data, fileName, mimetype = 'a
     jid = await whatsappReadyFor(rawMobile)
     await mustBeOnWhatsApp(jid, rawMobile)
   }
-  await whatsappSock.sendMessage(jid, { document: buffer, mimetype, fileName, ...(caption ? { caption } : {}) })
+  const content = /^image\/(jpeg|png)$/.test(mimetype)
+    ? { image: buffer, mimetype }
+    : { document: buffer, mimetype, fileName }
+  await whatsappSock.sendMessage(jid, { ...content, ...(caption ? { caption } : {}) })
   console.log(`[whatsapp-send] ${fileName} (${buffer.length} bytes) to ${jid}`)
   return { jid }
 }

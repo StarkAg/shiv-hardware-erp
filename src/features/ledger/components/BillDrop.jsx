@@ -108,12 +108,17 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
       contentType: 'image/jpeg',
     }));
 
-  /** A waiting bill as the viewer takes it: its pages, and where it came from. */
+  /**
+   * A waiting bill as the viewer takes it: its pages, and where it came from.
+   * `phonePages` are its queue rows, for the voucher being filled beside it to
+   * take as its own (BillBuilder).
+   */
   const shownOf = (unit) => ({
     party: unit.pages.length > 1 ? `From the phone · ${unit.pages.length} pages` : 'From the phone',
     date: unit.pages[0].at,
     vchLabel: '',
     attachmentUrls: asAttachments(unit.pages),
+    phonePages: unit.pages,
   });
   /**
    * The first bill photo still waiting to be filed, told to whoever asks

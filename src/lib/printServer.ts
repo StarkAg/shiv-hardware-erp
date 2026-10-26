@@ -544,7 +544,7 @@ export async function sendGuaranteeWhatsApp(mobile: string, name = ''): Promise<
  * Throws a TypeError when the shop PC cannot be reached, so the caller can
  * share the file another way.
  */
-export async function sendWhatsAppDocument(mobile: string, blob: Blob, fileName: string): Promise<{ jid: string }> {
+export async function sendWhatsAppDocument(mobile: string, blob: Blob, fileName: string, caption = ''): Promise<{ jid: string }> {
   const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''))
@@ -554,7 +554,7 @@ export async function sendWhatsAppDocument(mobile: string, blob: Blob, fileName:
   const res = await fetchPrintServer('/whatsapp-send-document', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mobile, fileName, mimetype: blob.type || 'application/pdf', data }),
+    body: JSON.stringify({ mobile, fileName, mimetype: blob.type || 'application/pdf', data, caption }),
   }, 30_000)
   const json = await res.json().catch(() => null)
   if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Print server returned HTTP ${res.status}`)

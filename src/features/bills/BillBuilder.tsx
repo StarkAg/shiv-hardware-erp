@@ -81,7 +81,7 @@ import { keepTyped, rateForUnit, withUnitRate } from '../../lib/linePick'
 import { itemHistory, recallList, type ItemHistory, type RecalledItem } from '../../lib/itemHistory'
 import { lastSoldRates, openingRate, type SoldRate } from '../../lib/rateFill'
 import { canonicalUnit, foldName, isWithoutBillParty } from '../../../convex/lib/text'
-import { numberToFill, parseContactRead, type ContactRead, type ReadNumber } from '../../../convex/lib/contactRead'
+import { nameToFill, numberToFill, parseContactRead, type ContactRead, type ReadNumber } from '../../../convex/lib/contactRead'
 import { catalogChangesFor } from '../../lib/learnCatalog'
 import { paidByDefault, withPaidDefault } from '../../lib/paidDefault'
 import { AgainstDeliveries, CheckedBy, ChecksNotice, deliveryChecks, type DeliveryRow } from './Deliveries'
@@ -3040,10 +3040,10 @@ export function BillBuilder() {
   }, [paperOnBill, draft.id])
   // A new voucher starts from the paper: the first bill photo still waiting
   // to be filed (the first tile under "From the phone", told by BillDrop) is
-  // docked beside the form as it opens. It is only shown, not picked: picking
-  // is still a tap on its tile, so no voucher takes a photo it was not typed
-  // from. When that photo is filed or thrown away while it is still the one
-  // on show, the next waiting one takes its place.
+  // docked beside the form as it opens. It is ticked for the voucher once the
+  // voucher is being filled (see `filling` below), not on opening, so a
+  // voucher left empty takes nothing. When that photo is filed or thrown away
+  // while it is still the one on show, the next waiting one takes its place.
   const [waitingPaper, setWaitingPaper] = useState<{ key: string; shown: unknown } | null | undefined>(undefined)
   // The account's newest bill, for a new receipt or payment (see below).
   // Known at once when the account's ledger was open (lib/paperUrls); asked
@@ -3234,10 +3234,28 @@ export function BillBuilder() {
   }, [contactOnFile])
   const phoneKnown = !!contactOnFile?.phone && !changeContact && (draft.customerPhone ?? '') === contactOnFile.phone
   const uidKnown = !!contactOnFile?.uid && !changeContact && (draft.customerUid ?? '') === contactOnFile.uid
+  // A sale given an Aadhaar is a sale with a guarantee card: the card switches
+  // on the moment a whole UID lands on the bill — typed, from the account, or
+  // read off the photo. Only a change on the bill in hand does it, so a bill
+  // opened again is not put back on the Guarantee list (nor by the account's
+  // UID filling in a saved bill as it opens), and a card switched off by hand
+  // stays off.
+  const uidSeen = useRef({ id: draft.id, uid: draft.customerUid ?? '' })
+  useEffect(() => {
+    const uid = draft.customerUid ?? ''
+    const was = uidSeen.current
+    uidSeen.current = { id: draft.id, uid }
+    if (was.id !== draft.id || was.uid === uid || !/^\d{12}$/.test(uid)) return
+    if (readOnly || (draft.kind ?? 'sale') !== 'sale' || isQuotation(draft) || draft.guaranteeCard) return
+    if (uid === contactOnFile?.uid && bills.some((b) => b.id === draft.id)) return
+    setDraft((d) => (d.id === draft.id ? { ...d, guaranteeCard: true } : d))
+  }, [draft.id, draft.customerUid])
 
   /**
    * The customer's mobile and Aadhaar, read off each bill photo as it is
-   * attached (convex/ai.ts readContact). A whole number goes into an empty box
+   * attached or opened beside the voucher from the phone (convex/ai.ts
+   * readContact). An empty name box takes the account holding a number read,
+   * or the name written on the slip (nameToFill). A whole number goes into an empty box
    * only — never over one typed, never where the account has its own — and
    * what was read is shown under the box either way, so a misreading is seen
    * before the bill is saved. A box still holding the reading is yellow.
@@ -3248,22 +3266,25 @@ export function BillBuilder() {
   const contactTried = useRef<{ id: string; keys: Set<string> }>({ id: '', keys: new Set() })
   const contactOnFileRef = useRef(contactOnFile)
   contactOnFileRef.current = contactOnFile
+  const liveCustomersRef = useRef(liveCustomers)
+  liveCustomersRef.current = liveCustomers
   useEffect(() => {
     if (isSupplierVoucher) return
     const id = draft.id
     if (contactTried.current.id !== id) contactTried.current = { id, keys: new Set() }
     const tried = contactTried.current.keys
+    const shownPages = (photoShown as { phonePages?: PickedPhoto[] } | null)?.phonePages ?? []
     const fresh = [
-      ...photoPicked.map((p) => ({ key: `s:${p.storageId}`, storageId: p.storageId, file: undefined as File | undefined })),
+      ...[...photoPicked, ...shownPages].map((p) => ({ key: `s:${p.storageId}`, storageId: p.storageId, file: undefined as File | undefined })),
       ...photoFiles
         .filter((f) => f.type.startsWith('image/'))
         .map((f) => ({ key: `f:${f.name}:${f.size}:${f.lastModified}`, storageId: undefined as string | undefined, file: f })),
     ].filter((p) => !tried.has(p.key))
     if (!fresh.length) return
     for (const p of fresh) tried.add(p.key)
-    // Both numbers already in their boxes: nothing a reading could fill.
+    // The name and both numbers already in their boxes: nothing a reading could fill.
     const now = draftRef.current
-    if (now.id === id && now.customerPhone && now.customerUid) return
+    if (now.id === id && now.customerName.trim() && now.customerPhone && now.customerUid) return
 
     for (const photo of fresh) {
       setContactRead((r) => (r.id === id ? { ...r, reading: r.reading + 1 } : { id, reading: 1, phones: [], uids: [] }))
@@ -3279,26 +3300,34 @@ export function BillBuilder() {
           setContactRead((r) => {
             if (r.id !== id) return r
             const merge = (a: ReadNumber[], b: ReadNumber[]) => [...a, ...b.filter((x) => !a.some((y) => (y.number ?? y.raw) === (x.number ?? x.raw)))]
-            return { ...r, reading: Math.max(0, r.reading - 1), phones: merge(r.phones, read?.phones ?? []), uids: merge(r.uids, read?.uids ?? []) }
+            return { ...r, reading: Math.max(0, r.reading - 1), phones: merge(r.phones, read?.phones ?? []), uids: merge(r.uids, read?.uids ?? []), name: r.name || read?.name }
           })
           if (!read) return
           setDraft((d) => {
             if (d.id !== id) return d
-            const onFile = contactOnFileRef.current
-            const phone = onFile?.phone ? null : numberToFill(d.customerPhone, read.phones)
-            const uid = onFile?.uid ? null : numberToFill(d.customerUid, read.uids)
-            if (!phone && !uid) return d
+            const named = nameToFill(d.customerName, read, liveCustomersRef.current, foldName)
+            const onFile = named ? undefined : contactOnFileRef.current
+            const phone = onFile?.phone || named?.mobile ? null : numberToFill(d.customerPhone, read.phones)
+            const uid = onFile?.uid || named?.uid ? null : numberToFill(d.customerUid, read.uids)
+            const name = named ? {
+              customerName: toProperCase(withoutCourtesy(named.name)),
+              customerPhone2: '',
+              ledgerId: undefined,
+              ...(named.mobile ? { customerPhone: named.mobile } : {}),
+              ...(named.uid ? { customerUid: named.uid } : {}),
+            } : {}
+            if (!named && !phone && !uid) return d
             photoFilled.current = {
               id,
               phone: phone ?? (photoFilled.current.id === id ? photoFilled.current.phone : ''),
               uid: uid ?? (photoFilled.current.id === id ? photoFilled.current.uid : ''),
             }
-            return { ...d, ...(phone ? { customerPhone: phone } : {}), ...(uid ? { customerUid: uid } : {}) }
+            return { ...d, ...name, ...(phone ? { customerPhone: phone } : {}), ...(uid ? { customerUid: uid } : {}) }
           })
         })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoPicked, photoFiles, draft.id, isSupplierVoucher])
+  }, [photoPicked, photoFiles, photoShown, draft.id, isSupplierVoucher])
   const readHere = contactRead.id === draft.id ? contactRead : undefined
   const phoneFromPhoto = photoFilled.current.id === draft.id && !!draft.customerPhone && draft.customerPhone === photoFilled.current.phone
   const uidFromPhoto = photoFilled.current.id === draft.id && !!draft.customerUid && draft.customerUid === photoFilled.current.uid
@@ -3517,6 +3546,27 @@ export function BillBuilder() {
   // so what is previewed, printed and posted is always the same bill.
   const priced = useMemo(() => (isMoneyVoucher ? draft : withCharges(draft)), [draft, isMoneyVoucher])
   const total = isMoneyVoucher ? money + discount : calcTotal(priced.items)
+  /**
+   * A phone photo open beside the voucher being filled is the paper it is
+   * filled from, so it is ticked for it, as a tap on its tile would: once the
+   * voucher has a name, a line or an amount, and again for another phone photo
+   * opened instead. A tick or untick by hand (handPicked) is left alone for
+   * the rest of the voucher, as is a voucher with files dropped on it.
+   */
+  const filling = hasMeaningfulContent(draft) || total > 0
+  const autoPicked = useRef<{ id: string; ids: string; hand: boolean }>({ id: '', ids: '', hand: false })
+  if (autoPicked.current.id !== draft.id) autoPicked.current = { id: draft.id, ids: '', hand: false }
+  const handPicked = (next: PickedPhoto[]) => { autoPicked.current.hand = true; pickPhotos(next) }
+  useEffect(() => {
+    const pages = (photoShown as { phonePages?: PickedPhoto[] } | null)?.phonePages
+    const auto = autoPicked.current
+    if (!filling || !pages?.length || readOnly || auto.hand || photoFiles.length) return
+    const ids = pages.map((p) => p._id).join(',')
+    const now = photoPicked.map((p) => p._id).join(',')
+    if (now === ids || (now && now !== auto.ids)) return
+    auto.ids = ids
+    setPhotoPicked(pages)
+  }, [filling, photoShown, draft.id])
   const unpricedPurchase = draft.kind === 'purchase' &&
     (!(total > 0) || priced.items.some((item) =>
       item.description.trim() && !item.isRoundup && !item.isDiscount && !Number(item.amount)))
@@ -5160,7 +5210,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
               attached={papersOnBill}
               onChange={setPhotoFiles}
               picked={photoPicked}
-              onPick={pickPhotos}
+              onPick={handPicked}
               onViewBill={showPhoto}
               onWaiting={setWaitingPaper}
               onDetach={detachPaper}
