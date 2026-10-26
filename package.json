@@ -1,7 +1,7 @@
 {
   "name": "shiv-panel",
   "private": true,
-  "version": "0.1.16",
+  "version": "0.1.17",
   "type": "module",
   "main": "electron/main.cjs",
   "description": "Shiv Hardware Store — quotation, rate & guarantee-card panel with pixel-accurate A4 printing",
