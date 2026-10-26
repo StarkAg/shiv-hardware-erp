@@ -523,6 +523,9 @@ export default defineSchema({
     alias: v.optional(v.string()),
     place: v.optional(v.string()),
     phone: v.optional(v.string()),
+    // A second number for the same party (a son's, the shop's landline), as
+    // bills carry it in customerPhone2.
+    phone2: v.optional(v.string()),
     gstin: v.optional(v.string()),
     // Kept for customers on credit who have no GST number. Digits only.
     aadhaar: v.optional(v.string()),

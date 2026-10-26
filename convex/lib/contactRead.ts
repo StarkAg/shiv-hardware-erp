@@ -123,7 +123,7 @@ export function parseContactRead(
 }
 
 /** An account as the name box offers it. */
-export type NamedAccount = { name: string; mobile: string; uid?: string }
+export type NamedAccount = { name: string; mobile: string; mobile2?: string; uid?: string }
 
 /**
  * The customer to put in an empty name box from what a photo said. Most slips
@@ -141,11 +141,76 @@ export function nameToFill(
 ): NamedAccount | null {
   if ((current ?? '').trim()) return null
   const numbers = new Set([...read.phones, ...read.uids].map((r) => r.number).filter(Boolean))
-  const holders = accounts.filter((a) => (a.mobile && numbers.has(a.mobile)) || (a.uid && numbers.has(a.uid)))
+  const holders = accounts.filter((a) =>
+    (a.mobile && numbers.has(a.mobile)) || (a.mobile2 && numbers.has(a.mobile2)) || (a.uid && numbers.has(a.uid)))
   if (new Set(holders.map((a) => fold(a.name))).size === 1) return holders[0]
   const written = read.name ?? ''
   if (!fold(written)) return null
-  return accounts.find((a) => fold(a.name) === fold(written)) ?? { name: written, mobile: '' }
+  return accounts.find((a) => fold(a.name) === fold(written))
+    ?? likeAccount(written, accounts)
+    ?? { name: written, mobile: '' }
+}
+
+/** Words that say nothing about who it is: courtesies and joiners. */
+const NO_NAME = new Set(['m', 's', 'ms', 'mr', 'mrs', 'smt', 'shri', 'sri', 'ji', 'jee', 'and', 'the'])
+
+/** A name's words, lower case, its courtesies left out. */
+function nameWords(name: string): string[] {
+  return name.toLowerCase().replace(/m\/s/g, ' ').split(/[^a-z0-9]+/).filter((w) => w && !NO_NAME.has(w))
+}
+
+/** Letters to change to turn one word into the other (Levenshtein). */
+function editDistance(a: string, b: string): number {
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i]
+    for (let j = 1; j <= b.length; j++) {
+      next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    row = next
+  }
+  return row[b.length]
+}
+
+/**
+ * Two words a hand could have written for one: the same, a letter or two out
+ * (one in a short word, two in a long one), or one cut short of the other
+ * ("Jew." for "Jewellers").
+ */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true
+  const short = Math.min(a.length, b.length)
+  if (short >= 3 && (a.startsWith(b) || b.startsWith(a))) return true
+  if (short < 4) return false
+  return editDistance(a, b) <= (short >= 7 ? 2 : 1)
+}
+
+/**
+ * The account a name read off a slip is most like, when one stands out. Each
+ * written word is looked for among the account's; most of the written words
+ * must be found (or all of the account's own name), and the account whose own name (before its comma, the place
+ * after) is most covered wins. Two accounts as like as each other: neither.
+ */
+export function likeAccount<T extends NamedAccount>(written: string, accounts: readonly T[]): T | null {
+  const words = nameWords(written)
+  if (!words.length) return null
+  let best: { account: T; score: number } | null = null
+  let second = 0
+  for (const account of accounts) {
+    const [own, ...place] = account.name.split(',')
+    const ownWords = nameWords(own)
+    const all = [...ownWords, ...nameWords(place.join(' '))]
+    const found = words.filter((w) => all.some((x) => sameWord(w, x))).length
+    const share = found / words.length
+    const covered = ownWords.filter((x) => words.some((w) => sameWord(w, x))).length / Math.max(1, ownWords.length)
+    // Every word of the account's own name there, the place written another
+    // way ("Ramgarh" for "RMG"), is still that account.
+    if (share < 0.75 && !(covered === 1 && share >= 0.5)) continue
+    const score = share * 0.6 + covered * 0.4
+    if (!best || score > best.score) { second = best?.score ?? 0; best = { account, score } }
+    else if (score > second) second = score
+  }
+  return best && best.score >= 0.7 && best.score - second >= 0.1 ? best.account : null
 }
 
 /**

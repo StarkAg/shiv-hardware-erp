@@ -434,6 +434,7 @@ export const postBill = mutation({
     const own = ownId && !(await findParty(ctx, customerName)) ? await ctx.db.get(ownId) : null
     const ledgerId = pinned ? pinned._id : own ? own._id : await openParty(ctx, customerName, {
       phone: bill.customerPhone || undefined,
+      phone2: bill.customerPhone2 || undefined,
       aadhaar: bill.customerUid || undefined,
       group: spec.group,
     })

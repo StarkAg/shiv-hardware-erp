@@ -2255,6 +2255,8 @@ type PartyOption = {
   id: string
   name: string
   mobile: string
+  /** The party's second number, when it has one. */
+  mobile2?: string
   uid?: string
   /** True when this name is an account in the books, not just a name on a bill. */
   account?: boolean
@@ -2668,6 +2670,7 @@ export function BillBuilder() {
         id: l._id,
         name: l.name,
         mobile: l.phone ?? '',
+        mobile2: l.phone2 ?? '',
         uid: l.aadhaar ?? '',
         account: true,
         side: l.groupName === 'Sundry Creditors' ? 'Supplier' : 'Customer',
@@ -2697,6 +2700,7 @@ export function BillBuilder() {
           id: b.id,
           name: toProperCase(name),
           mobile: b.customerPhone ?? '',
+          mobile2: b.customerPhone2 ?? '',
           ...(b.customerUid ? { uid: b.customerUid } : {}),
         })
       }
@@ -2748,7 +2752,7 @@ export function BillBuilder() {
       ...d,
       customerName: toProperCase(withoutCourtesy(c.name)),
       customerPhone: c.mobile,
-      customerPhone2: '',
+      customerPhone2: c.mobile2 ?? '',
       customerUid: c.uid ?? '',
       // Found again by its name when posted: the account the bill was on is
       // no longer the one it names (see postBill).
@@ -3205,7 +3209,8 @@ export function BillBuilder() {
     if (!account) return undefined
     const phone = /^\d{10}$/.test(account.mobile) ? account.mobile : ''
     const uid = /^\d{12}$/.test(account.uid ?? '') ? account.uid ?? '' : ''
-    return phone || uid ? { id: account.id, phone, uid } : undefined
+    const phone2 = /^\d{10}$/.test(account.mobile2 ?? '') ? account.mobile2 ?? '' : ''
+    return phone || uid ? { id: account.id, phone, phone2, uid } : undefined
   }, [draft.customerName, liveCustomers])
   const [changeContact, setChangeContact] = useState(false)
   // The box for a second number, opened by its button; a bill that has one shows it anyway.
@@ -3222,11 +3227,14 @@ export function BillBuilder() {
       const soft = photoFilled.current.id === d.id ? photoFilled.current : undefined
       const phone = d.customerPhone && d.customerPhone !== soft?.phone ? d.customerPhone : ''
       const uid = d.customerUid && d.customerUid !== soft?.uid ? d.customerUid : ''
+      const phone2 = !d.customerPhone2 && contactOnFile.phone2 !== (phone || contactOnFile.phone) ? contactOnFile.phone2 : ''
       return (!phone && contactOnFile.phone && d.customerPhone !== contactOnFile.phone)
         || (!uid && contactOnFile.uid && d.customerUid !== contactOnFile.uid)
+        || phone2
         ? {
             ...d,
             customerPhone: phone || contactOnFile.phone || d.customerPhone,
+            ...(phone2 ? { customerPhone2: phone2 } : {}),
             customerUid: uid || contactOnFile.uid || d.customerUid,
           }
         : d
@@ -3311,7 +3319,7 @@ export function BillBuilder() {
             const uid = onFile?.uid || named?.uid ? null : numberToFill(d.customerUid, read.uids)
             const name = named ? {
               customerName: toProperCase(withoutCourtesy(named.name)),
-              customerPhone2: '',
+              customerPhone2: named.mobile2 ?? '',
               ledgerId: undefined,
               ...(named.mobile ? { customerPhone: named.mobile } : {}),
               ...(named.uid ? { customerUid: named.uid } : {}),
@@ -4566,7 +4574,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                   customerName: name,
                   ledgerId: undefined,
                   customerPhone: match ? match.mobile : someoneElses('mobile', d.customerPhone) ? '' : d.customerPhone,
-                  ...(match ? { customerPhone2: '' } : {}),
+                  ...(match ? { customerPhone2: match.mobile2 ?? '' } : {}),
                   customerUid: match ? (match.uid ?? '') : someoneElses('uid', d.customerUid) ? '' : d.customerUid,
                 }))
               }}

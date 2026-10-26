@@ -101,7 +101,7 @@ export function findPartyIn(all: Doc<'ledgers'>[], name: string): Doc<'ledgers'>
 export async function openParty(
   ctx: MutationCtx,
   name: string,
-  opts: { phone?: string; aadhaar?: string; group?: string } = {},
+  opts: { phone?: string; phone2?: string; aadhaar?: string; group?: string } = {},
 ): Promise<Id<'ledgers'>> {
   // Proper case on the way in, as the account form does it.
   const clean = properText(name)
@@ -109,6 +109,8 @@ export async function openParty(
 
   // A whole Aadhaar only: a half-typed one is not filed on the account.
   const aadhaar = /^\d{12}$/.test(opts.aadhaar ?? '') ? opts.aadhaar : undefined
+  // A whole second mobile only, and never the first one over again.
+  const phone2 = /^\d{10}$/.test(opts.phone2 ?? '') && opts.phone2 !== opts.phone ? opts.phone2 : undefined
 
   const existing = await findParty(ctx, clean)
   if (existing) {
@@ -118,6 +120,7 @@ export async function openParty(
     // customer's UID stayed on the bill only, and every new bill asked again.
     const fill = {
       ...(opts.phone && !existing.phone ? { phone: opts.phone } : {}),
+      ...(phone2 && !existing.phone2 && phone2 !== existing.phone ? { phone2 } : {}),
       ...(aadhaar && !existing.aadhaar ? { aadhaar } : {}),
     }
     if (Object.keys(fill).length) await ctx.db.patch(existing._id, { ...fill, updatedAt: Date.now() })
@@ -151,6 +154,7 @@ export async function openParty(
     name: filedAs,
     groupId: under._id,
     ...(opts.phone ? { phone: opts.phone } : {}),
+    ...(phone2 ? { phone2 } : {}),
     ...(aadhaar ? { aadhaar } : {}),
     openingBalance: 0,
     openingSide: groupName === 'Sundry Creditors' ? ('Cr' as const) : ('Dr' as const),

@@ -196,7 +196,7 @@ export async function statementPdf(data, { onPhoto } = {}) {
   font(9);
   [
     account.place,
-    phoneDisplay(account.phone),
+    [phoneDisplay(account.phone), phoneDisplay(account.phone2)].filter(Boolean).join(' / '),
     account.gstin && `GSTIN ${account.gstin}`,
     account.aadhaar && `Aadhaar XXXX XXXX ${String(account.aadhaar).slice(-4)}`,
   ].filter(Boolean).forEach((text, i) => pdf.text(text, MARGIN, y + 30 + i * 12));

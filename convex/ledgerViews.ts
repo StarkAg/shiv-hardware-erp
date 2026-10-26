@@ -21,7 +21,7 @@ export const parties = query({
     const q = (search ?? '').trim().toLowerCase()
     if (q) {
       ledgers = ledgers.filter(
-        (l) => l.name.toLowerCase().includes(q) || (l.phone ?? '').includes(q),
+        (l) => l.name.toLowerCase().includes(q) || (l.phone ?? '').includes(q) || (l.phone2 ?? '').includes(q),
       )
     }
 

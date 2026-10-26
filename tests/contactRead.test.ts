@@ -136,6 +136,31 @@ describe('nameToFill', () => {
     expect(nameToFill('', parseContactRead({ name: 'Sunil Sahu' }, OWN), accounts, fold)).toEqual({ name: 'Sunil Sahu', mobile: '' })
   })
 
+  it('names the account holding the second number read', () => {
+    const sahil = { name: 'M/s Sahil Kumar Ji, RMG', mobile: '9334820113', mobile2: '8877665544' }
+    expect(nameToFill('', parseContactRead({ phones: ['88776 65544'] }, OWN), [...accounts, sahil], fold)).toBe(sahil)
+  })
+
+  it('finds the existing customer in a name written loosely', () => {
+    const sahil = { name: 'M/s Sahil Kumar Ji, RMG', mobile: '' }
+    const sahilTraders = { name: 'M/s Sahil Traders, Gola', mobile: '' }
+    const book = [...accounts, sahil, sahilTraders]
+    const named = (name: string) => nameToFill('', parseContactRead({ name }, OWN), book, fold)
+    expect(named('Nutan Jwellers')).toBe(nutan)
+    expect(named('M/s Nutan Jew. Gola')).toBe(nutan)
+    expect(named('Sahil Kumar')).toBe(sahil)
+    expect(named('Sahil Kumar Ji Ramgarh')).toBe(sahil)
+    expect(named('Ravi Kumr')).toBe(ravi)
+  })
+
+  it('does not pick between accounts as like as each other, nor a name barely like one', () => {
+    const book = [...accounts, { name: 'M/s Sahil Kumar Ji, RMG', mobile: '' }, { name: 'M/s Sahil Traders, Gola', mobile: '' }]
+    const named = (name: string) => nameToFill('', parseContactRead({ name }, OWN), book, fold)
+    expect(named('Sahil')).toEqual({ name: 'Sahil', mobile: '' })
+    expect(named('Sunil Sahu')).toEqual({ name: 'Sunil Sahu', mobile: '' })
+    expect(named('Kumar Hardware')).toEqual({ name: 'Kumar Hardware', mobile: '' })
+  })
+
   it('never names over a name in the box, nor by a number two accounts share', () => {
     expect(nameToFill('Someone', parseContactRead({ phones: ['9693991196'] }, OWN), accounts, fold)).toBeNull()
     const twin = { name: 'Gola Traders', mobile: '9693991196' }
