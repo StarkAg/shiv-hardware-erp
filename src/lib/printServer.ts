@@ -561,6 +561,28 @@ export async function sendWhatsAppDocument(mobile: string, blob: Blob, fileName:
   return json as { jid: string }
 }
 
+/**
+ * Card backs into the Epson's tray slots, through the print server on the shop
+ * PC — the website's way; Shiv Counter on that PC prints them itself.
+ * `files` are design file names from cardBacks.json, null for an empty slot.
+ */
+export async function printCardBacksOnServer(files: (string | null)[]): Promise<{ printer: string }> {
+  let res: Response
+  try {
+    res = await fetchPrintServer('/print-card-backs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files }),
+    }, 120_000)
+  } catch (err) {
+    if (err instanceof TypeError) throw new Error('Cannot reach the shop PC. Use the shop Wi-Fi, with the print server running.')
+    throw err
+  }
+  const json = await res.json().catch(() => null)
+  if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Print server returned HTTP ${res.status}`)
+  return json as { printer: string }
+}
+
 export async function printOnServer(payload: ServerPrintPayload, copies = 1, printer?: string): Promise<ServerPrintResult> {
   try {
     const res = await fetchPrintServer('/print', {

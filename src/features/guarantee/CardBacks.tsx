@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from 'react'
 import { Copy, Printer, X } from 'lucide-react'
 import { Button, Card } from '../../components/ui'
 import { toast } from '../../components/Toast'
+import { printCardBacksOnServer } from '../../lib/printServer'
 import BACKS from './cardBacks.json'
 
 /**
@@ -33,7 +34,10 @@ export function CardBacks() {
   const [active, setActive] = useState<0 | 1>(0)
   const [years, setYears] = useState<number | null>(null)
   const [printing, setPrinting] = useState(false)
+  // Shiv Counter on the shop PC prints them itself; anywhere else (the
+  // website, an older Shiv Counter) they go through the shop PC's print server.
   const printBacks = window.shivDesktop?.printCardBacksDirect
+    ?? ((payload: { files: (string | null)[] }) => printCardBacksOnServer(payload.files))
   const shown = years == null ? ALL : ALL.filter((b) => b.years === years)
 
   function choose(back: CardBack) {
@@ -50,7 +54,7 @@ export function CardBacks() {
   }
 
   async function print() {
-    if (!printBacks || printing || (!slots[0] && !slots[1])) return
+    if (printing || (!slots[0] && !slots[1])) return
     const label = slots.map((b) => b?.name).filter(Boolean).join(' + ')
     setPrinting(true)
     toast(`Printing ${label}…`, 'info')
@@ -65,11 +69,6 @@ export function CardBacks() {
   }
 
   const chosen = slots.filter(Boolean).length
-  const cantPrint = !printBacks
-    ? window.shivDesktop
-      ? 'Install the new Shiv Counter to print card backs'
-      : 'Card backs print from Shiv Counter on the shop PC'
-    : ''
 
   return (
     <div className="mobile-panel-screen flex flex-col overflow-hidden">
@@ -181,13 +180,12 @@ export function CardBacks() {
                 </Button>
                 <Button
                   onClick={print}
-                  disabled={!printBacks || !chosen || printing}
+                  disabled={!chosen || printing}
                   className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold"
                 >
                   <Printer size={20} /> {printing ? 'Printing…' : chosen === 2 ? 'Print 2 backs' : 'Print back'}
                 </Button>
               </div>
-              {cantPrint && <p className="mt-2 text-center text-xs text-muted">{cantPrint}</p>}
             </Card>
           </aside>
         </div>

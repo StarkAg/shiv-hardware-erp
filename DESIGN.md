@@ -162,6 +162,7 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Orders, and its Workshop panel | `order-web/` | Signs, 11 Oct 2026 (what it prints is unchanged) |
 | Price List | `prices-web/` | Signs, 14 Oct 2026 (built in it) |
 | Mica Match | `mica-web/` | Signs lettering and shapes on a dark ground, 11 Oct 2026 |
+| Shiv Counter (desktop app and shivhardware-counter site) | `src/counter.tsx`, `src/counter-signs.css` | Signs, 26 Oct 2026, as a layer over the screens it shares with the panel (the panel's `stone` and brass colours read variables that only the counter changes). What prints, and its preview, is unchanged: `.a4-page`, `.print-root` and `.print-doc` keep the old look |
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Shiv Accounts | `khata-web/` | kept in the older parchment and brass look: Tony tried Signs on it on 11 Oct 2026 and wanted the earlier version back |
 | Everything else | | still the older parchment and brass look |

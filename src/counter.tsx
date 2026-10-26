@@ -5,6 +5,8 @@ import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
 import { PinGate } from './lib/deviceTrust/PinGate.jsx'
 import './index.css'
+// The Signs look over the shared screens (DESIGN.md); the panel keeps its own.
+import './counter-signs.css'
 import { CounterLayout } from './components/CounterLayout'
 import { ConvexSync } from './components/ConvexSync'
 import { QuotationBuilder } from './features/quotation/QuotationBuilder'
@@ -30,6 +32,9 @@ import { watchForNewBuild } from './lib/staleBuild'
 
 // The PDF and print code still load on first use; a tab from before a deploy reloads.
 watchForNewBuild()
+
+// A sign is white: no dark mode on the counter, whatever the panel was set to.
+document.documentElement.classList.remove('dark')
 
 // The counter opens on the quotation chooser; the recovery screens' Home
 // button goes there, not to the panel's /home.
