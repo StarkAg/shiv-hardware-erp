@@ -213,7 +213,7 @@ function CardView({ doc, number, token, claims, onClaimed }) {
         </div>
       ) : <div />}
 
-      <CardStage label={`Guarantee card ${number}`} rows={items.length}>
+      <CardStage label={`Guarantee card ${number}`}>
         <div className="gc-face gc-front">
           <div className="gc-no">Guarantee card <b>{number}</b></div>
           <div>
