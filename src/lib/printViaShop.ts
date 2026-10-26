@@ -1,5 +1,5 @@
 import { createCloudPrintJob, getCloudPrintJob } from './cloudApi'
-import { printOnServer, type ServerPrintPayload } from './printServer'
+import { printCardBacksOnServer, printOnServer, type ServerPrintPayload } from './printServer'
 
 /**
  * Printing on the shop PC from wherever the phone is.
@@ -34,6 +34,23 @@ export async function printViaShop(
         ...(payload.slot ? { slot: payload.slot } : {}),
         ...(payload.documents?.length ? { documents: payload.documents } : {}),
       })
+  if (onDone) void follow(id, onDone)
+  return { via: 'queue', jobId: id }
+}
+
+/** Card backs (design file names, slot 1 and 2) the same way: the shop PC directly, else the online queue. */
+export async function printCardBacksViaShop(
+  files: (string | null)[],
+  { onDone }: { onDone?: (result: { ok: true } | { ok: false; error: string }) => void } = {},
+): Promise<PrintOutcome> {
+  try {
+    const result = await printCardBacksOnServer(files)
+    return { via: 'shop', printer: result.printer }
+  } catch (err) {
+    // The shop PC answered and refused it: queueing it would fail the same way.
+    if (!/Cannot reach|Cannot find/.test(err instanceof Error ? err.message : '')) throw err
+  }
+  const { id } = await createCloudPrintJob({ kind: 'card-backs', files, source: 'web' })
   if (onDone) void follow(id, onDone)
   return { via: 'queue', jobId: id }
 }

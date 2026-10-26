@@ -2939,6 +2939,9 @@ async function printCloudJob(job) {
     return { files: results }
   }
 
+  // The Card backs screen on a phone away from the shop Wi-Fi.
+  if (job.kind === 'card-backs') return await printCardBacks(job.payload?.files)
+
   throw new Error(`Unsupported cloud print job kind: ${job.kind}`)
 }
 
@@ -3717,24 +3720,30 @@ app.get('/whatsapp-web/group/check', async (_req, res) => {
 // prints them itself (electron/main.cjs card:print-backs) with the same 3 mm bleed.
 const CARD_BACKS_DIR = fileURLToPath(new URL('../public/card-backs/', import.meta.url))
 const CARD_BACK_BLEED_MM = 3
+// `files`: design file names, slot 1 and slot 2, null for an empty slot.
+// Asked directly on the shop Wi-Fi, or from a phone through the online queue.
+async function printCardBacks(files) {
+  const pick = (name) => {
+    if (!name) return null
+    if (!/^[\w.-]+\.jpg$/.test(String(name))) throw new Error(`Not a card back: ${name}`)
+    const file = join(CARD_BACKS_DIR, String(name))
+    if (!existsSync(file)) throw new Error(`Card back not found on the shop PC: ${name}`)
+    return file
+  }
+  const [one, two] = (Array.isArray(files) ? files : []).slice(0, 2).map(pick)
+  if (!one && !two) throw new Error('No card back chosen')
+  await runPrintExclusive('card backs', () => printCardImageWithDevmode(one || two, 1, 'Shiv card backs', COLOR_PRINTER, {
+    slot: one ? 1 : 2,
+    filePath2: one && two ? two : null,
+    bleedMm: CARD_BACK_BLEED_MM,
+  }))
+  console.log(`[card-backs] ${COLOR_PRINTER} ${one ? basename(one) : '-'} | ${two ? basename(two) : '-'}`)
+  return { printer: COLOR_PRINTER }
+}
+
 app.post('/print-card-backs', async (req, res) => {
   try {
-    const pick = (name) => {
-      if (!name) return null
-      if (!/^[\w.-]+\.jpg$/.test(String(name))) throw new Error(`Not a card back: ${name}`)
-      const file = join(CARD_BACKS_DIR, String(name))
-      if (!existsSync(file)) throw new Error(`Card back not found on the shop PC: ${name}`)
-      return file
-    }
-    const [one, two] = (Array.isArray(req.body?.files) ? req.body.files : []).slice(0, 2).map(pick)
-    if (!one && !two) throw new Error('No card back chosen')
-    await runPrintExclusive('card backs', () => printCardImageWithDevmode(one || two, 1, 'Shiv card backs', COLOR_PRINTER, {
-      slot: one ? 1 : 2,
-      filePath2: one && two ? two : null,
-      bleedMm: CARD_BACK_BLEED_MM,
-    }))
-    console.log(`[card-backs] ${COLOR_PRINTER} ${one ? basename(one) : '-'} | ${two ? basename(two) : '-'}`)
-    res.json({ ok: true, printer: COLOR_PRINTER })
+    res.json({ ok: true, ...await printCardBacks(req.body?.files) })
   } catch (err) {
     res.status(400).json({ ok: false, error: String(err?.message ?? err) })
   }

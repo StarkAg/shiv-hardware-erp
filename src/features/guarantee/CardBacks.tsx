@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react'
 import { Copy, Printer, X } from 'lucide-react'
 import { Button, Card } from '../../components/ui'
 import { toast } from '../../components/Toast'
-import { printCardBacksOnServer } from '../../lib/printServer'
+import { printCardBacksViaShop } from '../../lib/printViaShop'
 import BACKS from './cardBacks.json'
 
 /**
@@ -35,9 +35,9 @@ export function CardBacks() {
   const [years, setYears] = useState<number | null>(null)
   const [printing, setPrinting] = useState(false)
   // Shiv Counter on the shop PC prints them itself; anywhere else (the
-  // website, an older Shiv Counter) they go through the shop PC's print server.
-  const printBacks = window.shivDesktop?.printCardBacksDirect
-    ?? ((payload: { files: (string | null)[] }) => printCardBacksOnServer(payload.files))
+  // website, an older Shiv Counter) they go to the shop PC's print server,
+  // on its Wi-Fi directly and from anywhere else through the online queue.
+  const printDirect = window.shivDesktop?.printCardBacksDirect
   const shown = years == null ? ALL : ALL.filter((b) => b.years === years)
 
   function choose(back: CardBack) {
@@ -58,9 +58,17 @@ export function CardBacks() {
     const label = slots.map((b) => b?.name).filter(Boolean).join(' + ')
     setPrinting(true)
     toast(`Printing ${label}…`, 'info')
+    const files = slots.map((b) => b?.file ?? null)
     try {
-      const result = await printBacks({ files: slots.map((b) => b?.file ?? null) })
-      toast(`Sent ${label} to ${result.printer}`)
+      if (printDirect) {
+        const result = await printDirect({ files })
+        toast(`Sent ${label} to ${result.printer}`)
+        return
+      }
+      const sent = await printCardBacksViaShop(files, {
+        onDone: (r) => toast(r.ok ? `${label} printed at the shop` : `${label} not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
+      })
+      toast(sent.via === 'shop' ? `Sent ${label} to ${sent.printer}` : `${label} sent to the shop PC`, sent.via === 'shop' ? 'ok' : 'info')
     } catch (err) {
       toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {

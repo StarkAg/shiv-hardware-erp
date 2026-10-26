@@ -3,7 +3,7 @@ import type { Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 import { deviceOf, mutation, query } from './lib/guarded'
 
-const jobKind = v.union(v.literal('quotation'), v.literal('guarantee'), v.literal('raw-file'))
+const jobKind = v.union(v.literal('quotation'), v.literal('guarantee'), v.literal('raw-file'), v.literal('card-backs'))
 const jobSource = v.union(v.literal('android'), v.literal('web'), v.literal('whatsapp'), v.literal('server'))
 
 const ACTIVE_LEASE_MS = 2 * 60 * 1000

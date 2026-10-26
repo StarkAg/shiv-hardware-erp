@@ -279,7 +279,7 @@ export default defineSchema({
 
   printJobs: defineTable({
     status: printJobStatus,
-    kind: v.union(v.literal('quotation'), v.literal('guarantee'), v.literal('raw-file')),
+    kind: v.union(v.literal('quotation'), v.literal('guarantee'), v.literal('raw-file'), v.literal('card-backs')),
     source: v.union(v.literal('android'), v.literal('web'), v.literal('whatsapp'), v.literal('server')),
     payload: v.any(),
     copies: v.number(),
