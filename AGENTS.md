@@ -31,3 +31,6 @@ copy of the tool there).
   blue = do this, green = done, yellow = wait, red = delete; Barlow lettering; one action
   at the foot of the screen). New screens follow it; an app still in the older parchment
   and brass look is brought over whole, not mixed. `workshop-web/` is the working copy.
+- Planned, not built: one-tap printing from a phone straight to the Epson over the
+  shop Wi-Fi, with the PC off (a Capacitor counter app sending IPP). What was found
+  and the plan: `docs/one-tap-phone-print.md`.

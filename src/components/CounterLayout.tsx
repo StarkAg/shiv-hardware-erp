@@ -95,11 +95,13 @@ export function CounterLayout() {
   }, [])
 
   return (
-    // The counter has no top bar on a phone, only the bottom tabs: the screen
-    // heights shared with the panel must not hold back the panel's 57px bar,
-    // just the phone's own status bar when installed full screen.
+    // The counter is one screen high and never scrolls as a page: the screen
+    // in use fills what is left above the tab bar (counter-signs.css gives
+    // .mobile-panel-screen the whole of <main>) and scrolls inside itself.
+    // Worked out from the panel's tab bar instead, it stopped short of the
+    // counter's, and an iPhone could slide the page up, leaving a grey band.
     <div
-      className="flex min-h-screen bg-stone-100"
+      className="flex h-[100dvh] overflow-hidden bg-stone-100"
       style={{ '--mobile-topbar-height': 'env(safe-area-inset-top, 0px)' } as CSSProperties}
     >
       <aside className="no-print hidden w-56 shrink-0 flex-col border-r-2 border-stone-900 bg-white md:flex">
@@ -136,15 +138,19 @@ export function CounterLayout() {
         </nav>
       </aside>
 
-      <main className="min-w-0 flex-1 pt-[env(safe-area-inset-top,0px)] pb-20 md:pb-0 md:pt-0">
+      <div className="flex min-w-0 flex-1 flex-col">
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] md:pt-0">
         <Outlet />
       </main>
 
       {/* Every row across the bottom on a phone, four in view and the rest a
-          swipe away; the page in use is scrolled into view. */}
+          swipe away; the page in use is scrolled into view. The tabs run to
+          the foot of the screen, over the iPhone's home bar strip, with only
+          part of that strip kept clear under their labels: the bar used to sit
+          on an empty white band. */}
       <nav
         ref={bar}
-        className="no-print fixed inset-x-0 bottom-0 z-40 flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain border-t-4 border-stone-900 bg-white pb-[env(safe-area-inset-bottom)] [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
+        className="no-print flex flex-none snap-x snap-mandatory overflow-x-auto overscroll-x-contain border-t-4 border-stone-900 bg-white [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
       >
         {rows.map((item) => (
           <NavLink
@@ -153,7 +159,7 @@ export function CounterLayout() {
             aria-label={item.label}
             data-on={owns(item.to, pathname) ? '1' : undefined}
             style={{ touchAction: 'manipulation' }}
-            className={`flex min-h-[3.75rem] w-1/4 shrink-0 snap-start flex-col items-center justify-center gap-1 px-0.5 text-xs font-bold uppercase leading-tight ${
+            className={`flex min-h-[3.75rem] w-1/4 shrink-0 snap-start flex-col items-center justify-center gap-1 px-0.5 pb-[calc(env(safe-area-inset-bottom)*0.5)] text-xs font-bold uppercase leading-tight ${
               owns(item.to, pathname)
                 ? 'bg-stone-900 text-white'
                 : 'text-stone-900'
@@ -164,6 +170,7 @@ export function CounterLayout() {
           </NavLink>
         ))}
       </nav>
+      </div>
 
       <Toaster />
     </div>

@@ -68,6 +68,9 @@ body {
   background: var(--bg);
 }
 
+/* A screen fills <main>, whatever the tab bar under it measures (CounterLayout). */
+.mobile-panel-screen { height: 100% !important; }
+
 /* Names, headings and buttons in the condensed sign lettering. */
 h1, h2, h3, .panel-button, nav a {
   font-family: var(--sign);

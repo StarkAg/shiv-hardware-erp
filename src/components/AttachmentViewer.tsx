@@ -284,25 +284,44 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
   /**
-   * The photo on screen straight into the Shiv Hardware WhatsApp group, from
-   * the shop's number on the shop PC, with what it is a bill of as its
-   * caption. Where the shop PC cannot be reached, the phone's share sheet.
+   * The bill on screen straight into the Shiv Hardware WhatsApp group, from
+   * the shop's number on the shop PC: the picture alone, no caption, and every
+   * page of it, one after another. Its pages are the photos of the same entry
+   * (the same caption; a viewer of one bill has none, so all of them). The page
+   * on screen goes turned as it is shown. Where the shop PC cannot be reached,
+   * the phone's share sheet.
    */
-  const [sentToGroup, setSentToGroup] = useState(false)
+  const [groupNote, setGroupNote] = useState('')
   const shareToGroup = async () => {
     if (!shown || !file) return
-    const jpeg = await photoJpeg(shown, rotation)
-    const name = attachmentName(file, at).replace(/\.[a-z0-9]{2,5}$/i, '') + '.jpg'
+    const same = (a: Attachment) => ((a as { caption?: string }).caption ?? '') === (caption ?? '')
+    const pages: { url: string; turn: number; name: string }[] = pdf
+      ? [{ url: shown, turn: rotation, name: attachmentName(file, at) }]
+      : attachments
+        .map((a, i) => ({ a, i }))
+        .filter(({ a }) => same(a) && !isPdfAttachment(a) && (a.url || a.previewUrl))
+        .map(({ a, i }) => ({ url: (a.url || a.previewUrl)!, turn: a === file ? rotation : 0, name: attachmentName(a, i) }))
+    const jpegs: { blob: Blob; name: string }[] = []
+    for (const page of pages) {
+      jpegs.push({ blob: await photoJpeg(page.url, page.turn), name: page.name.replace(/\.[a-z0-9]{2,5}$/i, '') + '.jpg' })
+    }
     try {
-      await sendWhatsAppDocument('group', jpeg, name, caption || subtitle || title)
+      for (const [i, jpeg] of jpegs.entries()) {
+        if (jpegs.length > 1) setGroupNote(`Sending ${i + 1} of ${jpegs.length}…`)
+        await sendWhatsAppDocument('group', jpeg.blob, jpeg.name)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (!(error instanceof TypeError) && !/Cannot find Shiv Print Server/.test(message)) throw new Error('Not sent on WhatsApp: ' + message)
-      await shareFile(jpeg, name, 'image/jpeg')
+      const files = jpegs.map((j) => new File([j.blob], j.name, { type: 'image/jpeg' }))
+      if (navigator.canShare?.({ files })) await navigator.share({ files }).catch(() => undefined)
+      else for (const j of jpegs) await shareFile(j.blob, j.name, 'image/jpeg')
       return
+    } finally {
+      setGroupNote('')
     }
-    setSentToGroup(true)
-    setTimeout(() => setSentToGroup(false), 4000)
+    setGroupNote(jpegs.length > 1 ? `Sent ${jpegs.length} pages to group` : 'Sent to group')
+    setTimeout(() => setGroupNote(''), 4000)
   }
   const rotated = rotation % 180 !== 0
   const width = rotated ? natural.height : natural.width
@@ -337,7 +356,7 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
           {marks.length > 0 && <button type="button" onClick={wipeMarks} aria-label="Wipe the pencil marks" title="Wipe the pencil marks"><Eraser size={18} /></button>}
           {!docked && <button type="button" onClick={() => void action('file', download)} disabled={!!busy || !file?.url} aria-label="Download original file"><Download size={18} /><span className="attachment-action-label">{busy === 'file' ? 'Downloading…' : 'Download'}</span></button>}
           {onDownloadPdf && !docked && <button type="button" onClick={() => void action('pdf', onDownloadPdf)} disabled={!!busy}>{busy === 'pdf' ? 'Making PDF…' : 'Photos as PDF'}</button>}
-          {!docked && <button type="button" onClick={() => void action('group', shareToGroup)} disabled={!!busy || !shown} aria-label="Share this photo to the Shiv Hardware WhatsApp group" title="Send this photo to the Shiv Hardware group"><Send size={18} /><span className="attachment-action-label">{busy === 'group' ? 'Sending…' : sentToGroup ? 'Sent to group' : 'Share to group'}</span></button>}
+          {!docked && <button type="button" onClick={() => void action('group', shareToGroup)} disabled={!!busy || !shown} aria-label="Share this bill to the Shiv Hardware WhatsApp group" title="Send this bill, every page, to the Shiv Hardware group"><Send size={18} /><span className="attachment-action-label">{groupNote || (busy === 'group' ? 'Sending…' : 'Share to group')}</span></button>}
         </div>
   )
   const Shell = docked ? 'div' : 'dialog'
