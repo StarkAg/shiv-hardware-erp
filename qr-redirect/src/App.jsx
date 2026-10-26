@@ -102,10 +102,16 @@ const rupees = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
 // Rows of one brand (and one guarantee period) together, in the card's order: the brand
 // is said once, then one line per size. A card holds up to 18 rows (Shiv_Panel
 // print-server/template.mjs CARD_ROW_STEP_MM), so this keeps a full one readable.
+// The shop's short codes for the Signature range, written out where they stand as a word
+// ("WPC Chowket S", "SGC"); the printed card keeps them short.
+const BRAND_CODES = { S: 'Signature', SG: 'Signature Gold', SGC: 'Signature Gold Club' }
+function brandLabel(name) {
+  return String(name || '').trim().replace(/\b(SGC|SG|S)\b/g, (code) => BRAND_CODES[code])
+}
 function groupByBrand(items) {
   const groups = []
   for (const it of items) {
-    const brand = String(it.brandName || '').trim()
+    const brand = brandLabel(it.brandName)
     const years = Number(it.guaranteeYears) || 0
     const last = groups[groups.length - 1]
     if (last && last.brand === brand && last.years === years) last.items.push(it)
@@ -220,10 +226,11 @@ function CardView({ doc, number, token, claims, onClaimed }) {
                 ) : null}
                 {g.items.map((it, j) => {
                   const qty = Number(it.qty) || 0
-                  const spec = [fmtThickness(it.thickness), itemSize(it), qty ? `${qty} ${qty === 1 ? 'pc' : 'pcs'}` : ''].filter(Boolean).join(' · ')
+                  const spec = [fmtThickness(it.thickness), itemSize(it), qty ? `${qty} ${qty === 1 ? 'pc' : 'pcs'}` : ''].filter(Boolean)
                   return (
                     <li key={j}>
-                      <span className="spec">{spec || '—'}</span>
+                      {/* Each part kept whole: a line breaks between "81″ × 36″" and "4 pcs", never inside one. */}
+                      <span className="spec">{spec.length ? spec.map((s, k) => <span key={k}>{k ? ' · ' : ''}<span>{s}</span></span>) : '—'}</span>
                       {Number(it.amount) ? <span className="amt">{rupees(it.amount)}</span> : null}
                     </li>
                   )
@@ -263,14 +270,14 @@ function CardView({ doc, number, token, claims, onClaimed }) {
           token={token}
           termiteCovered={doc.termiteNote === false}
           items={items.map((it) => ({
-            label: [it.brandName || 'Item', fmtThickness(it.thickness), itemSize(it)].filter(Boolean).join(' · '),
+            label: [brandLabel(it.brandName) || 'Item', fmtThickness(it.thickness), itemSize(it)].filter(Boolean).join(' · '),
             qty: Number(it.qty) || 0,
           }))}
         />
         {/* A card made with its termite line switched off is guaranteed against termites too. */}
         <p className="gc-terms">
-          {doc.termiteNote === false ? 'Borer, termites and air bubbles are covered.' : 'Borer and air bubbles are covered; termites are not.'}
-          {' '}Valid for the years shown from the card&apos;s date. A replacement needs the original card and bill, after inspection.
+          {doc.termiteNote === false ? 'Covers borer, termites and air bubbles' : 'Covers borer and air bubbles, not termites'}, from the card&apos;s date.
+          {' '}Bring the original card and bill; the door is inspected.
         </p>
       </div>
     </main>
