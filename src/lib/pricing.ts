@@ -176,6 +176,6 @@ export function formatINR(amount: number): string {
 
 /** Map guarantee years to the wax-seal asset path. */
 export function sealForYears(years: number): string | null {
-  if ([1, 3, 7, 10, 25].includes(years)) return assetPath(`assets/seals/seal-${years}yr.png`)
+  if ([1, 3, 7, 10, 20, 25].includes(years)) return assetPath(`assets/seals/seal-${years}yr.png`)
   return null
 }

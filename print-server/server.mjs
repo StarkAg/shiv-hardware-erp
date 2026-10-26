@@ -1576,14 +1576,17 @@ function shouldUseCardImageEngine(isCard) {
   return process.platform === 'win32' && isCard && ['devmode', 'excel'].includes(EPSON_CARD_PRINT_ENGINE)
 }
 
-async function printCardImageWithDevmode(filePath, copies, title, printer = COLOR_PRINTER, { slot = 1, filePath2 = null } = {}) {
+async function printCardImageWithDevmode(filePath, copies, title, printer = COLOR_PRINTER, { slot = 1, filePath2 = null, bleedMm = 0 } = {}) {
   if (!existsSync(EPSON_CARD_DEVMODE_PATH)) {
     throw new Error(`Missing Epson card DEVMODE file: ${EPSON_CARD_DEVMODE_PATH}. Run print-server/tools/capture-epson-card-devmode.ps1 first.`)
   }
 
   // Single card can go to either slot; a second image always lands in slot 2.
-  const primaryLeft = slot === 2 ? EPSON_CARD_SLOT2_LEFT_MM : EPSON_CARD_SLOT_LEFT_MM
-  const primaryTop = slot === 2 ? EPSON_CARD_SLOT2_TOP_MM : EPSON_CARD_SLOT_TOP_MM
+  // A design with a bleed (a card back) is drawn that much bigger, and up and
+  // left of the slot by it, so a card sitting a little off still prints to its edge.
+  const b = bleedMm
+  const primaryLeft = (slot === 2 ? EPSON_CARD_SLOT2_LEFT_MM : EPSON_CARD_SLOT_LEFT_MM) - b
+  const primaryTop = (slot === 2 ? EPSON_CARD_SLOT2_TOP_MM : EPSON_CARD_SLOT_TOP_MM) - b
 
   return new Promise((ok, fail) => {
     const args = [
@@ -1607,13 +1610,13 @@ async function printCardImageWithDevmode(filePath, copies, title, printer = COLO
       '-SlotTopMm',
       String(primaryTop),
       '-Slot2LeftMm',
-      String(EPSON_CARD_SLOT2_LEFT_MM),
+      String(EPSON_CARD_SLOT2_LEFT_MM - b),
       '-Slot2TopMm',
-      String(EPSON_CARD_SLOT2_TOP_MM),
+      String(EPSON_CARD_SLOT2_TOP_MM - b),
       '-CardWidthMm',
-      String(CARD_WIDTH_MM),
+      String(CARD_WIDTH_MM + 2 * b),
       '-CardHeightMm',
-      String(CARD_HEIGHT_MM),
+      String(CARD_HEIGHT_MM + 2 * b),
       '-OffsetXmm',
       String(EPSON_CARD_OFFSET_X_MM),
       '-OffsetYmm',
@@ -2652,7 +2655,8 @@ async function mustBeOnWhatsApp(jid, rawMobile) {
 
 // A file (an account statement as a PDF) into a customer's chat, from the
 // shop's number. Sent when someone presses the button, never on its own.
-// `rawMobile` 'group' sends to the shop's own group ("Shiv Hardware").
+// `rawMobile` 'group' sends to the shop's own group ("Shiv Hardware"). A JPG
+// (a bill photo from the viewer) goes as a photo, seen in the chat, not a file.
 async function sendWhatsAppDocumentTo(rawMobile, { data, fileName, mimetype = 'application/pdf', caption = '' }) {
   const buffer = Buffer.from(String(data ?? ''), 'base64')
   if (!buffer.length) throw new Error('Nothing to send.')
@@ -2663,7 +2667,10 @@ async function sendWhatsAppDocumentTo(rawMobile, { data, fileName, mimetype = 'a
     jid = await whatsappReadyFor(rawMobile)
     await mustBeOnWhatsApp(jid, rawMobile)
   }
-  await whatsappSock.sendMessage(jid, { document: buffer, mimetype, fileName, ...(caption ? { caption } : {}) })
+  const content = /^image\/(jpeg|png)$/.test(mimetype)
+    ? { image: buffer, mimetype }
+    : { document: buffer, mimetype, fileName }
+  await whatsappSock.sendMessage(jid, { ...content, ...(caption ? { caption } : {}) })
   console.log(`[whatsapp-send] ${fileName} (${buffer.length} bytes) to ${jid}`)
   return { jid }
 }
@@ -2931,6 +2938,9 @@ async function printCloudJob(job) {
     }
     return { files: results }
   }
+
+  // The Card backs screen on a phone away from the shop Wi-Fi.
+  if (job.kind === 'card-backs') return await printCardBacks(job.payload?.files)
 
   throw new Error(`Unsupported cloud print job kind: ${job.kind}`)
 }
@@ -3704,6 +3714,41 @@ app.get('/whatsapp-web/group/check', async (_req, res) => {
 
 // A document to a customer's chat, or to the shop group ("mobile": "group")
 // — the WhatsApp PDF button on an account.
+// Card backs: the design side of blank PVC cards, from the shop's own designs
+// (public/card-backs, scripts/export-card-backs.ps1), one into each tray slot
+// in one pass — the Card backs screen on the website. Shiv Counter on this PC
+// prints them itself (electron/main.cjs card:print-backs) with the same 3 mm bleed.
+const CARD_BACKS_DIR = fileURLToPath(new URL('../public/card-backs/', import.meta.url))
+const CARD_BACK_BLEED_MM = 3
+// `files`: design file names, slot 1 and slot 2, null for an empty slot.
+// Asked directly on the shop Wi-Fi, or from a phone through the online queue.
+async function printCardBacks(files) {
+  const pick = (name) => {
+    if (!name) return null
+    if (!/^[\w.-]+\.jpg$/.test(String(name))) throw new Error(`Not a card back: ${name}`)
+    const file = join(CARD_BACKS_DIR, String(name))
+    if (!existsSync(file)) throw new Error(`Card back not found on the shop PC: ${name}`)
+    return file
+  }
+  const [one, two] = (Array.isArray(files) ? files : []).slice(0, 2).map(pick)
+  if (!one && !two) throw new Error('No card back chosen')
+  await runPrintExclusive('card backs', () => printCardImageWithDevmode(one || two, 1, 'Shiv card backs', COLOR_PRINTER, {
+    slot: one ? 1 : 2,
+    filePath2: one && two ? two : null,
+    bleedMm: CARD_BACK_BLEED_MM,
+  }))
+  console.log(`[card-backs] ${COLOR_PRINTER} ${one ? basename(one) : '-'} | ${two ? basename(two) : '-'}`)
+  return { printer: COLOR_PRINTER }
+}
+
+app.post('/print-card-backs', async (req, res) => {
+  try {
+    res.json({ ok: true, ...await printCardBacks(req.body?.files) })
+  } catch (err) {
+    res.status(400).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
 app.post('/whatsapp-send-document', async (req, res) => {
   const mobile = String(req.body?.mobile ?? '').trim()
   try {

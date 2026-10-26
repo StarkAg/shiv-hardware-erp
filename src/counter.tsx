@@ -5,6 +5,8 @@ import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
 import { PinGate } from './lib/deviceTrust/PinGate.jsx'
 import './index.css'
+// The Signs look over the shared screens (DESIGN.md); the panel keeps its own.
+import './counter-signs.css'
 import { CounterLayout } from './components/CounterLayout'
 import { ConvexSync } from './components/ConvexSync'
 import { QuotationBuilder } from './features/quotation/QuotationBuilder'
@@ -15,6 +17,7 @@ import { GuaranteeHistory } from './features/guarantee/GuaranteeHistory'
 import { GuaranteeClaims } from './features/guarantee/GuaranteeClaims'
 import { BillSelectPage } from './features/guarantee/BillSelectPage'
 import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
+import { CardBacks } from './features/guarantee/CardBacks'
 import { Inventory } from './features/inventory/Inventory'
 import { RateManager } from './features/rates/RateManager'
 import { Transport } from './features/transport/Transport'
@@ -29,6 +32,9 @@ import { watchForNewBuild } from './lib/staleBuild'
 
 // The PDF and print code still load on first use; a tab from before a deploy reloads.
 watchForNewBuild()
+
+// A sign is white: no dark mode on the counter, whatever the panel was set to.
+document.documentElement.classList.remove('dark')
 
 // The counter opens on the quotation chooser; the recovery screens' Home
 // button goes there, not to the panel's /home.
@@ -90,6 +96,7 @@ const router = createHashRouter([
       { path: 'history/:id', element: <QuoteHistory /> },
       { path: 'guarantee/card', element: <GuaranteeBuilder layout="card" /> },
       { path: 'guarantee/a4', element: <GuaranteeBuilder layout="a4" /> },
+      { path: 'guarantee/backs', element: <CardBacks /> },
       { path: 'guarantee/history', element: <GuaranteeHistory /> },
       { path: 'guarantee/history/:id', element: <GuaranteeHistory /> },
       { path: 'guarantee/claims', element: <GuaranteeClaims cardLinks /> },

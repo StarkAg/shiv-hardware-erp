@@ -355,6 +355,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
             {[
               account?.place,
               phoneDisplay(account?.phone),
+              phoneDisplay(account?.phone2),
               account?.gstin && `GSTIN ${account.gstin}`,
               account?.aadhaar && `Aadhaar ${aadhaarGroups(account.aadhaar)}`,
             ]

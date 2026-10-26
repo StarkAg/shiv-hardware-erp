@@ -70,6 +70,7 @@ export const createLedger = mutation({
     groupId: v.id("groups"),
     place: v.optional(v.string()),
     phone: v.optional(v.string()),
+    phone2: v.optional(v.string()),
     gstin: v.optional(v.string()),
     aadhaar: v.optional(v.string()),
     openingBalance: v.number(),
@@ -123,6 +124,7 @@ export const updateLedger = mutation({
     name: v.optional(v.string()),
     place: v.optional(v.string()),
     phone: v.optional(v.string()),
+    phone2: v.optional(v.string()),
     gstin: v.optional(v.string()),
     aadhaar: v.optional(v.string()),
     openingBalance: v.optional(v.number()),
@@ -139,6 +141,11 @@ export const updateLedger = mutation({
     const before = await ctx.db.get(id);
     if (patch.aadhaar !== undefined) {
       patch.aadhaar = patch.aadhaar.replace(/\D/g, "") || undefined;
+    }
+    // The form sends a cleared box as a blank, because a box sent as nothing
+    // never reaches here and the old number stayed. A blank takes it off.
+    for (const key of ["phone", "phone2", "notes"] as const) {
+      if (patch[key] !== undefined) patch[key] = patch[key]!.trim() || undefined;
     }
     // A blank means nobody is owed a commission on this account any more.
     // Patching the field to undefined is what removes it.
@@ -548,6 +555,9 @@ export const mergeDuplicateParties = mutation({
         // Keep a phone the survivor never had.
         if (loser.phone && !survivor.phone && !dryRun) {
           await ctx.db.patch(survivor._id, { phone: loser.phone });
+        }
+        if (loser.phone2 && !survivor.phone2 && loser.phone2 !== (survivor.phone ?? loser.phone) && !dryRun) {
+          await ctx.db.patch(survivor._id, { phone2: loser.phone2 });
         }
         if (!dryRun) await ctx.db.delete(loser._id);
       }

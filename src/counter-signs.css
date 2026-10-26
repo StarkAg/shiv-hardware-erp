@@ -1,0 +1,135 @@
+/*
+ * Shiv Counter in the Signs look (DESIGN.md), over the screens it shares with
+ * the panel. Loaded by src/counter.tsx alone, so the panel keeps its own look
+ * until it is brought over itself.
+ *
+ * Most of it is done by changing what the shared colours mean (the Tailwind
+ * `stone` greys, the brass, the panel's palette variables) rather than by
+ * touching each screen. What a screen draws itself in the Signs way is in
+ * CounterLayout and the screens.
+ *
+ * What prints is never touched: a document (.a4-page, .print-root) and a card
+ * face shown as it prints (.print-doc) keep the panel's colours, lettering and
+ * corners, here on the screen as on paper.
+ */
+@import "../design/signs/signs.css";
+
+:root {
+  /* Tailwind's stone greys, cooled to the Signs wall, hairline and print. */
+  --stone-50: 255 255 255;
+  --stone-100: 237 240 243;
+  --stone-200: 201 207 213;
+  --stone-300: 170 178 186;
+  --stone-400: 122 131 140;
+  --stone-500: 76 86 96;
+  --stone-600: 76 86 96;
+  --stone-700: 44 52 60;
+  --stone-800: 26 32 38;
+  --stone-900: 14 19 24;
+  --stone-950: 14 19 24;
+  /* The brass was "do this" all over the counter: it is blue now. */
+  --shiv-green-rgb: 0 84 180;
+  --shiv-red-rgb: 179 32 42;
+
+  --bg: #edf0f3;
+  --card: #ffffff;
+  --card2: #edf0f3;
+  --fg: #0e1318;
+  --muted: #4c5660;
+  --line: #c9cfd5;
+  --brass: #0054b4;
+  --brass-ink: #ffffff;
+  --brass-text: #0054b4;
+  --red: #b3202a;
+  /* Yellow is a ground with black print on it, never a colour of print. */
+  --amber: #ffcc00;
+  --amber-text: #0e1318;
+  --amber-tint: rgba(255, 204, 0, 0.28);
+  --amber-line: #ffcc00;
+  --green: #007a3d;
+  --green-text: #007a3d;
+  --green-ink: #ffffff;
+  --green-tint: rgba(0, 122, 61, 0.1);
+  --green-line: rgba(0, 122, 61, 0.45);
+  /* No shadows: what floats over the page is ruled round in black. */
+  --shadow: none;
+  --lift: 0 0 0 2px #0e1318;
+  --control-radius: 0px;
+  --control-height: 44px;
+}
+
+/* signs.css clears a button's border outright, which also took the solid
+   style Tailwind's outline classes rely on: a button given a border keeps it. */
+button { border-style: solid; }
+
+body {
+  font-family: var(--text);
+  font-weight: 500;
+  background: var(--bg);
+}
+
+/* A screen fills <main>, whatever the tab bar under it measures (CounterLayout). */
+.mobile-panel-screen { height: 100% !important; }
+
+/* Names, headings and buttons in the condensed sign lettering. */
+h1, h2, h3, .panel-button, nav a {
+  font-family: var(--sign);
+  letter-spacing: 0.02em;
+}
+h1 { font-weight: 800; }
+h2, h3 { font-weight: 700; }
+.panel-button { font-weight: 700; font-size: 15px; }
+
+/*
+ * Square and flat, everywhere but inside what prints (`:not(... *)` keeps
+ * these off a document and a card face, which keep their own corners).
+ */
+[class*="rounded"]:not(.print-doc, .a4-page, .print-root, :is(.a4-page, .print-root, .print-doc) *) { border-radius: 0 !important; }
+:is(input, select, textarea):not(:is(.a4-page, .print-root, .print-doc) *) { border-radius: 0 !important; }
+[class*="shadow"]:not(:is(.a4-page, .print-root, .print-doc) *) { --tw-shadow: 0 0 #0000 !important; --tw-shadow-colored: 0 0 #0000 !important; }
+
+/* Nothing under 12px. */
+:is(.text-\[9px\], .text-\[10px\], .text-\[11px\]):not(:is(.a4-page, .print-root, .print-doc) *) { font-size: 12px !important; }
+
+/* On blue the print is white, whatever the screen asked for. */
+:is(.bg-shiv-green, .bg-shiv-red, .bg-brass):not(.print-doc, :is(.a4-page, .print-root, .print-doc) *),
+:is(.bg-shiv-green, .bg-shiv-red, .bg-brass):not(.print-doc, :is(.a4-page, .print-root, .print-doc) *) * { color: #fff !important; }
+
+/*
+ * Tailwind's own colours, as the counter's screens use them, put to their
+ * one Signs meaning (whole class names only, so a hover: colour stays a hover): red deletes and warns, green is done (and a box
+ * filled in right), yellow is waiting, blue is to do. Never inside what prints.
+ */
+:where([class~="text-red-300"], [class~="text-red-400"], [class~="text-red-600"], [class~="text-red-800"]):not(:is(.a4-page, .print-root, .print-doc) *) { color: var(--stop) !important; }
+:where([class~="border-red-400"], [class~="border-red-500/60"]):not(:is(.a4-page, .print-root, .print-doc) *) { border-color: var(--stop) !important; }
+:where([class~="bg-red-50"], [class~="bg-red-100"], [class~="bg-red-500/15"]):not(:is(.a4-page, .print-root, .print-doc) *) { background-color: #f8e4e5 !important; }
+:where([class~="bg-red-600"], [class~="bg-red-500"]):not(:is(.a4-page, .print-root, .print-doc) *) { background-color: var(--stop) !important; color: #fff !important; }
+:where([class~="text-green-300"], [class~="text-green-800"], [class~="text-green-700"], [class~="text-emerald-700"]):not(:is(.a4-page, .print-root, .print-doc) *) { color: var(--safe) !important; }
+:where([class~="border-green-500"], [class~="border-green-600"]):not(:is(.a4-page, .print-root, .print-doc) *) { border-color: var(--safe) !important; }
+:where([class~="bg-green-50"], [class~="bg-green-100"], [class~="bg-green-500/15"]):not(:is(.a4-page, .print-root, .print-doc) *) { background-color: #e1f1e8 !important; }
+:where([class~="text-amber-300"], [class~="text-amber-800"], [class~="text-amber-900"]):not(:is(.a4-page, .print-root, .print-doc) *) { color: var(--ink) !important; }
+:where([class~="bg-amber-100"], [class~="bg-amber-500/15"]):not(:is(.a4-page, .print-root, .print-doc) *) { background-color: var(--wait) !important; }
+:where([class~="text-sky-300"], [class~="text-sky-800"]):not(:is(.a4-page, .print-root, .print-doc) *) { color: var(--must) !important; }
+:where([class~="bg-sky-100"], [class~="bg-sky-500/15"]):not(:is(.a4-page, .print-root, .print-doc) *) { background-color: #e0eaf6 !important; }
+
+/* ── What prints keeps its own look ─────────────────────────────────────── */
+.a4-page, .print-root, .print-doc {
+  --stone-50: 250 250 249;
+  --stone-100: 245 245 244;
+  --stone-200: 231 229 228;
+  --stone-300: 214 211 209;
+  --stone-400: 168 162 158;
+  --stone-500: 120 113 108;
+  --stone-600: 87 83 78;
+  --stone-700: 68 64 60;
+  --stone-800: 41 37 36;
+  --stone-900: 28 25 23;
+  --stone-950: 12 10 9;
+  --shiv-green-rgb: 185 146 75;
+  --shiv-red-rgb: 159 29 32;
+  --line: rgba(28, 25, 23, 0.12);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+:is(.a4-page, .print-root, .print-doc) :is(h1, h2, h3) { font-family: inherit; letter-spacing: normal; }

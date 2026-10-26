@@ -7,10 +7,17 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Read through variables (src/index.css) so Shiv Counter can wear the
+        // Signs look (src/counter-signs.css) while the panel keeps these exact
+        // colours: the defaults there are the same numbers as before.
         shiv: {
-          green: '#B9924B',
-          red: '#9F1D20',
+          green: 'rgb(var(--shiv-green-rgb) / <alpha-value>)',
+          red: 'rgb(var(--shiv-red-rgb) / <alpha-value>)',
         },
+        stone: Object.fromEntries(
+          [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
+            .map((step) => [step, `rgb(var(--stone-${step}) / <alpha-value>)`]),
+        ),
         // The panel's half of the shared palette in src/index.css. Both halves
         // read the same variables, so the theme cannot drift apart again.
         surface: 'var(--bg)',

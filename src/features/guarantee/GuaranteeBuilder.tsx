@@ -871,6 +871,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 <Button variant="outline" onClick={() => navigate('/guarantee/select-bill', { state: { returnTo: location.pathname } })} disabled={generating} className="flex min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold">
                   <FileText size={20} /> From a bill
                 </Button>
+                {/* Card backs is not offered here: the menu and the tab bar
+                    already have it, one tap away on every screen. */}
               </div>
             )}
             <div className="no-print text-center text-xs font-semibold uppercase tracking-wide text-muted">
@@ -984,7 +986,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                         type="button"
                         onClick={() => setTab(1)}
                         aria-label="Edit card 1"
-                        className={`relative h-[86mm] w-[54mm] overflow-hidden rounded-md border bg-white text-left shadow-sm transition ${
+                        className={`print-doc relative h-[86mm] w-[54mm] overflow-hidden rounded-md border bg-white text-left shadow-sm transition ${
                           !onCard2 ? 'border-shiv-green ring-2 ring-shiv-green/40' : 'border-stone-300 dark:border-white/20'
                         }`}
                       >
@@ -1002,7 +1004,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                             type="button"
                             onClick={() => setTab(2)}
                             aria-label="Edit card 2"
-                            className={`relative h-[86mm] w-[54mm] overflow-hidden rounded-md border bg-white text-left shadow-sm transition ${
+                            className={`print-doc relative h-[86mm] w-[54mm] overflow-hidden rounded-md border bg-white text-left shadow-sm transition ${
                               onCard2 ? 'border-shiv-green ring-2 ring-shiv-green/40' : 'border-stone-300 dark:border-white/20'
                             }`}
                           >
@@ -1334,14 +1336,24 @@ const chip = (on: boolean) =>
 
 const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
-/** Brand, thickness and size for the row being filled, a tap each — typing still works below. */
-function QuickPicks({ row, picks, onPick }: { row: SizeRow; picks: Picks; onPick: (patch: Partial<SizeRow>) => void }) {
+/**
+ * Brand, thickness and size for the row being filled, a tap each — typing
+ * still works below. The brand is the card's (one card is one brand), the
+ * same as the box above the rows, not a second brand for the row.
+ */
+function QuickPicks({ row, picks, brand, onBrand, onPick }: {
+  row: SizeRow
+  picks: Picks
+  brand: string
+  onBrand: (brand: string) => void
+  onPick: (patch: Partial<SizeRow>) => void
+}) {
   return (
     <div className="col-span-6 grid gap-2 border-b border-stone-200 pb-2 dark:border-white/10 md:hidden">
       {picks.brands.length > 0 && (
         <PickRow label="Brand">
           {picks.brands.map((b) => (
-            <button key={b.name} type="button" className={chip(sameText(row.type, b.name))} onClick={() => onPick({ type: b.name })}>
+            <button key={b.name} type="button" className={chip(sameText(brand, b.name))} onClick={() => onBrand(b.name)}>
               {b.name} <span className="font-normal opacity-70">{b.years}y</span>
             </button>
           ))}
@@ -1516,6 +1528,24 @@ function SizeTable({
   const [activeId, setActiveId] = useState<string | null>(null)
   const active = rows.find((r) => r.id === activeId)?.id
     ?? (rows.find((r) => !isRowFilled(r)) ?? rows[rows.length - 1]).id
+  /*
+   * On a phone only the row being filled is open, as taps and the boxes a
+   * door needs (type or design, length, height, pieces); rate, amount and an
+   * unusual thickness are behind Change (`changing`), and every other row is
+   * one line. The wide
+   * screen keeps every box as columns.
+   */
+  const [changing, setChanging] = useState<string | null>(null)
+  const phone = (shown: boolean) => (shown ? '' : 'max-md:hidden')
+  const rupee = (n: number | '') => (n === '' ? '' : `₹${Number(n).toLocaleString('en-IN')}`)
+  const rowLine = (r: SizeRow) => [
+    r.thickness,
+    r.type && !sameText(r.type, brand) ? r.type : '',
+    r.length !== '' || r.height !== ''
+      ? `${dimLabel(Number(r.length) || 0, Number(r.lengthSoot) || 0)} × ${dimLabel(Number(r.height) || 0, Number(r.heightSoot) || 0)}`
+      : '',
+    `${rowQty(r)} pc${rowQty(r) === 1 ? '' : 's'}`,
+  ].filter(Boolean).join(' · ')
   const typeNames = useMemo(() => options.types.map((t) => t.name), [options.types])
   const typeYears = useMemo(() => new Map(options.types.map((t) => [t.name, t.years])), [options.types])
   const firstThickness = rows.find(isRowFilled)?.thickness ?? ''
@@ -1641,16 +1671,28 @@ function SizeTable({
             onPointerDown={() => setActiveId(row.id)}
             className={`relative grid grid-cols-6 gap-x-2 gap-y-1.5 rounded-lg border p-2 pr-9 md:items-center md:gap-1 md:rounded-none md:border-0 md:border-b md:border-stone-100 md:bg-transparent md:p-0.5 md:pr-0.5 md:last:border-b-0 dark:border-white/10 md:dark:border-white/5 ${row.id === active ? 'border-shiv-green/60 bg-shiv-green/5' : 'border-stone-200'} ${gridCols}`}
           >
+            {row.id !== active && (
+              <button
+                type="button"
+                onClick={() => setActiveId(row.id)}
+                className="col-span-6 flex min-h-10 items-center justify-between gap-3 text-left md:hidden"
+              >
+                <span className="min-w-0 truncate text-base font-semibold">{isRowFilled(row) ? rowLine(row) : '+ Add another item'}</span>
+                <span className="shrink-0 text-base font-bold tabular-nums">{rupee(row.amount)}</span>
+              </button>
+            )}
             {row.id === active && (
               <QuickPicks
                 row={row}
                 picks={picks}
+                brand={brand}
+                onBrand={pickBrand}
                 // Filling the last row adds a blank one under it; the buttons stay on this row.
                 onPick={(patch) => { setActiveId(row.id); updateSizeRow(setRows, row.id, rateFor, patch) }}
               />
             )}
-            <label className="col-span-2 min-w-0 md:col-span-1">
-              <span className={labelClass}>Thickness</span>
+            <label className={`col-span-2 min-w-0 md:col-span-1 ${phone(row.id === active && changing === row.id)}`}>
+              <span className={labelClass}>Other thickness</span>
               <ComboBox
                 value={row.thickness}
                 placeholder="—"
@@ -1660,11 +1702,13 @@ function SizeTable({
                 className={cellClass}
               />
             </label>
-            <label className="col-span-4 min-w-0 md:col-span-1">
-              <span className={labelClass}>Type</span>
+            {/* Each row's own type or design name, always in view on a phone: a
+                card's rows are often different designs of the one brand. */}
+            <label className={`col-span-6 min-w-0 md:col-span-1 ${phone(row.id === active)}`}>
+              <span className={labelClass}>Type / design</span>
               <ComboBox
                 value={row.type}
-                placeholder="Brand"
+                placeholder="Design name"
                 options={typeNames}
                 note={(name) => {
                   const rate = rateFor(name, row.thickness)
@@ -1675,7 +1719,7 @@ function SizeTable({
                 className={cellClass}
               />
             </label>
-            <div className="col-span-3 min-w-0 md:col-span-1">
+            <div className={`col-span-3 min-w-0 md:col-span-1 ${phone(row.id === active)}`}>
               <span className={labelClass}>Length</span>
               <div className="flex items-center gap-0.5">
                 <input
@@ -1706,7 +1750,7 @@ function SizeTable({
                 <span className="shrink-0 text-xs text-muted">/8</span>
               </div>
             </div>
-            <div className="col-span-3 min-w-0 md:col-span-1">
+            <div className={`col-span-3 min-w-0 md:col-span-1 ${phone(row.id === active)}`}>
               <span className={labelClass}>Height</span>
               <div className="flex items-center gap-0.5">
                 <input
@@ -1737,7 +1781,7 @@ function SizeTable({
                 <span className="shrink-0 text-xs text-muted">/8</span>
               </div>
             </div>
-            <label className="col-span-3 min-w-0 md:col-span-1">
+            <label className={`col-span-3 min-w-0 md:col-span-1 ${phone(row.id === active)}`}>
               <span className={labelClass}>Pcs</span>
               <div className="flex items-center gap-1">
                 <button
@@ -1767,13 +1811,29 @@ function SizeTable({
                 </button>
               </div>
             </label>
-            <div className="col-span-3 min-w-0 md:col-span-1">
+            <div className={`col-span-3 min-w-0 md:col-span-1 ${phone(row.id === active)}`}>
               <span className={labelClass}>Sq ft</span>
               <div className="px-1 py-1.5 text-right text-sm tabular-nums text-muted" title={rowSqft(row) ? `${fmtSqft(rowSqft(row))} sq ft a piece` : undefined}>
                 {rowSqft(row) ? fmtSqft(rowSqft(row) * rowQty(row)) : '—'}
               </div>
             </div>
-            <label className="col-span-3 min-w-0 md:col-span-1">
+            {/* The money, on a phone: one line, worked out from the brand; Change opens the boxes. */}
+            {row.id === active && (
+              <div className="col-span-6 flex min-h-10 items-center justify-between gap-2 border-t border-stone-200 pt-1.5 md:hidden">
+                <span className="min-w-0 truncate text-sm text-muted">
+                  {row.sqftRate !== '' ? `${rupee(row.sqftRate)} / sq ft` : 'No rate yet'}
+                  {row.amount !== '' && <b className="ml-2 text-base text-stone-900">{rupee(row.amount)}</b>}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setChanging(changing === row.id ? null : row.id)}
+                  className="h-10 shrink-0 border-2 border-stone-900 px-3 text-sm font-bold uppercase"
+                >
+                  {changing === row.id ? 'Done' : 'Change'}
+                </button>
+              </div>
+            )}
+            <label className={`col-span-3 min-w-0 md:col-span-1 ${phone(row.id === active && changing === row.id)}`}>
               <span className={labelClass}>Rate / sq ft</span>
               <input
                 type="number"
@@ -1785,7 +1845,7 @@ function SizeTable({
                 className={`${cellClass} text-right`}
               />
             </label>
-            <label className="col-span-3 min-w-0 md:col-span-1">
+            <label className={`col-span-3 min-w-0 md:col-span-1 ${phone(row.id === active && changing === row.id)}`}>
               <span className={labelClass}>Amount</span>
               <input
                 type="number"

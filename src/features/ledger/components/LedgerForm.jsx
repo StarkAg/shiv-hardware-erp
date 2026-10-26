@@ -30,6 +30,7 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
   const [sideSet, setSideSet] = useState(Boolean(edit));
   const [asOf, setAsOf] = useState(inputDate(edit?.openingAsOf ?? today()));
   const [phone, setPhone] = useState(edit?.phone ?? '');
+  const [phone2, setPhone2] = useState(edit?.phone2 ?? '');
   const [aadhaar, setAadhaar] = useState(aadhaarGroups(edit?.aadhaar ?? ''));
   const [notes, setNotes] = useState(edit?.notes ?? '');
   // Only customers are brought in by anybody — a supplier owes the shop no
@@ -54,12 +55,15 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
         await updateLedger({
           id: edit._id,
           name: name.trim(),
-          phone: phone.trim() || undefined,
-          aadhaar: aadhaar.trim() || undefined,
+          // Sent even when empty, like the commission below: a box sent as
+          // nothing never reaches the server, so a number cleared stayed.
+          phone: phone.trim(),
+          phone2: phone2.trim(),
+          aadhaar: aadhaar.trim(),
           openingBalance: Number(opening) || 0,
           openingSide: side,
           openingAsOf: fromInputDate(asOf),
-          notes: notes.trim() || undefined,
+          notes: notes.trim(),
           // Sent even when empty: the server turns a blank into an unset, so
           // taking the carpenter off an account actually takes him off.
           commissionTo: isCustomer ? commissionTo.trim() : '',
@@ -71,6 +75,7 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
         name: name.trim(),
         groupId,
         phone: phone.trim() || undefined,
+        phone2: phone2.trim() || undefined,
         aadhaar: aadhaar.trim() || undefined,
         openingBalance: Number(opening) || 0,
         openingSide: side,
@@ -163,6 +168,16 @@ export default function LedgerForm({ groups: allGroups, edit, onClose }) {
               onChange={(e) => setPhone(e.target.value)}
               inputMode="tel"
               autoComplete="off"
+            />
+          </label>
+          <label>
+            Second contact
+            <input
+              value={phone2}
+              onChange={(e) => setPhone2(e.target.value)}
+              inputMode="tel"
+              autoComplete="off"
+              placeholder="if they have one"
             />
           </label>
           <label>

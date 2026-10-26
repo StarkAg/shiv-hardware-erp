@@ -4,7 +4,7 @@ export const CLOUD_API_URL = import.meta.env.VITE_CLOUD_API_URL ?? ''
 const CLOUD_API_KEY = import.meta.env.VITE_CLOUD_API_KEY ?? ''
 export const PRINTER_AGENT_ID = import.meta.env.VITE_PRINTER_AGENT_ID ?? 'shiv-shop-printer'
 
-export type CloudPrintJobKind = 'quotation' | 'guarantee' | 'raw-file'
+export type CloudPrintJobKind = 'quotation' | 'guarantee' | 'raw-file' | 'card-backs'
 export type CloudPrintJobSource = 'android' | 'web' | 'whatsapp' | 'server'
 export type CloudPrintJobStatus = 'pending' | 'claimed' | 'printing' | 'printed' | 'failed' | 'cancelled'
 
@@ -28,6 +28,12 @@ export type CreateCloudPrintJobPayload =
       source?: CloudPrintJobSource
       requestedBy?: string
       assignedPrinterId?: string
+    }
+  | {
+      /** Card back design file names (cardBacks.json), tray slot 1 and 2; null for an empty slot. */
+      kind: 'card-backs'
+      files: (string | null)[]
+      source?: CloudPrintJobSource
     }
 
 export type CreateCloudPrintJobResult = {
@@ -79,7 +85,9 @@ async function cloudFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function createCloudPrintJob(payload: CreateCloudPrintJobPayload): Promise<CreateCloudPrintJobResult> {
-  const body = payload.kind === 'quotation'
+  const body = payload.kind === 'card-backs'
+    ? { kind: 'card-backs', source: payload.source ?? 'web', copies: 1, payload: { files: payload.files } }
+    : payload.kind === 'quotation'
     ? {
         kind: 'quotation',
         source: payload.source ?? 'android',

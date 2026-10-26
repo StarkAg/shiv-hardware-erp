@@ -216,7 +216,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .bubble img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 
 /* Quotations: a list to go through, and one opened whole with arrows. */
-.qtoggle { display: flex; gap: 6px; margin: 10px 0 0; }
+.qtoggle { display: flex; gap: 6px; margin: 0 14px 10px; flex: none; }
 .qtoggle button { flex: 1; padding: 9px 0; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 14px; font-weight: 800; color: var(--muted); }
 .qtoggle button.on { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
 .chats.quotes .row { padding-left: 14px; }

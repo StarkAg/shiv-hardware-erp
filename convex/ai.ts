@@ -498,7 +498,7 @@ export const readNamesAhead = action({
  */
 const CONTACT_TOOL: Anthropic.Tool = {
   name: "customer_numbers",
-  description: "Give the customer's phone and Aadhaar numbers exactly as written on the slip.",
+  description: "Give the customer's name, phone and Aadhaar numbers exactly as written on the slip.",
   input_schema: {
     type: "object",
     properties: {
@@ -512,18 +512,23 @@ const CONTACT_TOOL: Anthropic.Tool = {
         items: { type: "string" },
         description: "The customer's 12-digit Aadhaar (UID) numbers, digits as written, '?' for any digit you cannot read. Empty when there is none.",
       },
+      name: {
+        type: "string",
+        description: "The customer's name (a person or a firm, with its place if written), spelt as written. Empty when no name is written.",
+      },
     },
-    required: ["phones", "uids"],
+    required: ["phones", "uids", "name"],
     additionalProperties: false,
   },
 };
 
-const CONTACT_SYSTEM = `You read a handwritten bill from a hardware shop in Ramgarh, Jharkhand, India, for one thing: the customer's phone number and Aadhaar number, where the counter has written them on it.
+const CONTACT_SYSTEM = `You read a handwritten bill from a hardware shop in Ramgarh, Jharkhand, India, for three things: the customer's name, phone number and Aadhaar number, where the counter has written them on it.
 
 - A phone number is ten digits, usually starting 6, 7, 8 or 9, often written near the customer's name, sometimes as "Mob", "Ph", "M" or with +91 in front. A customer may have two.
 - An Aadhaar number is twelve digits, usually written in three groups of four, sometimes labelled "Aadhar", "Adhar", "UID" or "AD".
 - Copy the digits exactly as written. Where a digit is genuinely unreadable, write ? in its place. Never fill in a digit you cannot see, never correct a number to make it look right, and never pad or drop digits to reach ten or twelve.
 - Not the customer's: phone numbers printed on a letterhead, the shop's own numbers, GSTIN, bill or serial numbers, dates, quantities, sizes, rates and amounts.
+- The name is who the bill is made out to, often after "M/s", "Name" or "Shri" near the top. Not the shop's own name or a brand printed on the pad, and not an item. Leave it empty when none is written; never guess one.
 - Leave a list empty when there is no such number on the slip.`;
 
 /** Reads one bill photo for the customer's numbers. */
@@ -533,7 +538,7 @@ export const readContact = action({
     // A photo chosen from the computer, not yet uploaded: a JPEG, base64.
     jpeg: v.optional(v.string()),
   },
-  handler: async (ctx, { storageId, jpeg }): Promise<{ ok: true; phones: string[]; uids: string[] } | { ok: false; error: string }> => {
+  handler: async (ctx, { storageId, jpeg }): Promise<{ ok: true; phones: string[]; uids: string[]; name: string } | { ok: false; error: string }> => {
     try {
       let page: { data: string; media_type: ReturnType<typeof imageType> }
       if (storageId) {
@@ -562,7 +567,7 @@ export const readContact = action({
             role: "user",
             content: [
               { type: "image" as const, source: { type: "base64" as const, media_type: page.media_type, data: page.data } },
-              { type: "text" as const, text: "What are the customer's phone and Aadhaar numbers on this bill?" },
+              { type: "text" as const, text: "What are the customer's name, phone and Aadhaar numbers on this bill?" },
             ],
           },
         ],
@@ -570,9 +575,9 @@ export const readContact = action({
 
       const call = response.content.find((b) => b.type === "tool_use");
       if (!call) throw new Error("The reader did not answer");
-      const input = (call as Anthropic.ToolUseBlock).input as { phones?: unknown; uids?: unknown };
+      const input = (call as Anthropic.ToolUseBlock).input as { phones?: unknown; uids?: unknown; name?: unknown };
       const strings = (x: unknown) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === "string") : []);
-      return { ok: true, phones: strings(input.phones), uids: strings(input.uids) };
+      return { ok: true, phones: strings(input.phones), uids: strings(input.uids), name: typeof input.name === "string" ? input.name : "" };
     } catch (err: any) {
       const message =
         err?.status === 401 || /no api key|api[_ ]?key|authentication/i.test(err?.message ?? "")

@@ -50,7 +50,7 @@ function ShowGuaranteeModal({ doc, onClose }: { doc: GuaranteeDocument; onClose:
         <div className="flex flex-col gap-5 md:flex-row">
           {/* The card as it prints (the shop design is pre-printed on the PVC). */}
           <div className="shrink-0 self-center md:self-start">
-            <div className="relative h-[86mm] w-[54mm] overflow-hidden rounded-md border border-stone-300 bg-white font-print text-black shadow-sm">
+            <div className="print-doc relative h-[86mm] w-[54mm] overflow-hidden rounded-md border border-stone-300 bg-white font-print text-black shadow-sm">
               <GuaranteeCardFace document={doc} />
             </div>
           </div>

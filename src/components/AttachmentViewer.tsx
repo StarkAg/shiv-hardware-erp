@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, Download, Eraser, FileText, Maximize2, Minus, Pencil, Plus, RotateCw, Scan, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Eraser, FileText, Maximize2, Minus, Pencil, Plus, RotateCw, Scan, Send, X } from 'lucide-react'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import { attachmentName, isPdfAttachment, type Attachment } from '../lib/attachments'
+import { sendWhatsAppDocument } from '../lib/printServer'
+import { shareFile } from '../lib/shareImage'
 import './AttachmentViewer.css'
 
 /** PDFs are rendered here too, so phones and desktops have the same preview. */
@@ -76,6 +78,32 @@ export function AttachmentThumbnail({ file, alt = '' }: { file: Attachment; alt?
   )
 }
 
+/**
+ * The photo on screen as a JPG, turned the way it is shown. A JPG not turned
+ * goes as it is; the pencil marks never go with it.
+ */
+async function photoJpeg(url: string, rotation: number): Promise<Blob> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('Could not fetch this photo. Please try again.')
+  const blob = await response.blob()
+  if (blob.type === 'image/jpeg' && rotation === 0) return blob
+  const image = await createImageBitmap(blob)
+  const turned = rotation % 180 !== 0
+  const canvas = document.createElement('canvas')
+  canvas.width = turned ? image.height : image.width
+  canvas.height = turned ? image.width : image.height
+  const context = canvas.getContext('2d')!
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.translate(canvas.width / 2, canvas.height / 2)
+  context.rotate(rotation * Math.PI / 180)
+  context.drawImage(image, -image.width / 2, -image.height / 2)
+  image.close()
+  const jpeg = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', .9))
+  if (!jpeg) throw new Error('Could not make the JPG. Please try again.')
+  return jpeg
+}
+
 /** One pencil stroke on a photo: x, y, x, y… in the photo's own pixels, so it stays put through zoom and rotation. */
 type Stroke = number[]
 
@@ -108,7 +136,7 @@ type Props = {
 }
 
 /** How close a photo opens: a little more than the whole page. */
-const OPEN_ZOOM = 1.5
+const OPEN_ZOOM = 1.25
 
 /** What a photo shown among others is on (BillViewer photoStrip). */
 type Entry = { type: string; number: string; date: string; amount: string; refNo: string; party: string; paper: string }
@@ -255,6 +283,46 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
     // Give the browser time to begin the download before releasing the URL.
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
+  /**
+   * The bill on screen straight into the Shiv Hardware WhatsApp group, from
+   * the shop's number on the shop PC: the picture alone, no caption, and every
+   * page of it, one after another. Its pages are the photos of the same entry
+   * (the same caption; a viewer of one bill has none, so all of them). The page
+   * on screen goes turned as it is shown. Where the shop PC cannot be reached,
+   * the phone's share sheet.
+   */
+  const [groupNote, setGroupNote] = useState('')
+  const shareToGroup = async () => {
+    if (!shown || !file) return
+    const same = (a: Attachment) => ((a as { caption?: string }).caption ?? '') === (caption ?? '')
+    const pages: { url: string; turn: number; name: string }[] = pdf
+      ? [{ url: shown, turn: rotation, name: attachmentName(file, at) }]
+      : attachments
+        .map((a, i) => ({ a, i }))
+        .filter(({ a }) => same(a) && !isPdfAttachment(a) && (a.url || a.previewUrl))
+        .map(({ a, i }) => ({ url: (a.url || a.previewUrl)!, turn: a === file ? rotation : 0, name: attachmentName(a, i) }))
+    const jpegs: { blob: Blob; name: string }[] = []
+    for (const page of pages) {
+      jpegs.push({ blob: await photoJpeg(page.url, page.turn), name: page.name.replace(/\.[a-z0-9]{2,5}$/i, '') + '.jpg' })
+    }
+    try {
+      for (const [i, jpeg] of jpegs.entries()) {
+        if (jpegs.length > 1) setGroupNote(`Sending ${i + 1} of ${jpegs.length}…`)
+        await sendWhatsAppDocument('group', jpeg.blob, jpeg.name)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!(error instanceof TypeError) && !/Cannot find Shiv Print Server/.test(message)) throw new Error('Not sent on WhatsApp: ' + message)
+      const files = jpegs.map((j) => new File([j.blob], j.name, { type: 'image/jpeg' }))
+      if (navigator.canShare?.({ files })) await navigator.share({ files }).catch(() => undefined)
+      else for (const j of jpegs) await shareFile(j.blob, j.name, 'image/jpeg')
+      return
+    } finally {
+      setGroupNote('')
+    }
+    setGroupNote(jpegs.length > 1 ? `Sent ${jpegs.length} pages to group` : 'Sent to group')
+    setTimeout(() => setGroupNote(''), 4000)
+  }
   const rotated = rotation % 180 !== 0
   const width = rotated ? natural.height : natural.width
   const height = rotated ? natural.width : natural.height
@@ -288,6 +356,7 @@ export default function AttachmentViewer({ attachments, title = 'Attachments', s
           {marks.length > 0 && <button type="button" onClick={wipeMarks} aria-label="Wipe the pencil marks" title="Wipe the pencil marks"><Eraser size={18} /></button>}
           {!docked && <button type="button" onClick={() => void action('file', download)} disabled={!!busy || !file?.url} aria-label="Download original file"><Download size={18} /><span className="attachment-action-label">{busy === 'file' ? 'Downloading…' : 'Download'}</span></button>}
           {onDownloadPdf && !docked && <button type="button" onClick={() => void action('pdf', onDownloadPdf)} disabled={!!busy}>{busy === 'pdf' ? 'Making PDF…' : 'Photos as PDF'}</button>}
+          {!docked && <button type="button" onClick={() => void action('group', shareToGroup)} disabled={!!busy || !shown} aria-label="Share this bill to the Shiv Hardware WhatsApp group" title="Send this bill, every page, to the Shiv Hardware group"><Send size={18} /><span className="attachment-action-label">{groupNote || (busy === 'group' ? 'Sending…' : 'Share to group')}</span></button>}
         </div>
   )
   const Shell = docked ? 'div' : 'dialog'

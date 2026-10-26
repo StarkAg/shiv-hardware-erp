@@ -9,7 +9,7 @@ import { isQuotation } from '../../lib/types'
 import { rupees, shortDate } from '../ledger/lib/format'
 import { useLedgerTheme } from '../ledger/useLedgerTheme'
 import VoucherBillPreview from '../ledger/components/VoucherBillPreview'
-import BillViewer from '../ledger/components/BillViewer'
+import BillViewer, { photoStrip } from '../ledger/components/BillViewer'
 import '../ledger/ledger.css'
 
 /** "QTN-4" for Q-4, the way the day book labels it. */
@@ -166,7 +166,21 @@ export function QuotationList() {
             }}
           />
         )}
-        {photos && <BillViewer voucher={{ party: photos.customerName, vchLabel: quoteLabel(photos.number), date: Date.parse(photos.date), attachmentUrls: photos.attachments }} onClose={() => setPhotos(null)} />}
+        {/* Every photo of the list as it stands, opened at the row clicked:
+            the arrows go on to the next quotation's. */}
+        {photos && <BillViewer voucher={photoStrip(
+          rows.map((b) => ({
+            key: b.id,
+            vchType: 'Quotation',
+            vchLabel: quoteLabel(isQuotation(b) ? b.number : b.fromQuote),
+            date: Date.parse(b.date),
+            party: b.customerName,
+            amount: b.total,
+            attachmentUrls: b.attachments,
+          })),
+          photos.id,
+          'Quotations',
+        )} onClose={() => setPhotos(null)} />}
       </div>
     </div>
   )
