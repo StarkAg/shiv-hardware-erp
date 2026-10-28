@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Copy, Minus, Plus, Save, Trash2 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '../../lib/store'
@@ -14,6 +14,7 @@ import {
 import { Button, Card, Page, PageHeader } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
+import { defaultRatesUnlocked, lockDefaultRates, unlockDefaultRates } from '../../lib/defaultRates'
 
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
 const COVERAGE_OPTIONS: CoverageType[] = ['guarantee', 'warranty']
@@ -62,8 +63,26 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(sets), [draft, sets])
   const active = draft[activeIdx] ?? draft[0]
 
+  const [unlocking, setUnlocking] = useState(false)
+  const [, bump] = useState(0)
+  useEffect(() => lockDefaultRates, [])
+  const onLockedDefault = activeIdx === 0 && !defaultRatesUnlocked()
+
+  // Rate edits are saved as they are made. The default set (C1) is protected:
+  // an edit copies it into a new set (C2, C3 …) and changes the copy; C1 itself
+  // needs the shop code (lib/defaultRates).
   function patchActive(mut: (s: BrandSet) => BrandSet) {
-    setDraft((d) => d.map((s, i) => (i === activeIdx ? mut(s) : s)))
+    let next: BrandSet[]
+    if (onLockedDefault) {
+      const copy = mut({ ...draft[0], id: uid(), name: `C${draft.length + 1}` })
+      next = [...draft, copy]
+      setActiveIdx(draft.length)
+      toast('C1 is the default — saved your change as a new set')
+    } else {
+      next = draft.map((s, i) => (i === activeIdx ? mut(s) : s))
+    }
+    setDraft(next)
+    setSets(codeSets(structuredClone(next)))
   }
   const updateBrand = (id: string, patch: Partial<Brand>) =>
     patchActive((s) => ({ ...s, brands: s.brands.map((b) => (b.id === id ? { ...b, ...patch } : b)) }))
@@ -123,8 +142,26 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
           title={`Delete ${draft[deletingSet]?.name}?`}
           confirmLabel="Delete"
           danger
-          onConfirm={() => dropSet(deletingSet)}
+          ask={deletingSet === 0 && !defaultRatesUnlocked() ? { label: 'Code', secret: true } : undefined}
+          onConfirm={(typed) => {
+            if (deletingSet === 0 && !defaultRatesUnlocked()) unlockDefaultRates(typed)
+            dropSet(deletingSet)
+            lockDefaultRates()
+          }}
           onClose={() => setDeletingSet(null)}
+        />
+      )}
+      {unlocking && (
+        <Confirm
+          title={`Unlock ${active?.name} for editing`}
+          body="C1 is the default rate set. Without the code, edits are saved as a new set instead."
+          confirmLabel="Unlock"
+          ask={{ label: 'Code', secret: true }}
+          onConfirm={(typed) => {
+            unlockDefaultRates(typed)
+            bump((n) => n + 1)
+          }}
+          onClose={() => setUnlocking(false)}
         />
       )}
       <Page>
@@ -158,6 +195,11 @@ export function RateManager({ basePath = '/rates' }: { basePath?: string } = {})
             Active set: <span className="text-shiv-green">{active?.name ?? 'C1'}</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {onLockedDefault && (
+              <Button variant="outline" onClick={() => setUnlocking(true)}>
+                Unlock {active?.name} (code)
+              </Button>
+            )}
             <Button variant="outline" onClick={addSet} className="flex items-center gap-1.5">
               <Copy size={15} /> Duplicate
             </Button>

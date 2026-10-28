@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Shiv WhatsApp Print",
+  "version": "1.0.0",
+  "description": "Print the photo open in WhatsApp Web straight on the shop printers, through the shop print server. No print window.",
+  "permissions": ["storage"],
+  "host_permissions": ["http://*/*", "https://web.whatsapp.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    { "matches": ["https://web.whatsapp.com/*"], "js": ["content.js"], "run_at": "document_idle" }
+  ],
+  "options_page": "options.html"
+}

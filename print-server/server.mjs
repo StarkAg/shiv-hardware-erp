@@ -3834,8 +3834,17 @@ app.post('/whatsapp-print/jobs', async (req, res) => {
   try {
     const files = rawFiles.map(decodeUploadedFile)
     const jobs = []
+    // `mode` 'bw' | 'color' (the group's bw and cp commands) picks the printer the same way
+    // the group does; without it, the page's usual choice. Used by the WhatsApp
+    // Web print extension (whatsapp-print-extension/).
+    const mode = ['bw', 'color'].includes(req.body?.mode) ? req.body.mode : null
     for (const file of files) {
-      jobs.push(await printUploadedFile(file, copies))
+      if (mode) {
+        const route = await routeWhatsAppPrintJob(mode, file)
+        jobs.push(await printUploadedFile(file, copies, route.printer, route.printSettings))
+      } else {
+        jobs.push(await printUploadedFile(file, copies))
+      }
     }
 
     res.json({

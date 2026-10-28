@@ -28,6 +28,7 @@ import { QuotationPrint, firstSectionRows, hasSections } from '../print/Quotatio
 import { printViaShop } from '../../lib/printViaShop'
 import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
 import { sendWhatsAppDocument } from '../../lib/printServer'
+import { defaultRatesUnlocked, lockDefaultRates, unlockDefaultRates } from '../../lib/defaultRates'
 import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
@@ -79,7 +80,23 @@ export function QuotationBuilder() {
   // selected price set
   const [setId, setSetId] = useState(sets[0]?.id)
   const activeSet = sets.find((s) => s.id === setId) ?? sets[0]
-  const [editMode, setEditMode] = useState(false)
+  const [editMode, setEditModeRaw] = useState(false)
+  const [asking, setAsking] = useState<null | 'unlock' | 'delete'>(null)
+  const [, bump] = useState(0)
+  const setEditMode = (on: boolean) => {
+    if (!on) { lockDefaultRates(); bump((n) => n + 1) }
+    setEditModeRaw(on)
+  }
+  // The default set (C1) is protected: an edit copies it into a new set and
+  // changes that copy; C1 itself needs the shop code (lib/defaultRates).
+  const onLockedDefault = !!activeSet && activeSet.id === sets[0]?.id && !defaultRatesUnlocked()
+  function editRates(apply: (targetSetId: string) => void) {
+    if (!onLockedDefault) return apply(setId)
+    const copyId = addSet(setId, true)
+    setSetId(copyId)
+    apply(copyId)
+    toast('C1 is the default — saved your change as a new set')
+  }
   const sizeCardRef = useRef<HTMLDivElement>(null)
 
   // Sync category when a different product submenu item is clicked.
@@ -475,7 +492,7 @@ export function QuotationBuilder() {
                         <input
                           className="h-8 w-full min-w-0 rounded border border-line px-1.5 text-[11px] dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
                           value={b.name}
-                          onChange={(e) => updateBrand(setId, b.id, { name: e.target.value })}
+                          onChange={(e) => editRates((t) => updateBrand(t, b.id, { name: e.target.value }))}
                         />
                       </td>
                       <td className="px-1 py-1.5 md:px-3">
@@ -483,7 +500,7 @@ export function QuotationBuilder() {
                           type="number"
                           className="h-8 w-full min-w-0 rounded border border-line px-1 text-right text-[11px] dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:w-24 md:px-2 md:py-1 md:text-sm"
                           value={b.rate}
-                          onChange={(e) => updateBrand(setId, b.id, { rate: Number(e.target.value) })}
+                          onChange={(e) => editRates((t) => updateBrand(t, b.id, { rate: Number(e.target.value) }))}
                         />
                       </td>
                       <td className="px-1 py-1.5 text-center md:px-3">
@@ -496,7 +513,7 @@ export function QuotationBuilder() {
                               aria-label="Coverage"
                               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                               value={b.coverage ?? 'guarantee'}
-                              onChange={(e) => updateBrand(setId, b.id, { coverage: e.target.value as CoverageType })}
+                              onChange={(e) => editRates((t) => updateBrand(t, b.id, { coverage: e.target.value as CoverageType }))}
                             >
                               {COVERAGE_OPTIONS.map((coverage) => (
                                 <option key={coverage} value={coverage}>
@@ -514,7 +531,7 @@ export function QuotationBuilder() {
                               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                               value={b.guaranteeYears}
                               onChange={(e) =>
-                                updateBrand(setId, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears })
+                                editRates((t) => updateBrand(t, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears }))
                               }
                             >
                               {GUARANTEE_OPTIONS.map((g) => (
@@ -527,7 +544,7 @@ export function QuotationBuilder() {
                       <td className="px-1 py-1.5 text-right md:px-3">
                         <button
                           className="rounded p-1 text-danger hover:bg-red-50 dark:hover:bg-red-950/30"
-                          onClick={() => removeBrand(setId, b.id)}
+                          onClick={() => editRates((t) => removeBrand(t, b.id))}
                           title="Remove brand"
                         >
                           <Minus size={16} />
@@ -543,7 +560,7 @@ export function QuotationBuilder() {
                 <tfoot>
                   <tr className="border-t border-stone-100 dark:border-white/10">
                     <td colSpan={4} className="px-4 py-2">
-                      <Button variant="outline" className="flex items-center gap-1.5" onClick={() => addBrand(setId, cat)}>
+                      <Button variant="outline" className="flex items-center gap-1.5" onClick={() => editRates((t) => addBrand(t, cat))}>
                         <Plus size={16} /> Add brand
                       </Button>
                     </td>
@@ -662,14 +679,38 @@ export function QuotationBuilder() {
             <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
               Active set: <span className="text-shiv-green">{activeSet?.name ?? 'C1'}</span>
             </div>
+            {onLockedDefault && (
+              <Button variant="ghost" onClick={() => setAsking('unlock')}>
+                Unlock {activeSet?.name} (code)
+              </Button>
+            )}
             <Button
               variant="ghost"
               className="flex items-center gap-1.5 text-danger"
               disabled={sets.length <= 1}
-              onClick={() => setDeletingSet(true)}
+              onClick={() => (onLockedDefault ? setAsking('delete') : setDeletingSet(true))}
             >
               <Trash2 size={15} /> Delete set
             </Button>
+            {asking && (
+              <Confirm
+                title={asking === 'unlock' ? `Unlock ${activeSet?.name} for editing` : `Delete ${activeSet?.name}?`}
+                body={asking === 'unlock' ? 'C1 is the default rate set. Without the code, edits are saved as a new set instead.' : 'C1 is the default rate set.'}
+                confirmLabel={asking === 'unlock' ? 'Unlock' : 'Delete'}
+                danger={asking === 'delete'}
+                ask={{ label: 'Code', secret: true }}
+                onConfirm={(typed) => {
+                  unlockDefaultRates(typed)
+                  if (asking === 'delete') {
+                    removeSet(setId)
+                    setSetId(sets.find((s) => s.id !== setId)?.id ?? sets[0]?.id)
+                    lockDefaultRates()
+                  }
+                  bump((n) => n + 1)
+                }}
+                onClose={() => setAsking(null)}
+              />
+            )}
             {deletingSet && (
               <Confirm
                 title={`Delete ${activeSet?.name}?`}

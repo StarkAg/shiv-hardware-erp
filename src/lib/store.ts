@@ -123,7 +123,7 @@ interface AppState {
   // price sets
   setSets: (sets: BrandSet[]) => void
   /** Append a new set (a copy of `cloneFromId`, or the first set). Returns its id. */
-  addSet: (cloneFromId?: string) => string
+  addSet: (cloneFromId?: string, keepIds?: boolean) => string
   removeSet: (setId: string) => void
   updateBrand: (setId: string, brandId: string, patch: Partial<Brand>) => void
   removeBrand: (setId: string, brandId: string) => void
@@ -333,14 +333,14 @@ export const useStore = create<AppState>((set, get) => ({
     persist(get)
   },
 
-  addSet: (cloneFromId) => {
+  addSet: (cloneFromId, keepIds) => {
     const id = uid()
     set((st) => {
       const src = st.sets.find((s) => s.id === cloneFromId) ?? st.sets[0]
       const cloned: BrandSet = {
         id,
         name: `C${st.sets.length + 1}`,
-        brands: (src?.brands ?? []).map((b) => ({ ...b, id: uid() })),
+        brands: (src?.brands ?? []).map((b) => ({ ...b, id: keepIds ? b.id : uid() })),
       }
       return { sets: [...st.sets, cloned] }
     })
