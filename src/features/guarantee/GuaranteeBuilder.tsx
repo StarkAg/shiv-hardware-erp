@@ -2,7 +2,7 @@ import type React from 'react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation } from 'convex/react'
-import { Camera, Check, Copy, Eye, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
+import { Camera, Check, Copy, Eye, FilePlus, FileText, Plus, Printer, Save, Send, Trash2, X } from 'lucide-react'
 import { Button, Card } from '../../components/ui'
 import { mintCardToken } from '../../lib/cardToken'
 import { useStore } from '../../lib/store'
@@ -25,6 +25,7 @@ import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, type ServerPrintPay
 import { printViaShop } from '../../lib/printViaShop'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
+import Confirm from '../ledger/components/Confirm'
 import { indiaYear } from '../../lib/businessDate'
 import { rateFromAmount } from '../../lib/guaranteeRate'
 import { BillDock, readDockSize, type DockSize } from '../../components/BillDock'
@@ -297,6 +298,38 @@ function rowsToItems(rows: SizeRow[], fallbackBrand: string, years: GuaranteeYea
 
 /** One card's identity: its GC number and the QR secret that opens it online. */
 type CardRef = { number: string; id: string; token: string }
+/**
+ * The half-filled card, kept when the user goes to another section and comes
+ * back (the page is unmounted on the way). Held in memory, and in this
+ * browser's storage so a reload keeps it too; the New button throws it away.
+ */
+type Draft = {
+  ref: CardRef; ref2: CardRef
+  customer: CustomerInfo; customer2: CustomerInfo
+  rows: SizeRow[]; rows2: SizeRow[]
+  brand1: string; brand2: string
+  period1: GuaranteeYears | ''; period2: GuaranteeYears | ''
+  termite1: boolean; termite2: boolean
+  secondCardOn: boolean; tab: 1 | 2
+  cardDate: string; fromBillId: string | null
+}
+const drafts = new Map<string, Draft | null>()
+const draftKey = (layout: GuaranteeLayout) => `shiv-panel:guarantee-draft:${layout}`
+function readDraft(layout: GuaranteeLayout): Draft | null {
+  if (drafts.has(layout)) return drafts.get(layout) ?? null
+  let found: Draft | null = null
+  try { found = JSON.parse(localStorage.getItem(draftKey(layout)) ?? 'null') } catch { /* no storage: memory only */ }
+  drafts.set(layout, found)
+  return found
+}
+function writeDraft(layout: GuaranteeLayout, draft: Draft | null) {
+  drafts.set(layout, draft)
+  try {
+    if (draft) localStorage.setItem(draftKey(layout), JSON.stringify(draft))
+    else localStorage.removeItem(draftKey(layout))
+  } catch { /* no storage: memory only */ }
+}
+
 /** A Print/Generate click: slot 1's ref, plus slot 2's own ref when it's on. */
 type MintedRefs = CardRef & { second: CardRef | null }
 
@@ -320,12 +353,15 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   const ensureParty = useMutation(api.billLedger.ensureParty)
   // The bill this card was started from, so saving the card ticks that sale
   // off the Guarantee list.
-  const [fromBillId, setFromBillId] = useState<string | null>(null)
+  const [saved] = useState(() => readDraft(layout))
+  const [fromBillId, setFromBillId] = useState<string | null>(saved?.fromBillId ?? null)
+  const [askNew, setAskNew] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   // Each Save or Print mints a fresh GC-YYYY-NNNN ref number from the store sequence,
   // so every card becomes a permanent entry in the History tab and gets a stable QR.
   const [ref, setRef] = useState<CardRef>(() => {
+    if (saved) return saved.ref
     const number = `GC-${indiaYear()}-${Date.now().toString().slice(-5)}`
     return { number, id: number, token: mintCardToken() }
   })
@@ -333,34 +369,35 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // (It used to share slot 1's, so both cards' QRs were identical and the
   // online view could only ever open one of them.)
   const [ref2, setRef2] = useState<CardRef>(() => {
+    if (saved) return saved.ref2
     const number = `GC-${indiaYear()}-${(Date.now() + 1).toString().slice(-5)}`
     return { number, id: number, token: mintCardToken() }
   })
-  const [customer, setCustomer] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
+  const [customer, setCustomer] = useState<CustomerInfo>(() => saved?.customer ?? { id: uid(), name: '', mobile: '', uid: '', address: '' })
   // The customer accounts the name box offers (see CustomerAccounts).
   const [accounts, setAccounts] = useState<CustomerAccount[]>([])
-  const [rows, setRows] = useState<SizeRow[]>(() => [blankRow()])
+  const [rows, setRows] = useState<SizeRow[]>(() => saved?.rows ?? [blankRow()])
   // The card's brand (DDoor Sunmica): it prices the rows; each row's Type is its model number.
-  const [brand1, setBrand1] = useState('')
+  const [brand1, setBrand1] = useState(saved?.brand1 ?? '')
   // On a phone the card preview is folded away until asked for.
   const [previewOpen, setPreviewOpen] = useState(false)
-  const [period1, setPeriod1] = useState<GuaranteeYears | ''>('')
+  const [period1, setPeriod1] = useState<GuaranteeYears | ''>(saved?.period1 ?? '')
   // The card's red termite line ("दीमक की कोई गारंटी नहीं है"): on unless switched off.
-  const [termite1, setTermite1] = useState(true)
+  const [termite1, setTermite1] = useState(saved?.termite1 ?? true)
   const [generating, setGenerating] = useState(false)
   const [showWhatsAppLogin, setShowWhatsAppLogin] = useState(false)
 
   // Slot 2: an independent second card printed in the same tray pass.
   // Ticking it on reveals its own small set of fields plus its own table.
-  const [secondCardOn, setSecondCardOn] = useState(false)
+  const [secondCardOn, setSecondCardOn] = useState(saved?.secondCardOn ?? false)
   // Which card the form is showing (card layout): one form, two tabs.
-  const [tab, setTab] = useState<1 | 2>(1)
+  const [tab, setTab] = useState<1 | 2>(saved?.tab ?? 1)
   const onCard2 = layout === 'card' && secondCardOn && tab === 2
-  const [customer2, setCustomer2] = useState({ id: uid(), name: '', mobile: '', uid: '', address: '' })
-  const [rows2, setRows2] = useState<SizeRow[]>(() => [blankRow()])
-  const [brand2, setBrand2] = useState('')
-  const [period2, setPeriod2] = useState<GuaranteeYears | ''>('')
-  const [termite2, setTermite2] = useState(true)
+  const [customer2, setCustomer2] = useState<CustomerInfo>(() => saved?.customer2 ?? { id: uid(), name: '', mobile: '', uid: '', address: '' })
+  const [rows2, setRows2] = useState<SizeRow[]>(() => saved?.rows2 ?? [blankRow()])
+  const [brand2, setBrand2] = useState(saved?.brand2 ?? '')
+  const [period2, setPeriod2] = useState<GuaranteeYears | ''>(saved?.period2 ?? '')
+  const [termite2, setTermite2] = useState(saved?.termite2 ?? true)
 
   // Editing a saved card (History → Edit): it keeps its number, QR secret and
   // date — the card in the customer's hand must keep opening — so Save never
@@ -369,7 +406,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
   // The date printed on the card(s): today unless changed (a card made for an
   // earlier sale is dated the sale's day). Editing starts from the card's own.
-  const [cardDate, setCardDate] = useState(() => localDay(new Date()))
+  const [cardDate, setCardDate] = useState(() => saved?.cardDate ?? localDay(new Date()))
   const cardDateIso = () => new Date(`${cardDate}T12:00:00`).toISOString()
 
   // Unfiltered brand list — the Items table's Type column can match any known
@@ -403,8 +440,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // A new Type on the card sets the period to that Type's own years: a period
   // chosen for the last card, or for the Type typed before, does not stay on.
   // A saved card being opened keeps the period it was saved with (see importGuarantee).
-  const typeSeen1 = useRef('')
-  const typeSeen2 = useRef('')
+  const typeSeen1 = useRef(saved ? brandKey(saved.brand1) || firstTypeKey(saved.rows) : '')
+  const typeSeen2 = useRef(saved ? brandKey(saved.brand2) || firstTypeKey(saved.rows2) : '')
   const type1 = brandKey(brand1) || firstTypeKey(rows)
   const type2 = brandKey(brand2) || firstTypeKey(rows2)
   useEffect(() => {
@@ -473,6 +510,33 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   /** "GC-2026-0012" or "GC-2026-0012 + 0013" for toasts. */
   const mintedLabel = (m: MintedRefs) =>
     m.second ? `${m.number} + ${m.second.number.split('-').pop()}` : m.number
+
+  // Keep the half-filled card for when this page is left and opened again.
+  // A card being edited from History is not kept: it has its own copy.
+  const touched = rows.some(isRowFilled) || rows2.some(isRowFilled) || !!(customer.name || customer.mobile || customer.uid || customer.address || brand1 || brand2 || (secondCardOn && (customer2.name || customer2.mobile)))
+  useEffect(() => {
+    if (editing) return
+    writeDraft(layout, touched ? { ref, ref2, customer, customer2, rows, rows2, brand1, brand2, period1, period2, termite1, termite2, secondCardOn, tab, cardDate, fromBillId } : null)
+  }, [layout, editing, touched, ref, ref2, customer, customer2, rows, rows2, brand1, brand2, period1, period2, termite1, termite2, secondCardOn, tab, cardDate, fromBillId])
+
+  /** New: an empty card with fresh numbers, the kept draft thrown away. */
+  function newCard() {
+    const number = `GC-${indiaYear()}-${Date.now().toString().slice(-5)}`
+    const number2 = `GC-${indiaYear()}-${(Date.now() + 1).toString().slice(-5)}`
+    setRef({ number, id: number, token: mintCardToken() })
+    setRef2({ number: number2, id: number2, token: mintCardToken() })
+    setCustomer({ id: uid(), name: '', mobile: '', uid: '', address: '' })
+    setCustomer2({ id: uid(), name: '', mobile: '', uid: '', address: '' })
+    setRows([blankRow()]); setRows2([blankRow()])
+    setBrand1(''); setBrand2('')
+    setPeriod1(''); setPeriod2('')
+    setTermite1(true); setTermite2(true)
+    setSecondCardOn(false); setTab(1)
+    setCardDate(localDay(new Date()))
+    setFromBillId(null)
+    typeSeen1.current = ''; typeSeen2.current = ''
+    writeDraft(layout, null)
+  }
 
   // On entry: reopen a saved guarantee (from History) or import a selected bill.
   useEffect(() => {
@@ -851,6 +915,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             ) : (
               <div className="no-print flex flex-wrap items-center justify-center gap-3">
                 {/* On a phone these live in the bar at the bottom, next to where the card is filled in. */}
+                <Button variant="outline" onClick={() => (touched ? setAskNew(true) : newCard())} disabled={generating} className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
+                  <FilePlus size={20} /> New
+                </Button>
                 <Button variant="outline" onClick={saveCard} disabled={!hasRows || generating} className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
                   <Save size={20} /> Save
                 </Button>
@@ -1041,6 +1108,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
         {!editing && (
           <div className="no-print sticky -bottom-3 z-10 -mx-3 -mb-3 mt-3 flex gap-2 border-t border-stone-200/90 bg-stone-100/95 px-3 py-2 backdrop-blur dark:border-white/10 dark:bg-stone-950/95 md:hidden">
+            <Button variant="outline" onClick={() => (touched ? setAskNew(true) : newCard())} disabled={generating} aria-label="New card" className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-base font-semibold">
+              <FilePlus size={18} /> New
+            </Button>
             <Button variant="outline" onClick={saveCard} disabled={!hasRows || generating} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl text-base font-semibold">
               <Save size={18} /> Save
             </Button>
@@ -1054,6 +1124,16 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         )}
       </div>
 
+      {askNew && (
+        <Confirm
+          title="Start a new card?"
+          body="What is filled in now is cleared. A card you already saved or printed is kept in History."
+          confirmLabel="New card"
+          danger
+          onConfirm={newCard}
+          onClose={() => setAskNew(false)}
+        />
+      )}
       <WhatsAppLoginModal open={showWhatsAppLogin} onClose={() => setShowWhatsAppLogin(false)} />
     </div>
   )
