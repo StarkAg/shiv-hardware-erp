@@ -153,7 +153,7 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
         <div className="absolute left-[122mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyDimension(quote.width)}</div>
         <div className="absolute left-[148mm] top-[101.3mm] w-[30mm] text-center text-[15pt] leading-[1.1]">{quote.qty ?? 1}</div>
         <div className="absolute left-[29mm] top-[107mm] border-t-[1.5px] border-black" style={{ right: twoCol ? '2mm' : '34mm' }} />
-        <div className="absolute left-[29mm] top-[113.5mm] text-[15pt] leading-[1.1]">Rate</div>
+        <div className="absolute left-[29mm] top-[113.5mm] w-[22mm] text-right text-[15pt] leading-[1.1]">Rate</div>
         <div className="absolute left-[56.4mm] top-[113.5mm] text-[15pt] leading-[1.1]">Brand</div>
         <div className="absolute left-[127mm] top-[113.5mm] text-[15pt] leading-[1.1]">Cost</div>
         <div className="absolute left-[148mm] w-[30mm] text-center top-[113.5mm] text-[15pt] leading-[1.1]">Guarantee</div>
@@ -188,7 +188,7 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
                     style={{ backgroundColor: row.accentColor, right: tintRight }}
                   />
                 )}
-                <span className="absolute left-[31mm]">{row.rate}</span>
+                <span className="absolute left-[29mm] w-[22mm] text-right">{row.rate}</span>
                 <span className="absolute left-[56.4mm]">{row.brandName}</span>
                 <span className="absolute left-[127mm]">{Math.round(row.cost || 0)}</span>
                 {twoCol ? (

@@ -14,6 +14,9 @@ const CATEGORY_ICONS: Record<CategoryIcon, LucideIcon> = {
   window: AppWindow,
 }
 
+/** The doors quoted most often, ruled in blue so they are found first. */
+const HIGHLIGHTED = new Set<string>(['readymade-door', 'flush-door'])
+
 /**
  * What to quote for: every product, grouped, on one screen.
  *
@@ -61,7 +64,11 @@ export function QuotationOptions() {
                       <Link
                         key={category}
                         to={`/product/${category}`}
-                        className="flex h-[5.25rem] flex-col justify-between border-2 border-stone-200 bg-white p-2.5 text-stone-900 active:translate-y-0.5 active:border-shiv-green hover:border-stone-900 sm:h-32 sm:p-4"
+                        className={`flex h-[5.25rem] flex-col justify-between border-2 p-2.5 text-stone-900 active:translate-y-0.5 active:border-shiv-green sm:h-32 sm:p-4 ${
+                          HIGHLIGHTED.has(category)
+                            ? 'border-shiv-green bg-shiv-green/10 hover:bg-shiv-green/20'
+                            : 'border-stone-200 bg-white hover:border-stone-900'
+                        }`}
                       >
                         <Icon size={22} strokeWidth={2.2} className="sm:h-8 sm:w-8" />
                         <span className="line-clamp-2 font-[family-name:var(--sign)] text-[15px] font-bold uppercase leading-[1.05] sm:text-xl">{meta.short}</span>

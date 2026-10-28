@@ -27,6 +27,7 @@ import { Button, Toggle } from '../../components/ui'
 import { QuotationPrint, firstSectionRows, hasSections } from '../print/QuotationPrint'
 import { printViaShop } from '../../lib/printViaShop'
 import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
+import { sendWhatsAppDocument } from '../../lib/printServer'
 import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
@@ -157,6 +158,15 @@ export function QuotationBuilder() {
       save({ silent: true })
       const shareDoc = enrichQuotation(buildQuote())
       const blob = await elementToJpeg(<QuotationPrint quote={shareDoc} />)
+      // Straight into the Shiv Hardware group from the shop's number; where the
+      // shop PC cannot be reached (not on shop Wi-Fi), the phone's share sheet.
+      try {
+        await sendWhatsAppDocument('group', blob, `${shareDoc.number}.jpg`)
+        toast(`${shareDoc.number} sent to the Shiv Hardware group`)
+        return
+      } catch (err) {
+        if (!(err instanceof TypeError)) throw err
+      }
       const how = await shareJpeg(blob, `${shareDoc.number}.jpg`)
       if (how === 'saved') toast(`${shareDoc.number}.jpg saved — send it from your photos`)
     } catch (err) {
