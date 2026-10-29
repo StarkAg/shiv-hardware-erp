@@ -188,14 +188,7 @@ export function AluminiumCosting() {
         }
       />
       <Page>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Choice value={product} options={PRODUCTS} onChange={(p) => navigate(`/aluminium-rates/${p}`, { replace: true })} />
-          <Button variant="ghost" className="flex items-center gap-1.5 text-danger" onClick={() => setResetting(true)}>
-            <RotateCcw size={15} /> Reset all to starting values
-          </Button>
-        </div>
-
-        <Section title="Aluminium rate" note="Rs per kg. One rate for the door and both windows.">
+        <Section title="Aluminium rate" note="Rs per kg. The same rate for the door and both windows.">
           <table className="text-sm">
             <thead><tr>{ALU_THICKNESSES.map((t) => <th key={t} className={th}>{t}</th>)}</tr></thead>
             <tbody>
@@ -213,6 +206,13 @@ export function AluminiumCosting() {
             </tbody>
           </table>
         </Section>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Choice value={product} options={PRODUCTS} onChange={(p) => navigate(`/aluminium-rates/${p}`, { replace: true })} />
+          <Button variant="ghost" className="flex items-center gap-1.5 text-danger" onClick={() => setResetting(true)}>
+            <RotateCcw size={15} /> Reset all to starting values
+          </Button>
+        </div>
 
         <Section
           title="Aluminium sections"
