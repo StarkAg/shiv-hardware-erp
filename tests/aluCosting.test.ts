@@ -12,15 +12,36 @@ describe('aluminium priced from its materials', () => {
     expect(t12.door!.door.kg).toBeCloseTo(1.7375, 4)
     // 1.7375 kg x 470 + ACP 455 + U rubber 23 ft x 4 + labour 488.
     expect(t12.door!.door.cost).toBeCloseTo(1851.625, 3)
-    // 20% on top, rate rounded up to a whole rupee per sqft.
-    expect(t12.door!.door.rate).toBe(137)
-    expect(t12.door!.door.sell).toBe(Math.round(137 * 16.25))
     expect(t12.door!.acc.cost).toBe(190)
+  })
+
+  it('starts on the selling sheet: the 78 x 30 door at 150 / 200 / 190 and chaukhat at 90 / 100 / 100', () => {
+    const rows = costOut('door', sizeOf(dim(78), dim(30)), defaultCosting())
+    expect(rows.map((r) => r.door!.door.rate)).toEqual([150, 200, 190])
+    expect(rows.map((r) => r.door!.chk.rate)).toEqual([90, 100, 100])
+    expect(rows.map((r) => r.door!.acc.sell)).toEqual([160, 160, 160])
+    expect(rows[0].door!.door.sell).toBe(Math.round(150 * 16.25))
+  })
+
+  it('starts windows within the sheet\'s rates-by-area at its middle sizes', () => {
+    const c = defaultCosting()
+    const rate = (p: 'win2' | 'win3', h: number, w: number) => costOut(p, sizeOf(dim(h), dim(w)), c).map((r) => r.window!.clear.rate)
+    // 12.25 sqft: the sheet's 270 (2 track) and 360 (3 track), +60 for 1.6 MM, +50 for Hindalco.
+    expect(rate('win2', 42, 42)).toEqual([270, 330, 320])
+    expect(rate('win3', 42, 42)).toEqual([360, 420, 410])
+  })
+
+  it('bills a small door as 15 sqft and its chaukhat as 14.5 rft', () => {
+    const c = defaultCosting()
+    const s = sizeOf(dim(60), dim(24))   // 10 sqft, 12 rft
+    const [t] = costOut('door', s, c)
+    expect(t.door!.door.sell).toBe(Math.round(t.door!.door.rate * 15))
+    expect(t.door!.chk.sell).toBe(Math.round(t.door!.chk.rate * 14.5))
   })
 
   it('takes a margin in rupees per sqft', () => {
     const c = defaultCosting()
-    c.win2.margin = { mode: 'rs', value: 50 }
+    c.win2.margin = { mode: 'rs', value: [50, 50, 50] }
     const s = sizeOf(dim(48), dim(48))
     const [t12] = costOut('win2', s, c)
     const cost = t12.window!.clear.cost
@@ -31,12 +52,14 @@ describe('aluminium priced from its materials', () => {
   it('moves with the aluminium rate and a section weight', () => {
     const c = defaultCosting()
     const s = sizeOf(dim(48), dim(48))
-    const before = costOut('win2', s, c)[0].window!.clear.cost
+    const [before] = costOut('win2', s, c)
     c.alu[0] = 520
-    c.win2.sections[0].kg[0] = 3
-    const after = costOut('win2', s, c)[0].window!.clear.cost
-    // 5.755 kg now at Rs 50 more, and 2 TTS (12 ft of a 16 ft piece) 0.22 kg heavier at 520.
-    expect(after - before).toBeCloseTo(5.755 * 50 + ((12 * (3 - 2.78)) / 16) * 520, 1)
+    c.win2.sections[0].kg[0] = 3     // 2 TTS runs 2 heights + 1 width = 12 ft of a 16 ft piece
+    const [after] = costOut('win2', s, c)
+    const kgBefore = before.window!.clear.kg
+    expect(after.window!.clear.kg - kgBefore).toBeCloseTo((12 * (3 - 2.2)) / 16, 6)
+    expect(after.window!.clear.cost - before.window!.clear.cost)
+      .toBeCloseTo(after.window!.clear.kg * 520 - kgBefore * 470, 6)
   })
 
   it('fills the quotation rows, add-ons only when chosen', () => {
@@ -50,9 +73,10 @@ describe('aluminium priced from its materials', () => {
   })
 
   it('reads a damaged copy back with starting values', () => {
+    // A margin saved as one number, before margins were per thickness.
     const c = normaliseCosting({ alu: [500, 'x', 500], door: { margin: { door: { mode: 'rs', value: 25 } } } })
     expect(c.alu).toEqual([500, 470, 500])
-    expect(c.door.margin.door).toEqual({ mode: 'rs', value: 25 })
+    expect(c.door.margin.door).toEqual({ mode: 'rs', value: [25, 25, 25] })
     expect(c.door.sections.length).toBe(4)
   })
 })
@@ -78,7 +102,7 @@ describe('the Aluminium rates screen reaches the printed quotation', () => {
     c.alu[0] = 600
     c.door.sections[0].kg[0] = 1.5
     c.door.parts[0].rate = 40
-    c.door.margin.door = { mode: 'rs', value: 25 }
+    c.door.margin.door = { mode: 'rs', value: [25, 25, 25] }
     const q = quoteFor('aluminium-door', c)
     const after = q.alu.thicknesses[0]
 

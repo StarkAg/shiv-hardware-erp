@@ -32,8 +32,10 @@ export interface AluSection {
 export interface AluPart {
   id: string
   name: string
-  /** area = per sqft of the opening; lin = a·H + b·W feet; fixed = n of them. */
+  /** area = per sqft of the opening (x factor); lin = a·H + b·W feet; fixed = n of them. */
   kind: 'area' | 'lin' | 'fixed'
+  /** Area only: the share of the opening it covers. Half SS net is 0.5. */
+  factor?: number
   a?: number
   b?: number
   n?: number
@@ -43,10 +45,14 @@ export interface AluPart {
   grp?: 'door' | 'acc'
 }
 
-/** Added to the making cost: a percentage of it, or rupees per unit sold. */
+/**
+ * Added to the making cost: a percentage of it, or rupees per unit sold. One
+ * value per thickness — Hindalco sells for more than plain 1.2 MM though it
+ * weighs the same, so the margin is where that difference lives.
+ */
 export interface Margin {
   mode: 'pct' | 'rs'
-  value: number
+  value: Thick3
 }
 
 export interface DoorCosting {
@@ -92,26 +98,68 @@ export const newId = () => `${Date.now().toString(36)}${(seq++).toString(36)}${M
 const sec = (name: string, xh: number, xw: number, kg: number, grp?: AluSection['grp']): AluSection =>
   ({ id: newId(), name, xh, xw, piece: 16, kg: est(kg), ...(grp ? { grp } : {}) })
 
-const windowSections = () => [
-  sec('2 TTS', 2, 1, 2.78),
-  sec('2 TB', 0, 1, 3),
-  sec('OSO', 2, 0, 1.9),
-  sec('BSO', 0, 2, 1.86),
-  sec('Interlock', 2, 0, 2.08),
+// From the shop's selling sheet (Aluminium Rates 2026-10-28.xlsm), which is
+// what the counter quoted by until now.
+const window2Sections = () => [
+  sec('2 TTS', 2, 1, 2.2),
+  sec('2 TB', 0, 1, 2.5),
+  sec('OSO', 2, 0, 1.1),
+  sec('BSO', 0, 2, 1.2),
+  sec('Interlock', 2, 0, 1.4),
 ]
 
-const windowParts = (): AluPart[] => [
-  { id: newId(), name: 'U Rubber', kind: 'lin', a: 4, b: 2, unit: 'ft', rate: 1 },
-  { id: newId(), name: 'T Rubber', kind: 'lin', a: 8, b: 8, unit: 'ft', rate: 1 },
-  { id: newId(), name: 'Glass (4 MM clear)', kind: 'area', unit: 'sqft', rate: 48 },
-  { id: newId(), name: 'Star Lock', kind: 'fixed', n: 1, unit: 'set', rate: 40 },
-  { id: newId(), name: 'Runner', kind: 'fixed', n: 4, unit: 'pcs', rate: 10 },
-  { id: newId(), name: 'Angle 6"', kind: 'fixed', n: 1, unit: 'set', rate: 45 },
-  { id: newId(), name: 'Screws', kind: 'fixed', n: 1, unit: 'lot', rate: 20 },
-  { id: newId(), name: 'Labour', kind: 'area', unit: 'sqft', rate: 30 },
+const window3Sections = () => [
+  sec('3 TTS', 2, 1, 2.78),
+  sec('3 TB', 0, 1, 3),
+  sec('OSO / A Section / Lock Section', 2, 0, 1.1),
+  sec('BSO / H Section / Palla Top & Bottom', 0, 3, 1.2),
+  sec('Interlock', 4, 0, 1.4),
 ]
 
-const pct = (value: number): Margin => ({ mode: 'pct', value })
+type PartSpec = Omit<AluPart, 'id'>
+const parts = (list: PartSpec[]): AluPart[] => list.map((p) => ({ id: newId(), ...p }))
+
+const window2Parts = () => parts([
+  { name: 'U Rubber', kind: 'lin', a: 4, b: 2, unit: 'ft', rate: 1 },
+  { name: 'T Brush', kind: 'lin', a: 8, b: 8, unit: 'ft', rate: 1 },
+  { name: 'Glass (4 MM clear)', kind: 'area', unit: 'sqft', rate: 48 },
+  { name: 'Star Lock', kind: 'fixed', n: 1, unit: 'set', rate: 40 },
+  { name: 'Runner', kind: 'fixed', n: 4, unit: 'pcs', rate: 10 },
+  { name: 'Angle 6"', kind: 'fixed', n: 1, unit: 'set', rate: 45 },
+  { name: 'Screws', kind: 'fixed', n: 1, unit: 'lot', rate: 20 },
+  { name: 'Labour', kind: 'area', unit: 'sqft', rate: 30 },
+])
+
+const window3Parts = () => parts([
+  { name: 'U Rubber', kind: 'lin', a: 4, b: 2, unit: 'ft', rate: 1 },
+  { name: 'T Brush', kind: 'lin', a: 12, b: 12, unit: 'ft', rate: 1 },
+  { name: 'Glass (4 MM clear)', kind: 'area', unit: 'sqft', rate: 48 },
+  { name: 'Star Lock', kind: 'fixed', n: 1, unit: 'set', rate: 40 },
+  { name: 'Runner', kind: 'fixed', n: 6, unit: 'pcs', rate: 10 },
+  { name: 'Angle 6"', kind: 'fixed', n: 1, unit: 'set', rate: 45 },
+  { name: 'Screws', kind: 'fixed', n: 1, unit: 'lot', rate: 20 },
+  { name: 'Labour', kind: 'area', unit: 'sqft', rate: 45 },
+  { name: '3/8" U Channel', kind: 'lin', a: 2, b: 1, unit: 'ft', rate: 10 },
+  { name: 'SS Net (half the window)', kind: 'area', factor: 0.5, unit: 'sqft', rate: 20 },
+])
+
+const rs = (...value: Thick3): Margin => ({ mode: 'rs', value })
+
+/**
+ * Starting margins, Rs per unit, per thickness: what makes the costed price
+ * land on the selling sheet's rates (see tests/aluCosting.test.ts).
+ */
+const MARGINS: Record<'door' | 'chk' | 'acc' | 'win2' | 'win3', Thick3> = {
+  // At the sheet's 78 x 30 door: 150 / 200 / 190 a sqft, chaukhat 90 / 100 / 100 a rft.
+  door: [36, 69, 76],
+  chk: [23, 11, 33],
+  // The sheet charges 160 for accessories that cost 190 in parts.
+  acc: [-30, -30, -30],
+  // Windows: the closest fit to the sheet's rates-by-area table across sizes,
+  // with 1.6 MM at +60 a sqft and Hindalco at +50.
+  win2: [35, 49, 85],
+  win3: [35, 31, 85],
+}
 
 export function defaultCosting(): AluCosting {
   return {
@@ -133,21 +181,20 @@ export function defaultCosting(): AluCosting {
         { id: newId(), name: 'Screws', kind: 'fixed', n: 1, unit: 'lot', rate: 20, grp: 'acc' },
         { id: newId(), name: 'Labour', kind: 'area', unit: 'sqft', rate: 30, grp: 'door' },
       ],
-      margin: { door: pct(20), chk: pct(20), acc: pct(20) },
+      margin: { door: rs(...MARGINS.door), chk: rs(...MARGINS.chk), acc: rs(...MARGINS.acc) },
       addons: { decorFilm: 30, brownCoated: 40 },
     },
     win2: {
-      sections: windowSections(),
-      parts: windowParts(),
-      margin: pct(20),
+      sections: window2Sections(),
+      parts: window2Parts(),
+      margin: rs(...MARGINS.win2),
       reflectiveExtra: 20,
       addons: { ssNet: 50, decorFilm: 30, brownCoated: 40 },
     },
     win3: {
-      // The 2-track sections until the 3-track ones are entered.
-      sections: windowSections(),
-      parts: windowParts(),
-      margin: pct(20),
+      sections: window3Sections(),
+      parts: window3Parts(),
+      margin: rs(...MARGINS.win3),
       reflectiveExtra: 20,
       addons: { ssNet: 50, decorFilm: 30, brownCoated: 40 },
     },
@@ -180,7 +227,7 @@ export function sizeOf(height: Dimension, width: Dimension): AluSize {
 }
 
 export function partQty(part: AluPart, s: AluSize): number {
-  if (part.kind === 'area') return s.area
+  if (part.kind === 'area') return r2(s.area * (part.factor ?? 1))
   if (part.kind === 'lin') return up(num(part.a) * s.H + num(part.b) * s.W)
   return num(part.n)
 }
@@ -192,10 +239,18 @@ export const sectionFeet = (sc: AluSection, s: AluSize) => num(sc.xh) * s.H + nu
 export const sectionKg = (sc: AluSection, s: AluSize, t: number) =>
   (sectionFeet(sc, s) * num(sc.kg[t])) / (num(sc.piece) || 16)
 
-/** Making cost plus margin. `units` is what a Rs margin is counted per. */
-export function withMargin(cost: number, m: Margin, units: number): number {
-  return m.mode === 'pct' ? cost * (1 + num(m.value) / 100) : cost + num(m.value) * units
+/** Making cost plus margin, for thickness `t`. `units` is what a Rs margin is counted per. */
+export function withMargin(cost: number, m: Margin, units: number, t: number): number {
+  const v = num(m.value[t])
+  return m.mode === 'pct' ? cost * (1 + v / 100) : cost + v * units
 }
+
+/**
+ * The sheet's minimum bill for a door: a small one is charged as 15 sqft, and
+ * its chaukhat as 14.5 rft. The making cost is still the real size.
+ */
+export const DOOR_MIN_SQFT = 15
+export const CHAUKHAT_MIN_RFT = 14.5
 
 /**
  * A priced line the way the quotation prints it: a whole-rupee rate per unit,
@@ -234,7 +289,7 @@ export function costOut(product: AluProduct, s: AluSize, c: AluCosting): Thickne
       const d = c.door
       const item = (kg: number, extra: number, m: Margin, units: number): ItemCost => {
         const cost = kg * rate + extra
-        const p = priced(withMargin(cost, m, units), units)
+        const p = priced(withMargin(cost, m, units, t), units)
         return { kg, cost, sell: p.amount, rate: p.rate }
       }
       const doorKg = kgSum(d.sections, s, t, 'door')
@@ -243,10 +298,10 @@ export function costOut(product: AluProduct, s: AluSize, c: AluCosting): Thickne
       return {
         name,
         door: {
-          door: item(doorKg, partsSum(d.parts, s, 'door'), d.margin.door, s.area),
-          chk: item(chkKg, 0, d.margin.chk, s.rft),
+          door: item(doorKg, partsSum(d.parts, s, 'door'), d.margin.door, Math.max(s.area, DOOR_MIN_SQFT)),
+          chk: item(chkKg, 0, d.margin.chk, Math.max(s.rft, CHAUKHAT_MIN_RFT)),
           // A flat sum: a Rs margin is added once.
-          acc: { kg: 0, cost: accCost, sell: Math.round(withMargin(accCost, d.margin.acc, 1)), rate: 0 },
+          acc: { kg: 0, cost: accCost, sell: Math.round(withMargin(accCost, d.margin.acc, 1, t)), rate: 0 },
         },
       }
     }
@@ -254,8 +309,8 @@ export function costOut(product: AluProduct, s: AluSize, c: AluCosting): Thickne
     const kg = kgSum(w.sections, s, t)
     const clearCost = kg * rate + partsSum(w.parts, s)
     const reflCost = clearCost + num(w.reflectiveExtra) * s.area
-    const clear = priced(withMargin(clearCost, w.margin, s.area), s.area)
-    const refl = priced(withMargin(reflCost, w.margin, s.area), s.area)
+    const clear = priced(withMargin(clearCost, w.margin, s.area, t), s.area)
+    const refl = priced(withMargin(reflCost, w.margin, s.area, t), s.area)
     return {
       name,
       window: {
@@ -293,7 +348,7 @@ export function calcAllThicknessesCosted(
         name,
         doorRate: d.door.rate, doorCost: d.door.sell,
         chaukhatRate: d.chk.rate, chaukhatCost,
-        chaukhatRft: s.rft,
+        chaukhatRft: Math.max(s.rft, CHAUKHAT_MIN_RFT),
         accessories,
         total: d.door.sell + chaukhatCost + accessories,
         decorFilmRate: a.decorFilm, decorFilm: perSqft(addons.decorFilm, a.decorFilm),
@@ -333,10 +388,14 @@ export function normaliseCosting(raw: unknown): AluCosting {
   const r = raw as Partial<AluCosting>
   const t3 = (x: unknown, f: Thick3): Thick3 =>
     Array.isArray(x) && x.length === 3 ? (x.map((v, i) => (Number.isFinite(Number(v)) ? Number(v) : f[i])) as Thick3) : f
-  const margin = (x: unknown, f: Margin): Margin =>
-    x && typeof x === 'object' && ((x as Margin).mode === 'pct' || (x as Margin).mode === 'rs')
-      ? { mode: (x as Margin).mode, value: num((x as Margin).value) }
-      : f
+  // A margin saved before it was per thickness is one number for all three.
+  const margin = (x: unknown, f: Margin): Margin => {
+    if (!x || typeof x !== 'object') return f
+    const m = x as { mode?: unknown; value?: unknown }
+    if (m.mode !== 'pct' && m.mode !== 'rs') return f
+    const one = num(m.value)
+    return { mode: m.mode, value: Array.isArray(m.value) ? t3(m.value, f.value) : [one, one, one] }
+  }
   const list = <T,>(x: unknown, f: T[]) => (Array.isArray(x) ? (x as T[]) : f)
   const sections = (x: unknown, f: AluSection[]) =>
     list<AluSection>(x, f).map((sc) => ({ ...sc, id: sc.id || newId(), kg: t3(sc.kg, [0, 0, 0]) }))

@@ -5,6 +5,8 @@ import { Button, Card, Page, PageHeader } from '../../components/ui'
 import Confirm from '../ledger/components/Confirm'
 import { ALU_THICKNESSES } from '../../lib/aluminium'
 import {
+  CHAUKHAT_MIN_RFT,
+  DOOR_MIN_SQFT,
   costOut,
   newId,
   partAmount,
@@ -122,9 +124,19 @@ function MarginEditor({ label, unit, margin, onChange }: {
           onChange={(mode) => onChange({ ...margin, mode })}
         />
       </td>
-      <td className={`${td} w-28`}>
-        <Num label={`${label} margin`} value={margin.value} onChange={(value) => onChange({ ...margin, value })} />
-      </td>
+      {ALU_THICKNESSES.map((t, i) => (
+        <td key={t} className={`${td} w-28`}>
+          <Num
+            label={`${label} margin ${t}`}
+            value={margin.value[i]}
+            onChange={(v) => {
+              const value = [...margin.value] as Thick3
+              value[i] = v
+              onChange({ ...margin, value })
+            }}
+          />
+        </td>
+      ))}
       <td className={`${td} text-xs text-muted`}>{margin.mode === 'pct' ? '%' : unit}</td>
     </tr>
   )
@@ -282,7 +294,7 @@ export function AluminiumCosting() {
 
         <Section
           title="Raw materials & labour"
-          note="Per sqft: counted on the area. By length: a x height + b x width, in feet, rounded up. Fixed: that many, whatever the size."
+          note="Per sqft: the area, or a share of it (0.5 for half). By length: a x height + b x width, in feet, rounded up. Fixed: that many, whatever the size."
         >
           <table className="w-full text-sm">
             <thead>
@@ -332,7 +344,12 @@ export function AluminiumCosting() {
                         <span className="ml-1 tabular-nums text-stone-700">= {n2(partQty(p, s), 0)}</span>
                       </div>
                     ) : (
-                      <span className="tabular-nums">{n2(partQty(p, s))}</span>
+                      // Most cover the whole opening; a half SS net is 0.5 of it.
+                      <div className="flex items-center gap-1 whitespace-nowrap text-xs text-muted">
+                        <div className="w-16"><Num label="Share of the area" value={p.factor ?? 1} onChange={(factor) => setPart(i, { factor })} /></div>
+                        x area
+                        <span className="ml-1 tabular-nums text-stone-700">= {n2(partQty(p, s))}</span>
+                      </div>
                     )}
                   </td>
                   <td className={`${td} w-24`}>
@@ -367,8 +384,19 @@ export function AluminiumCosting() {
           </Button>
         </Section>
 
-        <Section title="Margin" note="Added to the making cost. A percentage of the cost, or rupees per unit sold.">
+        <Section
+          title="Margin"
+          note={<>Added to the making cost, for each thickness: a percentage of the cost, or rupees per unit sold.{isDoor && ` A door is billed as at least ${DOOR_MIN_SQFT} sqft and its chaukhat as at least ${CHAUKHAT_MIN_RFT} rft, as on the selling sheet.`}</>}
+        >
           <table className="text-sm">
+            <thead>
+              <tr>
+                <th className={th} />
+                <th className={th} />
+                {ALU_THICKNESSES.map((t) => <th key={t} className={th}>{t}</th>)}
+                <th />
+              </tr>
+            </thead>
             <tbody>
               {isDoor ? (
                 <>
