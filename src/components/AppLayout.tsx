@@ -19,7 +19,7 @@ import {
   LayoutDashboard,
   NotebookPen,
   Scale,
-  TrendingUp, HandCoins, Coins, CalendarClock, PackageCheck, PackageOpen,
+  TrendingUp, HandCoins, Coins, CalendarClock, PackageCheck,
   ReceiptIndianRupee, MessageCircle, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, Inbox, ShieldCheck, ClipboardList, Truck } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { UpdateBanner } from './UpdateBanner'
@@ -106,14 +106,13 @@ const AREAS: { label: string; items: NavItem[] }[] = [
   },
   {
     // Every running list in one place, near the top: what is waiting to be
-    // made, quoted, delivered, received or settled. They were spread across
+    // made, quoted, delivered or settled. They were spread across
     // three headings, and Advances sat far enough down to be missed.
     label: 'Lists',
     items: [
       { to: '/work-list', label: 'Work List', icon: ClipboardList },
       { to: '/quotations', label: 'Quotations', icon: FileStack },
       { to: '/ledger/advances', label: 'Advances', icon: Coins },
-      { to: '/ledger/tocome', label: 'Bills to Come', icon: PackageOpen },
       { to: '/guarantee/list', label: 'Guarantee List', icon: ShieldCheck },
       { to: '/delivery', label: 'Delivery', icon: Truck },
     ],
