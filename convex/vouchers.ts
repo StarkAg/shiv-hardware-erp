@@ -293,6 +293,65 @@ export const createReceipt = mutation({
 });
 
 /**
+ * An advance with no bill behind it, written from the terminal — money that
+ * reached the drawer or the bank before Advance was a voucher, and never made
+ * it into the books. A customer's is received (Dr Cash or Bank, Cr them); a
+ * supplier's is paid (Dr them, Cr Cash or Bank). On the counter an advance is
+ * written as a bill instead (billLedger, kind "advance").
+ *
+ *   npx convex run --prod vouchers:writeAdvance '{"date": …, "partyLedgerId": "…", "account": "Bank", "amount": 50000}'
+ */
+export const writeAdvance = internalMutation({
+  args: {
+    date: v.number(),
+    partyLedgerId: v.id("ledgers"),
+    account: v.union(v.literal("Cash"), v.literal("Bank")),
+    amount: v.number(),
+    narration: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!(args.amount > 0)) throw new Error("An advance needs an amount");
+    const party = await ctx.db.get(args.partyLedgerId);
+    if (!party) throw new Error("That account is no longer in the books.");
+    const supplier = (await ctx.db.get(party.groupId))?.name === "Sundry Creditors";
+    const drawer = await ctx.db.query("ledgers").filter((q) => q.eq(q.field("name"), args.account)).first();
+    if (!drawer) throw new Error(`The "${args.account}" account is missing`);
+    let type = await ctx.db.query("voucherTypes").withIndex("by_name", (q) => q.eq("name", "Advance")).unique();
+    if (!type) {
+      const id = await ctx.db.insert("voucherTypes", { name: "Advance", abbr: "ADV", sort: 12 });
+      type = (await ctx.db.get(id))!;
+    }
+    const fy = fyOf(args.date);
+    const now = Date.now();
+    const voucherNo = await nextVoucherNo(ctx, type, fy);
+    const voucherId = await ctx.db.insert("vouchers", {
+      typeId: type._id,
+      voucherNo,
+      fy,
+      date: args.date,
+      partyLedgerId: args.partyLedgerId,
+      narration: args.narration ?? "Advance",
+      status: "final",
+      amount: round2(args.amount),
+      attachments: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await writeLines(ctx, voucherId, args.date, [
+      { ledgerId: args.partyLedgerId, side: supplier ? "Dr" : "Cr", amount: args.amount },
+      { ledgerId: drawer._id, side: supplier ? "Cr" : "Dr", amount: args.amount },
+    ]);
+    await record(
+      ctx,
+      "voucher.create",
+      `Advance ${await describe(ctx, type.abbr, voucherNo, args.partyLedgerId, args.amount)} on ${day(args.date)}`,
+      { entity: "voucher", entityId: voucherId }
+    );
+    return `${type.abbr}-${String(voucherNo).padStart(4, "0")}`;
+  },
+});
+
+/**
  * Which ledger sits on which side, by voucher type. The party is a creditor on
  * a purchase and a debtor on a sale, so the two sides swap with the type — and
  * an edit has to know that to rewrite the lines correctly.
