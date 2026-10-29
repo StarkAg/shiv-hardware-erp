@@ -1495,3 +1495,20 @@ to{transform: scale(1); color: #fff}}
 .ledger-root .ledger tr.marked-green > td { background: rgba(22, 163, 74, 0.10); }
 .ledger-root .ledger tr.marked-yellow > td { background: rgba(234, 179, 8, 0.16); }
 .ledger-root .ledger tr.marked-red > td { background: rgba(220, 38, 38, 0.12); }
+
+/* ---------- Quotations list (features/bills/QuotationList) ---------- */
+.ledger-root .card.qtn-attention{border-color: var(--amber-line); background: linear-gradient(var(--amber-tint), var(--amber-tint)), var(--card);}
+.ledger-root .card.qtn-attention .card-amt{color: var(--amber-text);}
+.ledger-root .qtn-search{flex: 1; min-width: 240px; max-width: 460px;}
+.ledger-root .ledger tbody tr.qtn-month td{background: var(--card2); color: var(--muted); font-size: 11px;
+  font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; padding: 7px 14px;}
+.ledger-root .ledger tbody tr.qtn-row{cursor: pointer;}
+.ledger-root .ledger tbody tr.qtn-row:hover td{background: var(--card2);}
+.ledger-root .qtn-name{font-weight: 700;}
+.ledger-root .qtn-amt{font-weight: 800;}
+.ledger-root .qtn-age{font-family: inherit; font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 2px;}
+.ledger-root .qtn-age.stale{color: var(--amber-text); font-weight: 800;}
+.ledger-root .qtn-status{display: inline-block; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 800;
+  background: var(--card2); color: var(--fg); border: 1px solid var(--line); white-space: nowrap;}
+.ledger-root .qtn-status.stale{background: var(--amber-tint); color: var(--amber-text); border-color: var(--amber-line);}
+.ledger-root .qtn-status.sold{background: var(--green-tint); color: var(--green-text); border-color: var(--green-line);}

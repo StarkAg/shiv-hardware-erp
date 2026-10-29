@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useShortcuts } from '../lib/useShortcuts'
 import { isDarkMode, toggleTheme } from '../lib/theme'
@@ -29,12 +29,48 @@ import { BUILD_ID, CURRENT_VERSION } from '../lib/appUpdate'
 // Guarantee claims (and their menu badge) read the cloud, so they only mount when it is configured.
 const CONVEX_READY = Boolean(import.meta.env.VITE_CONVEX_URL)
 
-const linkClass = ({ isActive }: { isActive: boolean }) =>
+// The page you are on is solid green; the entries used most are a light
+// green, so the everyday ones stand out from the rest of a long menu.
+const FREQUENT = 'bg-shiv-green/15 font-semibold text-stone-950 hover:bg-shiv-green/25 dark:bg-shiv-green/15 dark:text-white dark:hover:bg-shiv-green/25'
+const PLAIN = 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
+
+const linkClass = ({ isActive, frequent = false }: { isActive: boolean; frequent?: boolean }) =>
   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${
     isActive
       ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
-      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
+      : frequent ? FREQUENT : PLAIN
   }`
+
+/**
+ * Which menu entries are used most, counted on this computer.
+ *
+ * Every page opened adds one to its entry. Until there have been enough
+ * visits to go by, the everyday vouchers and the accounts stand in.
+ */
+const USE_KEY = 'shiv-panel:nav-use'
+const FREQUENT_COUNT = 6
+const STARTERS = ['/day', '/bills?new=sale', '/bills?new=purchase', '/bills?new=receipt', '/bills?new=payment', '/ledger']
+
+function readUse(): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(USE_KEY) || '{}')
+    return raw && typeof raw === 'object' ? raw : {}
+  } catch {
+    return {}
+  }
+}
+
+function mostUsed(use: Record<string, number>): Set<string> {
+  const total = Object.values(use).reduce((t, n) => t + n, 0)
+  if (total < 30) return new Set(STARTERS)
+  return new Set(
+    Object.entries(use)
+      .filter(([to]) => to !== '/home')
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, FREQUENT_COUNT)
+      .map(([to]) => to),
+  )
+}
 
 /** The same, one level in. It was written out by hand six times. */
 
@@ -251,6 +287,19 @@ export function AppLayout() {
   useShortcuts(
     Object.fromEntries(VOUCHERS.map((v) => [v.key, () => navigate(v.to)])),
   )
+  // Count the entry this page belongs to, for the shading of the most used.
+  const [use, setUse] = useState(readUse)
+  useEffect(() => {
+    const item = AREAS.flatMap((a) => a.items).find((i) => isCurrent(i, location.pathname, location.search))
+    if (!item) return
+    setUse((prev) => {
+      const next = { ...prev, [item.to]: (prev[item.to] ?? 0) + 1 }
+      try { localStorage.setItem(USE_KEY, JSON.stringify(next)) } catch { /* private window: not remembered */ }
+      return next
+    })
+  }, [location.pathname, location.search])
+  const frequent = useMemo(() => mostUsed(use), [use])
+
   // dark: just a re-render trigger — the real source of truth is the DOM class.
   const [dark, setDark] = useState(isDarkMode)
   // Desktop sidebar collapse, remembered so the shop's laptop keeps its choice.
@@ -312,7 +361,7 @@ export function AppLayout() {
                   className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-lg transition ${
                     isCurrent(item, location.pathname, location.search)
                       ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
-                      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
+                      : frequent.has(item.to) ? FREQUENT : PLAIN
                   }`}
                 >
                   <item.icon size={18} className="shrink-0" />
@@ -325,7 +374,7 @@ export function AppLayout() {
                   key={item.to}
                   to={item.to}
                   title={item.label}
-                  className={linkClass({ isActive: isCurrent(item, location.pathname, location.search) })}
+                  className={linkClass({ isActive: isCurrent(item, location.pathname, location.search), frequent: frequent.has(item.to) })}
                 >
                   <item.icon size={18} className="shrink-0" />
                   <span className="flex-1">{item.label}</span>
