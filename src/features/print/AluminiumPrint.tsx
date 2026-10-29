@@ -209,7 +209,9 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
       chaukhatRate: r.chaukhatRate, chaukhatCost: 0,
       clearTotal: clearCost,
       ssNet: hasWindowSsNet ? r.accessories : 0,
+      ssNetRate: r.ssNetRate ?? 50,
       decorFilm: hasDecorFilm ? r.decorFilm : 0,
+      brownCoatedRate: r.brownCoatedRate ?? 40,
       brownCoated: hasBrownCoated ? r.brownCoated ?? 0 : 0,
     }
   }) : ALU_THICKNESSES.map((t) => {
@@ -228,6 +230,8 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
       chaukhatRate: tr.chaukhat, chaukhatCost,
       clearTotal: clearCost + chaukhatCost,
       ssNet: hasWindowSsNet ? r0(area * 50) : 0,
+      ssNetRate: 50,
+      brownCoatedRate: 40,
       decorFilm: hasDecorFilm ? r0(area * 30) : 0,
       brownCoated: hasBrownCoated ? r0(area * 40) : 0,
     }
@@ -384,7 +388,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                     <Td className="bg-[#d9d9d9] text-right">SS Net</Td>
                     {wRows.map((d) => (
                       <Fragment key={d.t}>
-                        <Td className="bg-[#d9d9d9] text-right">@50</Td>
+                        <Td className="bg-[#d9d9d9] text-right">@{d.ssNetRate}</Td>
                         <Td className="text-right">{d.ssNet}</Td>
                       </Fragment>
                     ))}
@@ -395,7 +399,7 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
                     <Td className="bg-[#d9d9d9] text-right">Brown Coated</Td>
                     {wRows.map((d) => (
                       <Fragment key={d.t}>
-                        <Td className="bg-[#d9d9d9] text-right">@40</Td>
+                        <Td className="bg-[#d9d9d9] text-right">@{d.brownCoatedRate}</Td>
                         <Td className="text-right">{d.brownCoated}</Td>
                       </Fragment>
                     ))}

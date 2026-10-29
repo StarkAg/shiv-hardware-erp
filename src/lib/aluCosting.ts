@@ -306,15 +306,16 @@ export function calcAllThicknessesCosted(
   const ssNet = product === 'win2' && addons.ssNet ? perSqft(true, a.ssNet) : 0
   return rows.map(({ name, window }) => {
     const w = window!
-    const chosen = addons.glassType === 'reflective' ? w.reflective : w.clear
+    // Both glasses are quoted side by side; the first row is always clear.
     return {
       name,
-      doorRate: chosen.rate, doorCost: chosen.sell,
+      doorRate: w.clear.rate, doorCost: w.clear.sell,
       glassRate: w.clear.rate, glassCost: w.clear.sell,
       reflectiveRate: w.reflective.rate, reflectiveCost: w.reflective.sell,
       chaukhatRate: 0, chaukhatCost: 0,
       accessories: ssNet,
-      total: chosen.sell,
+      ssNetRate: a.ssNet,
+      total: w.clear.sell,
       decorFilmRate: a.decorFilm, decorFilm: perSqft(addons.decorFilm, a.decorFilm),
       brownCoatedRate: a.brownCoated, brownCoated: perSqft(addons.brownCoated, a.brownCoated),
     }

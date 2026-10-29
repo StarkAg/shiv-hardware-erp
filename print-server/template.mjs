@@ -543,15 +543,15 @@ async function buildAluminiumHtml(quote) {
     if (hasDecorFilm) rows += row('Décor Film', thicknesses.map(t => pairCells(t.decorFilmRate, t.decorFilm)).join(''))
     if (hasBrownCoated) rows += row('Brown Coated', thicknesses.map(t => pairCells(t.brownCoatedRate, t.brownCoated)).join(''))
   } else {
-    rows = row('4 MM Clear &amp; Texture Glass', thicknesses.map(t => pairCells(t.doorRate, t.doorCost)).join(''))
+    rows = row('4 MM Clear &amp; Texture Glass', thicknesses.map(t => pairCells(t.glassRate ?? t.doorRate, t.glassCost ?? t.doorCost)).join(''))
     rows += row('4 MM Reflective Glass', thicknesses.map(t => {
       const rate = t.reflectiveRate ?? Number(t.doorRate || 0) + 20
       const amount = t.reflectiveCost ?? Math.round(area * rate)
       return pairCells(rate, amount)
     }).join(''))
     if (hasAnyWindowAddon) rows += addonHeader
-    if (hasWindowSsNet) rows += row('SS Net', thicknesses.map(t => pairCells(50, t.accessories)).join(''))
-    if (hasBrownCoated) rows += row('Brown Coated', thicknesses.map(t => pairCells(40, t.brownCoated)).join(''))
+    if (hasWindowSsNet) rows += row('SS Net', thicknesses.map(t => pairCells(t.ssNetRate ?? 50, t.accessories)).join(''))
+    if (hasBrownCoated) rows += row('Brown Coated', thicknesses.map(t => pairCells(t.brownCoatedRate ?? 40, t.brownCoated)).join(''))
   }
 
   const diagramKind = isDoor ? 'door' : is2Track ? 'window2' : 'window3'

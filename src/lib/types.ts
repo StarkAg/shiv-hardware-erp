@@ -183,6 +183,8 @@ export interface Quotation {
       /** windows */
       glassRate?: number; glassCost?: number
       reflectiveRate?: number; reflectiveCost?: number
+      /** 2-track: the SS Net add-on is `accessories`, at this rate per sqft. */
+      ssNetRate?: number
       chaukhatRft?: number
     }[]
   }
