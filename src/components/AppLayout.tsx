@@ -299,12 +299,14 @@ export function AppLayout() {
     })
   }, [location.pathname, location.search])
   const frequent = useMemo(() => mostUsed(use), [use])
-  // Shaded rows next to each other read as one block: no rounded corner
-  // where two of them meet, or the run looks notched down its edge.
-  const shaded = (item: NavItem) => frequent.has(item.to) && !isCurrent(item, location.pathname, location.search)
+  // The most-used rows (and the page you are on) run the full width of the
+  // sidebar as square bands, with a thin rule between neighbours, so a run of
+  // them reads as one block rather than a stack of separate pills.
+  const banded = (item: NavItem) => frequent.has(item.to) || isCurrent(item, location.pathname, location.search)
   const joins = (items: NavItem[], i: number) => {
-    if (!shaded(items[i])) return ''
-    return `${i > 0 && shaded(items[i - 1]) ? ' rounded-t-none' : ''}${i < items.length - 1 && shaded(items[i + 1]) ? ' rounded-b-none' : ''}`
+    if (!banded(items[i])) return ''
+    const ruled = i > 0 && banded(items[i - 1]) ? ' border-t border-stone-300/70 dark:border-white/10' : ''
+    return ` -mx-3 rounded-none px-6${ruled}`
   }
 
   // dark: just a re-render trigger — the real source of truth is the DOM class.
