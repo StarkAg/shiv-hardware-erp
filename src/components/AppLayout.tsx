@@ -299,6 +299,13 @@ export function AppLayout() {
     })
   }, [location.pathname, location.search])
   const frequent = useMemo(() => mostUsed(use), [use])
+  // Shaded rows next to each other read as one block: no rounded corner
+  // where two of them meet, or the run looks notched down its edge.
+  const shaded = (item: NavItem) => frequent.has(item.to) && !isCurrent(item, location.pathname, location.search)
+  const joins = (items: NavItem[], i: number) => {
+    if (!shaded(items[i])) return ''
+    return `${i > 0 && shaded(items[i - 1]) ? ' rounded-t-none' : ''}${i < items.length - 1 && shaded(items[i + 1]) ? ' rounded-b-none' : ''}`
+  }
 
   // dark: just a re-render trigger — the real source of truth is the DOM class.
   const [dark, setDark] = useState(isDarkMode)
@@ -348,7 +355,7 @@ export function AppLayout() {
             )}
             {area.label !== 'Home' && railed && <div className="mx-auto mb-2 w-8 border-t border-stone-200/80 dark:border-white/10" />}
 
-            {area.items.map((item) => (
+            {area.items.map((item, i) => (
               // Collapsed, a row is its icon and nothing else: the name and
               // the F-key squeezed the icon smaller than its neighbours and
               // pushed it off the rail's centre line. Both are in the tooltip.
@@ -374,7 +381,7 @@ export function AppLayout() {
                   key={item.to}
                   to={item.to}
                   title={item.label}
-                  className={linkClass({ isActive: isCurrent(item, location.pathname, location.search), frequent: frequent.has(item.to) })}
+                  className={`${linkClass({ isActive: isCurrent(item, location.pathname, location.search), frequent: frequent.has(item.to) })}${joins(area.items, i)}`}
                 >
                   <item.icon size={18} className="shrink-0" />
                   <span className="flex-1">{item.label}</span>
