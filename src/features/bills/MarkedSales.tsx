@@ -144,12 +144,20 @@ function MarkedSales({ kind }: { kind: ListKind }) {
                           </button>
                         )}
                         {kind === 'guarantee' && !isDone && (
-                          <button className="btn small ghost" onClick={() => saveBill({ ...b, guaranteeIgnoredAt: b.guaranteeIgnoredAt ? undefined : Date.now() })}>
-                            {b.guaranteeIgnoredAt ? 'Bring back' : 'Ignore for now'}
+                          <button
+                            className="btn small ghost"
+                            title={b.guaranteeIgnoredAt ? 'Put it back on the list' : 'Set aside for now; it stays under Ignored'}
+                            onClick={() => saveBill({ ...b, guaranteeIgnoredAt: b.guaranteeIgnoredAt ? undefined : Date.now() })}
+                          >
+                            {b.guaranteeIgnoredAt ? 'Bring back' : 'Ignore'}
                           </button>
                         )}
-                        <button className="btn small ghost" onClick={() => saveBill(list.setDone(b, isDone ? undefined : Date.now()))}>
-                          {isDone ? <><RotateCcw size={13} aria-hidden="true" /> Not {list.doneLabel.toLowerCase()}</> : <><Check size={13} aria-hidden="true" /> {list.doneLabel}</>}
+                        <button
+                          className="btn small ghost"
+                          title={isDone ? `Not ${list.doneLabel.toLowerCase()} after all` : `Mark ${list.doneLabel.toLowerCase()}`}
+                          onClick={() => saveBill(list.setDone(b, isDone ? undefined : Date.now()))}
+                        >
+                          {isDone ? <><RotateCcw size={13} aria-hidden="true" /> Undo</> : <><Check size={13} aria-hidden="true" /> {list.doneLabel}</>}
                         </button>
                       </div>
                     </td>

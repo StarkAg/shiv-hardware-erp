@@ -6,6 +6,8 @@ import { ExternalLink, Mail, Phone } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Doc, Id } from '../../../convex/_generated/dataModel'
 import { Button, Card, Page, PageHeader } from '../../components/ui'
+import { useLedgerTheme } from '../ledger/useLedgerTheme'
+import '../ledger/ledger.css'
 import { toast } from '../../components/Toast'
 
 /**
@@ -53,15 +55,31 @@ const ago = (at: number) => {
 /** `cardLinks`: link each claim to the card in Guarantee History (Shiv Quotation has it; the panel does not). */
 export function GuaranteeClaims({ cardLinks = false }: { cardLinks?: boolean }) {
   const convexReady = Boolean(import.meta.env.VITE_CONVEX_URL)
+  const dark = useLedgerTheme()
+  const body = convexReady
+    ? <ClaimList cardLinks={cardLinks} lists={!cardLinks} />
+    : <Card className="p-6 text-sm text-muted">Claims need the cloud connection (VITE_CONVEX_URL).</Card>
+  // The counter shows claims in its own Signs look. The panel shows them like
+  // every other list there: the same title, filter chips and empty box.
+  if (cardLinks) {
+    return (
+      <Page>
+        <PageHeader title="Claims" />
+        {body}
+      </Page>
+    )
+  }
   return (
-    <Page>
-      <PageHeader title="Claims" />
-      {convexReady ? <ClaimList cardLinks={cardLinks} /> : <Card className="p-6 text-sm text-muted">Claims need the cloud connection (VITE_CONVEX_URL).</Card>}
-    </Page>
+    <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
+      <div className="app">
+        <h1 className="pagetitle">Claims</h1>
+        {body}
+      </div>
+    </div>
   )
 }
 
-function ClaimList({ cardLinks }: { cardLinks: boolean }) {
+function ClaimList({ cardLinks, lists }: { cardLinks: boolean; lists: boolean }) {
   const claims = useLive(api.guaranteeClaims.list, {}, 'claims') as Claim[] | undefined
   const [filter, setFilter] = useState('waiting')
 
@@ -79,6 +97,30 @@ function ClaimList({ cardLinks }: { cardLinks: boolean }) {
   }, [claims, filter])
 
   if (claims === undefined) return <Card className="p-6 text-sm text-muted">Loading claims…</Card>
+
+  if (lists) {
+    return (
+      <>
+        <div className="toolbar">
+          <div className="chips" role="tablist" aria-label="Filter claims">
+            {FILTERS.map((f) => (
+              <button key={f.key} type="button" role="tab" aria-selected={filter === f.key}
+                className={`chip${filter === f.key ? ' on' : ''}`} onClick={() => setFilter(f.key)}>
+                {f.label} ({counts[f.key]})
+              </button>
+            ))}
+          </div>
+        </div>
+        {shown.length === 0 ? (
+          <div className="empty">{filter === 'waiting' ? 'No claims waiting. Every claim has a decision.' : 'No claims here.'}</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {shown.map((c) => <ClaimCard key={c._id} claim={c} cardLink={cardLinks} />)}
+          </div>
+        )}
+      </>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-3">

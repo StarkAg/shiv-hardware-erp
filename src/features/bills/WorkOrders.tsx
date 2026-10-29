@@ -1,12 +1,14 @@
 import { useLive } from '../ledger/lib/cache'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ClipboardList, FileText, Printer, ReceiptIndianRupee, RotateCcw, Ruler } from 'lucide-react'
+import { Check, FileText, Printer, ReceiptIndianRupee, RotateCcw, Ruler } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import { foldName } from '../../../convex/lib/text'
 import { UNIT_WORD, sizeText, workPieces, type PieceSize } from '../../../convex/lib/workPieces'
 import { useStore } from '../../lib/store'
 import { SHOP, billLines, type Bill } from '../../lib/types'
+import { useLedgerTheme } from '../ledger/useLedgerTheme'
+import '../ledger/ledger.css'
 
 /**
  * Every piece of an order with the size the mechanic sent for it, in the
@@ -140,6 +142,7 @@ export function WorkOrders() {
   const staff = ['Gopal & Bandhu']
   const book = useLive(api.reports.receivables, {}, 'receivables') as { rows: any[] } | undefined
   const [showBilled, setShowBilled] = useState(false)
+  const dark = useLedgerTheme()
 
   const orders = useMemo(() => bills
     .filter((b) => b.workOrder && ((b.kind ?? 'sale') === 'sale' || b.kind === 'quotation'))
@@ -260,36 +263,23 @@ export function WorkOrders() {
   const busy = columns.filter((c) => c.key === '' || c.orders.length)
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:p-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2">
-          <ClipboardList size={20} className="text-shiv-green" />
-          <h1 className="text-lg font-bold text-stone-900 dark:text-stone-100">Work list</h1>
+    <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
+    <div className="app flex min-h-0 flex-col gap-3">
+      <h1 className="pagetitle">Work list</h1>
+      <div className="toolbar">
+        <div className="chips">
+          <button className={`chip${showBilled ? '' : ' on'}`} onClick={() => setShowBilled(false)}>Open ({open.length})</button>
+          <button className={`chip${showBilled ? ' on' : ''}`} onClick={() => setShowBilled(true)}>Billed ({billed.length})</button>
+          <span className="count">
+            {byStage('measure').length} to measure · {byStage('measured').length} measured, to bill · {columns.find((c) => c.key === '')?.orders.length ?? 0} unassigned
+            {free.length > 0 && ` · Free: ${free.join(', ')}`}
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{byStage('measure').length} to measure</span>
-          <span className="rounded-full bg-sky-100 px-2.5 py-1 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300">{byStage('measured').length} measured · to bill</span>
-          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-stone-700 dark:bg-white/10 dark:text-stone-200">{columns.find((c) => c.key === '')?.orders.length ?? 0} unassigned</span>
-          {free.length > 0 && <span className="font-semibold text-muted">Free: {free.join(', ')}</span>}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {billed.length > 0 && (
-            <button type="button" onClick={() => setShowBilled((v) => !v)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-muted hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-white/10 dark:hover:text-stone-200">
-              {showBilled ? 'Hide' : 'Show'} billed ({billed.length})
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => navigate('/bills?new=quotation&order=1')}
-            className="rounded-lg bg-shiv-green px-3 py-1.5 text-xs font-bold text-stone-950 hover:brightness-95"
-          >
-            New order
-          </button>
-        </div>
+        <button className="btn small" onClick={() => navigate('/bills?new=quotation&order=1')}>+ New order</button>
       </div>
 
       {open.length === 0 && !showBilled ? (
-        <p className="rounded-xl border border-dashed border-stone-300 px-4 py-10 text-center text-sm text-muted dark:border-white/15">
+        <p className="empty">
           No open orders. Take the advance as a Receipt, then <b>New order</b>: what to make, as a Quotation with Order on.
           Pick a mechanic on its card, print the visit slip, enter the sizes he brings, then Make sale bill.
         </p>
@@ -307,6 +297,7 @@ export function WorkOrders() {
           ))}
         </div>
       )}
+    </div>
     </div>
   )
 }
