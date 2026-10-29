@@ -22,15 +22,30 @@ import { isStaleBuild, reloadForNewBuild, watchForNewBuild } from './lib/staleBu
 watchForNewBuild()
 
 /**
- * Each screen is fetched when it is first opened, not with the panel. The
+ * Each screen is its own file, not part of the panel's first download. The
  * panel used to arrive as one 717 kB file holding every screen and the PDF
  * reader, all of it parsed before the first one could draw. Home and the bill
  * editor, opened all day, come with the panel.
+ *
+ * But a screen fetched only when it is first clicked left the page blank
+ * while it came down — the "wait" that made the panel feel like a website.
+ * So once the panel is up and idle, every screen is fetched in the
+ * background (preloadPages), and a screen already here draws at once with no
+ * blank frame at all.
  */
+const preloads: (() => Promise<unknown>)[] = []
+
 function page<K extends string>(load: () => Promise<{ [k in K]: unknown }>, name: K) {
+  let ready: React.ComponentType | null = null
+  const fetchIt = async () => {
+    const C = (await load())[name] as React.ComponentType
+    ready = C
+    return C
+  }
+  preloads.push(() => fetchIt().catch(() => undefined))
   const Lazy = React.lazy(async () => {
     try {
-      return { default: (await load())[name] as React.ComponentType }
+      return { default: await fetchIt() }
     } catch (error) {
       // A screen from before the last deploy: reload onto the new one.
       // The promise is left hanging while the page reloads, so no error flashes.
@@ -38,7 +53,19 @@ function page<K extends string>(load: () => Promise<{ [k in K]: unknown }>, name
       throw error
     }
   })
-  return () => <React.Suspense fallback={null}><Lazy /></React.Suspense>
+  return () => {
+    const Ready = ready
+    return Ready ? <Ready /> : <React.Suspense fallback={null}><Lazy /></React.Suspense>
+  }
+}
+
+/** Every screen, fetched one after another while nothing else is happening. */
+function preloadPages() {
+  const idle = (fn: () => void) =>
+    'requestIdleCallback' in window ? window.requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 1500)
+  idle(async () => {
+    for (const fetchIt of preloads) await fetchIt()
+  })
 }
 const PrintDemo = page(() => import('./features/print/PrintDemo'), 'PrintDemo')
 const GuaranteeClaims = page(() => import('./features/guarantee/GuaranteeClaims'), 'GuaranteeClaims')
@@ -243,4 +270,5 @@ void hydrateStore().catch(() => undefined).then(() => {
       {app}
     </React.StrictMode>,
   )
+  preloadPages()
 })

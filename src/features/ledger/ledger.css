@@ -1497,8 +1497,6 @@ to{transform: scale(1); color: #fff}}
 .ledger-root .ledger tr.marked-red > td { background: rgba(220, 38, 38, 0.12); }
 
 /* ---------- Quotations list (features/bills/QuotationList) ---------- */
-.ledger-root .card.qtn-attention{border-color: var(--amber-line); background: linear-gradient(var(--amber-tint), var(--amber-tint)), var(--card);}
-.ledger-root .card.qtn-attention .card-amt{color: var(--amber-text);}
 .ledger-root .qtn-search{flex: 1; min-width: 240px; max-width: 460px;}
 .ledger-root .ledger tbody tr.qtn-month td{background: var(--card2); color: var(--muted); font-size: 11px;
   font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; padding: 7px 14px;}
@@ -1512,3 +1510,40 @@ to{transform: scale(1); color: #fff}}
   background: var(--card2); color: var(--fg); border: 1px solid var(--line); white-space: nowrap;}
 .ledger-root .qtn-status.stale{background: var(--amber-tint); color: var(--amber-text); border-color: var(--amber-line);}
 .ledger-root .qtn-status.sold{background: var(--green-tint); color: var(--green-text); border-color: var(--green-line);}
+.ledger-root .qtn-acts{display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px;}
+.ledger-root .qtn-acts .xbtn{margin-left: 4px;}
+
+/* Table text in Barlow Semi Condensed — the Signs lettering, and narrow the
+   way Tally's is, so a party's full name fits on its line. */
+@font-face{font-family: 'Barlow Semi Condensed'; font-weight: 500; font-display: swap;
+  src: url('./fonts/barlow-semi-condensed-500.woff2') format('woff2');}
+@font-face{font-family: 'Barlow Semi Condensed'; font-weight: 600; font-display: swap;
+  src: url('./fonts/barlow-semi-condensed-600.woff2') format('woff2');}
+@font-face{font-family: 'Barlow Semi Condensed'; font-weight: 700; font-display: swap;
+  src: url('./fonts/barlow-semi-condensed-700.woff2') format('woff2');}
+
+/* One line per cell, always, and never wider than the screen. A name that
+   wraps doubles its row's height and breaks the run of the list, and a table
+   that scrolls sideways hides the amounts. The short columns (date, number,
+   ref, amount, buttons) take what they need; the text columns share the rest,
+   the party the largest share, and end in "..." only if a name still does not
+   fit. Phones keep their card layout (max-width: 760px). */
+@media (min-width: 761px){
+  .ledger-root .ledger th,
+  .ledger-root .ledger td{white-space: nowrap;}
+  .ledger-root .ledger td:not(.mono){font-family: 'Barlow Semi Condensed', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 16px;}
+  .ledger-root .ledger td.particulars{max-width: 0; width: 18%;
+    overflow: hidden; text-overflow: ellipsis;}
+  .ledger-root .ledger td.particulars[data-label="Party"],
+  .ledger-root .ledger td.particulars[data-label="Customer"],
+  .ledger-root .ledger td.particulars[data-label="Supplier"],
+  .ledger-root .ledger td.particulars[data-label="Name"],
+  .ledger-root .ledger td.particulars[data-label="Ledger"]{width: 32%;}
+  .ledger-root .ledger td.particulars[data-label="Particulars"],
+  .ledger-root .ledger td.particulars[data-label="Items"]{width: 22%;}
+  .ledger-root .ledger td.particulars > *{display: block; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;}
+}
+.ledger-root .chips-gap{width: 14px;}
+.ledger-root .adv-paid{color: var(--green-text); font-weight: 800;}

@@ -15,6 +15,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 
+/** WebP at 0.8, the same picture at under half a JPEG's weight; JPEG where the browser cannot write WebP. */
+const smallBlob = async (canvas, jpegQuality) => {
+  const webp = await new Promise((done) => canvas.toBlob(done, 'image/webp', 0.8))
+  if (webp?.type === 'image/webp') return webp
+  return new Promise((done) => canvas.toBlob(done, 'image/jpeg', jpegQuality))
+}
+
 const KEY = 'shiv-sort:stack'
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F']
 const MAX_EDGE = 1800
@@ -164,21 +171,18 @@ export default function Shoot({ onWorking }) {
     // A separate canvas freezes this exact press, even during a rapid burst.
     const out = Object.assign(document.createElement('canvas'), { width: w, height: h })
     out.getContext('2d').drawImage(el, 0, 0, w, h)
-    out.toBlob(
-      (blob) => {
-        if (!blob) {
-          flying.current -= 1
-          setPending(flying.current)
-          say()
-          setTrouble('The photo could not be captured. Please shoot this bill again.')
-          return
-        }
-        const at = Date.now()
-        void send(new File([blob], `bill-${at}.jpg`, { type: 'image/jpeg', lastModified: at }))
-      },
-      'image/jpeg',
-      QUALITY,
-    )
+    void smallBlob(out, QUALITY).then((blob) => {
+      if (!blob) {
+        flying.current -= 1
+        setPending(flying.current)
+        say()
+        setTrouble('The photo could not be captured. Please shoot this bill again.')
+        return
+      }
+      const at = Date.now()
+      const ext = blob.type === 'image/webp' ? 'webp' : 'jpg'
+      void send(new File([blob], `bill-${at}.${ext}`, { type: blob.type, lastModified: at }))
+    })
   }, [send, say])
 
   const choose = (letter) => {

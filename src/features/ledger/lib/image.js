@@ -63,10 +63,30 @@ function pixels(bitmap, width, height) {
   return { canvas, ctx, image: ctx.getImageData(0, 0, width, height) };
 }
 
-const encode = (canvas, quality) =>
+const encodeAs = (canvas, type, quality) =>
   canvas.convertToBlob
-    ? canvas.convertToBlob({ type: 'image/jpeg', quality })
-    : new Promise((done) => canvas.toBlob(done, 'image/jpeg', quality));
+    ? canvas.convertToBlob({ type, quality })
+    : new Promise((done) => canvas.toBlob(done, type, quality));
+
+/**
+ * WebP at 0.8: the same pixels as the old JPEG at well under half the weight,
+ * with no difference you can see on a bill (checked side by side, 2026-10-29).
+ * A browser that cannot write WebP — some Safaris — hands back a PNG instead,
+ * and then it is JPEG as before.
+ */
+const WEBP_QUALITY = 0.8;
+async function encode(canvas, quality) {
+  const webp = await encodeAs(canvas, 'image/webp', WEBP_QUALITY);
+  if (webp?.type === 'image/webp') return webp;
+  return encodeAs(canvas, 'image/jpeg', quality);
+}
+
+/** The file to upload, named and typed by what it was encoded as. */
+const asFile = (blob, name, lastModified) =>
+  new File([blob], name.replace(/\.[^.]+$/, '') + (blob.type === 'image/webp' ? '.webp' : '.jpg'), {
+    type: blob.type,
+    lastModified,
+  });
 
 /**
  * Crops a photograph to the sheet of paper in it, here on the phone.
@@ -123,10 +143,7 @@ export async function crop(file) {
     const blob = await encode(out, QUALITY);
     if (!blob) return file;
 
-    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
-      type: 'image/jpeg',
-      lastModified: file.lastModified,
-    });
+    return asFile(blob, file.name, file.lastModified);
   } catch {
     return file;                // never lose a bill to a failed crop
   } finally {
@@ -154,7 +171,7 @@ export async function shrink(file, max = MAX_EDGE) {
   canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
   bitmap.close?.();
 
-  const blob = await new Promise((done) => canvas.toBlob(done, 'image/jpeg', QUALITY));
+  const blob = await encode(canvas, QUALITY);
   /**
    * Keep the original only when it is already a JPEG and no bigger.
    *
@@ -165,13 +182,10 @@ export async function shrink(file, max = MAX_EDGE) {
    * Worse, a PNG carries an alpha channel a JPEG cannot, so anything that
    * assumed the type downstream was wrong about it.
    */
-  const alreadyJpeg = file.type === 'image/jpeg';
-  if (!blob || (alreadyJpeg && blob.size >= file.size)) return file;
+  const alreadySmall = file.type === 'image/jpeg' || file.type === 'image/webp';
+  if (!blob || (alreadySmall && blob.size >= file.size)) return file;
 
-  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
-    type: 'image/jpeg',
-    lastModified: file.lastModified,
-  });
+  return asFile(blob, file.name, file.lastModified);
 }
 
 // Wide enough to read a printed invoice, and no wider. Quality is lower than

@@ -35,7 +35,7 @@ const FREQUENT = 'bg-shiv-green/15 font-semibold text-stone-950 hover:bg-shiv-gr
 const PLAIN = 'text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white'
 
 const linkClass = ({ isActive, frequent = false }: { isActive: boolean; frequent?: boolean }) =>
-  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${
+  `-mx-3 flex items-center gap-3 whitespace-nowrap px-6 py-2 text-sm font-medium transition focus-visible:outline-offset-[-2px] ${
     isActive
       ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
       : frequent ? FREQUENT : PLAIN
@@ -105,13 +105,24 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     items: [{ to: '/home', label: 'Home', icon: LayoutDashboard }],
   },
   {
+    // Every running list in one place, near the top: what is waiting to be
+    // made, quoted, delivered, received or settled. They were spread across
+    // three headings, and Advances sat far enough down to be missed.
+    label: 'Lists',
+    items: [
+      { to: '/work-list', label: 'Work List', icon: ClipboardList },
+      { to: '/quotations', label: 'Quotations', icon: FileStack },
+      { to: '/ledger/advances', label: 'Advances', icon: Coins },
+      { to: '/ledger/tocome', label: 'Bills to Come', icon: PackageOpen },
+      { to: '/guarantee/list', label: 'Guarantee List', icon: ShieldCheck },
+      { to: '/delivery', label: 'Delivery', icon: Truck },
+    ],
+  },
+  {
     label: 'Operations',
     items: [
       { to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck },
       { to: '/guarantee/claims', label: 'Guarantee Claims', icon: Inbox, badge: true },
-      { to: '/guarantee/list', label: 'Guarantee List', icon: ShieldCheck },
-      { to: '/work-list', label: 'Work List', icon: ClipboardList },
-      { to: '/delivery', label: 'Delivery', icon: Truck },
     ],
   },
   {
@@ -158,7 +169,6 @@ const AREAS: { label: string; items: NavItem[] }[] = [
       // A price given, not a sale: kept with the bills, never in the books.
       // Alt+F10 — F10 is Tally's "Other Vouchers", and a quotation is one.
       { to: '/bills?new=quotation', label: 'Quotation', icon: FileText, key: 'Alt+F10' },
-      { to: '/quotations', label: 'Quotations List', icon: FileStack },
     ],
   },
   {
@@ -170,8 +180,6 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     label: 'Accounts',
     items: [
       { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly', '/ledger/tocome', '/ledger/bills', '/ledger/advances'] },
-      { to: '/ledger/tocome', label: 'Bills to Come', icon: PackageOpen },
-      { to: '/ledger/advances', label: 'Advances', icon: Coins },
       { to: '/ledger/monthly', label: 'Salary & Rent', icon: CalendarClock },
       { to: '/ledgers', label: 'Account Masters', icon: Users },
       { to: '/ledger/trial', label: 'Trial Balance', icon: Scale },
@@ -299,14 +307,12 @@ export function AppLayout() {
     })
   }, [location.pathname, location.search])
   const frequent = useMemo(() => mostUsed(use), [use])
-  // The most-used rows (and the page you are on) run the full width of the
-  // sidebar as square bands, with a thin rule between neighbours, so a run of
-  // them reads as one block rather than a stack of separate pills.
+  // Every row runs the full width of the sidebar, square. The most-used rows
+  // (and the page you are on) are shaded bands with a thin rule between
+  // neighbours, so a run of them reads as one block, not a stack of pills.
   const banded = (item: NavItem) => frequent.has(item.to) || isCurrent(item, location.pathname, location.search)
   const joins = (items: NavItem[], i: number) => {
-    if (!banded(items[i])) return ''
-    const ruled = i > 0 && banded(items[i - 1]) ? ' border-t border-stone-300/70 dark:border-white/10' : ''
-    return ` -mx-3 rounded-none px-6${ruled}`
+    return i > 0 && banded(items[i]) && banded(items[i - 1]) ? ' border-t border-stone-300/70 dark:border-white/10' : ''
   }
 
   // dark: just a re-render trigger — the real source of truth is the DOM class.
@@ -331,11 +337,11 @@ export function AppLayout() {
           <button
             onClick={toggleRail}
             aria-label={railed ? 'Open sidebar' : 'Collapse sidebar'}
-            className={`flex shrink-0 items-center justify-center rounded-lg text-muted hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto h-10 w-10' : 'ml-auto order-last h-8 w-8'}`}
+            className={`flex shrink-0 items-center justify-center text-muted hover:bg-stone-200/70 hover:text-stone-800 dark:hover:bg-white/10 dark:hover:text-white ${railed ? 'mx-auto h-10 w-10' : 'ml-auto order-last h-8 w-8'}`}
           >
             {railed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
           </button>
-          <div className={`h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white shadow-inner shadow-stone-400/30 ${railed ? 'hidden' : 'flex'}`}>
+          <div className={`h-10 w-10 shrink-0 items-center justify-center border border-white/10 bg-white shadow-inner shadow-stone-400/30 ${railed ? 'hidden' : 'flex'}`}>
             <img src={assetPath('assets/letterhead/shiv-logo.png')} alt="" className="h-9 w-9 object-contain" />
           </div>
           <div className={`min-w-0 flex-1 ${railed ? 'hidden' : ''}`}>
@@ -367,7 +373,7 @@ export function AppLayout() {
                   to={item.to}
                   title={item.key ? `${item.label}  ${item.key}` : item.label}
                   aria-label={item.label}
-                  className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-lg transition ${
+                  className={`relative mx-auto flex h-10 w-10 items-center justify-center transition focus-visible:outline-offset-[-2px] ${
                     isCurrent(item, location.pathname, location.search)
                       ? 'bg-shiv-green text-stone-950 shadow-sm shadow-black/20'
                       : frequent.has(item.to) ? FREQUENT : PLAIN
@@ -404,7 +410,7 @@ export function AppLayout() {
         <button
           onClick={() => setDark(toggleTheme())}
           title={dark ? 'Light mode' : 'Dark mode'}
-          className={`flex items-center rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition ${
+          className={`flex items-center text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white transition ${
             railed ? 'mx-auto h-10 w-10 justify-center' : 'w-full gap-2 px-3 py-2'
           }`}
         >
@@ -423,7 +429,7 @@ export function AppLayout() {
           </a>
           <span
             title={BUILD_ID ? `Build ${BUILD_ID}` : undefined}
-            className="rounded-full bg-stone-200/70 px-2 py-0.5 text-[10px] font-semibold text-muted dark:bg-white/10"
+            className="bg-stone-200/70 px-2 py-0.5 text-[10px] font-semibold text-muted dark:bg-white/10"
           >
             v{CURRENT_VERSION}{BUILD_ID && <span className="font-normal"> · {BUILD_ID.split(' · ')[0]}</span>}
           </span>

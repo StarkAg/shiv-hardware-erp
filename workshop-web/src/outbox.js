@@ -2,6 +2,13 @@ import { useSyncExternalStore } from 'react'
 import { SIDE } from './side.js'
 import { api, finished, needsOf, said, stageId, stageNo } from './flow.js'
 
+/** WebP at 0.8, the same picture at under half a JPEG's weight; JPEG where the browser cannot write WebP. */
+const smallBlob = async (canvas, jpegQuality) => {
+  const webp = await new Promise((done) => canvas.toBlob(done, 'image/webp', 0.8))
+  if (webp?.type === 'image/webp') return webp
+  return new Promise((done) => canvas.toBlob(done, 'image/jpeg', jpegQuality))
+}
+
 /**
  * A phone photo is 4-12 MB and its upload over mobile data is most of the
  * wait. Brought down to 1600px and packed tighter it is about a twentieth of
@@ -19,7 +26,7 @@ async function forUpload(file) {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
     bitmap.close?.()
-    const blob = await new Promise((done) => canvas.toBlob(done, 'image/jpeg', 0.72))
+    const blob = await smallBlob(canvas, 0.72)
     return blob && blob.size < file.size ? blob : file
   } catch {
     return file

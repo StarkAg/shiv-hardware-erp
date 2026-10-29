@@ -74,6 +74,7 @@ import type * as mica from "../mica.js";
 import type * as migrateLedger from "../migrateLedger.js";
 import type * as money from "../money.js";
 import type * as monthly from "../monthly.js";
+import type * as photoSwap from "../photoSwap.js";
 import type * as photos from "../photos.js";
 import type * as prices from "../prices.js";
 import type * as printJobs from "../printJobs.js";
@@ -166,6 +167,7 @@ declare const fullApi: ApiFromModules<{
   migrateLedger: typeof migrateLedger;
   money: typeof money;
   monthly: typeof monthly;
+  photoSwap: typeof photoSwap;
   photos: typeof photos;
   prices: typeof prices;
   printJobs: typeof printJobs;

@@ -326,7 +326,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
       )}
 
       {tab === 'advances' && (
-        <Advances onOpen={openParty} onNew={() => onOpenVoucher?.('advance')} />
+        <Advances onOpen={openParty} onNew={() => onOpenVoucher?.('advance')} onViewBill={setViewing} />
       )}
 
       {tab === 'bills' && <Bills masters={masters} pending={pending} onViewBill={setViewing} onOpen={openParty} />}

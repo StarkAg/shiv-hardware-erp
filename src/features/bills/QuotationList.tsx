@@ -52,12 +52,9 @@ export function QuotationList() {
       .sort((a, b) => b.date.localeCompare(a.date) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
     [bills],
   )
-  const sum = (list: Bill[]) => list.reduce((t, b) => t + (b.total || 0), 0)
   const open = all.filter(isQuotation)
   const sold = all.filter((b) => !isQuotation(b))
   const stale = open.filter((b) => daysOld(b) > STALE_DAYS)
-  // Of every quotation given, how many became a sale.
-  const converted = all.length ? Math.round((sold.length / all.length) * 100) : 0
 
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase()
@@ -78,32 +75,13 @@ export function QuotationList() {
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
       <div className="app">
         <h1 className="pagetitle">Quotations</h1>
-        <p className="hint mb-4">
-          Prices given to customers. They sit on the customer&apos;s account but never in its balance, until converted to a sale.
-          Click a row to see the quotation.
-        </p>
-        {/* The four figures are also the filter: pressing one shows those. */}
-        <div className="summary">
-          <button type="button" className={`card total${show === 'open' ? ' on' : ''}`} onClick={() => setShow('open')}>
-            <span className="card-name">Open</span>
-            <span className="card-amt">{rupees(sum(open))}</span>
-            <span className="card-meta">{open.length} quotation{open.length === 1 ? '' : 's'} waiting on the customer</span>
-          </button>
-          <button type="button" className={`card${show === 'stale' ? ' on' : ''}${stale.length ? ' qtn-attention' : ''}`} onClick={() => setShow('stale')}>
-            <span className="card-name">Over {STALE_DAYS} days</span>
-            <span className="card-amt">{stale.length}</span>
-            <span className="card-meta">{stale.length ? `${rupees(sum(stale))} open, worth a call` : 'none left waiting'}</span>
-          </button>
-          <button type="button" className={`card${show === 'sold' ? ' on' : ''}`} onClick={() => setShow('sold')}>
-            <span className="card-name">Became a sale</span>
-            <span className="card-amt">{rupees(sum(sold))}</span>
-            <span className="card-meta">{sold.length} of {all.length} · {converted}% converted</span>
-          </button>
-          <button type="button" className={`card${show === 'all' ? ' on' : ''}`} onClick={() => setShow('all')}>
-            <span className="card-name">All quotations</span>
-            <span className="card-amt">{all.length}</span>
-            <span className="card-meta">{rupees(sum(all))} quoted in all</span>
-          </button>
+        <div className="toolbar">
+          <div className="chips">
+            <button className={`chip${show === 'open' ? ' on' : ''}`} onClick={() => setShow('open')}>Open ({open.length})</button>
+            <button className={`chip${show === 'stale' ? ' on' : ''}`} onClick={() => setShow('stale')}>Over {STALE_DAYS} days ({stale.length})</button>
+            <button className={`chip${show === 'sold' ? ' on' : ''}`} onClick={() => setShow('sold')}>Sold ({sold.length})</button>
+            <button className={`chip${show === 'all' ? ' on' : ''}`} onClick={() => setShow('all')}>All ({all.length})</button>
+          </div>
         </div>
         <div className="toolbar">
           <input aria-label="Search quotations" className="qtn-search" placeholder="Search customer, phone, number or item" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -178,17 +156,20 @@ export function QuotationList() {
                           </button>
                         </td>
                         <td className="rowacts" data-label="">
-                          {isOpen ? (
-                            <>
-                              <button className="btn small" onClick={() => navigate(`/bills/${b.id}`)}>Open</button>
-                              <button className="btn small on" onClick={() => navigate(`/bills/${b.id}?convert=sale`)}>Convert to sale</button>
-                              <button className="xbtn del" title="Delete this quotation" aria-label={`Delete ${quoteLabel(b.number)}`} onClick={() => setDeleting(b)}>
-                                <X size={14} aria-hidden="true" />
-                              </button>
-                            </>
-                          ) : (
-                            <button className="btn small" onClick={() => navigate(`/bills/${b.id}`)}>Open bill</button>
-                          )}
+                          {/* Open is the quiet one; converting is what the row is for. */}
+                          <div className="qtn-acts">
+                            {isOpen ? (
+                              <>
+                                <button className="btn small ghost" onClick={() => navigate(`/bills/${b.id}`)}>Open</button>
+                                <button className="btn small" onClick={() => navigate(`/bills/${b.id}?convert=sale`)}>Convert to sale</button>
+                                <button className="xbtn del" title="Delete this quotation" aria-label={`Delete ${quoteLabel(b.number)}`} onClick={() => setDeleting(b)}>
+                                  <X size={14} aria-hidden="true" />
+                                </button>
+                              </>
+                            ) : (
+                              <button className="btn small ghost" onClick={() => navigate(`/bills/${b.id}`)}>Open bill</button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     </Fragment>

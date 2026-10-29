@@ -1,6 +1,13 @@
 import { convex, withTimeout } from './sync.js'
 import { anyApi } from 'convex/server'
 
+/** WebP at 0.8, the same picture at under half a JPEG's weight; JPEG where the browser cannot write WebP. */
+const smallBlob = async (canvas, jpegQuality) => {
+  const webp = await new Promise((done) => canvas.toBlob(done, 'image/webp', 0.8))
+  if (webp?.type === 'image/webp') return webp
+  return new Promise((done) => canvas.toBlob(done, 'image/jpeg', jpegQuality))
+}
+
 const DB_NAME = 'shiv-cash-bill-photos'
 const STORE = 'pages'
 
@@ -39,10 +46,9 @@ async function smallJpeg(file) {
   canvas.height = Math.round(bitmap.height * ratio)
   canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
   bitmap.close()
-  return new Promise((resolve, reject) => canvas.toBlob(
-    blob => blob ? resolve(blob) : reject(new Error('Could not prepare the photo.')),
-    'image/jpeg', 0.84,
-  ))
+  const blob = await smallBlob(canvas, 0.84)
+  if (!blob) throw new Error('Could not prepare the photo.')
+  return blob
 }
 
 export async function enqueuePhotos(entryId, files, batchId) {
@@ -69,7 +75,7 @@ export async function flushPhotos() {
         let storageId = page.storageId
         if (!storageId) {
           const url = await withTimeout(client.mutation(anyApi.files.generateUploadUrl, {}))
-          const response = await withTimeout(fetch(url, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: page.blob }), 60000)
+          const response = await withTimeout(fetch(url, { method: 'POST', headers: { 'Content-Type': page.blob.type || 'image/jpeg' }, body: page.blob }), 60000)
           if (!response.ok) throw new Error(`Upload failed (${response.status})`)
           storageId = (await response.json()).storageId
           await put({ ...page, storageId })

@@ -348,6 +348,22 @@ export const advances = query({
     const all = await ctx.db.query("vouchers").withIndex("by_date").order("desc").collect();
     const bills = await allBills(ctx);
 
+    // Each party's balance now. Zero means the advance has been used up — the
+    // goods went, or the bill came — and the party's work is done.
+    const balanceOf = new Map<string, number>();
+    for (const vch of all) {
+      if (vch.typeId !== type._id || balanceOf.has(vch.partyLedgerId)) continue;
+      const account = ledgerById.get(vch.partyLedgerId);
+      const lines = await ctx.db
+        .query("voucherEntries")
+        .withIndex("by_ledger", (q) => q.eq("ledgerId", vch.partyLedgerId))
+        .collect();
+      balanceOf.set(
+        vch.partyLedgerId,
+        round2((account ? openingSigned(account) : 0) + lines.reduce((t, l) => t + signed(l.side, l.amount), 0)),
+      );
+    }
+
     return Promise.all(
       all
         .filter((vch) => vch.typeId === type._id)
@@ -373,6 +389,11 @@ export const advances = query({
             narration: vch.narration ?? "",
             amount: vch.amount ?? 0,
             billId: billOf(bills, vch)?.id ?? null,
+            partyBalance: Math.abs(balanceOf.get(vch.partyLedgerId) ?? 0),
+            partySide: sideOf(balanceOf.get(vch.partyLedgerId) ?? 0),
+            settled: Math.abs(balanceOf.get(vch.partyLedgerId) ?? 0) < 0.5,
+            // Photos of the slip, for the paperclip, as the ledger lines carry.
+            attachmentUrls: await urlsFor(ctx, vch.attachments),
           };
         })
     );

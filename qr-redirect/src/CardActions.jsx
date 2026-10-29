@@ -5,6 +5,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
+/** WebP at 0.8, the same picture at under half a JPEG's weight; JPEG where the browser cannot write WebP. */
+const smallBlob = async (canvas, jpegQuality) => {
+  const webp = await new Promise((done) => canvas.toBlob(done, 'image/webp', 0.8))
+  if (webp?.type === 'image/webp') return webp
+  return new Promise((done) => canvas.toBlob(done, 'image/jpeg', jpegQuality))
+}
+
 const MAX_PHOTOS = 3
 // Proof the claimant holds the originals, and that the door is this card's door.
 const PROOFS = [
@@ -41,7 +48,7 @@ async function shrink(file) {
     canvas.height = Math.round(bitmap.height * scale)
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
     bitmap.close?.()
-    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82))
+    const blob = await smallBlob(canvas, 0.82)
     return blob || file
   } catch {
     return file

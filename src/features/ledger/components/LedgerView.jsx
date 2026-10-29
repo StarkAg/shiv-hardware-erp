@@ -8,6 +8,7 @@ import { useStore } from '../../../lib/store'
 import { toast } from '../../../components/Toast'
 import VoucherBillPreview from './VoucherBillPreview'
 import { photoStrip } from './BillViewer'
+import { billFor as findBill } from '../lib/billFor'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
@@ -93,17 +94,8 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
    */
   const bills = useStore((st) => st.bills);
   const [previewing, setPreviewing] = useState(null);
-  const billFor = (row) => {
-    // The bill names its voucher outright; the BILL-n reference is the fallback
-    // for bills saved before they did. Same test as VoucherEditor.
-    const id = String(row?.voucherId ?? row?._id ?? '');
-    const named = id && bills.find((b) => String(b.voucherId ?? '') === id);
-    if (named) return named;
-    const ref = String(row?.refNo ?? '');
-    if (!ref.startsWith('BILL-')) return null;
-    const number = ref.slice(5);
-    return bills.find((b) => String(b.number) === number) ?? null;
-  };
+  // Same test as VoucherEditor and the Advances list (lib/billFor).
+  const billFor = (row) => findBill(bills, row);
   const [pricing, setPricing] = useState(null);
   const [editing, setEditing] = useState(null);
   const navigate = useNavigate();
