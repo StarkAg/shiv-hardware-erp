@@ -435,7 +435,7 @@ export const detail = query({
     const paymentMode = moneyLines.length
       ? (moneyLines.some(({ name }) => name === "Cash") ? "cash" : "upi")
       : undefined;
-    const settles = type?.name === "Receipt" || type?.name === "Payment" || type?.name === "Refund";
+    const settles = type?.name === "Receipt" || type?.name === "Payment" || type?.name === "Refund" || type?.name === "Advance";
     const discount = settles
       ? named.filter(({ line, name }) => line.ledgerId !== voucher.partyLedgerId && /^Discount (Allowed|Received)$/.test(name))
           .reduce((sum, { line }) => sum + line.amount, 0)
@@ -1207,7 +1207,7 @@ export const lastPaper = query({
     // A bill: a receipt or a payment carries the paper of the money, not of
     // what it is paid against, so it is passed over.
     const types = new Map((await ctx.db.query("voucherTypes").collect()).map((t) => [t._id, t.name]));
-    const money = new Set(["Receipt", "Payment", "Refund", "Contra", "Journal"]);
+    const money = new Set(["Receipt", "Payment", "Refund", "Advance", "Contra", "Journal"]);
     const newest = vouchers
       .filter((vch) => !money.has(types.get(vch.typeId) ?? ""))
       .filter((vch) => (vch.attachments ?? []).some((a: any) => typeof a === "string" || a.kind !== "receipt"))

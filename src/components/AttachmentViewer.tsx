@@ -143,7 +143,7 @@ type Entry = { type: string; number: string; date: string; amount: string; refNo
 /** One colour per kind of entry, so a purchase and a sale are told apart at a glance. */
 const TYPE_TONE: Record<string, string> = {
   Sale: 'sale', Purchase: 'purchase', Receipt: 'receipt', Payment: 'payment',
-  'Goods Return': 'return', Refund: 'return', Quotation: 'quote', 'Goods Received': 'grn',
+  'Goods Return': 'return', Refund: 'return', Advance: 'receipt', Quotation: 'quote', 'Goods Received': 'grn',
 }
 
 /** The entry a photo is on, as a card: its kind in its colour, number, day, amount, reference. */

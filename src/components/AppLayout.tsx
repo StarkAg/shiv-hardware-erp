@@ -19,7 +19,7 @@ import {
   LayoutDashboard,
   NotebookPen,
   Scale,
-  TrendingUp, HandCoins, CalendarClock, PackageCheck, PackageOpen,
+  TrendingUp, HandCoins, Coins, CalendarClock, PackageCheck, PackageOpen,
   ReceiptIndianRupee, MessageCircle, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, Inbox, ShieldCheck, ClipboardList, Truck } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { UpdateBanner } from './UpdateBanner'
@@ -116,6 +116,9 @@ const AREAS: { label: string; items: NavItem[] }[] = [
       { to: '/bills?new=grn', label: 'Goods Received', icon: PackageCheck, key: 'Alt+F9' },
       { to: '/bills?new=return', label: 'Goods Return', icon: PackageX, key: 'Alt+F8' },
       { to: '/bills?new=refund', label: 'Refund', icon: HandCoins, key: 'Alt+F6' },
+      // Money ahead of the goods. Alt of Payment, F5: Alt+F6 is already the
+      // refund, and an advance is money moving before any bill, like both.
+      { to: '/bills?new=advance', label: 'Advance', icon: Coins, key: 'Alt+F5' },
       // A price given, not a sale: kept with the bills, never in the books.
       // Alt+F10 — F10 is Tally's "Other Vouchers", and a quotation is one.
       { to: '/bills?new=quotation', label: 'Quotation', icon: FileText, key: 'Alt+F10' },
@@ -130,8 +133,9 @@ const AREAS: { label: string; items: NavItem[] }[] = [
   {
     label: 'Accounts',
     items: [
-      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly', '/ledger/tocome', '/ledger/bills'] },
+      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly', '/ledger/tocome', '/ledger/bills', '/ledger/advances'] },
       { to: '/ledger/tocome', label: 'Bills to Come', icon: PackageOpen },
+      { to: '/ledger/advances', label: 'Advances', icon: Coins },
       { to: '/ledger/monthly', label: 'Salary & Rent', icon: CalendarClock },
       { to: '/ledgers', label: 'Account Masters', icon: Users },
       { to: '/ledger/trial', label: 'Trial Balance', icon: Scale },
@@ -172,6 +176,7 @@ const VOUCHERS = [
   { to: '/bills?new=grn',      label: 'Goods Received', key: 'alt+F9', kind: 'grn' },
   { to: '/bills?new=return',   label: 'Goods Return',   key: 'alt+F8', kind: 'return' },
   { to: '/bills?new=refund',   label: 'Refund',         key: 'alt+F6', kind: 'refund' },
+  { to: '/bills?new=advance',  label: 'Advance',        key: 'alt+F5', kind: 'advance' },
   { to: '/bills?new=quotation', label: 'Quotation',     key: 'alt+F10', kind: 'quotation' },
 ] as const
 

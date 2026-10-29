@@ -14,6 +14,7 @@ import BillViewer from './components/BillViewer';
 import PrintPacket from './components/PrintPacket';
 import SalaryRent from './components/SalaryRent';
 import BillsToCome from './components/BillsToCome';
+import Advances from './components/Advances';
 import Bills from './components/Bills';
 import { History as HistoryIcon } from 'lucide-react'
 
@@ -46,7 +47,7 @@ const TABS = [
  * address against the tab strip instead would have quietly dropped all three
  * back to All Parties the moment they stopped being tabs.
  */
-const VIEWS = [...TABS.map(([id]) => id), 'monthly', 'tocome', 'trial', 'bills'];
+const VIEWS = [...TABS.map(([id]) => id), 'monthly', 'tocome', 'advances', 'trial', 'bills'];
 
 const KINDS = ['purchase', 'payment', 'sale', 'receipt'];
 
@@ -66,8 +67,8 @@ const MONTHLY_GROUPS = ['Staff', 'Rent Payable'];
 /** Whether an account belongs on a voucher of this kind. */
 const fitsVoucher = (kind, group) =>
   group === PARTY_GROUP[kind] ||
-  // A goods return goes either way; a payment can be wages or rent.
-  (kind === 'return' && (group === 'Sundry Debtors' || group === 'Sundry Creditors')) ||
+  // A goods return or an advance goes either way; a payment can be wages or rent.
+  ((kind === 'return' || kind === 'advance') && (group === 'Sundry Debtors' || group === 'Sundry Creditors')) ||
   (kind === 'payment' && MONTHLY_GROUPS.includes(group));
 
 /** Manifest shortcuts land here: /?new=sale, /?tab=pending. */
@@ -226,7 +227,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
   return (
     <div className="app">
       <header className="topbar">
-        <h1 className="pagetitle">{tab === 'bills' ? 'Bills' : tab === 'tocome' ? 'Bills to Come' : tab === 'monthly' ? 'Salary & Rent' : tab === 'trial' ? 'Trial Balance' : 'Party Accounts'}</h1>
+        <h1 className="pagetitle">{tab === 'bills' ? 'Bills' : tab === 'tocome' ? 'Bills to Come' : tab === 'advances' ? 'Advances' : tab === 'monthly' ? 'Salary & Rent' : tab === 'trial' ? 'Trial Balance' : 'Party Accounts'}</h1>
         <div className="actions">
           {/* The four voucher buttons that were here are gone. They were the
               third way to write the same voucher and the worst of the three:
@@ -322,6 +323,10 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
           onEnterBill={(row) => onOpenVoucher?.('purchase', row.party, { grn: row.voucherId })}
           onViewBill={setViewing}
         />
+      )}
+
+      {tab === 'advances' && (
+        <Advances onOpen={openParty} onNew={() => onOpenVoucher?.('advance')} />
       )}
 
       {tab === 'bills' && <Bills masters={masters} pending={pending} onViewBill={setViewing} onOpen={openParty} />}

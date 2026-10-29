@@ -77,7 +77,7 @@ const ageTone = (ms) => {
 };
 
 /** The wording a bill's voucher gets when nobody typed any: "Purchase 144". */
-const DEFAULT_NARRATION = /^(Sale|Purchase|Receipt|Payment|Goods Return|Refund) \S+$/;
+const DEFAULT_NARRATION = /^(Sale|Purchase|Receipt|Payment|Goods Return|Refund|Advance) \S+$/;
 import VoucherEditor from './VoucherEditor';
 import LedgerForm from './LedgerForm';
 import TagDots from './TagDots';
@@ -195,7 +195,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
     // The newest bill (not a receipt or payment slip), for a receipt opened
     // from here: docked at once, with nothing to ask the books.
     if (!data) return;
-    const MONEY = new Set(['Receipt', 'Payment', 'Refund', 'Contra', 'Journal']);
+    const MONEY = new Set(['Receipt', 'Payment', 'Refund', 'Advance', 'Contra', 'Journal']);
     const bill = lines.find((line) => !MONEY.has(line.vchType) && (line.attachmentUrls ?? []).some((a) => a.kind !== 'receipt'));
     rememberPartyPaper(ledgerId, bill ? {
       vchLabel: bill.vchLabel, date: bill.date, initialIndex: 0,
@@ -266,9 +266,9 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
         : kind === 'purchase' ? [paid, amt]
         : kind === 'receipt' ? [0, amt]
         : kind === 'payment' || kind === 'refund' ? [amt, 0]
-        : kind === 'return' ? (supplierSide ? [amt, 0] : [0, amt])
+        : kind === 'return' || kind === 'advance' ? (supplierSide ? [amt, 0] : [0, amt])
         : [0, 0];
-      return { b, dr, cr, label: { sale: 'Sale', purchase: 'Purchase', receipt: 'Receipt', payment: 'Payment', refund: 'Refund', return: 'Goods Return' }[kind] ?? 'Bill' };
+      return { b, dr, cr, label: { sale: 'Sale', purchase: 'Purchase', receipt: 'Receipt', payment: 'Payment', refund: 'Refund', advance: 'Advance', return: 'Goods Return' }[kind] ?? 'Bill' };
     });
   // The closing balance with them in: Dr counted up, Cr down.
   const signedClosing = (data?.closingSide === 'Cr' ? -1 : 1) * (Number(data?.closing) || 0)
@@ -406,6 +406,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
               </button>
               <button className="btn" onClick={() => onAddVoucher('return')}>+ Goods Return</button>
               <button className="btn" onClick={() => onAddVoucher('refund')}>+ Refund</button>
+              <button className="btn" onClick={() => onAddVoucher('advance')}>+ Advance</button>
             </>
           ) : (
             <>
@@ -415,6 +416,7 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                 + Payment
               </button>
               <button className="btn" onClick={() => onAddVoucher('return')}>+ Goods Return</button>
+              <button className="btn" onClick={() => onAddVoucher('advance')}>+ Advance</button>
             </>
           )}
           <div className="partyhead-tools">

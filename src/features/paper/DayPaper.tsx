@@ -165,6 +165,8 @@ function placeOf(v: { vchType: string; vchLabel: string; partyGroup?: string }):
       return { type: supplier ? 'Purchase' : 'Sale', tag: 'RET', minus: true }
     case 'Refund':
       return { type: 'Payment', tag: 'REF' }
+    case 'Advance':
+      return { type: supplier ? 'Payment' : 'Receipt', tag: 'ADV' }
     default:
       return { type: OTHER, tag: v.vchLabel.split('-')[0] }
   }

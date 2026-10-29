@@ -25,6 +25,7 @@ const SAME_DAY_ORDER: Record<string, number> = {
   Payment: 4,
   // A refund can only follow the return that left the customer in credit.
   Refund: 4,
+  Advance: 4,
   // A month falling due is the charge; any payment that day comes after it.
   Journal: 1,
 };
@@ -332,6 +333,52 @@ export const ledger = query({
 });
 
 /** Every voucher, newest work first — Tally's Day Book. */
+/**
+ * Every advance on the books, newest first: money taken from a customer
+ * before the sale, or paid to a supplier before their bill. Which way it went
+ * is read off the party's own line — credited, it came in from them; debited,
+ * it went out to them.
+ */
+export const advances = query({
+  args: {},
+  handler: async (ctx) => {
+    const { ledgerById, typeById, groupById } = await context(ctx);
+    const type = [...typeById.values()].find((t) => t.name === "Advance");
+    if (!type) return [];
+    const all = await ctx.db.query("vouchers").withIndex("by_date").order("desc").collect();
+    const bills = await allBills(ctx);
+
+    return Promise.all(
+      all
+        .filter((vch) => vch.typeId === type._id)
+        .map(async (vch) => {
+          const lines = await ctx.db
+            .query("voucherEntries")
+            .withIndex("by_voucher", (q) => q.eq("voucherId", vch._id))
+            .collect();
+          const party = ledgerById.get(vch.partyLedgerId);
+          const own = lines.find((l) => l.ledgerId === vch.partyLedgerId);
+          return {
+            _id: vch._id,
+            date: vch.date,
+            vchLabel: vchLabel(type.abbr, vch.voucherNo),
+            party: party?.name ?? "—",
+            partyLedgerId: vch.partyLedgerId,
+            partyGroup: party ? groupById.get(party.groupId)?.name ?? "" : "",
+            direction: own?.side === "Dr" ? "paid" : "received",
+            via: lines
+              .filter((l) => l.ledgerId !== vch.partyLedgerId)
+              .map((l) => ledgerById.get(l.ledgerId)?.name ?? "—"),
+            refNo: vch.refNo ?? "",
+            narration: vch.narration ?? "",
+            amount: vch.amount ?? 0,
+            billId: billOf(bills, vch)?.id ?? null,
+          };
+        })
+    );
+  },
+});
+
 export const dayBook = query({
   args: { from: v.optional(v.number()), to: v.optional(v.number()) },
   handler: async (ctx, { from, to }) => {
@@ -718,6 +765,15 @@ export const dashboard = query({
     const sumOf = (name: string) =>
       round2(today.filter((v) => typeById.get(v.typeId)?.name === name)
         .reduce((t, v) => t + (v.amount ?? 0), 0));
+    // An advance is money in from a customer or out to a supplier, so it is
+    // counted with the day's receipts or payments by whose account it is on.
+    const supplierIds = new Set(ledgers
+      .filter((l) => groupById.get(l.groupId)?.name === "Sundry Creditors")
+      .map((l) => l._id as string));
+    const advances = (paid: boolean) =>
+      round2(today.filter((v) => typeById.get(v.typeId)?.name === "Advance"
+        && supplierIds.has(v.partyLedgerId as string) === paid)
+        .reduce((t, v) => t + (v.amount ?? 0), 0));
 
     // ── twelve months of trade, oldest first ─────────────────────────────
     const span = months ?? 12;
@@ -771,8 +827,8 @@ export const dashboard = query({
       day: {
         sales: sumOf("Sale"),
         purchases: sumOf("Purchase"),
-        received: sumOf("Receipt"),
-        paid: sumOf("Payment"),
+        received: round2(sumOf("Receipt") + advances(false)),
+        paid: round2(sumOf("Payment") + advances(true)),
         entries: today.length,
       },
       /**

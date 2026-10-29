@@ -71,6 +71,19 @@ const KINDS = {
    * the purchase written when the bill comes is linked back to it.
    */
   grn:      { type: GRN_TYPE,   account: 'Purchases', group: 'Sundry Creditors', party: 'Cr', other: 'Dr', settles: false },
+  /**
+   * Money ahead of the goods: taken from a customer before the sale is made.
+   * Posted like a receipt, but kept in its own series (ADV) so every advance
+   * can be listed on its own. One paid out to a supplier ahead of their bill
+   * goes the other way and is chosen by the party's account; see
+   * ADVANCE_TO_SUPPLIER.
+   */
+  advance:  { type: 'Advance',  account: 'Cash',      group: 'Sundry Debtors',   party: 'Cr', other: 'Dr', settles: true },
+} as const
+
+/** An advance paid to a supplier: they owe the shop the goods for it. */
+const ADVANCE_TO_SUPPLIER = {
+  type: 'Advance', account: 'Cash', group: 'Sundry Creditors', party: 'Dr', other: 'Cr', settles: true,
 } as const
 
 /** Goods Return to a supplier: the shop owes them less. */
@@ -315,9 +328,17 @@ export const postBill = mutation({
     if (kind === 'return' && returnGroup !== 'Sundry Debtors' && returnGroup !== 'Sundry Creditors') {
       throw new Error(`Pick the customer or supplier this goods return is for — "${customerName}" is not an account in the books.`)
     }
+    // An advance follows its party the same way, but a name not yet in the
+    // books is a customer paying ahead — that is how the counter takes them.
+    const advanceParty = kind === 'advance'
+      ? (args.partyLedgerId ? await ctx.db.get(args.partyLedgerId) : await findParty(ctx, customerName))
+      : null
+    const advanceGroup = advanceParty ? (await ctx.db.get(advanceParty.groupId))?.name : undefined
     const spec = kind === 'return' && returnGroup === 'Sundry Creditors'
       ? RETURN_TO_SUPPLIER
-      : KINDS[kind] ?? KINDS.sale
+      : kind === 'advance' && advanceGroup === 'Sundry Creditors'
+        ? ADVANCE_TO_SUPPLIER
+        : KINDS[kind] ?? KINDS.sale
 
     /**
      * Where the money itself went. Receipts and payments used to post to Bank
@@ -371,8 +392,8 @@ export const postBill = mutation({
      * reach the drawer: it goes to its own account, which is where the shop
      * can later see what a year of rounding off actually cost.
      */
-    // Nothing is let off on a refund; the money handed back is the whole of it.
-    const discount = spec.settles && kind !== 'refund'
+    // Nothing is let off on a refund or an advance; the money is the whole of it.
+    const discount = spec.settles && kind !== 'refund' && kind !== 'advance'
       ? round2(Math.min(Math.max(Number(bill.discount) || 0, 0), total))
       : 0
 
@@ -388,11 +409,13 @@ export const postBill = mutation({
       .query('voucherTypes')
       .withIndex('by_name', (q) => q.eq('name', spec.type))
       .unique()
-    // The Refund and Goods Received series open the first time one is written.
-    if (!type && (spec.type === 'Refund' || spec.type === GRN_TYPE)) {
+    // The Refund, Goods Received and Advance series open the first time one is written.
+    if (!type && (spec.type === 'Refund' || spec.type === GRN_TYPE || spec.type === 'Advance')) {
       const id = await ctx.db.insert('voucherTypes', spec.type === 'Refund'
         ? { name: 'Refund', abbr: 'REF', sort: 10 }
-        : { name: GRN_TYPE, abbr: GRN_ABBR, sort: 11 })
+        : spec.type === 'Advance'
+          ? { name: 'Advance', abbr: 'ADV', sort: 12 }
+          : { name: GRN_TYPE, abbr: GRN_ABBR, sort: 11 })
       type = await ctx.db.get(id)
     }
     if (!type) throw new Error(`The "${spec.type}" voucher type is not set up.`)
@@ -743,6 +766,51 @@ export const postBill = mutation({
  * every new bill asked for it again. A page at a time:
  *   npx convex run billLedger:backfillPartyContacts '{}'   (then pass the cursor it returns)
  */
+/**
+ * Receipts the counter wrote as advances, before Advance was a voucher of its
+ * own: a receipt bill whose note says "Advance". Each becomes an advance bill
+ * and its voucher moves into the ADV series. The lines are not touched — a
+ * customer's advance posts exactly as a receipt does, so no balance moves.
+ *
+ * Dry run unless `apply` is set; it lists what it would change either way.
+ */
+export const receiptsToAdvances = internalMutation({
+  args: { apply: v.optional(v.boolean()) },
+  handler: async (ctx, { apply }) => {
+    const receiptType = await ctx.db.query('voucherTypes')
+      .withIndex('by_name', (q) => q.eq('name', 'Receipt')).unique()
+    if (!receiptType) return []
+    let advanceType = await ctx.db.query('voucherTypes')
+      .withIndex('by_name', (q) => q.eq('name', 'Advance')).unique()
+    const bills = await readBills(ctx)
+    const done: string[] = []
+    const changed = []
+    for (const bill of bills) {
+      const isAdvance = (bill.kind ?? 'sale') === 'receipt' && /\badvance\b/i.test(String(bill.notes ?? ''))
+      const voucher = isAdvance
+        ? (bill.voucherId
+            ? await ctx.db.get(bill.voucherId as Id<'vouchers'>)
+            : await ctx.db.query('vouchers').filter((q) => q.eq(q.field('refNo'), `BILL-${bill.number}`)).first())
+        : null
+      if (!isAdvance || !voucher || voucher.typeId !== receiptType._id) continue
+      done.push(`bill ${bill.number} · ${bill.customerName} · ${money(voucher.amount)}`)
+      if (!apply) continue
+      if (!advanceType) {
+        const id = await ctx.db.insert('voucherTypes', { name: 'Advance', abbr: 'ADV', sort: 12 })
+        advanceType = (await ctx.db.get(id))!
+      }
+      const voucherNo = await nextVoucherNo(ctx, advanceType, voucher.fy)
+      await ctx.db.patch(voucher._id, { typeId: advanceType._id, voucherNo, updatedAt: Date.now() })
+      await record(ctx, 'voucher.retype',
+        `Receipt → Advance: ADV-${String(voucherNo).padStart(4, '0')} · bill ${bill.number} · ${bill.customerName} · ${money(voucher.amount)}`,
+        { entity: 'voucher', entityId: voucher._id })
+      changed.push({ ...bill, kind: 'advance', updatedAt: Date.now() })
+    }
+    if (changed.length) await writeBills(ctx, changed)
+    return done
+  },
+})
+
 export const backfillPartyContacts = internalMutation({
   args: { cursor: v.optional(v.union(v.string(), v.null())) },
   handler: async (ctx, { cursor }) => {

@@ -2279,6 +2279,8 @@ const PARTY_SIDE: Record<BillKind, 'customer' | 'supplier' | 'both'> = {
   return: 'both',
   // Money handed back to a customer.
   refund: 'customer',
+  // Money ahead of the goods: from a customer, or to a supplier.
+  advance: 'both',
   // Goods in from a supplier, ahead of their bill.
   grn: 'supplier',
   // A price given to a customer, not yet a sale.
@@ -2680,7 +2682,7 @@ export function BillBuilder() {
     // Only the customer side has bills behind it; a supplier is never named on
     // one. An account of the same name already read wins — it carries the
     // balance, and offering both would put the two spellings side by side.
-    if (kind === 'sale' || kind === 'receipt' || kind === 'refund') {
+    if (kind === 'sale' || kind === 'receipt' || kind === 'refund' || kind === 'advance') {
       // A supplier's name must not ride in on an old purchase or payment bill,
       // nor on a sale typed against a name that is a supplier's account.
       const suppliers = new Set(
@@ -2818,6 +2820,7 @@ export function BillBuilder() {
     const kindOf: Record<string, BillKind> = {
       sale: 'sale', purchase: 'purchase', receipt: 'receipt', payment: 'payment', 'goods return': 'return',
       refund: 'refund',
+      advance: 'advance',
       'goods received': 'grn',
     }
     setDraft(fromBooks({
@@ -4845,7 +4848,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
 
               {/* What the party was let off. It is not money, so it never
                   reaches the drawer — it clears the rest of their account. */}
-              {(draft.kind ?? 'sale') !== 'refund' && (
+              {(draft.kind ?? 'sale') !== 'refund' && (draft.kind ?? 'sale') !== 'advance' && (
               <label className="flex-1 min-w-[9rem]">
                 <span className="mb-1 block text-xs font-semibold text-muted">
                   Discount {(draft.kind ?? 'sale') === 'payment' ? 'received' : 'allowed'}
@@ -5268,7 +5271,7 @@ const iso = (d: Date) => indiaDate(d)
  * The number is the bill's own until it posts and the books issue theirs.
  */
 const VCH_ABBR: Record<string, string> = {
-  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR', refund: 'REF', grn: 'GRN', quotation: 'QTN',
+  sale: 'SAL', purchase: 'PUR', receipt: 'RCT', payment: 'PAY', return: 'GR', refund: 'REF', advance: 'ADV', grn: 'GRN', quotation: 'QTN',
 }
 const billLabel = (b: Bill) =>
   // A voucher opened for editing already carries the books' own label:
@@ -5289,7 +5292,7 @@ const seriesOf = (label: string) => label.split('-')[0]
 /** Names for the series a bill can carry before the books have named it. */
 const SERIES_NAME: Record<string, string> = {
   SAL: 'Sales', PUR: 'Purchase', RCT: 'Receipt', PAY: 'Payment', GR: 'Goods return',
-  REF: 'Refund', GRN: 'Goods received', QTN: 'Quotation',
+  REF: 'Refund', ADV: 'Advance', GRN: 'Goods received', QTN: 'Quotation',
 }
 
 const sideOf = (label: string): 'customers' | 'suppliers' =>

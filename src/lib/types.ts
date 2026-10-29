@@ -275,7 +275,7 @@ export const DEFAULT_PAYMENT_MODE: BillPaymentMode = 'upi'
  * a supplier. It takes either kind of party; which way it posts follows the
  * party's account.
  */
-export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return' | 'refund' | 'grn' | 'quotation'
+export type BillKind = 'sale' | 'purchase' | 'receipt' | 'payment' | 'return' | 'refund' | 'advance' | 'grn' | 'quotation'
 
 /** What each one is called, and what the party on it is called. */
 export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: string }> = {
@@ -285,6 +285,7 @@ export const BILL_KINDS: Record<BillKind, { title: string; party: string; ref: s
   payment:  { title: 'Payment',  party: 'Supplier', ref: 'Voucher no.' },
   return:   { title: 'Goods Return', party: 'Party', ref: 'Ref' },
   refund:   { title: 'Refund',   party: 'Customer', ref: 'Slip no.' },
+  advance:  { title: 'Advance',  party: 'Party',    ref: 'Slip no.' },
   grn:      { title: 'Goods Received', party: 'Supplier', ref: 'Challan no.' },
   quotation: { title: 'Quotation', party: 'Customer', ref: 'Ref' },
 }
@@ -384,8 +385,8 @@ export const isChargeName = (name: string | undefined) => AMOUNT_ONLY_NAMES.test
  * paid), back from a customer is the selling side. Asked by every place that
  * learns a rate or counts a sale, so they cannot disagree.
  */
-/** Money moving and nothing else: a receipt, a payment, or a refund handed back. */
-export const MONEY_BILL_KINDS: BillKind[] = ['receipt', 'payment', 'refund']
+/** Money moving and nothing else: a receipt, a payment, a refund handed back, or an advance. */
+export const MONEY_BILL_KINDS: BillKind[] = ['receipt', 'payment', 'refund', 'advance']
 
 export const isBuyingBill = (kind: BillKind | undefined, supplier = false) => {
   const k = kind ?? 'sale'

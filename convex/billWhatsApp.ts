@@ -76,7 +76,7 @@ async function photosOf(ctx: QueryCtx, docs: Attachment[]) {
  * and returns that go with it. The automatic sender stays with sales only. A
  * purchase or a payment out is the shop's own paper with a supplier.
  */
-const SENDABLE = new Set(['Sale', 'Receipt', 'Refund', 'Goods Return', 'Discount'])
+const SENDABLE = new Set(['Sale', 'Receipt', 'Refund', 'Advance', 'Goods Return', 'Discount'])
 async function typesOf(ctx: QueryCtx) {
   return new Map((await ctx.db.query('voucherTypes').collect()).map((t) => [String(t._id), t]))
 }

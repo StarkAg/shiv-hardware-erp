@@ -37,7 +37,7 @@ export function MovedToCounter() {
 /** The voucher chooser is gone; its links open the bill builder instead. */
 export function VoucherRedirect() {
   const { kind } = useParams<{ kind: string }>()
-  const ok = ['sale', 'purchase', 'receipt', 'payment', 'return', 'refund', 'grn', 'quotation'].includes(kind ?? '')
+  const ok = ['sale', 'purchase', 'receipt', 'payment', 'return', 'refund', 'advance', 'grn', 'quotation'].includes(kind ?? '')
   return <Navigate to={ok ? `/bills?new=${kind}` : '/day'} replace />
 }
 
