@@ -20,6 +20,7 @@ is only kept when it is at least 15% smaller.
 """
 import json
 import os
+import time
 import subprocess
 import sys
 import urllib.request
@@ -90,8 +91,19 @@ def upload(work):
         urls = run('photoSwap:uploadUrls', {'count': len(batch)})
         for p, url in zip(batch, urls):
             body = open(os.path.join(work, 'webp', p['from'] + '.webp'), 'rb').read()
-            req = urllib.request.Request(url, data=body, method='POST', headers={'Content-Type': 'image/webp'})
-            p['to'] = json.load(urllib.request.urlopen(req, timeout=120))['storageId']
+            # The connection drops now and then on a long run; try again on a
+            # fresh link rather than lose the whole batch.
+            for attempt in range(5):
+                try:
+                    req = urllib.request.Request(url, data=body, method='POST', headers={'Content-Type': 'image/webp'})
+                    p['to'] = json.load(urllib.request.urlopen(req, timeout=120))['storageId']
+                    break
+                except OSError:
+                    if attempt == 4:
+                        save(work, pairs)
+                        raise
+                    time.sleep(3 * (attempt + 1))
+                    url = run('photoSwap:uploadUrls', {'count': 1})[0]
         save(work, pairs)
         print(f'  {sum(1 for p in pairs.values() if p.get("to"))} uploaded')
 

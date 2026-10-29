@@ -477,6 +477,81 @@ export const loadSheet = internalMutation({
 });
 
 /**
+ * The rent sheet as it stood on 29 October 2026: the shop and the back down
+ * godown let at 25,000 and 15,000 a month, October fallen due on all three
+ * premises (the front godown's October came to 26,620), and the 6,00,000
+ * security deposit held by Sangam Shoes. Run once —
+ *
+ *   npx convex run --prod monthly:rentSheetOct2026
+ *
+ * — a month already on the books is skipped, so a second run changes nothing.
+ */
+export const rentSheetOct2026 = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const setup = await ensure(ctx);
+    const now = Date.now();
+    const find = async (name: string) => {
+      const found = await ledgerNamed(ctx, name);
+      if (!found) throw new Error(`No ledger named ${name}`);
+      return found;
+    };
+    const shop = await find("Shop");
+    const back = await find("Back Down Godown");
+    const front = await find("Front Godown");
+
+    for (const [account, monthly] of [[shop, 25000], [back, 15000]] as const) {
+      if (account.monthly !== monthly) await ctx.db.patch(account._id, { monthly, updatedAt: now });
+    }
+
+    const posted: string[] = [];
+    for (const [account, amount] of [[shop, 25000], [back, 15000], [front, 26620]] as const) {
+      if ((await charge(ctx, setup, "rent", account, "2026-10", amount)) === "posted") {
+        posted.push(account.name);
+      }
+    }
+
+    // Money the shop has handed over and gets back when it leaves: an asset,
+    // kept apart from the rent account, which only ever holds months due and
+    // payments.
+    let deposits = await groupNamed(ctx, "Deposits (Asset)");
+    if (!deposits) {
+      const id = await ctx.db.insert("groups", {
+        name: "Deposits (Asset)", nature: "asset", normalSide: "Dr", sort: 10,
+      });
+      deposits = (await ctx.db.get(id))!;
+    }
+    const depositName = "Security Deposit - Sangam Shoes";
+    let deposit = false;
+    if (!(await ledgerNamed(ctx, depositName))) {
+      await ctx.db.insert("ledgers", {
+        name: depositName,
+        groupId: deposits._id,
+        payee: "Sangam Shoes",
+        phone: front.phone,
+        notes: "Security for the Front Godown, paid before these books began.",
+        openingBalance: 600000,
+        openingSide: "Dr",
+        openingAsOf: front.openingAsOf,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      deposit = true;
+    }
+
+    await record(
+      ctx,
+      "monthly.load",
+      "Matched the rent sheet of 29 Oct 2026 — Shop 25,000 and Back Down Godown 15,000 a month, " +
+        `October due on ${posted.length} premises` + (deposit ? ", Sangam Shoes security 6,00,000" : ""),
+      { entity: "monthly", detail: { posted, deposit } }
+    );
+    return { posted, deposit };
+  },
+});
+
+/**
  * Staff accounts as the record of wages paid, not of wages owed. Run once on a
  * deployment set up before wages were known to be paid daily.
  *
