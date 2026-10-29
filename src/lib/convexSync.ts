@@ -149,3 +149,27 @@ export async function fetchCatalogFromConvex() {
     return null
   }
 }
+
+/** Aluminium costing (lib/aluCostingStore): the server's copy, or null. */
+export async function fetchAluCosting(): Promise<{ data: unknown; savedAt: number } | null> {
+  const c = client()
+  if (!c) return null
+  try {
+    const row = await c.query(api.aluCosting.get, {})
+    return row ? { data: row.data, savedAt: row.savedAt } : null
+  } catch {
+    return null
+  }
+}
+
+/** Sends this device's aluminium costing; false when it did not reach the server. */
+export async function pushAluCosting(data: unknown, savedAt: number): Promise<boolean> {
+  const c = client()
+  if (!c) return false
+  try {
+    await c.mutation(api.aluCosting.save, { data, savedAt })
+    return true
+  } catch {
+    return false
+  }
+}

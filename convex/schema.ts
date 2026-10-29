@@ -144,6 +144,14 @@ export default defineSchema({
     savedAt: v.number(),
   }),
 
+  // ── Aluminium costing (single row) ───────────────────────────────────────
+  // Section weights, the aluminium rate per kg, raw materials and margins the
+  // counter prices aluminium doors and windows from (src/lib/aluCosting.ts).
+  aluCostingStore: defineTable({
+    data: v.any(),
+    savedAt: v.number(),
+  }),
+
   // ── Catalog backup (single-row snapshot) ──────────────────────────────────
   catalogStore: defineTable({
     hardwareCatalog: v.any(),

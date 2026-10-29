@@ -20,6 +20,7 @@ import { BillBrandCardsPage } from './features/guarantee/BillBrandCardsPage'
 import { CardBacks } from './features/guarantee/CardBacks'
 import { Inventory } from './features/inventory/Inventory'
 import { RateManager } from './features/rates/RateManager'
+import { AluminiumCosting } from './features/rates/AluminiumCosting'
 import { Transport } from './features/transport/Transport'
 import { Customers } from './features/customers/Customers'
 import { AppError, HOME, NotFound } from './components/RouteFallbacks'
@@ -110,6 +111,8 @@ const router = createHashRouter([
       { path: 'inventory/:tab/:openId', element: <Inventory /> },
       { path: 'rates', element: <RateManager /> },
       { path: 'rates/:category', element: <RateManager /> },
+      { path: 'aluminium-rates', element: <AluminiumCosting /> },
+      { path: 'aluminium-rates/:product', element: <AluminiumCosting /> },
       { path: 'transport', element: <Transport /> },
       { path: 'transport/:view', element: <Transport /> },
       { path: 'customers', element: <Customers /> },

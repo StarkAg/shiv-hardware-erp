@@ -167,8 +167,22 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
     : assetPath('assets/aluminium/window-3-track.jpeg')
   const diagramKind: DiagramKind = isDoor ? 'door' : is2Track ? 'window2' : 'window3'
 
+  // The prices the quotation was made with. Since aluminium is costed from
+  // its materials (lib/aluCosting) they are saved on the quotation, so a
+  // reprint says what the customer was told even after the rates move. Only
+  // a quotation with none saved is priced from the old rate tables below.
+  const saved = quote.alu?.thicknesses?.length === ALU_THICKNESSES.length ? quote.alu.thicknesses : null
+
   // compute per-thickness costs for doors
-  const dRows = ALU_THICKNESSES.map((t) => {
+  const dRows = saved && isDoor ? saved.map((r) => ({
+    t: r.name,
+    doorRate: r.doorRate, doorCost: r.doorCost,
+    chaukhatRate: r.chaukhatRate, chaukhatCost: hasChaukhat ? r.chaukhatCost : 0,
+    accessories: hasAccessories ? r.accessories : 0,
+    total: r.doorCost + (hasChaukhat ? r.chaukhatCost : 0) + (hasAccessories ? r.accessories : 0),
+    decorFilmRate: r.decorFilmRate, decorFilm: hasDecorFilm ? r.decorFilm : 0,
+    brownCoatedRate: r.brownCoatedRate ?? 0, brownCoated: hasBrownCoated ? r.brownCoated ?? 0 : 0,
+  })) : ALU_THICKNESSES.map((t) => {
     const r = doorRates[t]
     const doorCost = r0(area * r.door)
     const chaukhatCost = hasChaukhat ? r0(chaukhatRft * r.chaukhat) : 0
@@ -185,7 +199,20 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
   })
 
   // compute per-thickness costs for windows
-  const wRows = ALU_THICKNESSES.map((t) => {
+  const wRows = saved && !isDoor ? saved.map((r) => {
+    const clearRate = r.glassRate ?? r.doorRate
+    const clearCost = r.glassCost ?? r.doorCost
+    return {
+      t: r.name,
+      clearRate, clearCost,
+      reflectiveRate: r.reflectiveRate ?? 0, reflectiveCost: r.reflectiveCost ?? 0,
+      chaukhatRate: r.chaukhatRate, chaukhatCost: 0,
+      clearTotal: clearCost,
+      ssNet: hasWindowSsNet ? r.accessories : 0,
+      decorFilm: hasDecorFilm ? r.decorFilm : 0,
+      brownCoated: hasBrownCoated ? r.brownCoated ?? 0 : 0,
+    }
+  }) : ALU_THICKNESSES.map((t) => {
     const tr = windowThicknessRates[t]
     const table = is2Track ? window2TrackAreaRates : window3TrackAreaRates
     const base = slabRate(area, table)

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { useParams } from 'react-router-dom'
-import { Minus, Plus, Printer, Share2, Trash2 } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { Calculator, Minus, Plus, Printer, Share2, Trash2 } from 'lucide-react'
 import { useStore } from '../../lib/store'
 import {
   CATEGORY_LABELS,
@@ -16,10 +16,11 @@ import {
 import { areaSqft, buildBrandRows, enrichQuotation, formatINR, formatSize, isFootSized } from '../../lib/pricing'
 import {
   type AluAddons,
-  calcAllThicknesses,
   defaultAddons,
   isAluminium,
 } from '../../lib/aluminium'
+import { calcAllThicknessesCosted, productOf } from '../../lib/aluCosting'
+import { useAluCosting } from '../../lib/aluCostingStore'
 import { calcAllUpvcBrands, isUpvc } from '../../lib/upvc'
 import { FIXED_CARDS, FIXED_CARD_META, isFixedCard } from '../../lib/data/fixedCards'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -115,8 +116,10 @@ export function QuotationBuilder() {
   const hasSize = h.inches > 0 || w.inches > 0
   const brands = (activeSet?.brands ?? []).filter((b) => b.category === cat)
   const sqft = areaSqft(h, w, cat)
+  // Aluminium is priced from its sections, materials and margin (Aluminium rates screen).
+  const aluCosting = useAluCosting()
   const aluThicknesses = alu
-    ? calcAllThicknesses(cat, h, w, addons)
+    ? calcAllThicknessesCosted(cat, h, w, addons, aluCosting)
     : upvc
       ? calcAllUpvcBrands(cat, h, w, addons)
       : []
@@ -379,6 +382,15 @@ export function QuotationBuilder() {
                     ))}
                 </div>
               </div>
+            )}
+
+            {alu && (
+              <Link
+                to={`/aluminium-rates/${productOf(cat)}`}
+                className="mt-2 flex min-h-10 items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 hover:border-shiv-green dark:border-white/15 dark:bg-transparent dark:text-stone-100 md:mt-3"
+              >
+                <Calculator size={16} /> Section kg, aluminium rate, materials &amp; margin
+              </Link>
             )}
 
             <div className="mt-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-600 dark:border-white/10 dark:bg-white/5 dark:text-stone-300 md:mt-3">

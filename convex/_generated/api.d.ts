@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
+import type * as aluCosting from "../aluCosting.js";
 import type * as anchor from "../anchor.js";
 import type * as attendance from "../attendance.js";
 import type * as backups from "../backups.js";
@@ -101,6 +102,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   ai: typeof ai;
+  aluCosting: typeof aluCosting;
   anchor: typeof anchor;
   attendance: typeof attendance;
   backups: typeof backups;
