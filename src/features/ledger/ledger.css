@@ -1546,6 +1546,14 @@ to{transform: scale(1); color: #fff}}
   .ledger-root .ledger td.particulars[data-label="Items"]{width: 22%;}
   .ledger-root .ledger td.particulars > *{display: block; max-width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;}
+  /* The exception: a party's name is never cut. Two accounts can differ only in
+     the last word ("Sanjay Prasad Ji, Chainpur"), so a long name carries on to
+     the next line, the way Tally shows it. The place under it stays one line. */
+  .ledger-root .ledger td.particulars > .partycell{display: flex; white-space: normal;}
+  .ledger-root .ledger td.particulars .partycell > div:first-child{min-width: 0;}
+  .ledger-root .ledger td.particulars .party{overflow-wrap: anywhere; line-height: 1.2;}
+  .ledger-root .ledger td.particulars .partycell .ref{display: block; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;}
 }
 .ledger-root .chips-gap{width: 14px;}
 .ledger-root .adv-paid{color: var(--green-text); font-weight: 800;}
