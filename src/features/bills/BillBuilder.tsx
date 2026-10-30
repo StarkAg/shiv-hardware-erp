@@ -3558,6 +3558,35 @@ export function BillBuilder() {
   const priced = useMemo(() => (isMoneyVoucher ? draft : withCharges(draft)), [draft, isMoneyVoucher])
   const total = isMoneyVoucher ? money + discount : calcTotal(priced.items)
   /**
+   * Old dues brought forward (B/f), as the paper bills write them above the
+   * goods. Ticked, the box starts at what the account owed before this bill —
+   * its balance less this bill's own share once the bill is in the books —
+   * and stays the counter's to change. Money taken past this bill's own total
+   * goes to the old dues and posts as a receipt of its own (billLedger).
+   */
+  const bfOffered = (draft.kind ?? 'sale') === 'sale' && !isWithoutBillSale
+  const bfOn = bfOffered && draft.bf !== undefined
+  const bf = bfOn ? Math.max(0, Number(draft.bf) || 0) : 0
+  const owedBefore = useMemo(() => {
+    if (!partyBalance) return 0
+    const owed = partyBalance.side === 'Cr' ? -partyBalance.amount : partyBalance.amount
+    const saved = bills.find((b) => b.id === draft.id)
+    const savedTotal = Number(saved?.total) || 0
+    const own = saved?.postedAt
+      ? savedTotal
+        - Math.min(Number(saved.paidAmount ?? (saved.paid ? savedTotal : 0)) || 0, savedTotal)
+        - (Number(saved.bfPaid) || 0)
+      : 0
+    return Math.max(0, Math.round((owed - own) * 100) / 100)
+  }, [partyBalance, bills, draft.id])
+  /** What the customer handed over, split: this bill first, then the old dues. */
+  const takeMoney = (value: number | undefined) => setDraft((d) => {
+    if (value === undefined) return { ...d, paidAmount: undefined, paid: false, bfPaid: undefined }
+    const forBill = bfOn ? Math.min(value, total) : value
+    const forDues = bfOn ? Math.min(Math.max(value - total, 0), bf) : 0
+    return { ...d, paidAmount: forBill, paid: forBill >= total && total > 0, bfPaid: forDues || undefined }
+  })
+  /**
    * A phone photo open beside the voucher being filled is the paper it is
    * filled from, so it is ticked for it, as a tap on its tile would: once the
    * voucher has a name, a line or an amount, and again for another phone photo
@@ -4082,7 +4111,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
   async function moveToQuotation() {
     const sale = bills.find((b) => b.id === draft.id)
     if (!sale) throw new Error('This bill is not saved yet — switch it to a quotation from the menu instead.')
-    if ((sale.paidAmount ?? 0) > 0) {
+    if ((sale.paidAmount ?? 0) > 0 || (sale.bfPaid ?? 0) > 0) {
       throw new Error('Money was taken against this bill. Take the payment off it first, then move it to a quotation.')
     }
     const attachments = await prepareAttachments()
@@ -4099,7 +4128,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
       paid: false,
       attachments,
     }
-    for (const k of ['voucherId', 'postedAt', 'postError', 'paidAmount', 'paidDate', 'fromQuote', 'checks'] as (keyof Bill)[]) {
+    for (const k of ['voucherId', 'postedAt', 'postError', 'paidAmount', 'paidDate', 'bf', 'bfPaid', 'fromQuote', 'checks'] as (keyof Bill)[]) {
       delete (quote as Partial<Bill>)[k]
     }
     saveBill(quote)
@@ -4990,6 +5019,47 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 where it went. A sale or a purchase asks how much of it was
                 settled now — that amount posts as a line of this same
                 voucher, against the drawer or the bank. */}
+            {/* Old dues brought forward: offered once the account owes
+                something, and kept in view on a bill that already carries them. */}
+            {bfOffered && (draft.bf !== undefined || owedBefore > 0) && (
+              <div className="flex items-center gap-1.5 rounded-xl bg-stone-100 px-3 py-2 dark:bg-stone-800">
+                <label className="flex cursor-pointer items-center gap-1.5 text-sm text-muted" title="Bring the old dues onto this bill (B/f)">
+                  <input
+                    type="checkbox"
+                    data-bill-nav="1"
+                    checked={bfOn}
+                    onChange={(e) => setDraft((d) => (e.target.checked
+                      ? { ...d, bf: owedBefore }
+                      : { ...d, bf: undefined, bfPaid: undefined }))}
+                    className="h-4 w-4 accent-blue-600"
+                  />
+                  B/f old dues
+                </label>
+                {bfOn ? (
+                  <>
+                    <span className="text-sm text-muted">₹</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      data-bill-nav="1"
+                      value={draft.bf ?? ''}
+                      onChange={(e) => {
+                        const next = Math.max(0, Number(e.target.value) || 0)
+                        setDraft((d) => ({
+                          ...d,
+                          bf: e.target.value === '' ? 0 : next,
+                          bfPaid: Math.min(Number(d.bfPaid) || 0, next) || undefined,
+                        }))
+                      }}
+                      className="w-24 rounded-lg border border-stone-200 bg-white px-2 py-1 text-right text-sm dark:border-white/10 dark:bg-stone-900 dark:text-white"
+                    />
+                  </>
+                ) : (
+                  <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">₹{owedBefore.toLocaleString('en-IN')}</span>
+                )}
+              </div>
+            )}
             {!isMoneyVoucher && (draft.kind ?? 'sale') !== 'return' && (draft.kind ?? 'sale') !== 'grn' && !isQuotation(draft) && (
               <div className="flex items-center gap-1.5 rounded-xl bg-stone-100 px-3 py-2 dark:bg-stone-800">
                 <span className="text-sm text-muted">
@@ -5000,24 +5070,30 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                   type="number"
                   inputMode="decimal"
                   min={0}
-                  max={total || undefined}
+                  max={total + bf || undefined}
                   data-bill-nav="1"
                   readOnly={isWithoutBillSale}
-                  value={isWithoutBillSale ? total : draft.paidAmount ?? (paidByDefault(draft, total) ? total : '')}
-                  onChange={(e) => setDraft((d) => ({
-                    ...d,
-                    paidAmount: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
-                    paid: Number(e.target.value) >= total && total > 0,
-                  }))}
+                  value={isWithoutBillSale
+                    ? total
+                    : bfOn && (draft.paidAmount !== undefined || draft.bfPaid !== undefined)
+                      ? (Number(draft.paidAmount) || 0) + (Number(draft.bfPaid) || 0)
+                      : draft.paidAmount ?? (paidByDefault(draft, total) ? total : '')}
+                  onChange={(e) => takeMoney(e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0))}
                   className="w-24 rounded-lg border border-stone-200 bg-white px-2 py-1 text-right text-sm dark:border-white/10 dark:bg-stone-900 dark:text-white"
                 />
                 <button
                   type="button"
-                  onClick={() => setDraft((d) => ({ ...d, paidAmount: total, paid: true }))}
+                  onClick={() => takeMoney(total + bf)}
                   className="rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-stone-200 dark:hover:bg-white/10"
                 >
                   Full
                 </button>
+                {/* Said, so nobody goes looking for the old dues' money in this sale. */}
+                {bfOn && (draft.bfPaid ?? 0) > 0 && (
+                  <span className="text-xs text-muted" title="Posts as its own receipt when the bill is saved">
+                    ₹{(draft.bfPaid ?? 0).toLocaleString('en-IN')} to old dues — own receipt
+                  </span>
+                )}
                 {/* Said out loud, because a customer's account coming out
                     square with nobody having touched this box would otherwise
                     look like a mistake. */}
@@ -5029,7 +5105,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 {/* When the money came in. Blank is the usual counter sale —
                     paid with the bill — so it only asks once there is money to
                     date, and it defaults to the bill's own day. */}
-                {((draft.paidAmount ?? 0) > 0 || paidByDefault(draft, total)) && (
+                {((draft.paidAmount ?? 0) > 0 || (bfOn && (draft.bfPaid ?? 0) > 0) || paidByDefault(draft, total)) && (
                   <input
                     type="date"
                     data-bill-nav="1"
@@ -5041,7 +5117,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
                 )}
               </div>
             )}
-            {(isMoneyVoucher || (draft.paidAmount ?? 0) > 0 || paidByDefault(draft, total)) && (
+            {(isMoneyVoucher || (draft.paidAmount ?? 0) > 0 || (bfOn && (draft.bfPaid ?? 0) > 0) || paidByDefault(draft, total)) && (
               <div className="flex items-center gap-1 rounded-xl bg-stone-100 p-1 dark:bg-stone-800">
                 {/* UPI first and picked on a new bill. An older bill marked
                     "online" went to Bank the same way, so it shows as UPI; one
@@ -5068,7 +5144,12 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             )}
             <div className="rounded-xl bg-stone-100 px-5 py-2 dark:bg-stone-800">
               <span className="text-sm text-muted">Total </span>
-              <span className="text-lg font-bold text-stone-900 dark:text-white">₹{total.toLocaleString('en-IN')}</span>
+              <span className="text-lg font-bold text-stone-900 dark:text-white">₹{(total + bf).toLocaleString('en-IN')}</span>
+              {bf > 0 && (
+                <span className="ml-2 text-xs text-muted">
+                  bill ₹{total.toLocaleString('en-IN')} + B/f ₹{bf.toLocaleString('en-IN')}
+                </span>
+              )}
             </div>
           </div>
         </div>

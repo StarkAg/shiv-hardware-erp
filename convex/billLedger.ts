@@ -147,13 +147,15 @@ async function billNumberFor(ctx: MutationCtx, bill: any): Promise<string> {
  */
 async function syncBillReceipt(
   ctx: MutationCtx,
-  { ref, number, ledgerId, date, amount, drawer }: {
+  { ref, number, ledgerId, date, amount, drawer, oldDues = false }: {
     ref: string
     number: string
     ledgerId: Id<'ledgers'>
     date: number
     amount: number
     drawer: Doc<'ledgers'> | null
+    /** Money against the old dues brought forward on the bill, not the bill's own cash. */
+    oldDues?: boolean
   },
 ) {
   const linked = await ctx.db
@@ -174,7 +176,9 @@ async function syncBillReceipt(
   if (!type) throw new Error('The "Receipt" voucher type is not set up.')
 
   const now = Date.now()
-  const narration = `${drawer.name === 'Bank' ? 'Paid online' : 'Cash'} with bill ${number}`
+  const narration = oldDues
+    ? `Old dues ${drawer.name === 'Bank' ? 'paid online' : 'paid in cash'} with bill ${number}`
+    : `${drawer.name === 'Bank' ? 'Paid online' : 'Cash'} with bill ${number}`
   let id: Id<'vouchers'>
   if (keep) {
     // The receipt follows its sale into the new year when the date crosses 1 April.
@@ -383,6 +387,27 @@ export const postBill = mutation({
     const received = wbReceipt ? 0 : taken
 
     /**
+     * Old dues brought forward (B/f) on a sale, as the paper bills write them
+     * above the goods. They are already on the customer's account, so they
+     * never touch this sale's voucher; the bill only prints them into its
+     * grand total. Money handed over for them is a receipt of its own, kept
+     * in step with the bill the same way as a W/B sale's cash — re-saving
+     * rewrites it, deleting or restoring the bill takes it along. A W/B
+     * customer has no account to owe on, so the two never meet on one bill.
+     */
+    const bf = kind === 'sale' && keepAsBill && !wbReceipt && !args.cashEntryId
+      ? round2(Math.max(Number(bill.bf) || 0, 0))
+      : 0
+    const bfTaken = round2(Math.min(Math.max(Number(bill.bfPaid) || 0, 0), bf))
+    if (bf > 0) {
+      bill.bf = bf
+      bill.bfPaid = bfTaken || undefined
+    } else {
+      delete bill.bf
+      delete bill.bfPaid
+    }
+
+    /**
      * Discount given up at settlement — allowed on a receipt, received on a
      * payment.
      *
@@ -430,8 +455,8 @@ export const postBill = mutation({
     const account = hasAmount ? await byName(accountName) : null
     if (hasAmount && !account) throw new Error(`The "${accountName}" account is missing — set it up in Account Masters before saving this bill.`)
 
-    const settlement = taken > 0 ? await byName(drawer) : null
-    if (taken > 0 && !settlement) {
+    const settlement = taken > 0 || bfTaken > 0 ? await byName(drawer) : null
+    if ((taken > 0 || bfTaken > 0) && !settlement) {
       throw new Error(`The "${drawer}" account is missing — set it up in Account Masters before taking money against this bill.`)
     }
 
@@ -635,8 +660,9 @@ export const postBill = mutation({
         number,
         ledgerId,
         date,
-        amount: wbReceipt && hasAmount ? taken : 0,
+        amount: wbReceipt && hasAmount ? taken : bfTaken,
         drawer: settlement,
+        oldDues: !wbReceipt,
       })
     }
 

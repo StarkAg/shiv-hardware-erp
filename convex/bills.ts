@@ -20,7 +20,7 @@ import { nextVoucherPhotoNo } from './lib/numbering'
  */
 const BOOKED = [
   'items', 'total', 'customerName', 'ledgerId', 'kind', 'date', 'number', 'voucherId', 'postedAt',
-  'paid', 'paidAmount', 'paidDate', 'moneyAmount', 'discount', 'paymentMode',
+  'paid', 'paidAmount', 'paidDate', 'moneyAmount', 'discount', 'paymentMode', 'bf', 'bfPaid',
   'gst', 'gstRate', 'offValue', 'offIsPercent', 'round', 'roundValue',
 ] as const
 const booked = (bill: any) => JSON.stringify(BOOKED.map((k) => bill?.[k] ?? null))

@@ -763,7 +763,13 @@ export function buildBillHtml(bill) {
     const received = isMoneyVoucher
       ? 0
       : Math.min(Math.max(Number(bill.paidAmount ?? (bill.paid ? bill.total : 0)) || 0, 0), Number(bill.total) || 0)
-    const balance = (Number(bill.total) || 0) - received
+    // Old dues brought forward (B/f) on a sale join the grand total, and any
+    // money taken for them joins what was received.
+    const bf = bill.kind && bill.kind !== 'sale' ? 0 : Math.max(0, Number(bill.bf) || 0)
+    const bfPaid = Math.min(Math.max(0, Number(bill.bfPaid) || 0), bf)
+    const grand = (Number(bill.total) || 0) + bf
+    const taken = received + bfPaid
+    const balance = grand - taken
     const receivedLabel = `${bill.kind === 'purchase' ? 'Paid' : 'Received'}${
       bill.paidDate && bill.paidDate !== bill.date ? ` ${formatDate(bill.paidDate)}` : ''
     }`
@@ -773,15 +779,22 @@ export function buildBillHtml(bill) {
     const hasCharges = isLast && charges.length > 0
     const bottomRight = isLast ? `
       <div style="text-align:right">
-        ${prevTotal > 0 && !hasCharges ? `<div style="font-size:9.5pt;color:#555;margin-bottom:0.5mm">${fmt(runningTotal)}</div>` : ''}
+        ${prevTotal > 0 && !hasCharges && !bf ? `<div style="font-size:9.5pt;color:#555;margin-bottom:0.5mm">${fmt(runningTotal)}</div>` : ''}
+        ${bf > 0 ? `
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:9.5pt;color:#555;padding-bottom:0.5mm">
+            <span>This bill</span><span style="font-weight:600">${fmt(bill.total)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:9.5pt;color:#555;padding-bottom:1mm">
+            <span>B/f old dues</span><span style="font-weight:600">${fmt(bf)}</span>
+          </div>` : ''}
         <div style="font-size:12pt;font-weight:900;border-top:1.5px solid #111;${
-          received > 0 ? '' : 'border-bottom:3px double #111;'
+          taken > 0 ? '' : 'border-bottom:3px double #111;'
         }padding-top:1mm;padding-bottom:1mm;min-width:24mm">${
-          hasCharges ? '<span style="font-size:9.5pt;font-weight:700;color:#555;margin-right:4mm">Total</span>' : ''
-        }${fmt(bill.total)}</div>
-        ${received > 0 ? `
+          hasCharges || bf > 0 ? '<span style="font-size:9.5pt;font-weight:700;color:#555;margin-right:4mm">Total</span>' : ''
+        }${fmt(grand)}</div>
+        ${taken > 0 ? `
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:9.5pt;color:#555;padding-top:1mm">
-            <span>Less ${esc(receivedLabel)}</span><span style="font-weight:600">${fmt(received)}</span>
+            <span>Less ${esc(receivedLabel)}</span><span style="font-weight:600">${fmt(taken)}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4mm;font-size:11pt;font-weight:900;border-top:1.5px solid #111;border-bottom:3px double #111;padding-top:1mm;padding-bottom:1mm;margin-top:1mm">
             <span>Balance</span><span>${fmt(balance)}</span>

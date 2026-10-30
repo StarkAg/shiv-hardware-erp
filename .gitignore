@@ -38,3 +38,4 @@ certs/dev-key.pem
 # What this machine last deployed of the parts with no record of their own (scripts/deploy.mjs).
 .deploy-state.json
 .intake/
+print-server/.card-check-*.mjs

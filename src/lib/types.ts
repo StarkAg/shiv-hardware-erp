@@ -469,6 +469,18 @@ export interface Bill extends BillCharges {
    */
   paidAmount?: number
   /**
+   * Old dues brought forward (B/f) on a sale — what the customer already owed
+   * before this bill, printed into its grand total the way the paper bills
+   * write it above the goods. Already on their account, so the sale's voucher
+   * leaves it out.
+   */
+  bf?: number
+  /**
+   * Money taken against those old dues with this bill. It posts as a receipt
+   * of its own (paysFor the bill), not as a line of the sale.
+   */
+  bfPaid?: number
+  /**
    * A receipt or a payment is the money itself, so it carries its own amount
    * rather than adding up item lines — the lines on one are a note of what it
    * settles, and summing them counted the same money twice.

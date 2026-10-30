@@ -30,7 +30,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync, rmdirSync, cpSync, statSync, symlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir, hostname, platform, tmpdir } from 'node:os'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -155,6 +155,55 @@ function changedSince(base, paths) {
   try { git('cat-file', '-e', `${base}^{commit}`) } catch { return null }
   const out = git('diff', '--name-only', base, 'HEAD', '--', ...paths)
   return out ? out.split('\n') : []
+}
+
+/**
+ * The desktop apps take print-server/template.mjs for the guarantee card only
+ * (electron/main.cjs: buildGuaranteeHtml and the card's size). The bill and
+ * the quotation in the same file belong to the print server and the screens,
+ * so a change there needs no installer. Both copies are asked to draw the
+ * same cards: the same cards mean the apps' shell has not changed.
+ */
+const TEMPLATE = 'print-server/template.mjs'
+const CARD_SAMPLES = [
+  { number: 'G-1', date: '2026-10-20', customer: 'Manoj Kumar', category: 'plywood', height: 8, width: 4, qty: 2,
+    qrUrl: 'https://gcvf.vercel.app/G-1/abc', items: [{ guaranteeYears: 10, sizeLabel: '8x4', brand: 'Century', qty: 2 }] },
+  { number: 'G-2', date: '2026-01-05', customer: 'A Very Long Customer Name For The Row', category: 'door', qty: 1,
+    termiteNote: false, items: [
+      { guaranteeYears: 5, sizeLabel: '7x3', qty: 1 }, { guaranteeYears: 0, sizeLabel: '6x3', qty: 4 },
+      { guaranteeYears: 21, sizeLabel: '19MM', qty: 3 },
+    ] },
+]
+async function cardDrawnSame(base) {
+  const old = git('show', `${base}:${TEMPLATE}`)
+  const now = git('show', `HEAD:${TEMPLATE}`)
+  if (old === now) return true
+  // Written beside the original, so its imports (qrcode, the seals) resolve the same way.
+  const stamp = `${process.pid}-${Date.now()}`
+  const files = [old, now].map((text, i) => {
+    const file = join(ROOT, 'print-server', `.card-check-${stamp}-${i}.mjs`)
+    writeFileSync(file, text)
+    return file
+  })
+  try {
+    const [a, b] = await Promise.all(files.map((f) => import(pathToFileURL(f).href)))
+    if (a.CARD_W_MM !== b.CARD_W_MM || a.CARD_H_MM !== b.CARD_H_MM) return false
+    for (const doc of CARD_SAMPLES) {
+      if (await a.buildGuaranteeHtml(doc, 'card') !== await b.buildGuaranteeHtml(doc, 'card')) return false
+    }
+    return true
+  } catch {
+    return false // can't tell: count it as changed
+  } finally {
+    for (const f of files) rmSync(f, { force: true })
+  }
+}
+
+/** Like changedSince, for an app's shell: the template counts only when its card changed. */
+async function shellChangedSince(base, paths) {
+  const files = changedSince(base, paths)
+  if (!files?.includes(TEMPLATE)) return files
+  return (await cardDrawnSame(base)) ? files.filter((f) => f !== TEMPLATE) : files
 }
 
 // ── Vercel ─────────────────────────────────────────────────────────────────
@@ -456,7 +505,7 @@ async function baselines() {
           // installed shell takes screens and nothing of the shell has changed
           // since, screens are all this deploy needs: no installer.
           const pushed = mine ? state.quotationScreens : null
-          const shell = mine && state.quotation.screens ? changedSince(state.quotation.sha, QUOTATION_SHELL) : null
+          const shell = mine && state.quotation.screens ? await shellChangedSince(state.quotation.sha, QUOTATION_SHELL) : null
           out.set(t.id, {
             base: pushed?.sha ?? (mine ? state.quotation.sha : commitAt(when)),
             when: pushed?.at ?? when,
@@ -509,10 +558,10 @@ async function main() {
   await refreshVercelLogin()
   const base = await baselines()
 
-  const plan = TARGETS.map((t) => {
+  const plan = await Promise.all(TARGETS.map(async (t) => {
     const b = base.get(t.id) ?? {}
     const named = ONLY?.includes(t.id)
-    let files = b.error || b.skip ? [] : changedSince(b.base, t.paths)
+    let files = b.error || b.skip ? [] : t.kind === 'release' ? await shellChangedSince(b.base, t.paths) : changedSince(b.base, t.paths)
     let action
     if (SKIP.includes(t.id)) action = 'skip'
     else if (ONLY && !named) action = 'skip'
@@ -523,7 +572,7 @@ async function main() {
     else if (named || ALL || files === null || files.length) action = 'deploy'
     else action = 'up to date'
     return { t, b, files, action }
-  })
+  }))
 
   log('')
   log(bold('Part'.padEnd(13)) + bold('Last deployed'.padEnd(31)) + bold('Changed'.padEnd(10)) + bold('Action'))
