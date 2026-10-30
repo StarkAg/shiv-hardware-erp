@@ -136,6 +136,15 @@ function CropBox({ box, onChange, onDone }) {
 
 const newGroup = () => `voucher-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const queueLabel = (number) => String(number).padStart(4, '0')
+// Pages of one bill sit together, first page first; the bills stay newest first.
+const bundled = (rows) => {
+  const bundles = new Map()
+  for (const row of rows) {
+    if (!bundles.has(row.groupId)) bundles.set(row.groupId, [])
+    bundles.get(row.groupId).unshift(row)
+  }
+  return [...bundles.entries()].map(([groupId, pages]) => ({ groupId, pages }))
+}
 const ago = (at) => {
   const minutes = Math.max(0, Math.floor((Date.now() - at) / 60000))
   return minutes < 1 ? 'just now' : minutes < 60 ? `${minutes} min ago` : `${Math.floor(minutes / 60)} h ago`
@@ -323,6 +332,23 @@ export default function App() {
   const pending = outgoing.filter((item) => item.status === 'queued' || item.status === 'sending').length
   const failed = outgoing.filter((item) => item.status === 'failed').length
 
+  const waitingTile = (row, page) => (
+    <div className="tile" key={row._id}>
+      <a href={row.url} target="_blank" rel="noreferrer"><img src={row.url} alt="Bill photo waiting to be attached" /></a>
+      {page && <b className="page-no">{page}</b>}
+      <span>{row.queueNo == null ? '' : `#${queueLabel(row.queueNo)} · `}{ago(row.at)}</span>
+      {/* Asked on the page, not with the browser's confirm box: that
+          box paused the live camera and it stayed frozen after. */}
+      <button className={discarding === row._id ? 'sure' : ''} onClick={() => {
+        if (discarding !== row._id) { setDiscarding(row._id); return }
+        setDiscarding(null)
+        discard({ id: row._id })
+        // A page of the bill in hand, thrown away: it is no longer one of its pages.
+        if (row.groupId === group.current) setPages((count) => Math.max(0, count - 1))
+      }}>{discarding === row._id ? 'Sure? Discard' : 'Discard'}</button>
+    </div>
+  )
+
   return (
     <main className="site">
       <div className="scanner">
@@ -401,19 +427,12 @@ export default function App() {
       <section className="waiting">
         <h2>Waiting for a voucher <span>{rows.length}</span></h2>
         {rows.length > 0 && <div className="tiles">
-          {rows.map((row) => <div className="tile" key={row._id}>
-            <a href={row.url} target="_blank" rel="noreferrer"><img src={row.url} alt="Bill photo waiting to be attached" /></a>
-            <span>{row.queueNo == null ? '' : `#${queueLabel(row.queueNo)} · `}{ago(row.at)}</span>
-            {/* Asked on the page, not with the browser's confirm box: that
-                box paused the live camera and it stayed frozen after. */}
-            <button className={discarding === row._id ? 'sure' : ''} onClick={() => {
-              if (discarding !== row._id) { setDiscarding(row._id); return }
-              setDiscarding(null)
-              discard({ id: row._id })
-              // A page of the bill in hand, thrown away: it is no longer one of its pages.
-              if (row.groupId === group.current) setPages((count) => Math.max(0, count - 1))
-            }}>{discarding === row._id ? 'Sure? Discard' : 'Discard'}</button>
-          </div>)}
+          {bundled(rows).map(({ groupId, pages }) => pages.length === 1 ? waitingTile(pages[0]) : (
+            <div className="bundle" key={groupId}>
+              <h3>Same bill <span>{pages.length} pages</span></h3>
+              <div className="tiles">{pages.map((row, index) => waitingTile(row, index + 1))}</div>
+            </div>
+          ))}
         </div>}
       </section>
 
