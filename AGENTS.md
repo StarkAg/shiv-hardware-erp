@@ -40,3 +40,6 @@ copy of the tool there).
 - Planned, not built: one-tap printing from a phone straight to the Epson over the
   shop Wi-Fi, with the PC off (a Capacitor counter app sending IPP). What was found
   and the plan: `docs/one-tap-phone-print.md`.
+- Which WhatsApp number sends what: `docs/whatsapp-numbers.md`.
+- When a confusion gets solved, write the answer into a `.md` in `docs/` and commit
+  it, without being asked.
