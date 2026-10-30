@@ -4,6 +4,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import { setShopWhatsAppClient } from './lib/shopWhatsApp'
 import { PinGate } from './lib/deviceTrust/PinGate.jsx'
 import './index.css'
 import { AppLayout } from './components/AppLayout'
@@ -120,6 +121,7 @@ if (convexEnabled()) {
 // ── Convex ─────────────────────────────────────────────────────────────────
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
 const convex = CONVEX_URL ? new ConvexReactClient(CONVEX_URL) : null
+setShopWhatsAppClient(convex)
 
 /**
  * A phone opening the website gets the books to read, not the counter.

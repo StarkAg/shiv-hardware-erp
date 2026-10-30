@@ -82,6 +82,7 @@ import type * as receipts from "../receipts.js";
 import type * as reports from "../reports.js";
 import type * as review from "../review.js";
 import type * as seed from "../seed.js";
+import type * as shopWhatsApp from "../shopWhatsApp.js";
 import type * as staffPay from "../staffPay.js";
 import type * as tags from "../tags.js";
 import type * as tidy from "../tidy.js";
@@ -175,6 +176,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   review: typeof review;
   seed: typeof seed;
+  shopWhatsApp: typeof shopWhatsApp;
   staffPay: typeof staffPay;
   tags: typeof tags;
   tidy: typeof tidy;

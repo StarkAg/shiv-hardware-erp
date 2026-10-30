@@ -1,5 +1,6 @@
 import type { Bill, BrandSet, CustomCatalogEntry, GuaranteeDocument, HardwareCatalog, Quotation } from './types'
 import { fetchPrinterAgentLanUrls } from './cloudApi'
+import { shopApi, shopWhatsApp } from './shopWhatsApp'
 
 const PRINT_SERVER_PORT = import.meta.env.VITE_PRINT_SERVER_PORT || '3333'
 const configuredPrintServer = (import.meta.env.VITE_PRINT_SERVER || '').trim().replace(/\/+$/, '')
@@ -484,12 +485,12 @@ export type WhatsAppWebStatus = {
   lastError?: { at: string; error: string } | null
 }
 
-/** Read the shop WhatsApp connection status (+ QR data URL when re-login is needed). */
+/**
+ * The Shop WhatsApp's link (+ QR data URL when it needs a scan). It is on
+ * Railway now, not the shop PC (convex/shopWhatsApp.ts).
+ */
 export async function fetchWhatsAppStatus(): Promise<WhatsAppWebStatus> {
-  const res = await fetchPrintServer('/whatsapp-web/status', undefined, 8000)
-  const json = await res.json().catch(() => null)
-  if (!json || typeof json.status !== 'string') throw new Error('Could not read WhatsApp status from the print server')
-  return json as WhatsAppWebStatus
+  return shopWhatsApp((c) => c.action(shopApi.shopWhatsApp.status, {}))
 }
 
 /** True if the error from a WhatsApp send means the account needs (re-)login. */
@@ -503,38 +504,9 @@ export function isWhatsAppNotConnectedError(err: unknown): boolean {
  * mobile, using the same account that hosts the shop's WhatsApp auto-print.
  * Resolves with the JID it sent to; throws with a user-facing message on failure.
  */
-export async function sendGuaranteeWhatsApp(mobile: string, name = ''): Promise<{ ok: true; jid: string; message: string; skipped?: boolean }> {
-  try {
-    const send = () => fetchPrintServer('/whatsapp-notify-customer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mobile, name }),
-    }, 25_000)
-    // The print server restarts itself when its code is updated and refuses
-    // connections for those few seconds, so an unreachable server is tried
-    // twice more before the card is reported as not sent. Asking again is safe:
-    // the server will not message one number twice inside its cooldown.
-    let res: Response | undefined
-    for (let attempt = 0; !res; attempt++) {
-      try {
-        res = await send()
-      } catch (err) {
-        if (!(err instanceof TypeError) || attempt >= 2) throw err
-        await new Promise((resolve) => window.setTimeout(resolve, 4000))
-      }
-    }
-    const json = await res.json().catch(() => null)
-    if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Print server returned HTTP ${res.status}`)
-    return json as { ok: true; jid: string; message: string; skipped?: boolean }
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`Print server timed out at ${PRINT_SERVER_URL}`)
-    }
-    if (err instanceof TypeError) {
-      throw new Error(`Cannot reach print server at ${PRINT_SERVER_URL}. Start it on the computer and use the same Wi-Fi.`)
-    }
-    throw err
-  }
+export async function sendGuaranteeWhatsApp(mobile: string, name = '', number = ''): Promise<{ ok: true; jid: string; message: string; skipped?: boolean }> {
+  // Asking again is safe: the service will not message one number twice inside its cooldown.
+  return shopWhatsApp((c) => c.action(shopApi.shopWhatsApp.notifyGuarantee, { mobile, name, ...(number ? { number } : {}) }))
 }
 
 /**
@@ -551,14 +523,9 @@ export async function sendWhatsAppDocument(mobile: string, blob: Blob, fileName:
     reader.onerror = () => reject(reader.error)
     reader.readAsDataURL(blob)
   })
-  const res = await fetchPrintServer('/whatsapp-send-document', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mobile, fileName, mimetype: blob.type || 'application/pdf', data, caption }),
-  }, 30_000)
-  const json = await res.json().catch(() => null)
-  if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Print server returned HTTP ${res.status}`)
-  return json as { jid: string }
+  return shopWhatsApp((c) => c.action(shopApi.shopWhatsApp.sendDocument, {
+    mobile, fileName, mimetype: blob.type || 'application/pdf', data, ...(caption ? { caption } : {}),
+  }))
 }
 
 /**

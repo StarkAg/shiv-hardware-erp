@@ -2576,6 +2576,7 @@ function customerMobileToWhatsAppJid(rawMobile) {
 // callers should not await print completion on this. Deduped by card number.
 async function notifyCustomerGuaranteeReady(document) {
   if (!WHATSAPP_CUSTOMER_NOTIFY_ENABLED) return
+  if (SHOP_WHATSAPP_URL) return notifyThroughShopWhatsApp(document)
   const number = document?.number ?? document?.id
   const mobile = document?.customer?.mobile
   const name = document?.customer?.name || ''
@@ -2620,6 +2621,31 @@ async function notifyCustomerGuaranteeReady(document) {
     whatsappNotifiedGuarantees.delete(number)
     whatsappWebState.lastError = { at: new Date().toISOString(), error: `notify ${number}: ${String(err?.message ?? err)}` }
     console.error(`[whatsapp-notify] failed to message customer for ${number}`, err?.message ?? err)
+  }
+}
+
+// The Shop WhatsApp moved to Railway (whatsapp-reminders/server.mjs) on
+// 2026-10-30, with WhatsApp printing retired. Set, the card-printed message
+// goes from there, which keeps its own once-per-card record; this server's
+// own link (WHATSAPP_AUTO_PRINT_ENABLED) is then left off.
+const SHOP_WHATSAPP_URL = (process.env.SHOP_WHATSAPP_URL || '').replace(/\/+$/, '')
+const SHOP_WHATSAPP_KEY = process.env.SHOP_WHATSAPP_KEY || ''
+
+async function notifyThroughShopWhatsApp(document) {
+  const number = String(document?.number ?? document?.id ?? '')
+  const mobile = String(document?.customer?.mobile ?? '').trim()
+  if (!number || !mobile) return
+  try {
+    const res = await fetch(`${SHOP_WHATSAPP_URL}/notify-guarantee`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-shop-key': SHOP_WHATSAPP_KEY },
+      body: JSON.stringify({ mobile, name: document?.customer?.name || '', number }),
+    })
+    const json = await res.json().catch(() => null)
+    if (!res.ok || !json?.ok) throw new Error(json?.error ?? `HTTP ${res.status}`)
+    console.log(`[whatsapp-notify] guarantee ${number}: ${json.skipped ? 'already told' : 'sent'} via Shop WhatsApp`)
+  } catch (err) {
+    console.error(`[whatsapp-notify] guarantee ${number}: Shop WhatsApp failed`, err?.message ?? err)
   }
 }
 

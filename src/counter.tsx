@@ -3,6 +3,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createHashRouter, Navigate } from 'react-router-dom'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import { setShopWhatsAppClient } from './lib/shopWhatsApp'
 import { PinGate } from './lib/deviceTrust/PinGate.jsx'
 import './index.css'
 // The Signs look over the shared screens (DESIGN.md); the panel keeps its own.
@@ -69,6 +70,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator && location.protocol ==
 
 const CONVEX_URL = (import.meta.env.VITE_CONVEX_URL ?? '').trim()
 const convex = CONVEX_URL ? new ConvexReactClient(CONVEX_URL) : null
+setShopWhatsAppClient(convex)
 
 // Same wheel rule as the panel: a trackpad nudge must never change an amount.
 document.addEventListener(

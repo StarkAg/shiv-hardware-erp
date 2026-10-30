@@ -74,9 +74,8 @@ export function WhatsAppLoginModal({
 
         {error ? (
           <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
-            <p className="font-semibold">Can't reach the print server</p>
+            <p className="font-semibold">Can't reach the Shop WhatsApp</p>
             <p className="mt-1 text-xs opacity-90">{error}</p>
-            <p className="mt-2 text-xs opacity-90">Start it on the shop computer and use the same Wi-Fi.</p>
           </div>
         ) : status === 'ready' ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
@@ -91,7 +90,7 @@ export function WhatsAppLoginModal({
               className="h-56 w-56 rounded-lg border border-stone-200 bg-white p-2 dark:border-white/10"
             />
             <ol className="text-left text-xs text-stone-600 dark:text-stone-300">
-              <li>1. Open WhatsApp on the shop phone.</li>
+              <li>1. Open WhatsApp on the Shop phone (79705 50954).</li>
               <li>2. Tap <b>⋮ / Settings → Linked devices</b>.</li>
               <li>3. Tap <b>Link a device</b> and scan this code.</li>
             </ol>
@@ -104,9 +103,7 @@ export function WhatsAppLoginModal({
                 ? 'Logged out — generating a new QR…'
                 : status === 'reconnecting'
                   ? 'Reconnecting…'
-                  : status === 'disabled'
-                    ? 'WhatsApp auto-print is disabled on the server.'
-                    : 'Preparing WhatsApp…'}
+                  : 'Preparing WhatsApp…'}
             </p>
             <p className="text-xs text-muted">The QR will appear here in a moment.</p>
           </div>
