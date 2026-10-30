@@ -61,6 +61,8 @@ const TARGETS = [
   // draws a typed bill with the shop PC's template, so that and the
   // letterhead go up beside it (`stage`).
   { id: 'whatsapp-bills', kind: 'railway', service: 'whatsapp-bills', upload: 'whatsapp-bills', stage: ['print-server/template.mjs', 'public/assets'], label: 'WhatsApp bills (Railway)', paths: ['whatsapp-bills', 'print-server/template.mjs', 'public/assets'] },
+  // Birthday reminders to the owner's chat, from the Shop WhatsApp.
+  { id: 'whatsapp-reminders', kind: 'railway', service: 'whatsapp-reminders', upload: 'whatsapp-reminders', label: 'WhatsApp reminders (Railway)', paths: ['whatsapp-reminders'] },
   { id: 'panel', kind: 'vercel', project: 'shiv-panel', domain: 'shiv-panel.vercel.app', label: 'Panel website', paths: PANEL_SOURCES, build: 'panel' },
   { id: 'counter', kind: 'vercel', project: 'shiv-counter', domain: 'shivhardware-counter.vercel.app', label: 'Counter website', paths: PANEL_SOURCES, build: 'counter' },
   site('cash', 'cash-web', 'cash-web', 'shivhardware-cash.vercel.app', 'Cashier'),

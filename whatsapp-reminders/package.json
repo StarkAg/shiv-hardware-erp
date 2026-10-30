@@ -1,0 +1,14 @@
+{
+  "name": "shiv-whatsapp-reminders",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Birthday reminders to the owner's chat, from the Shop WhatsApp, linked here (Railway)",
+  "main": "server.mjs",
+  "scripts": { "start": "node server.mjs" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "qrcode": "^1.5.4"
+  }
+}

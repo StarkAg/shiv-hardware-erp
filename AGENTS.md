@@ -31,6 +31,8 @@ copy of the tool there).
   One exception, asked for by the owner: `whatsapp-bills/server.mjs` greets a
   number it has not sent a bill to before with a smile and folded hands, then
   the visiting card, as the shop does by hand. They are written as code points.
+  A second, also asked for by the owner: `whatsapp-reminders/server.mjs` puts
+  celebration emojis in the birthday reminder, written as code points too.
 - Commit and push each finished piece of work. To take one file the other computer
   has: `git checkout refs/wip-others/<computer> -- <file>` (after `npm run sync`).
 - One look for every app: the "Signs" design language in `DESIGN.md` (white, black print,

@@ -9,6 +9,10 @@ Which number sends what. Checked 2026-10-30. Update this file when a link change
 | Meta (C) | Not looked up, ID `1348201888369392` | Convex `convex/whatsapp.ts` | Guarantee cards sent from the panel | Convex variable `WHATSAPP_PHONE_NUMBER_ID` |
 | Twilio | +91 98357 16123 | Convex `convex/twilio.ts` | One notice when a template is approved | Convex variable `TWILIO_WHATSAPP_FROM` |
 
+## Birthday reminders
+
+Railway service `whatsapp-reminders` sends the GradeX birthdays to 87099 64141 at 12:00 am India time. It is meant to be linked to Shop as its own linked device, separate from the shop PC's link, so it works with the PC off. It sends only when the linked number is `FROM_NUMBER` (917970550954), and sends nothing on the day it is first linked. Scan the QR at `/login?key=LOGIN_KEY` (`railway variables --service whatsapp-reminders --kv`). To change the list, edit `whatsapp-reminders/birthdays.json`, then `npm run deploy -- --only whatsapp-reminders`.
+
 ## Still open
 
 - **Shop PC:** to confirm the number directly, read `me.id` in `print-server/data/baileys-auth/creds.json` on the PC. `/whatsapp-web/status` does not report it.
