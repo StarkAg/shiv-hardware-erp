@@ -3,6 +3,7 @@ import { useLive } from '../lib/cache';
 import { rupees, phoneDisplay, phoneHref } from '../lib/format';
 import { TAGS } from '../lib/tags';
 import TagDots from './TagDots';
+import FitName from './FitName';
 
 /** Squared up: nothing owed either way, and no bill waiting for a price. */
 const isSettled = (r) =>
@@ -185,8 +186,8 @@ export function PartiesView({
                           middle of both rather than hanging off the last line. */}
                       <div className="partycell">
                         <div>
-                          <div className="party">
-                            {r.ledger.name}
+                          <div className="party party-fit">
+                            <FitName>{r.ledger.name}</FitName>
                             <TagDots tags={r.ledger.tags} />
                           </div>
                           {/* Most parties have a place; the rest at least have

@@ -328,7 +328,7 @@
   background: var(--card); border: 1px solid var(--line);
   border-radius: 18px; padding: 18px 20px; box-shadow: var(--shadow);}
 .ledger-root .partyhead-main{min-width: 0; overflow-wrap: anywhere;}
-.ledger-root .partyname{display: flex; align-items: center; gap: 10px;}
+.ledger-root .party-fit{display: flex; align-items: center; gap: 10px;}
 .ledger-root .partyname .xbtn{flex: none;}
 .ledger-root .partyhead h1{margin: 8px 0 4px; font-size: 25px; font-weight: 800; letter-spacing: -0.01em;}
 .ledger-root .partyhead-figure{text-align: right;}
@@ -400,6 +400,10 @@
 @media (max-width: 420px){
 .ledger-root .shotroll{grid-template-columns: minmax(0, 1fr);}}
 .ledger-root .party{font-weight: 800; font-size: 16px;}
+.ledger-root .party-fit{display: flex; align-items: center; gap: 6px;}
+.ledger-root .party-fit > :not(.fitname){flex: none;}
+.ledger-root .fitname{flex: 0 1 auto; min-width: 0; overflow: hidden;}
+.ledger-root .fitname-text{display: inline-block; white-space: nowrap; transform-origin: left center;}
 .ledger-root .ledger th.num{text-align: right;}
 .ledger-root .ledger tr.clickable{cursor: pointer;}
 .ledger-root .ledger tr.clickable:hover td{background: var(--card2);}
@@ -1546,14 +1550,6 @@ to{transform: scale(1); color: #fff}}
   .ledger-root .ledger td.particulars[data-label="Items"]{width: 22%;}
   .ledger-root .ledger td.particulars > *{display: block; max-width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;}
-  /* The exception: a party's name is never cut. Two accounts can differ only in
-     the last word ("Sanjay Prasad Ji, Chainpur"), so a long name carries on to
-     the next line, the way Tally shows it. The place under it stays one line. */
-  .ledger-root .ledger td.particulars > .partycell{display: flex; white-space: normal;}
-  .ledger-root .ledger td.particulars .partycell > div:first-child{min-width: 0;}
-  .ledger-root .ledger td.particulars .party{overflow-wrap: anywhere; line-height: 1.2;}
-  .ledger-root .ledger td.particulars .partycell .ref{display: block; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap;}
 }
 .ledger-root .chips-gap{width: 14px;}
 .ledger-root .adv-paid{color: var(--green-text); font-weight: 800;}
