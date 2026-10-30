@@ -322,6 +322,7 @@ export default defineSchema({
   attendanceMeta: defineTable({
     staff: v.array(v.string()),
     rates: v.optional(v.any()), // { staffName: dailyRate }
+    theme: v.optional(v.string()), // 'cricket', or unset for plain Signs (docs/cricket-theme-design.md)
     updatedAt: v.number(),
   }),
 

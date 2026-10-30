@@ -1,0 +1,28 @@
+{
+ "cell": 48,
+ "count": 22,
+ "frames": {
+  "batter-stance": 0,
+  "batter-lift": 1,
+  "batter-drive": 2,
+  "batter-follow": 3,
+  "batter-pull": 4,
+  "batter-runA": 5,
+  "batter-runB": 6,
+  "batter-cheer": 7,
+  "batter-walk": 8,
+  "bowler-mark": 9,
+  "bowler-runA": 10,
+  "bowler-runB": 11,
+  "bowler-load": 12,
+  "bowler-throw": 13,
+  "bowler-after": 14,
+  "bowler-appeal": 15,
+  "umpire-still": 16,
+  "umpire-out": 17,
+  "umpire-fourA": 18,
+  "umpire-fourB": 19,
+  "umpire-six": 20,
+  "umpire-wide": 21
+ }
+}

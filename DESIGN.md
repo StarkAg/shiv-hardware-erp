@@ -166,3 +166,7 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | The shop PIN screen | `src/lib/deviceTrust/PinGate.jsx` | wears Signs in any app that has it |
 | Shiv Accounts | `khata-web/` | kept in the older parchment and brass look: Tony tried Signs on it on 11 Oct 2026 and wanted the earlier version back |
 | Everything else | | still the older parchment and brass look |
+
+## The one exception: the attendance cricket theme
+
+The attendance app has a switchable cricket theme that leaves the Signs look on purpose. It stays off unless turned on, and off means the plain Signs screen with none of its code downloaded. Rules and reasons: `docs/cricket-theme-design.md`.

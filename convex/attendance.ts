@@ -56,6 +56,26 @@ export const setStaff = openMutation({
   },
 })
 
+// ── The app's look, for every phone (docs/cricket-theme-design.md) ────────────
+export const getTheme = openQuery({
+  args: {},
+  handler: async (ctx) => {
+    const meta = await ctx.db.query('attendanceMeta').first()
+    return meta?.theme ?? ''
+  },
+})
+
+export const setTheme = openMutation({
+  args: { theme: v.union(v.literal('cricket'), v.literal('')) },
+  handler: async (ctx, { theme }) => {
+    const meta = await ctx.db.query('attendanceMeta').first()
+    if ((meta?.theme ?? '') === theme) return
+    if (meta) await ctx.db.patch(meta._id, { theme, updatedAt: Date.now() })
+    else await ctx.db.insert('attendanceMeta', { staff: DEFAULT_STAFF, theme, updatedAt: Date.now() })
+    await logChange(ctx, { action: 'theme', summary: theme ? 'Cricket theme turned on' : 'Cricket theme turned off' })
+  },
+})
+
 // ── Per-staff daily wage rates ────────────────────────────────────────────────
 export const getRates = query({
   args: {},

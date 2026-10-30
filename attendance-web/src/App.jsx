@@ -12,6 +12,11 @@ function OnTrusted({ onTrusted }) {
   return null
 }
 import { monthPay, ATTEND_THRESHOLD } from './pay.js'
+import { useAttendanceTheme, useWords, WordsProvider } from './cricket/theme.jsx'
+import { cricketEvent } from './cricket/bus.js'
+import { ThemeSwitch } from './cricket/ThemeSwitch.jsx'
+import { CricketKey, CricketLayer, CricketTabIcon, PointsTable, RunChase } from './cricket/lazy.jsx'
+import { monthScores } from './cricket/score.js'
 
 const api = anyApi
 const EDIT_PASSWORD = '262003'
@@ -121,6 +126,12 @@ export default function App() {
   // Rates, advances and staff pay move money: read only on a phone given the
   // PIN, and read again the moment the Pay tab's PIN screen lets it through.
   const [trustTick, setTrustTick] = useState(0)
+  const theme = useAttendanceTheme(convex)
+  const [refreshTick, setRefreshTick] = useState(0) // the theme's pull to refresh
+  const goTo = (next) => {
+    if (next !== mode) cricketEvent('tab', { from: mode, to: next })
+    setMode(next)
+  }
 
   const [openingsOpen, setOpeningsOpen] = useState(false)
   const [openings, setOpenings] = useState(null)
@@ -196,7 +207,7 @@ export default function App() {
       setStaff(s); writeCache(STAFF_CACHE_KEY, s)
     }).catch(() => {})
     return () => { off = true }
-  }, [convex])
+  }, [convex, refreshTick])
 
   // Per-staff daily rates — cache-first; one-shot refresh.
   const [rates, setRates] = useState(() => readCache(RATES_CACHE_KEY, {}) || {})
@@ -230,7 +241,7 @@ export default function App() {
       writeCache(MONTH_CACHE_KEY, { ...readCache(MONTH_CACHE_KEY, {}), [month]: rows })
     }).catch(() => {})
     return () => { off = true }
-  }, [month, currentMonth, convex])
+  }, [month, currentMonth, convex, refreshTick])
 
   /**
    * What each man still owes on an advance, and at what rate.
@@ -295,6 +306,7 @@ export default function App() {
     })
   }
   const setMark = (date, name, status) => {
+    cricketEvent('mark', { name, status })
     applyLocal(date, (day) => { if (status) day.marks[name] = status; else delete day.marks[name] })
     convex.mutation(api.attendance.setMark, { date, staff: name, status }).catch(() => {})
   }
@@ -352,8 +364,10 @@ export default function App() {
       pendingRef.current = null
       if (p && p.date) setUnlockedDates((prev) => ({ ...prev, [p.date]: Date.now() + UNLOCK_MS }))
       setPw({ open: false, error: '' })
+      if (p && p.date) cricketEvent('overturned')
       if (p && p.action) p.action()
     } else {
+      cricketEvent('notout')
       setPw({ open: true, error: 'Wrong password. Try again.' })
     }
   }
@@ -370,16 +384,18 @@ export default function App() {
   const loading = days === undefined
 
   return (
-    <div className="wrap">
+    <WordsProvider on={theme.on}>
+    <div className={`wrap ${theme.on ? 'ck' : ''}`}>
       <header className="top">
         <div className="brandrow">
           <img className="logo" src="/logo.png" alt="Shiv Hardware" />
           <div>
             <div className="brand">Shiv Hardware</div>
-            <div className="sub">Attendance</div>
+            <div className="sub">Attendance{theme.on && ' · Under lights'}</div>
           </div>
         </div>
         <div className="headbtns">
+          {theme.on && <CricketKey />}
           <button className="themebtn histbtn" onClick={openHistoryOrOpenings} aria-label="Change history" title="Change history">
             <HistoryIcon />
             {historyAlert && <span className="alertdot" aria-label="Past date changed">!</span>}
@@ -387,7 +403,14 @@ export default function App() {
         </div>
       </header>
 
-      <TabBar mode={mode} setMode={setMode} />
+      {theme.on && (
+        <CricketLayer
+          staff={staff} statusFor={statusFor} cursor={cursor} todayKey={todayKey} mode={mode} loading={loading}
+          onRefresh={() => setRefreshTick((t) => t + 1)}
+        />
+      )}
+
+      <TabBar mode={mode} setMode={goTo} cricket={theme.on} />
 
       {mode === 'day' ? (
         <DailyView
@@ -404,16 +427,19 @@ export default function App() {
           onAllPresent={() => {
             const marks = {}
             for (const s of staff) marks[s] = 'P'
+            cricketEvent('allin')
             setDayAll(dateKey(cursor), marks)
           }}
           onAllClosed={() => {
             const marks = {}
             for (const s of staff) marks[s] = 'C'
+            cricketEvent('rain')
             setDayAll(dateKey(cursor), marks)
           }}
           onSave={() => {
             const marks = {}
             for (const s of staff) marks[s] = statusFor(cursor, s) || 'P'
+            cricketEvent('stumps')
             lockDay(dateKey(cursor), marks)
             relock(dateKey(cursor)) // saving re-locks the day
           }}
@@ -432,7 +458,7 @@ export default function App() {
       ) : mode === 'stats' ? (
         <StatsView
           cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading} dayOff={dayOff}
-          unlockThen={unlockThen}
+          unlockThen={unlockThen} theme={theme} todayKey={todayKey}
           onAddStaff={(name) => changeStaff([...staff, name])}
           onRemoveStaff={(name) => changeStaff(staff.filter((s) => s !== name))}
         />
@@ -442,7 +468,7 @@ export default function App() {
           <OnTrusted onTrusted={() => setTrustTick((t) => t + 1)} />
           <PayView
             cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
-            rates={rates} advances={advances} owing={owing} unlockThen={unlockThen}
+            rates={rates} advances={advances} owing={owing} unlockThen={unlockThen} cricket={theme.on}
             onSetRate={setRate} onAddAdvance={addAdvance} onRemoveAdvance={removeAdvance}
           />
         </PinGate>
@@ -455,6 +481,7 @@ export default function App() {
       {openingsOpen && <OpeningLogModal openings={openings} onClose={() => setOpeningsOpen(false)} />}
       <footer className="foot">Live sync • {Object.values(unlockedDates).some((e) => e > Date.now()) ? 'edit unlocked (10h)' : 'past days locked'} • {month}</footer>
     </div>
+    </WordsProvider>
   )
 }
 
@@ -467,6 +494,7 @@ function DailyView({ cursor, setCursor, staff, statusFor, loading, todayKey, isS
   }
   const isToday = dateKey(cursor) === todayKey
   const tue = isTue(cursor)
+  const words = useWords()
 
   const guarded = (fn) => () => { if (editable) fn(); else unlockThen(fn, dateKey(cursor)) }
 
@@ -525,7 +553,7 @@ function DailyView({ cursor, setCursor, staff, statusFor, loading, todayKey, isS
           )}
 
           {isToday && editable && (
-            <button className="allbtn" onClick={onSave}>{isSaved ? 'Re-lock this day' : 'Save & lock this day'}</button>
+            <button className="allbtn" onClick={onSave}>{isSaved ? words.relock : words.save}</button>
           )}
           {isSaved && !editable && (
             <div className="savednote">Saved. Tap “tap to edit” and enter the password to change today.</div>
@@ -561,6 +589,7 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
   const dim = daysInMonth(y, m0 + 1)
   const days = Array.from({ length: dim }, (_, i) => new Date(y, m0, i + 1))
   const stepM = (n) => setCursor(new Date(y, m0 + n, 1))
+  const { legend } = useWords()
   // A Tuesday the shop was shut is one box down the whole column, with the
   // day written in it. Tapping the box opens that column, for the Tuesday the
   // shop did work; a Tuesday with any mark on it is shown as an ordinary day.
@@ -650,16 +679,16 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
         </div>
       )}
       <div className="legend">
-        <span className="pill p">P present</span>
-        <span className="pill n">N absent</span>
-        <span className="pill h">½ half</span>
-        <span className="pill c">C closed</span>
+        <span className="pill p">{legend.p}</span>
+        <span className="pill n">{legend.n}</span>
+        <span className="pill h">{legend.h}</span>
+        <span className="pill c">{legend.c}</span>
       </div>
     </div>
   )
 }
 
-function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances, owing, unlockThen, onSetRate, onAddAdvance, onRemoveAdvance }) {
+function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances, owing, unlockThen, cricket, onSetRate, onAddAdvance, onRemoveAdvance }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const dim = daysInMonth(y, m0 + 1)
@@ -737,6 +766,7 @@ function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances
           </div>
 
           <div className="motcard">
+            {cricket && <RunChase name={sel} attended={r.attended} threshold={ATTEND_THRESHOLD} unlocked={r.unlocked} missedCount={r.missed.length} />}
             <div className="motlabel">{sel}&rsquo;s earnings this month</div>
             <div className="motnet">{inr(r.net)}</div>
             <div className="motdays">{r.attended} / {ATTEND_THRESHOLD} days present</div>
@@ -839,7 +869,7 @@ function PayRatesModal({ staff, rates, onSetRate, onClose }) {
   )
 }
 
-function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, onAddStaff, onRemoveStaff, dayOff }) {
+function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, theme, todayKey, onAddStaff, onRemoveStaff, dayOff }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const dim = daysInMonth(y, m0 + 1)
@@ -893,6 +923,8 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, o
             <span className="pill c">{closed} closed</span>
           </div>
 
+          {theme.on && <PointsTable rows={monthScores(staff, days, statusFor, todayKey, dateKey)} />}
+
           <div className="stats">
             {stats.map((s) => (
               <div className="statrow" key={s.name}>
@@ -938,6 +970,7 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, o
           <button onClick={addStaff}>Add</button>
         </div>
         <div className="savednote">Adding or removing staff needs the password.</div>
+        <ThemeSwitch theme={theme} unlockThen={unlockThen} />
       </div>
     </div>
   )
@@ -945,13 +978,14 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, o
 
 function PasswordModal({ error, onSubmit, onClose, title, sub }) {
   const [value, setValue] = useState('')
+  const words = useWords()
   const submit = () => onSubmit(value)
   return (
     <div className="modal" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheetlock"><LockIcon /></div>
-        <div className="sheettitle">{title || 'This day is locked'}</div>
-        <div className="sheetsub">{sub || 'Enter the password to edit past attendance'}</div>
+        <div className="sheettitle">{title || words.lockedTitle}</div>
+        <div className="sheetsub">{sub || words.lockedSub}</div>
         <input
           autoFocus
           type="password"
@@ -984,10 +1018,11 @@ const fmtDay = (dateStr) => {
 
 function HistoryModal({ log, onClose }) {
   const todayK = dateKey(new Date())
+  const words = useWords()
   return (
     <div className="modal" onClick={onClose}>
       <div className="sheet histsheet" onClick={(e) => e.stopPropagation()}>
-        <div className="sheettitle">Change history</div>
+        <div className="sheettitle">{words.historyTitle}</div>
         <div className="sheetsub">When and what was edited</div>
         {log === null ? (
           <div className="muted center">Loading…</div>
@@ -1116,7 +1151,8 @@ const NAV_ITEMS = [
   { id: 'pay', label: 'Pay' },
 ]
 
-function TabBar({ mode, setMode }) {
+function TabBar({ mode, setMode, cricket }) {
+  const words = useWords()
   return (
     <nav className="tabbar" aria-label="Sections" style={{ '--navcount': NAV_ITEMS.length }}>
       {NAV_ITEMS.map((item) => (
@@ -1127,8 +1163,8 @@ function TabBar({ mode, setMode }) {
           aria-current={mode === item.id ? 'page' : undefined}
           onClick={() => setMode(item.id)}
         >
-          {NAV_ICONS[item.id]}
-          <span className="tablabel">{item.label}</span>
+          {cricket ? <CricketTabIcon id={item.id} fallback={NAV_ICONS[item.id]} /> : NAV_ICONS[item.id]}
+          <span className="tablabel">{words.tabs[item.id]}</span>
         </button>
       ))}
     </nav>
