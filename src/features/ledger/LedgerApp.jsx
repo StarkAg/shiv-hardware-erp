@@ -85,7 +85,7 @@ function launchIntent() {
   return intent;
 }
 
-export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVoucher }) {
+export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVoucher, back }) {
   const [intent] = useState(launchIntent);
 
   // The phone opens straight onto the camera; nothing else on that screen.
@@ -179,7 +179,7 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
     if (form) return setForm(null);
     if (ledgerForm) return setLedgerForm(false);
     if (printing) return setPrinting(null);
-    if (partyId) return setPartyId(null);
+    if (partyId) return leaveParty();
     return undefined;
   };
   const busy = Boolean(form || ledgerForm || viewing || printing || history);
@@ -192,6 +192,13 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
     s: open('sale'),
     r: open('receipt'),
   });
+
+  // Back from an account: to the page it was opened from when the panel
+  // knows one (Ledger.tsx), else to the list it belongs to.
+  function leaveParty() {
+    if (back) back.go();
+    else setPartyId(null);
+  }
 
   // Opened from All Parties, an account stays under All Parties, so Back
   // returns to the combined list rather than to one side of it.
@@ -216,8 +223,8 @@ export default function App({ route, onRoute, newVoucher, onConsumeNew, onOpenVo
     <LedgerView
       ledgerId={partyId}
       masters={masters}
-      onBack={() => setPartyId(null)}
-      backLabel={tab === 'all' ? 'All parties' : tab === 'monthly' ? 'Salary & Rent' : undefined}
+      onBack={leaveParty}
+      backLabel={back?.label ?? (tab === 'all' ? 'All parties' : tab === 'monthly' ? 'Salary & Rent' : undefined)}
       onViewBill={setViewing}
       onPrint={(payload) => setPrinting(payload)}
       onAddVoucher={addVoucher}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { cameFrom, pageName } from '../../lib/trail'
 // The ledger app is plain JSX, ported across as-is (allowJs).
 import LedgerApp from './LedgerApp.jsx'
 import './ledger.css'
@@ -36,6 +37,7 @@ export function Ledger() {
   // doesn't bury the rest of the panel under a stack of back steps.
   const { tab, partyId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
 
   // `?new=sale` opens that voucher form — how the sidebar's Vouchers menu and
   // the phone's home-screen shortcuts both get in. Cleared once it has opened,
@@ -85,9 +87,15 @@ export function Ledger() {
   // over what was kept.
   if (kept) return null
 
+  // An open account goes Back to the page it was opened from — Advances, the
+  // Day Book — rather than always to the list of its side.
+  const from = partyId ? cameFrom(location.pathname + location.search) : null
+  const back = from ? { label: pageName(from), go: () => navigate(from) } : null
+
   return (
     <div className={`ledger-root min-h-screen ${dark ? 'dark' : ''}`}>
       <LedgerApp
+        back={back}
         route={{ tab, partyId }}
         onRoute={onRoute}
         newVoucher={newVoucher}

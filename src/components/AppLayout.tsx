@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { WorkingDate } from './WorkingDate'
+import { noteVisit } from '../lib/trail'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useShortcuts } from '../lib/useShortcuts'
 import { isDarkMode, toggleTheme } from '../lib/theme'
@@ -289,6 +290,8 @@ function BackBar() {
 export function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
+  // Where the panel has been, so Back on an account returns there (lib/trail).
+  useEffect(() => { noteVisit(location.pathname + location.search) }, [location.pathname, location.search])
 
   // The keys printed beside the menu, working from anywhere in the panel —
   // the hook allows a function key through even with the cursor in a field.
