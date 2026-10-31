@@ -13,7 +13,8 @@ import stumpsPng from './art/stumps.png'
 import stumpsHitPng from './art/stumps-hit.png'
 
 const REST = { batter: 'walk', bowler: 'mark', umpire: 'still', hit: false }
-const TODAY_WORD = { P: 'Four', H: 'Two', N: 'Out', C: 'Closed' }
+const TODAY_MARK = { P: '4', H: '2', N: 'W', C: 'C' }
+const TODAY_SAY = { P: 'Present, four runs', H: 'Half day, two runs', N: 'Absent, out', C: 'Closed' }
 const STAMP = {
   P: { word: 'FOUR!', say: 'present', kind: 'four' },
   H: { word: 'TWO RUNS', say: 'half day', kind: 'two' },
@@ -188,7 +189,7 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
             return (
               <div className="ck-rp-row" style={{ animationDelay: `${i * 60}ms` }} key={r.name}>
                 <span>{i + 1}. {r.name}</span>
-                <em data-s={today || undefined}>{TODAY_WORD[today] || 'Yet'}</em>
+                <em data-s={today || undefined} aria-label={TODAY_SAY[today] || 'Not marked'}>{TODAY_MARK[today] || '-'}</em>
                 <b>{r.runs}</b>
               </div>
             )

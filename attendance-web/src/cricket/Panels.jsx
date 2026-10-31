@@ -1,6 +1,7 @@
 /** The theme's solid panels: the points table, the run chase, and Ground settings. */
+import { Fragment, useState } from 'react'
 import { cricketEvent } from './bus.js'
-import { byRuns, honours, MOMENTS, runsFor } from './score.js'
+import { byRuns, COLUMN_INFO, HONOUR_INFO, honours, MOMENTS, runsFor } from './score.js'
 import { PixelIcon } from './Sprite.jsx'
 import ballPng from './art/ball.png'
 import stumpsPng from './art/stumps.png'
@@ -19,22 +20,57 @@ export function CricketTabIcon({ id }) {
 
 export function PointsTable({ rows }) {
   const sorted = byRuns(rows)
+  // One meaning open at a time; tapping the same icon again closes it.
+  const [tip, setTip] = useState(null)
+  const toggle = (id, title, say) => setTip((t) => (t?.id === id ? null : { id, title, say }))
+  const tipLine = tip && <div className="ck-tip" role="status"><b>{tip.title}</b> {tip.say}</div>
+  const onHead = tip?.id.startsWith('col:')
   return (
     <div className="ck-table">
-      <div className="ck-table-row head"><span>#</span><span>Batter</span><span>R</span><span>W</span><span>SR</span></div>
+      <div className="ck-table-row head">
+        <span>#</span><span>Batter</span>
+        {Object.keys(COLUMN_INFO).map((col) => (
+          <button
+            key={col}
+            className="ck-colkey"
+            aria-expanded={tip?.id === `col:${col}`}
+            aria-label={COLUMN_INFO[col]}
+            onClick={() => toggle(`col:${col}`, col, COLUMN_INFO[col])}
+          >
+            {col}
+          </button>
+        ))}
+      </div>
+      {onHead && tipLine}
       {sorted.map((r, i) => (
-        <div className="ck-table-row" data-top={i === 0 && r.runs > 0 ? 'true' : undefined} style={{ animationDelay: `${i * 50}ms` }} key={r.name}>
-          <span>{i + 1}</span>
-          <span className="ck-table-name">
-            {r.name}
-            {honours(r).map((h) => <em key={h}>{h}</em>)}
-          </span>
-          <span>{r.runs}</span>
-          <span>{r.wickets}</span>
-          <span>{r.rate}</span>
-        </div>
+        <Fragment key={r.name}>
+          <div className="ck-table-row" data-top={i === 0 && r.runs > 0 ? 'true' : undefined} style={{ animationDelay: `${i * 50}ms` }}>
+            <span>{i + 1}</span>
+            <span className="ck-table-name">
+              <span>{r.name}</span>
+              {honours(r).map((h) => {
+                const id = `${r.name}:${h}`
+                return (
+                  <button
+                    key={h}
+                    className="ck-honour"
+                    data-h={HONOUR_INFO[h].icon}
+                    aria-expanded={tip?.id === id}
+                    aria-label={`${h}: ${HONOUR_INFO[h].say}`}
+                    onClick={() => toggle(id, h, HONOUR_INFO[h].say)}
+                  >
+                    <PixelIcon id={HONOUR_INFO[h].icon} size={22} />
+                  </button>
+                )
+              })}
+            </span>
+            <span>{r.runs}</span>
+            <span>{r.wickets}</span>
+            <span>{r.rate}</span>
+          </div>
+          {tip?.id.startsWith(`${r.name}:`) && tipLine}
+        </Fragment>
       ))}
-      <div className="ck-table-note">Present 4 runs, half day 2, absent a wicket. SR is out of 100.</div>
     </div>
   )
 }

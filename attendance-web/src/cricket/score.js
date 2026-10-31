@@ -49,6 +49,21 @@ export function honours(row) {
   return out
 }
 
+/** Each honour's icon, and what a tap on it says. */
+export const HONOUR_INFO = {
+  Fifty: { icon: 'bat', say: '50 runs this month' },
+  Century: { icon: 'stats', say: '100 runs this month' },
+  'Long innings': { icon: 'flame', say: 'Present 7 days in a row' },
+  'Fortnight unbeaten': { icon: 'shield', say: 'Present 14 days in a row' },
+  'Not out': { icon: 'stumps', say: 'No absence in 10 or more days this month' },
+}
+
+export const COLUMN_INFO = {
+  R: 'Runs: present 4, half day 2',
+  W: 'Wickets: days absent',
+  SR: 'Strike rate: out of 100, 100 means present every day',
+}
+
 /** The line that runs along the top. Attendance facts only, never a rupee. */
 export function tickerLines({ day, rows, isToday }) {
   const lines = []

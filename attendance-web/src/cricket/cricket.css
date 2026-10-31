@@ -174,10 +174,19 @@ html.ck-root body { background: transparent; }
 .ck-table-row > span:nth-child(n+3) { text-align: right; }
 .ck-table-row > span:first-child { color: var(--dim); }
 .ck-table-row.head { padding: 6px 0; color: var(--dim); font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; animation: none; }
-.ck-table-row[data-top] { background: rgba(255, 204, 0, .12); box-shadow: inset 4px 0 0 var(--wait); padding-left: 8px; }
+.ck-table-row[data-top] { margin-left: -8px; padding-left: 8px; background: rgba(255, 204, 0, .12); box-shadow: inset 4px 0 0 var(--wait); }
 .ck-table-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; text-transform: uppercase; overflow-wrap: anywhere; }
-.ck-table-name em { padding: 2px 5px; background: var(--safe); color: #fff; font: 700 12px/1 var(--sign); font-style: normal; letter-spacing: .03em; }
-.ck-table-note { padding-top: 6px; color: var(--dim); font-size: 14px; }
+.ck-table-name > span { margin-right: 2px; }
+.ck-honour { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; background: #03090e; box-shadow: inset 0 0 0 1px var(--line); color: var(--print-safe); }
+.ck-honour[data-h="bat"] { color: #ebd7aa; }
+.ck-honour[data-h="stats"] { color: var(--wait); }
+.ck-honour[data-h="flame"] { color: #ff9a3c; }
+.ck-honour[data-h="shield"] { color: var(--print-must); }
+.ck-honour[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--wait); }
+.ck-colkey { justify-self: end; min-width: 36px; min-height: 36px; padding: 0; background: none; color: var(--dim); font: 700 14px/1 var(--sign); text-align: right; text-decoration: underline dotted; text-underline-offset: 3px; letter-spacing: .05em; }
+.ck-colkey[aria-expanded="true"] { color: var(--wait); }
+.ck-tip { padding: 8px 10px; background: #03090e; border-bottom: 2px solid var(--wait); font-size: 16px; font-weight: 600; line-height: 1.25; animation: ck-line .18s steps(3) both; }
+.ck-tip b { color: var(--wait); font: 800 16px/1.25 var(--sign); text-transform: uppercase; }
 
 /* ── the run chase on Purse ────────────────────────────────────────────────── */
 .ck-chase { margin-bottom: 10px; padding: 10px; background: #03090e; border: 2px solid var(--line); }
@@ -260,7 +269,7 @@ html.ck-root body { background: transparent; }
 .ck-rp-name { padding: 20px 16px; text-align: center; font: 800 46px/1 var(--sign); text-transform: uppercase; overflow-wrap: anywhere; animation: ck-line .3s steps(4) both; }
 .ck-rp-hint { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); text-align: center; color: var(--wait); font: 700 17px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; }
 .ck-rp-card { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; }
-.ck-rp-head, .ck-rp-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px 52px; gap: 8px; align-items: center; }
+.ck-rp-head, .ck-rp-row { display: grid; grid-template-columns: minmax(0, 1fr) 40px 52px; gap: 8px; align-items: center; }
 .ck-rp-head { padding-bottom: 6px; color: var(--dim); font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; }
 .ck-rp-head > :last-child, .ck-rp-row > b { text-align: right; }
 .ck-rp-row { padding: 11px 0; border-top: 1px solid var(--line); font: 800 24px/1.1 var(--sign); text-transform: uppercase; animation: ck-line .25s steps(4) both; }
