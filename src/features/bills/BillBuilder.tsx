@@ -100,7 +100,7 @@ import { indiaDate, indiaToday } from '../../lib/businessDate'
 /** How long Save waits for the books before saying there was no answer. */
 const POST_WAIT_MS = 25_000
 import { clearFormDraft, draftKey, loadFormDraft, saveFormDraft } from '../../lib/formDrafts'
-import { usePhonePhotoActions } from '../../lib/phonePhotos'
+import { usePhonePhotoActions, usePhoneQueue } from '../../lib/phonePhotos'
 
 /**
  * Square-foot pricing for boards and doors is parked, not removed.
@@ -3597,16 +3597,38 @@ export function BillBuilder() {
   const autoPicked = useRef<{ id: string; ids: string; hand: boolean }>({ id: '', ids: '', hand: false })
   if (autoPicked.current.id !== draft.id) autoPicked.current = { id: draft.id, ids: '', hand: false }
   const handPicked = (next: PickedPhoto[]) => { autoPicked.current.hand = true; pickPhotos(next) }
+  /**
+   * The phone photo open beside the form, as queue rows. A photo docked from
+   * its tile says so itself (phonePages); one opened another way — the
+   * viewer's arrows, a tile's picture — is matched to the queue by its file,
+   * so it is ticked all the same. Bill 680 was typed in full beside #0544
+   * with nothing ticked.
+   */
+  const phoneQueue = usePhoneQueue()
+  const shownPhonePages = useMemo(() => {
+    const shown = photoShown as { phonePages?: PickedPhoto[]; attachmentUrls?: { storageId?: string }[] } | null
+    if (shown?.phonePages?.length) return shown.phonePages
+    const ids = new Set((shown?.attachmentUrls ?? []).map((a) => String(a.storageId ?? '')).filter(Boolean))
+    if (!ids.size) return [] as PickedPhoto[]
+    return (phoneQueue ?? []).filter((row) => ids.has(String(row.storageId))) as PickedPhoto[]
+  }, [photoShown, phoneQueue])
   useEffect(() => {
-    const pages = (photoShown as { phonePages?: PickedPhoto[] } | null)?.phonePages
+    const pages = shownPhonePages
     const auto = autoPicked.current
-    if (!filling || !pages?.length || readOnly || auto.hand || photoFiles.length) return
+    if (!filling || !pages.length || readOnly || auto.hand || photoFiles.length) return
     const ids = pages.map((p) => p._id).join(',')
     const now = photoPicked.map((p) => p._id).join(',')
     if (now === ids || (now && now !== auto.ids)) return
     auto.ids = ids
     setPhotoPicked(pages)
-  }, [filling, photoShown, draft.id])
+  }, [filling, shownPhonePages, draft.id, photoPicked.length])
+  /**
+   * What a save files: the photos ticked, or — nothing ticked by hand or by
+   * itself yet — the phone photo the bill was typed beside. A tick taken off
+   * by hand is kept off.
+   */
+  const pickedForSave = (): PickedPhoto[] =>
+    photoPicked.length || photoFiles.length || autoPicked.current.hand || readOnly ? photoPicked : shownPhonePages
   const unpricedPurchase = draft.kind === 'purchase' &&
     (!(total > 0) || priced.items.some((item) =>
       item.description.trim() && !item.isRoundup && !item.isDiscount && !Number(item.amount)))
@@ -3883,7 +3905,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       const allAttachments = [
         ...attachments,
         ...uploaded.map((storageId: string) => ({ storageId, kind: docKind })),
-        ...photoPicked.map((p) => ({ storageId: p.storageId as string, kind: docKind })),
+        ...pickedForSave().map((p) => ({ storageId: p.storageId as string, kind: docKind })),
       ]
       attachments = [...new Map(allAttachments.map((doc) => [doc.storageId, doc])).values()]
       // An uploaded file belongs to this draft even if posting is refused.
@@ -3903,7 +3925,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     const docKind = MONEY_KINDS.includes(draft.kind ?? 'sale') ? ('receipt' as const) : ('bill' as const)
     const all = [
       ...(draft.attachments ?? []),
-      ...photoPicked.map((p) => ({ storageId: p.storageId as string, kind: docKind })),
+      ...pickedForSave().map((p) => ({ storageId: p.storageId as string, kind: docKind })),
     ]
     return [...new Map(all.map((doc) => [doc.storageId, doc])).values()]
   }
@@ -3963,7 +3985,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
   }
 
   async function claimPhotos() {
-    const filing = photoPicked
+    const filing = pickedForSave()
     if (!(await phonePhotos.file(filing))) {
       toast('Bill saved, but its photo is still in the phone queue.', 'error')
       return
