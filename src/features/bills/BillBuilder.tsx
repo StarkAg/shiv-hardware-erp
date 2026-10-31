@@ -3271,10 +3271,29 @@ export function BillBuilder() {
    * what was read is shown under the box either way, so a misreading is seen
    * before the bill is saved. A box still holding the reading is yellow.
    */
+  /**
+   * The phone photo open beside the form, as queue rows. A photo docked from
+   * its tile says so itself (phonePages); one opened another way — the
+   * viewer's arrows, a tile's picture — is matched to the queue by its file,
+   * so it is ticked all the same. Bill 680 was typed in full beside #0544
+   * with nothing ticked.
+   */
+  const phoneQueue = usePhoneQueue()
+  const shownPhonePages = useMemo(() => {
+    const shown = photoShown as { phonePages?: PickedPhoto[]; attachmentUrls?: { storageId?: string }[] } | null
+    if (shown?.phonePages?.length) return shown.phonePages
+    const ids = new Set((shown?.attachmentUrls ?? []).map((a) => String(a.storageId ?? '')).filter(Boolean))
+    if (!ids.size) return [] as PickedPhoto[]
+    return (phoneQueue ?? []).filter((row) => ids.has(String(row.storageId))) as PickedPhoto[]
+  }, [photoShown, phoneQueue])
   const readContactAi = useAction(api.ai.readContact)
   const [contactRead, setContactRead] = useState<ContactRead & { id: string; reading: number }>({ id: '', reading: 0, phones: [], uids: [] })
-  const photoFilled = useRef<{ id: string; phone: string; uid: string }>({ id: '', phone: '', uid: '' })
-  const contactTried = useRef<{ id: string; keys: Set<string> }>({ id: '', keys: new Set() })
+  /** What the photo put in each box, so a box still holding only that can be changed for the next photo. */
+  const photoFilled = useRef<{ id: string; name: string; phone: string; phone2: string; uid: string }>({ id: '', name: '', phone: '', phone2: '', uid: '' })
+  /** Each photo is read once; going back to one puts its reading back without asking again. */
+  const contactReads = useRef(new Map<string, Promise<ContactRead | null>>())
+  /** The photos the boxes are being filled from now, as one key. */
+  const readingFrom = useRef('')
   const contactOnFileRef = useRef(contactOnFile)
   contactOnFileRef.current = contactOnFile
   const liveCustomersRef = useRef(liveCustomers)
@@ -3282,63 +3301,94 @@ export function BillBuilder() {
   useEffect(() => {
     if (isSupplierVoucher) return
     const id = draft.id
-    if (contactTried.current.id !== id) contactTried.current = { id, keys: new Set() }
-    const tried = contactTried.current.keys
-    const shownPages = (photoShown as { phonePages?: PickedPhoto[] } | null)?.phonePages ?? []
-    const fresh = [
-      ...[...photoPicked, ...shownPages].map((p) => ({ key: `s:${p.storageId}`, storageId: p.storageId, file: undefined as File | undefined })),
+    // The paper being typed from: the photo open beside the form, else the
+    // ones ticked, and any dropped on.
+    const pages = shownPhonePages.length ? shownPhonePages : photoPicked
+    const photos = [
+      ...pages.map((p) => ({ key: `s:${p.storageId}`, storageId: p.storageId, file: undefined as File | undefined })),
       ...photoFiles
         .filter((f) => f.type.startsWith('image/'))
         .map((f) => ({ key: `f:${f.name}:${f.size}:${f.lastModified}`, storageId: undefined as string | undefined, file: f })),
-    ].filter((p) => !tried.has(p.key))
-    if (!fresh.length) return
-    for (const p of fresh) tried.add(p.key)
-    // The name and both numbers already in their boxes: nothing a reading could fill.
-    const now = draftRef.current
-    if (now.id === id && now.customerName.trim() && now.customerPhone && now.customerUid) return
+    ]
+    // The photo closed: what it filled stays.
+    if (!photos.length) return
+    const from = `${id}|${photos.map((p) => p.key).join(',')}`
+    if (readingFrom.current === from) return
+    const sameBill = readingFrom.current.startsWith(`${id}|`)
+    readingFrom.current = from
 
-    for (const photo of fresh) {
-      setContactRead((r) => (r.id === id ? { ...r, reading: r.reading + 1 } : { id, reading: 1, phones: [], uids: [] }))
-      ;(async () => {
-        const result = photo.storageId
-          ? await readContactAi({ storageId: photo.storageId as never })
-          : await readContactAi({ jpeg: await photoAsJpeg(photo.file!) })
-        if (!result.ok) { console.warn('Reading the numbers off the photo:', result.error); return null }
-        return parseContactRead(result, SHOP.phones.map((n) => n.number))
-      })()
-        .catch((err) => { console.warn('Reading the numbers off the photo:', err); return null })
-        .then((read) => {
-          setContactRead((r) => {
-            if (r.id !== id) return r
-            const merge = (a: ReadNumber[], b: ReadNumber[]) => [...a, ...b.filter((x) => !a.some((y) => (y.number ?? y.raw) === (x.number ?? x.raw)))]
-            return { ...r, reading: Math.max(0, r.reading - 1), phones: merge(r.phones, read?.phones ?? []), uids: merge(r.uids, read?.uids ?? []), name: r.name || read?.name }
-          })
-          if (!read) return
-          setDraft((d) => {
-            if (d.id !== id) return d
-            const named = nameToFill(d.customerName, read, liveCustomersRef.current, foldName)
-            const onFile = named ? undefined : contactOnFileRef.current
-            const phone = onFile?.phone || named?.mobile ? null : numberToFill(d.customerPhone, read.phones)
-            const uid = onFile?.uid || named?.uid ? null : numberToFill(d.customerUid, read.uids)
-            const name = named ? {
-              customerName: toProperCase(withoutCourtesy(named.name)),
-              customerPhone2: named.mobile2 ?? '',
-              ledgerId: undefined,
-              ...(named.mobile ? { customerPhone: named.mobile } : {}),
-              ...(named.uid ? { customerUid: named.uid } : {}),
-            } : {}
-            if (!named && !phone && !uid) return d
-            photoFilled.current = {
-              id,
-              phone: phone ?? (photoFilled.current.id === id ? photoFilled.current.phone : ''),
-              uid: uid ?? (photoFilled.current.id === id ? photoFilled.current.uid : ''),
-            }
-            return { ...d, ...name, ...(phone ? { customerPhone: phone } : {}), ...(uid ? { customerUid: uid } : {}) }
-          })
+    // Another photo on the same bill: what the last one put in the boxes is
+    // taken out — never what was typed — and this one is read in its place.
+    if (sameBill && photoFilled.current.id === id) {
+      const was = photoFilled.current
+      setDraft((d) => {
+        if (d.id !== id) return d
+        const clear = {
+          ...(was.name && d.customerName === was.name ? { customerName: '', ledgerId: undefined } : {}),
+          ...(was.phone && d.customerPhone === was.phone ? { customerPhone: '' } : {}),
+          ...(was.phone2 && d.customerPhone2 === was.phone2 ? { customerPhone2: '' } : {}),
+          ...(was.uid && d.customerUid === was.uid ? { customerUid: '' } : {}),
+        }
+        return Object.keys(clear).length ? { ...d, ...clear } : d
+      })
+    }
+    photoFilled.current = { id, name: '', phone: '', phone2: '', uid: '' }
+    setContactRead({ id, reading: photos.length, phones: [], uids: [] })
+
+    for (const photo of photos) {
+      let read = contactReads.current.get(photo.key)
+      if (!read) {
+        read = (async () => {
+          const result = photo.storageId
+            ? await readContactAi({ storageId: photo.storageId as never })
+            : await readContactAi({ jpeg: await photoAsJpeg(photo.file!) })
+          if (!result.ok) { console.warn('Reading the numbers off the photo:', result.error); return null }
+          const parsed = parseContactRead(result, SHOP.phones.map((n) => n.number))
+          // The shop's own name off its pad is not the customer.
+          if (parsed.name && foldName(parsed.name).includes(foldName(SHOP.name))) delete parsed.name
+          return parsed
+        })().catch((err) => { console.warn('Reading the numbers off the photo:', err); return null })
+        contactReads.current.set(photo.key, read)
+        // A failed reading may be tried again next time the photo is opened.
+        void read.then((r) => { if (!r) contactReads.current.delete(photo.key) })
+      }
+      void read.then((read) => {
+        // Moved on to another photo while this one was being read.
+        if (readingFrom.current !== from) return
+        setContactRead((r) => {
+          if (r.id !== id) return r
+          const merge = (a: ReadNumber[], b: ReadNumber[]) => [...a, ...b.filter((x) => !a.some((y) => (y.number ?? y.raw) === (x.number ?? x.raw)))]
+          return { ...r, reading: Math.max(0, r.reading - 1), phones: merge(r.phones, read?.phones ?? []), uids: merge(r.uids, read?.uids ?? []), name: r.name || read?.name }
         })
+        if (!read) return
+        setDraft((d) => {
+          if (d.id !== id || readingFrom.current !== from) return d
+          const named = nameToFill(d.customerName, read, liveCustomersRef.current, foldName)
+          const onFile = named ? undefined : contactOnFileRef.current
+          const phone = onFile?.phone || named?.mobile ? null : numberToFill(d.customerPhone, read.phones)
+          const uid = onFile?.uid || named?.uid ? null : numberToFill(d.customerUid, read.uids)
+          const name = named ? {
+            customerName: toProperCase(withoutCourtesy(named.name)),
+            customerPhone2: named.mobile2 ?? '',
+            ledgerId: undefined,
+            ...(named.mobile ? { customerPhone: named.mobile } : {}),
+            ...(named.uid ? { customerUid: named.uid } : {}),
+          } : {}
+          if (!named && !phone && !uid) return d
+          const was = photoFilled.current.id === id ? photoFilled.current : { name: '', phone: '', phone2: '', uid: '' }
+          photoFilled.current = {
+            id,
+            name: named ? toProperCase(withoutCourtesy(named.name)) : was.name,
+            phone: phone ?? named?.mobile ?? was.phone,
+            phone2: named?.mobile2 ?? was.phone2,
+            uid: uid ?? named?.uid ?? was.uid,
+          }
+          return { ...d, ...name, ...(phone ? { customerPhone: phone } : {}), ...(uid ? { customerUid: uid } : {}) }
+        })
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoPicked, photoFiles, photoShown, draft.id, isSupplierVoucher])
+  }, [photoPicked, photoFiles, shownPhonePages, draft.id, isSupplierVoucher])
   const readHere = contactRead.id === draft.id ? contactRead : undefined
   const phoneFromPhoto = photoFilled.current.id === draft.id && !!draft.customerPhone && draft.customerPhone === photoFilled.current.phone
   const uidFromPhoto = photoFilled.current.id === draft.id && !!draft.customerUid && draft.customerUid === photoFilled.current.uid
@@ -3597,21 +3647,6 @@ export function BillBuilder() {
   const autoPicked = useRef<{ id: string; ids: string; hand: boolean }>({ id: '', ids: '', hand: false })
   if (autoPicked.current.id !== draft.id) autoPicked.current = { id: draft.id, ids: '', hand: false }
   const handPicked = (next: PickedPhoto[]) => { autoPicked.current.hand = true; pickPhotos(next) }
-  /**
-   * The phone photo open beside the form, as queue rows. A photo docked from
-   * its tile says so itself (phonePages); one opened another way — the
-   * viewer's arrows, a tile's picture — is matched to the queue by its file,
-   * so it is ticked all the same. Bill 680 was typed in full beside #0544
-   * with nothing ticked.
-   */
-  const phoneQueue = usePhoneQueue()
-  const shownPhonePages = useMemo(() => {
-    const shown = photoShown as { phonePages?: PickedPhoto[]; attachmentUrls?: { storageId?: string }[] } | null
-    if (shown?.phonePages?.length) return shown.phonePages
-    const ids = new Set((shown?.attachmentUrls ?? []).map((a) => String(a.storageId ?? '')).filter(Boolean))
-    if (!ids.size) return [] as PickedPhoto[]
-    return (phoneQueue ?? []).filter((row) => ids.has(String(row.storageId))) as PickedPhoto[]
-  }, [photoShown, phoneQueue])
   useEffect(() => {
     const pages = shownPhonePages
     const auto = autoPicked.current
