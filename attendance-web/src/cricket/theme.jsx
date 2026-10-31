@@ -4,6 +4,7 @@
  * The rules and the why: docs/cricket-theme-design.md.
  */
 import { createContext, useContext, useEffect, useState } from 'react'
+import { useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 
 const THEME_KEY = 'shiv-attendance:theme'
@@ -23,21 +24,28 @@ export function useAttendanceTheme(convex) {
   const [shared, setShared] = useState(() => {
     try { return localStorage.getItem(THEME_KEY) === 'cricket' } catch { return false }
   })
-  const [tryOut] = useState(readTryOut)
+  const [tryOut, setTryOut] = useState(readTryOut)
   const remember = (next) => {
     setShared(next)
     try { localStorage.setItem(THEME_KEY, next ? 'cricket' : '') } catch { /* ignore */ }
   }
+  // Live, the one subscription in this app: flip it on one phone and every open
+  // phone follows at once, without waiting to be reopened.
+  const live = useQuery(anyApi.attendance.getTheme, {})
   useEffect(() => {
-    let off = false
-    convex.query(anyApi.attendance.getTheme, {})
-      .then((t) => { if (!off) remember(t === 'cricket') })
-      .catch(() => {})
-    return () => { off = true }
-  }, [convex])
+    if (live !== undefined) remember(live === 'cricket')
+  }, [live])
   const setCricket = (next) => {
+    // The switch outranks a tab's try-out, or this phone would ignore its own switch.
+    try {
+      sessionStorage.removeItem(TRY_KEY)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('cricket')
+      window.history.replaceState(null, '', url)
+    } catch { /* ignore */ }
+    setTryOut(null)
     remember(next)
-    convex.mutation(anyApi.attendance.setTheme, { theme: next ? 'cricket' : '' }).catch(() => {})
+    convex.mutation(anyApi.attendance.setTheme, { theme: next ? 'cricket' : '' }).catch(() => remember(!next))
   }
   const on = tryOut ?? shared
   useEffect(() => {

@@ -1,6 +1,6 @@
 // Minimal service worker — enables install; network-first (attendance is live data).
 // Bump SW_VERSION on deploys that must force every client onto the newest app shell.
-const SW_VERSION = '2026-10-31-cricket-nostaff'
+const SW_VERSION = '2026-10-31-cricket-live'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => {

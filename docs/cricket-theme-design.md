@@ -156,3 +156,7 @@ the whole team's day when the app is opened, or comes back after 30 seconds away
 - Absent players are shown by name, at the owner's request. The film still names no one for absences.
 - It obeys the Effects switch, and Ground settings has "Watch today's play".
 - A phone will not make sound before a tap, so it asks "Tap for sound" rather than saving the sounds up.
+
+## The switch is one switch
+
+Turning it on or off on any phone changes every phone, live, including ones already open. It is the app's only live Convex subscription. Using the switch also ends that phone's `?cricket=` try-out.
