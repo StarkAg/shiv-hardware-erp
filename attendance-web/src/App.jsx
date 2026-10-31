@@ -482,7 +482,6 @@ export default function App() {
       )}
       {historyOpen && <HistoryModal log={log} onClose={() => setHistoryOpen(false)} />}
       {openingsOpen && <OpeningLogModal openings={openings} onClose={() => setOpeningsOpen(false)} />}
-      <footer className="foot">Live sync • {Object.values(unlockedDates).some((e) => e > Date.now()) ? 'edit unlocked (10h)' : 'past days locked'} • {month}</footer>
     </div>
     </WordsProvider>
   )

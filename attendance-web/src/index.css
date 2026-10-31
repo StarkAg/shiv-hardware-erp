@@ -216,7 +216,6 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .histrow.sus .histwhen { color: var(--stop); }
 .susflag { display: inline-block; margin-top: 6px; padding: 4px 7px 3px; background: var(--stop); color: #fff; font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
 
-.foot { margin-top: 16px; text-align: center; color: var(--dim); font-size: 14px; }
 
 @media (max-width: 359px) {
   .brand { font-size: 24px; }
