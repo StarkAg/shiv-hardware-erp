@@ -7,7 +7,7 @@
  * a new mark cancels the last one's animation instead of queueing behind it.
  */
 import { useEffect, useRef, useState } from 'react'
-import { byRuns, dayScore, IDLE_LINES, MOMENTS, monthScores, tickerLines } from './score.js'
+import { byRuns, dayScore, IDLE_LINES, MOMENTS, monthScores, sixRun, tickerLines } from './score.js'
 import { play, wakeSound } from './sound.js'
 import { Film, FILM_SEEN_KEY } from './Film.jsx'
 import { Replay } from './Replay.jsx'
@@ -251,6 +251,9 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
     at(1100, () => setScene(REST))
   }
 
+  const markedOn = useRef(null)
+  markedOn.current = { statusFor, cursor }
+
   useEffect(() => {
     const onTap = (e) => { lastTap.current = { x: e.clientX, y: e.clientY } }
     window.addEventListener('pointerdown', onTap, { passive: true })
@@ -275,7 +278,17 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
       setScene(REST)
       if (ev.type === 'mark') {
         setStriker(ev.name || '')
-        if (ev.status === 'P') {
+        const run = ev.status === 'P' ? sixRun(markedOn.current.statusFor, ev.name, markedOn.current.cursor) : 0
+        if (run) {
+          tell('six')
+          if (fx) {
+            buzz([18, 30, 18])
+            burst(fxRoot.current, x, y, ['#ffcc00', '#5fe39a', '#ffffff', '#6fb4ff'], 24, 110)
+            showStamp('SIX!', `${ev.name}: ${run} days in a row`, 'six')
+            sfx('crowd', 0.45)
+            playSix()
+          } else sfx('crack')
+        } else if (ev.status === 'P') {
           tell('cover')
           if (fx) { buzz(18); burst(fxRoot.current, x, y, ['#ffcc00', '#5fe39a', '#ffffff']); showStamp('FOUR!', `${ev.name}: present`, 'four'); playFour() } else sfx('crack')
         } else if (ev.status === 'H') {
@@ -365,7 +378,10 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
   // Today's play. Each opening of the app looks once, on marks fresh from Convex
   // rather than the cache, and plays when the day is done and this phone has not
   // seen these exact marks. A half marked day waits, so nobody gets it mid-marking.
-  const todayPlays = () => staff.map((name) => ({ name, status: statusFor(new Date(), name) }))
+  const todayPlays = () => staff.map((name) => {
+    const status = statusFor(new Date(), name)
+    return { name, status, run: status === 'P' ? sixRun(statusFor, name, new Date()) : 0 }
+  })
   const lookForReplay = useRef(true)
   const onCurrentMonth = cursor.getFullYear() === new Date().getFullYear() && cursor.getMonth() === new Date().getMonth()
   const onCurrentMonthRef = useRef(onCurrentMonth)
