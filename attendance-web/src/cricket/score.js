@@ -4,22 +4,46 @@
  *
  * A present day is a four and a half day is a two, so a half keeps its true value
  * against a full day. The target is the Tuesday pay rule's twenty days, in runs.
+ *
+ * A good attender hits sixes: from the sixth present in a row, every present is a
+ * six until the run breaks. A half day or an absence breaks it and the climb starts
+ * again; a closed or unmarked day does not, and each month starts fresh.
  */
 export const RUNS = { P: 4, H: 2 }
+export const SIX_RUNS = 6
+export const SIX_AFTER = 6
 export const runsFor = (days) => days * RUNS.P
+
+/** How long the run is if this day is hit for six; otherwise 0. */
+export function sixRun(statusFor, name, date) {
+  let run = 1
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1)
+  for (; d.getMonth() === date.getMonth(); d.setDate(d.getDate() - 1)) {
+    const st = statusFor(d, name)
+    if (st === 'P') run++
+    else if (st === 'H' || st === 'N') break
+  }
+  return run >= SIX_AFTER ? run : 0
+}
 
 export function monthScores(staff, days, statusFor, todayKey, keyOf) {
   return staff.map((name) => {
-    let runs = 0, wickets = 0, fours = 0, twos = 0, streak = 0, best = 0
+    let runs = 0, wickets = 0, fours = 0, twos = 0, sixes = 0, streak = 0, best = 0, run = 0
     for (const d of days) {
       if (keyOf(d) > todayKey) break
       const st = statusFor(d, name)
-      if (st === 'P') { runs += RUNS.P; fours++; streak++; best = Math.max(best, streak) }
-      else if (st === 'H') { runs += RUNS.H; twos++ }
-      else if (st === 'N') { wickets++; streak = 0 }
+      if (st === 'P') {
+        run++
+        if (run >= SIX_AFTER) { runs += SIX_RUNS; sixes++ } else { runs += RUNS.P; fours++ }
+        streak++
+        best = Math.max(best, streak)
+      } else if (st === 'H') { runs += RUNS.H; twos++; run = 0 }
+      else if (st === 'N') { wickets++; streak = 0; run = 0 }
     }
-    const faced = fours + twos + wickets
-    return { name, runs, wickets, fours, twos, faced, best, rate: faced ? Math.round((runs / (faced * RUNS.P)) * 100) : 0 }
+    const presents = fours + sixes
+    const faced = presents + twos + wickets
+    const rate = faced ? Math.round(((presents * RUNS.P + twos * RUNS.H) / (faced * RUNS.P)) * 100) : 0
+    return { name, runs, wickets, fours, twos, sixes, faced, best, rate }
   })
 }
 
@@ -30,7 +54,8 @@ export function dayScore(staff, statusFor, date) {
   const yet = []
   for (const name of staff) {
     const st = statusFor(date, name)
-    if (st === 'P' || st === 'H') runs += RUNS[st]
+    if (st === 'P') runs += sixRun(statusFor, name, date) ? SIX_RUNS : RUNS.P
+    else if (st === 'H') runs += RUNS.H
     else if (st === 'N') wickets++
     else if (st === 'C') closed++
     else yet.push(name)
@@ -59,7 +84,7 @@ export const HONOUR_INFO = {
 }
 
 export const COLUMN_INFO = {
-  R: 'Runs: present 4, half day 2',
+  R: 'Runs: present 4, half day 2. After 6 presents in a row, every present is 6 until a half day or absence',
   W: 'Wickets: days absent',
   SR: 'Strike rate: out of 100, 100 means present every day',
 }
@@ -94,7 +119,7 @@ export const MOMENTS = [
   { id: 'rain', name: 'Rain stops play', hint: 'Mark the shop closed' },
   { id: 'stumps', name: 'Stumps', hint: 'Save and lock a day' },
   { id: 'third', name: 'Third umpire', hint: 'Unlock a past day' },
-  { id: 'six', name: 'Into the stands', hint: 'Tap the batter' },
+  { id: 'six', name: 'Into the stands', hint: 'Present 6 days in a row, or tap the batter' },
   { id: 'hattrick', name: 'Three in a row', hint: 'Keep tapping the batter' },
   { id: 'newball', name: 'New ball', hint: 'Pull the screen down' },
 ]
