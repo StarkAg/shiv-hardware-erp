@@ -106,23 +106,13 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     items: [{ to: '/home', label: 'Home', icon: LayoutDashboard }],
   },
   {
-    // Every running list in one place, near the top: what is waiting to be
-    // made, quoted, delivered or settled. They were spread across
-    // three headings, and Advances sat far enough down to be missed.
-    label: 'Lists',
+    label: 'Accounts',
     items: [
-      { to: '/work-list', label: 'Work List', icon: ClipboardList },
-      { to: '/quotations', label: 'Quotations', icon: FileStack },
-      { to: '/ledger/advances', label: 'Advances', icon: Coins },
-      { to: '/guarantee/list', label: 'Guarantee List', icon: ShieldCheck },
-      { to: '/delivery', label: 'Delivery', icon: Truck },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck },
-      { to: '/guarantee/claims', label: 'Guarantee Claims', icon: Inbox, badge: true },
+      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly', '/ledger/tocome', '/ledger/bills', '/ledger/advances'] },
+      { to: '/ledger/monthly', label: 'Salary & Rent', icon: CalendarClock },
+      { to: '/ledgers', label: 'Account Masters', icon: Users },
+      { to: '/ledger/trial', label: 'Trial Balance', icon: Scale },
+      { to: '/profit', label: 'Profit', icon: TrendingUp },
     ],
   },
   {
@@ -177,13 +167,23 @@ const AREAS: { label: string; items: NavItem[] }[] = [
     items: [{ to: '/cash-review', label: 'Cash', icon: Wallet }],
   },
   {
-    label: 'Accounts',
+    // Every running list in one place: what is waiting to be
+    // made, quoted, delivered or settled. They were spread across
+    // three headings, and Advances sat far enough down to be missed.
+    label: 'Lists',
     items: [
-      { to: '/ledger', label: 'Party Accounts', icon: BookOpen, except: ['/ledger/trial', '/ledger/monthly', '/ledger/tocome', '/ledger/bills', '/ledger/advances'] },
-      { to: '/ledger/monthly', label: 'Salary & Rent', icon: CalendarClock },
-      { to: '/ledgers', label: 'Account Masters', icon: Users },
-      { to: '/ledger/trial', label: 'Trial Balance', icon: Scale },
-      { to: '/profit', label: 'Profit', icon: TrendingUp },
+      { to: '/work-list', label: 'Work List', icon: ClipboardList },
+      { to: '/quotations', label: 'Quotations', icon: FileStack },
+      { to: '/ledger/advances', label: 'Advances', icon: Coins },
+      { to: '/guarantee/list', label: 'Guarantee List', icon: ShieldCheck },
+      { to: '/delivery', label: 'Delivery', icon: Truck },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { to: '/bill-flow', label: 'Bill Flow', icon: PackageCheck },
+      { to: '/guarantee/claims', label: 'Guarantee Claims', icon: Inbox, badge: true },
     ],
   },
   {
