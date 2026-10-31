@@ -21,7 +21,6 @@ import groundPng from './art/ground.png'
 
 const FOUND_KEY = 'shiv-attendance:ck-found'
 const PREFS_KEY = 'shiv-attendance:ck-prefs'
-const REPLAY_SEEN_KEY = 'shiv-attendance:ck-replay-seen'
 const AWAY_MS = 30000
 const REST = { batter: 'stance', bowler: 'mark', umpire: 'still', hit: false }
 const STAMP_MS = 900
@@ -375,9 +374,9 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
   // Pull the page down from the very top: the batter winds up; let go and it is hit.
   const pullRef = useRef(0)
 
-  // Today's play. Each opening of the app looks once, on marks fresh from Convex
-  // rather than the cache, and plays when the day is done and this phone has not
-  // seen these exact marks. A half marked day waits, so nobody gets it mid-marking.
+  // Today's play. Every opening of the app, on every phone, looks once on marks fresh
+  // from Convex rather than the cache, and plays when the day is done, even with the
+  // effects off. A half marked day waits, so nobody gets it mid-marking.
   const todayPlays = () => staff.map((name) => {
     const status = statusFor(new Date(), name)
     return { name, status, run: status === 'P' ? sixRun(statusFor, name, new Date()) : 0 }
@@ -389,13 +388,10 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
   useEffect(() => {
     if (!lookForReplay.current || freshTick === 0 || staff.length === 0) return
     lookForReplay.current = false
-    if (!prefsRef.current.effects || !onCurrentMonth) return
+    if (!onCurrentMonth) return
     const plays = todayPlays()
     if (!plays.some((p) => p.status === 'P' || p.status === 'H' || p.status === 'N')) return
     if (!todaySaved && plays.some((p) => !p.status)) return
-    const marks = `${keyOf(new Date())}|${plays.map((p) => `${p.name}:${p.status}`).join(',')}`
-    if (readJson(REPLAY_SEEN_KEY, '') === marks) return
-    writeJson(REPLAY_SEEN_KEY, marks)
     setReplay(plays)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [freshTick, staff.length])
