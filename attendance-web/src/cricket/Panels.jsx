@@ -59,7 +59,7 @@ export function PointsTable({ rows }) {
                     aria-label={`${h}: ${HONOUR_INFO[h].say}`}
                     onClick={() => toggle(id, h, HONOUR_INFO[h].say)}
                   >
-                    <PixelIcon id={HONOUR_INFO[h].icon} size={22} />
+                    <PixelIcon id={HONOUR_INFO[h].icon} size={20} />
                   </button>
                 )
               })}
