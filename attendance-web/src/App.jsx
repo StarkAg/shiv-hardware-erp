@@ -320,10 +320,6 @@ export default function App() {
     applyLocal(date, (day) => { day.locked = true; if (marks) day.marks = { ...marks } })
     convex.mutation(api.attendance.lockDay, { date, marks }).catch(() => {})
   }
-  const changeStaff = (newStaff) => {
-    setStaff(newStaff); writeCache(STAFF_CACHE_KEY, newStaff)
-    convex.mutation(api.attendance.setStaff, { staff: newStaff }).catch(() => {})
-  }
 
   const marksByDate = useMemo(() => {
     const m = {}
@@ -462,8 +458,6 @@ export default function App() {
         <StatsView
           cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading} dayOff={dayOff}
           unlockThen={unlockThen} theme={theme} todayKey={todayKey}
-          onAddStaff={(name) => changeStaff([...staff, name])}
-          onRemoveStaff={(name) => changeStaff(staff.filter((s) => s !== name))}
         />
       ) : (
         // Pay is money: the shop PIN, once on this phone, before it opens.
@@ -871,13 +865,12 @@ function PayRatesModal({ staff, rates, onSetRate, onClose }) {
   )
 }
 
-function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, theme, todayKey, onAddStaff, onRemoveStaff, dayOff }) {
+function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, theme, todayKey, dayOff }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const dim = daysInMonth(y, m0 + 1)
   const days = Array.from({ length: dim }, (_, i) => new Date(y, m0, i + 1))
   const stepM = (n) => setCursor(new Date(y, m0 + n, 1))
-  const [newName, setNewName] = useState('')
 
   // Per-staff tally for the month.
   const stats = staff.map((name) => {
@@ -896,17 +889,6 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, t
   for (const d of days) if (statusFor(d, staff[0]) === 'C' || dayOff(d)) closed++
   const workingDays = dim - closed
 
-  const addStaff = () => {
-    const nm = newName.trim()
-    if (!nm) return
-    if (staff.includes(nm)) { window.alert('That name already exists.'); return }
-    unlockThen(() => { onAddStaff(nm); setNewName('') })
-  }
-  const removeStaff = (name) => {
-    unlockThen(() => {
-      if (window.confirm(`Remove ${name} from the staff list?\n(Past records are kept.)`)) onRemoveStaff(name)
-    })
-  }
 
   return (
     <div className="card">
@@ -951,29 +933,7 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, t
         </>
       )}
 
-      {/* Manage staff */}
-      <div className="manage">
-        <div className="mgttl">Manage staff</div>
-        <div className="stafflist">
-          {staff.map((name) => (
-            <div className="staffchip" key={name}>
-              <span>{name}</span>
-              <button aria-label={`Remove ${name}`} onClick={() => removeStaff(name)}><TrashIcon /></button>
-            </div>
-          ))}
-        </div>
-        <div className="addrow">
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') addStaff() }}
-            placeholder="New worker name"
-          />
-          <button onClick={addStaff}>Add</button>
-        </div>
-        <div className="savednote">Adding or removing staff needs the password.</div>
-        <ThemeSwitch theme={theme} unlockThen={unlockThen} />
-      </div>
+      <ThemeSwitch theme={theme} unlockThen={unlockThen} />
     </div>
   )
 }

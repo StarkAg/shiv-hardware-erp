@@ -1,4 +1,4 @@
-/** The switch for every phone, kept in Convex. Goes in Stats, under Manage staff. */
+/** The switch for every phone, kept in Convex. Goes at the bottom of Stats. */
 export function ThemeSwitch({ theme, unlockThen }) {
   const { shared, tryOut, setCricket } = theme
   return (
