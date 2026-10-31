@@ -3286,6 +3286,22 @@ export function BillBuilder() {
     if (!ids.size) return [] as PickedPhoto[]
     return (phoneQueue ?? []).filter((row) => ids.has(String(row.storageId))) as PickedPhoto[]
   }, [photoShown, phoneQueue])
+  /**
+   * A phone photo on show that is no longer waiting — filed on the bill just
+   * saved, or thrown away — gives way to the next one waiting, or closes. The
+   * new bill after 688 opened beside #0543, filed on 688 a moment before,
+   * from a copy of the queue taken before the save.
+   */
+  useEffect(() => {
+    const pages = (photoShown as { phonePages?: PickedPhoto[] } | null)?.phonePages
+    if (!pages?.length || phoneQueue === undefined) return
+    const waiting = new Set(phoneQueue.map((p) => String(p._id)))
+    if (pages.some((p) => waiting.has(String(p._id)))) return
+    const next = (waitingPaper?.shown as { phonePages?: PickedPhoto[] } | undefined)?.phonePages
+    if (waitingPaper && next?.some((p) => waiting.has(String(p._id)))) dockPhoto(waitingPaper.shown)
+    else setPhotoShown(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoShown, phoneQueue, waitingPaper])
   const readContactAi = useAction(api.ai.readContact)
   const [contactRead, setContactRead] = useState<ContactRead & { id: string; reading: number }>({ id: '', reading: 0, phones: [], uids: [] })
   /** What the photo put in each box, so a box still holding only that can be changed for the next photo. */
