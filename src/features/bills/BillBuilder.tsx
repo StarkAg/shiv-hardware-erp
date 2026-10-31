@@ -4032,7 +4032,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
       if (!quote) return
       finishDraft()
       setView('list')
-      navigate(quote.ledgerId ? `/ledger/customers/${quote.ledgerId}` : '/day', { replace: true })
+      navigate(quote.ledgerId && !isWithoutBillParty(quote.customerName) ? `/ledger/customers/${quote.ledgerId}` : '/day', { replace: true })
       return
     }
 
@@ -4059,7 +4059,9 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
         toast('Filed as Goods Received. Enter the supplier bill amount when it arrives.', 'ok')
       }
       setView('list')
-      const party = saved.ledgerId || draft.ledgerId
+      // W/B is every walk-in sale on one account: opening it after each
+      // bill only buries the counter in a long list, so it goes to the Day Book.
+      const party = isWithoutBillParty(draft.customerName) ? '' : saved.ledgerId || draft.ledgerId
       navigate(party ? `/ledger/${partyTab}/${party}` : '/day', { replace: true })
     } finally {
       postingBills.delete(draft.id)
