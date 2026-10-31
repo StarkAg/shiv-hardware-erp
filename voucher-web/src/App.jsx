@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 
@@ -52,9 +52,9 @@ const MIN_SIDE = 0.15
 function loadCrop() {
   try {
     const kept = JSON.parse(localStorage.getItem(CROP_KEY) ?? 'null')
-    if (kept && ['l', 't', 'r', 'b'].every((k) => Number.isFinite(kept.box?.[k]))) return kept
+    if (kept && ['l', 't', 'r', 'b'].every((k) => Number.isFinite(kept.box?.[k]))) return { after: true, ...kept }
   } catch { /* private window, or nothing kept */ }
-  return { on: true, box: START_BOX }
+  return { on: true, after: true, box: START_BOX }
 }
 function keepCrop(crop) {
   try { localStorage.setItem(CROP_KEY, JSON.stringify(crop)) } catch { /* not kept; still works */ }
@@ -88,7 +88,7 @@ function CropBox({ box, onChange, onDone }) {
   const start = (part) => (event) => {
     event.preventDefault()
     event.stopPropagation()
-    const frame = event.currentTarget.closest('.camera').getBoundingClientRect()
+    const frame = event.currentTarget.closest('.crop-frame').getBoundingClientRect()
     drag.current = { part, frame, x: event.clientX, y: event.clientY, box }
     event.currentTarget.setPointerCapture?.(event.pointerId)
   }
@@ -134,6 +134,50 @@ function CropBox({ box, onChange, onDone }) {
   )
 }
 
+/**
+ * The crop after the shot: the photo just taken, held still with the box over
+ * all of it, so tapping Use without touching the box keeps the whole photo.
+ */
+const WHOLE_BOX = { l: 0, t: 0, r: 1, b: 1 }
+function CropAfter({ canvas, title, onRetake, onUse }) {
+  const stage = useRef(null)
+  const holder = useRef(null)
+  const [box, setBox] = useState(WHOLE_BOX)
+  const [size, setSize] = useState(null)
+  useEffect(() => {
+    holder.current?.appendChild(canvas)
+  }, [canvas, size !== null])
+  useLayoutEffect(() => {
+    const el = stage.current
+    const fit = () => {
+      const scale = Math.min((el.clientWidth - 28) / canvas.width, (el.clientHeight - 28) / canvas.height)
+      setSize({ width: Math.round(canvas.width * scale), height: Math.round(canvas.height * scale) })
+    }
+    fit()
+    const watcher = new ResizeObserver(fit)
+    watcher.observe(el)
+    return () => watcher.disconnect()
+  }, [canvas])
+  return (
+    <div className="after" role="dialog" aria-label="Crop the photo">
+      <h2>{title}</h2>
+      <div className="after-stage" ref={stage}>
+        {size && (
+          <div className="crop-frame after-frame" style={size}>
+            <div className="after-photo" ref={holder} />
+            <CropBox box={box} onChange={setBox} onDone={() => {}} />
+          </div>
+        )}
+      </div>
+      <div className="after-keys">
+        <button type="button" className="secondary" onClick={onRetake}>Retake</button>
+        <button type="button" className="secondary" onClick={() => setBox(WHOLE_BOX)}>Reset</button>
+        <button type="button" className="after-use" onClick={() => onUse(box)}>Use</button>
+      </div>
+    </div>
+  )
+}
+
 const newGroup = () => `voucher-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const queueLabel = (number) => String(number).padStart(4, '0')
 // Pages of one bill sit together, first page first; the bills stay newest first.
@@ -169,6 +213,8 @@ export default function App() {
   const [pages, setPages] = useState(0)
   const [outgoing, setOutgoing] = useState([])
   const [crop, setCrop] = useState(loadCrop)
+  // The photo waiting to be cropped, when the After crop switch is on.
+  const [picture, setPicture] = useState(null)
   // Counts shots; each new value replays the white flash over the screen.
   const [shot, setShot] = useState(0)
   // The last shot was Page: the screen stays green while the bill in hand
@@ -293,24 +339,48 @@ export default function App() {
    * One photo. `fresh` starts a new bill with it as page 1 (the shutter: most
    * bills are one page); otherwise it is the next page of the bill in hand.
    * A flash and a buzz say it was taken; a new bill buzzes once, a page twice,
-   * so the two can be told apart without looking.
+   * so the two can be told apart without looking. It only counts once it is
+   * kept: a photo retaken from the crop screen never joined the bill.
    */
-  const take = useCallback((fresh) => {
-    const source = video.current
-    if (!source?.videoWidth) return
+  const keep = useCallback((drawable, width, height, area, fresh) => {
     if (fresh) group.current = newGroup()
     const groupId = group.current
     setPages((count) => (fresh ? 1 : count + 1))
-    setShot((n) => n + 1)
     setAdding(!fresh)
-    navigator.vibrate?.(fresh ? 20 : [12, 40, 12])
-    const { on, box } = cropRef.current
-    const area = on ? cropArea(source, box) : undefined
-    compress(source, source.videoWidth, source.videoHeight, area).then((blob) => {
+    compress(drawable, width, height, area).then((blob) => {
       if (blob) enqueue(asFile(blob), groupId)
       else setCameraError('The photo could not be prepared. Please try again.')
     })
   }, [enqueue])
+
+  const take = useCallback((fresh) => {
+    const source = video.current
+    if (!source?.videoWidth) return
+    setShot((n) => n + 1)
+    navigator.vibrate?.(fresh ? 20 : [12, 40, 12])
+    const { on, after, box } = cropRef.current
+    if (after) {
+      const canvas = document.createElement('canvas')
+      canvas.width = source.videoWidth
+      canvas.height = source.videoHeight
+      canvas.getContext('2d').drawImage(source, 0, 0)
+      setPicture({ canvas, fresh })
+      return
+    }
+    keep(source, source.videoWidth, source.videoHeight, on ? cropArea(source, box) : undefined, fresh)
+  }, [keep])
+
+  const useCropped = (box) => {
+    const { canvas, fresh } = picture
+    const { width, height } = canvas
+    setPicture(null)
+    keep(canvas, width, height, {
+      x: box.l * width,
+      y: box.t * height,
+      w: (box.r - box.l) * width,
+      h: (box.b - box.t) * height,
+    }, fresh)
+  }
 
   const choose = async (files) => {
     const groupId = group.current
@@ -355,19 +425,30 @@ export default function App() {
         <header className="top">
           <span className="mark" aria-hidden="true">SH</span>
           <div className="top-copy"><h1>Voucher Bill Shooter</h1><small>Shiv Hardware</small></div>
-          <span className={`status${failed ? ' error' : pending ? ' busy' : ''}`} role="status" aria-live="polite">{failed ? `${failed} failed` : pending ? `${pending} sending` : 'Ready'}</span>
+          <div className="top-side">
+            <span className={`status${failed ? ' error' : pending ? ' busy' : ''}`} role="status" aria-live="polite">{failed ? `${failed} failed` : pending ? `${pending} sending` : 'Ready'}</span>
+            <button
+              type="button"
+              className="after-switch"
+              role="switch"
+              aria-checked={crop.after}
+              onClick={() => setCrop((c) => { const next = { ...c, after: !c.after }; keepCrop(next); return next })}
+            >
+              After crop <i aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
-        <section className="camera" aria-label="Voucher bill camera">
+        <section className="camera crop-frame" aria-label="Voucher bill camera">
           <video ref={video} playsInline muted autoPlay />
-          {cameraReady && crop.on && (
+          {cameraReady && !crop.after && crop.on && (
             <CropBox
               box={crop.box}
               onChange={(box) => setCrop((c) => ({ ...c, box }))}
               onDone={() => keepCrop(cropRef.current)}
             />
           )}
-          {cameraReady && (
+          {cameraReady && !crop.after && (
             <div className="crop-keys">
               <button
                 type="button"
@@ -438,6 +519,14 @@ export default function App() {
 
       {/* Over the whole screen, letting taps through: green while pages are being added to one bill, a flash at each shot. */}
       <div className={`adding-tint${adding && pages > 0 ? ' on' : ''}`} aria-hidden="true" />
+      {picture && (
+        <CropAfter
+          canvas={picture.canvas}
+          title={picture.fresh ? 'New bill' : `Page ${pages + 1}`}
+          onRetake={() => setPicture(null)}
+          onUse={useCropped}
+        />
+      )}
       {shot > 0 && <div key={shot} className="flash" aria-hidden="true" />}
     </main>
   )
