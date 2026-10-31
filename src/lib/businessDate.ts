@@ -17,8 +17,34 @@ export function indiaDate(at: Date | number = Date.now()): string {
   return `${p.year}-${p.month}-${p.day}`
 }
 
-/** Today in India, YYYY-MM-DD. */
-export const indiaToday = () => indiaDate()
+/**
+ * The working date: the day the counter is entering, picked under the shop's
+ * name in the sidebar (WorkingDate). A day of old slips is typed with it set
+ * back, and every new bill, voucher and form across the panel starts on it
+ * instead of today. Kept in memory only, so a refresh is back on today.
+ */
+let working: string | null = null
+const listeners = new Set<() => void>()
+
+/** Sets the working date; null, or today itself, goes back to following the calendar. */
+export function setWorkingDate(day: string | null) {
+  const next = day && /^\d{4}-\d{2}-\d{2}$/.test(day) && day < indiaDate() ? day : null
+  if (next === working) return
+  working = next
+  for (const fn of listeners) fn()
+}
+
+/** The day picked, or null while the panel is on today. */
+export const workingDate = () => working
+
+/** Calls back whenever the working date changes. Returns the way to stop. */
+export function onWorkingDate(fn: () => void) {
+  listeners.add(fn)
+  return () => { listeners.delete(fn) }
+}
+
+/** Today in India, YYYY-MM-DD — or the working date, when one is picked. */
+export const indiaToday = () => working ?? indiaDate()
 
 /** Today in India as the books store a date: midnight UTC of that day. */
 export const indiaTodayMs = () => Date.parse(`${indiaToday()}T00:00:00Z`)

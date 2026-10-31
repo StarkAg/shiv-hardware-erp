@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { workingDate } from '../../lib/businessDate'
 import { Link, useParams } from 'react-router-dom'
 import { Calculator, Minus, Plus, Printer, Share2, Trash2 } from 'lucide-react'
 import { useStore } from '../../lib/store'
@@ -139,7 +140,8 @@ export function QuotationBuilder() {
     const base = {
       id: quoteId,
       number,
-      date: new Date().toISOString(),
+      // The working date picked in the sidebar, when one is (lib/businessDate).
+      date: workingDate() ? `${workingDate()}T06:30:00.000Z` : new Date().toISOString(),
       customer: withCustomer ? customer : { id: customer.id, name: '', mobile: '' },
       category: cat,
       height: h,

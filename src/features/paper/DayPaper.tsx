@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import { workingDate } from '../../lib/businessDate'
 import { useMutation } from 'convex/react'
 import { useLive } from '../ledger/lib/cache'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -443,7 +444,8 @@ export function DayPaper() {
   const today = isoDay(new Date())
   const asked = params.get('date')
   // A day later than today has no paper yet, and a mistyped one is today's.
-  const day = validDay(asked) && asked! <= today ? asked! : today
+  // Opened without a day, it shows the working date picked in the sidebar.
+  const day = validDay(asked) && asked! <= today ? asked! : (workingDate() ?? today)
   const onToday = day === today
 
   const go = (next: string) => {

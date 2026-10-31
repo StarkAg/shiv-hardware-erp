@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { WorkingDate } from './WorkingDate'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useShortcuts } from '../lib/useShortcuts'
 import { isDarkMode, toggleTheme } from '../lib/theme'
@@ -350,6 +351,7 @@ export function AppLayout() {
             <div className="text-xs font-medium text-shiv-green">Panel</div>
           </div>
         </div>
+        {!railed && <WorkingDate />}
       </div>
 
       <nav className={`flex-1 overflow-y-auto py-3 ${railed ? "space-y-1.5 px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:space-y-1.5" : "space-y-1 px-3"}`}>

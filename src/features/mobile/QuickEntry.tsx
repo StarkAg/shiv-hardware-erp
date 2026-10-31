@@ -1,4 +1,5 @@
 import { useLive } from '../ledger/lib/cache'
+import { indiaToday } from '../../lib/businessDate'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
@@ -19,10 +20,8 @@ type Bill = {
 }
 type DayRow = { vchLabel: string; vchType: string; partyLedgerId: string; amount: number; refNo?: string }
 
-const today = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+// The working date when one is picked in the sidebar (lib/businessDate).
+const today = indiaToday
 const dateMs = (date: string) => Date.parse(`${date}T00:00:00Z`)
 const newReference = () => `MOBILE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
 const button = 'min-h-12 w-full rounded-xl bg-shiv-green px-4 py-3 text-base font-bold text-stone-950 disabled:cursor-wait disabled:opacity-60'

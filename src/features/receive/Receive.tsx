@@ -1,4 +1,5 @@
 import { useLive } from '../ledger/lib/cache'
+import { indiaToday } from '../../lib/businessDate'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import AttachmentViewer from '../../components/AttachmentViewer'
 import { Link } from 'react-router-dom'
@@ -24,10 +25,8 @@ import { DEFAULT_PAYMENT_MODE } from '../../lib/types'
 
 type Supplier = { _id: Id<'ledgers'>; name: string; place: string; phone: string; last: number }
 
-const today = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+// The working date when one is picked in the sidebar (lib/businessDate).
+const today = indiaToday
 
 const tile = 'rounded-xl border border-stone-200 bg-white p-3 text-left shadow-sm transition active:scale-[0.98] dark:border-white/10 dark:bg-white/5'
 const section = 'space-y-2'
