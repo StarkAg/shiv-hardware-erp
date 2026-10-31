@@ -91,7 +91,7 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .grid th.sun .dwd { color: var(--ink); font-weight: 800; }
 .stick { position: sticky; left: 0; background: var(--wall); z-index: 2; text-align: left; }
 .grid td.nm { padding: 6px 10px; font: 700 17px/1.1 var(--sign); text-transform: uppercase; white-space: nowrap; }
-.cell { width: 36px; height: 40px; color: var(--ink); font: 800 19px/1 var(--sign); }
+.cell { width: 36px; height: calc(var(--rowh, 41px) - 1px); color: var(--ink); font: 800 var(--cellfs, 19px)/1 var(--sign); }
 .cell:focus-visible { outline-offset: -3px; }
 .cell.p { color: var(--safe); }
 .cell.n { background: var(--ink); color: #fff; }
@@ -99,7 +99,7 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .cell.c { background: var(--key); color: var(--dim); }
 /* A Tuesday the shop was shut: one box down the column, the day written up it. */
 .grid td.tuecol { background: var(--key); }
-.tuecell { display: flex; align-items: center; justify-content: center; width: 36px; height: calc(var(--rows, 1) * 41px - 1px); color: var(--dim); }
+.tuecell { display: flex; align-items: center; justify-content: center; width: 36px; height: calc(var(--rows, 1) * var(--rowh, 41px) - 1px); color: var(--dim); }
 /* The letters stand upright, one under another, spread evenly down the
    whole column so the word reads top to bottom. */
 .tuecell .word { display: flex; flex-direction: column; align-items: center; justify-content: space-evenly;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useConvex } from 'convex/react'
 import { anyApi } from 'convex/server'
 import { PinGate } from './deviceTrust/PinGate.jsx'
@@ -576,6 +576,10 @@ function Summary({ staff, statusFor, cursor }) {
   )
 }
 
+const ROW_MIN = 41
+const ROW_MAX = 84
+const CARD_GAP = 12
+
 function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlockThen, onCycle, todayKey, dayOff }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
@@ -593,8 +597,30 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
   const shut = (d) => !opened.has(dateKey(d)) && staff.length > 0
     && staff.every((name) => (statusFor(d, name) || (dayOff(d) ? 'C' : '')) === 'C')
 
+  // The rows share whatever room is left above the tab bar, so the card fills
+  // the screen. With no room left they stay at their normal height and it scrolls.
+  const cardRef = useRef(null)
+  const [rowH, setRowH] = useState(ROW_MIN)
+  useLayoutEffect(() => {
+    const fit = () => {
+      const card = cardRef.current
+      const nav = document.querySelector('.tabbar')
+      if (!card || !nav || staff.length === 0) return
+      const spare = nav.getBoundingClientRect().top - CARD_GAP - (card.getBoundingClientRect().bottom + window.scrollY)
+      setRowH((h) => Math.max(ROW_MIN, Math.min(ROW_MAX, h + Math.floor(spare / staff.length))))
+    }
+    fit()
+    const seen = new ResizeObserver(fit)
+    seen.observe(cardRef.current)
+    window.addEventListener('resize', fit)
+    // The cricket header and fonts arrive late and move the card without resizing it.
+    const later = setTimeout(fit, 400)
+    document.fonts?.ready.then(fit)
+    return () => { seen.disconnect(); window.removeEventListener('resize', fit); clearTimeout(later) }
+  }, [staff.length, loading])
+
   return (
-    <div className="card">
+    <div className="card" ref={cardRef}>
       <div className="datenav">
         <button onClick={() => stepM(-1)} aria-label="Previous month">‹</button>
         <div className="dbig">{MON[m0]} {y}</div>
@@ -604,7 +630,7 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
         <div className="muted center">Loading…</div>
       ) : (
         <div className="gridscroll">
-          <table className="grid">
+          <table className="grid" style={{ '--rowh': `${rowH}px`, '--cellfs': rowH >= 56 ? '24px' : '19px' }}>
             <thead>
               <tr>
                 <th className="stick">Staff</th>
@@ -637,9 +663,9 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
                             {(() => {
                               const word = isTue(d) ? (staff.length >= 3 ? 'Tuesday' : 'Tue') : 'Closed'
                               // Each upright letter takes a line; shrink them only if the column is too short.
-                              const fit = Math.floor((staff.length * 41 - 12) / (word.length * 1.3))
+                              const fit = Math.floor((staff.length * rowH - 12) / (word.length * 1.3))
                               return (
-                                <span className="word" style={{ '--fs': `${Math.max(9, Math.min(15, fit))}px` }} aria-hidden="true">
+                                <span className="word" style={{ '--fs': `${Math.max(9, Math.min(rowH >= 56 ? 19 : 15, fit))}px` }} aria-hidden="true">
                                   {[...word].map((ch, i) => <span key={i}>{ch}</span>)}
                                 </span>
                               )
