@@ -114,7 +114,7 @@ shape everybody in India reads at a glance.
 ## How it is switched
 
 - **Everyone:** the field `theme` on the one `attendanceMeta` row in Convex,
-  `"cricket"` or empty. Flip it from Stats, Manage staff, Cricket theme (asks the
+  `"cricket"` or empty. Flip it from the bottom of Stats, Cricket theme (asks the
   edit password and writes a line in the change history), or edit that field in
   the Convex dashboard. Phones read it once when they open, like the staff list.
 - **One phone, to try it:** open the app with `?cricket=1`. It lasts until that
