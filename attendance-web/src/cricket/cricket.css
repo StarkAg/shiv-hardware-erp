@@ -138,7 +138,6 @@ html.ck-root body { background: transparent; }
 .ck-stamp b { padding: 6px 16px 3px; background: var(--safe); color: #fff; font: 800 54px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; rotate: -3deg; box-shadow: 6px 6px 0 #03090e; }
 .ck-stamp small { padding: 3px 8px; background: #03090e; color: #fff; font: 700 15px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
 .ck-stamp.two b { background: var(--wait); color: #0e1318; font-size: 42px; }
-.ck-stamp.six b { background: #ffcc00; color: #0e1318; font-size: 64px; }
 .ck-stamp.out b { background: var(--stop); }
 .ck-stamp.rain b { background: #2a4b70; font-size: 38px; }
 .ck-stamp.stumps b { background: #f4f7ef; color: #0e1318; }
@@ -269,7 +268,6 @@ html.ck-root body { background: transparent; }
 .ck-rp-stage .ck-stamp { top: 13%; z-index: 4; gap: 6px; }
 .ck-rp-stage .ck-stamp b { font-size: 76px; }
 .ck-rp-stage .ck-stamp.two b { font-size: 58px; }
-.ck-rp-stage .ck-stamp.six b { font-size: 92px; }
 .ck-rp-stage .ck-stamp small { font-size: 19px; }
 .ck-rp-stage .ck-flash { z-index: 3; }
 .ck-rp-name { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 32px); z-index: 5; padding: 0 16px; text-align: center; font: 800 50px/1 var(--sign); text-transform: uppercase; white-space: nowrap; text-shadow: 3px 3px 0 #03090e; animation: ck-line .3s steps(4) both; }
@@ -282,7 +280,6 @@ html.ck-root body { background: transparent; }
 .ck-rp-row > span { overflow-wrap: anywhere; }
 .ck-rp-row em { padding: 5px 4px 3px; background: var(--key); color: var(--dim); font: 800 16px/1 var(--sign); font-style: normal; text-align: center; }
 .ck-rp-row em[data-s="P"] { background: var(--safe); color: #fff; }
-.ck-rp-row em[data-s="six"] { background: #ffcc00; color: #0e1318; }
 .ck-rp-row em[data-s="H"] { background: var(--wait); color: #0e1318; }
 .ck-rp-row em[data-s="N"] { background: var(--stop); color: #fff; }
 .ck-rp-row > b { color: var(--wait); font-variant-numeric: tabular-nums; }
@@ -293,7 +290,6 @@ html.ck-root body { background: transparent; }
   .ck-rp-name { font-size: 38px; }
   .ck-rp-stage .ck-stamp b { font-size: 56px; }
   .ck-rp-stage .ck-stamp.two b { font-size: 44px; }
-  .ck-rp-stage .ck-stamp.six b { font-size: 68px; }
   .ck-stamp b { font-size: 44px; }
   .ck-line { font-size: 32px; }
   .ck-film-tabs { grid-template-columns: repeat(4, 62px); }
