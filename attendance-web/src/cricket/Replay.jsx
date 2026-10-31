@@ -22,6 +22,8 @@ const STAMP = {
 }
 
 export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
+  const [big] = useState(() => window.innerWidth >= 360)
+  const k = big ? 4 / 3 : 1
   const batting = useRef(plays.filter((p) => RUNS[p.status] || p.status === 'N')).current
   const [turn, setTurn] = useState(-1)
   const [scene, setScene] = useState(REST)
@@ -67,9 +69,9 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
     const bw = bowlerEl.current.getBoundingClientRect()
     return {
       w: box.width,
-      from: { x: bw.left - box.left + 39, y: bw.top - box.top + 33 },
-      bat: { x: bt.left - box.left + 108, y: bt.top - box.top + 87 },
-      stumps: { x: bt.left - box.left + 9, y: bt.top - box.top + 96 },
+      from: { x: bw.left - box.left + 39 * k, y: bw.top - box.top + 33 * k },
+      bat: { x: bt.left - box.left + 108 * k, y: bt.top - box.top + 87 * k },
+      stumps: { x: bt.left - box.left + 9 * k, y: bt.top - box.top + 96 * k },
     }
   }
 
@@ -81,7 +83,7 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
     setStamp(null)
     setScene(REST)
     batterEl.current?.animate(
-      [{ transform: 'translateX(-110px)' }, { transform: 'translateX(0)' }],
+      [{ transform: 'translateX(-200px)' }, { transform: 'translateX(0)' }],
       { duration: 320, easing: 'steps(6)' },
     )
     at(340, () => setScene((s) => ({ ...s, batter: 'stance', bowler: 'load' })))
@@ -135,7 +137,7 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
         at(260, () => {
           setScene((c) => ({ ...c, umpire: 'out', batter: 'walk' }))
           batterEl.current?.animate(
-            [{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(-110px)', opacity: 0 }],
+            [{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(-160px)', opacity: 0 }],
             { duration: 700, easing: 'steps(9)', fill: 'forwards' },
           )
         })
@@ -197,15 +199,15 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
         </div>
       ) : (
         <>
-          <div className="ck-rp-stage" ref={stage}>
+          <div className="ck-rp-stage" ref={stage} style={{ '--k': k }}>
             <div className="ck-rp-stumps" aria-hidden="true">
               <img src={scene.hit ? stumpsHitPng : stumpsPng} alt="" />
               <img ref={bailA} className="a" src={bailPng} alt="" />
               <img ref={bailB} className="b" src={bailPng} alt="" />
             </div>
-            <div className="ck-rp-who batter" ref={batterEl}><Sprite frame={`batter-${scene.batter}`} scale={3} flip={walkingOff} /></div>
+            <div className="ck-rp-who batter" ref={batterEl}><Sprite frame={`batter-${scene.batter}`} scale={big ? 4 : 3} flip={walkingOff} /></div>
             <div className="ck-rp-who umpire"><Sprite frame={`umpire-${scene.umpire}`} scale={3} /></div>
-            <div className="ck-rp-who bowler" ref={bowlerEl}><Sprite frame={`bowler-${scene.bowler}`} scale={3} flip /></div>
+            <div className="ck-rp-who bowler" ref={bowlerEl}><Sprite frame={`bowler-${scene.bowler}`} scale={big ? 4 : 3} flip /></div>
             <img ref={ballEl} className="ck-rp-ball" src={ballPng} alt="" aria-hidden="true" />
             {flash && <div className="ck-flash" />}
             {stamp && (
