@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '../../convex/_generated/api'
+import { useStore } from './store'
 // The ledger's live-with-a-kept-copy query, plain JS.
 import { useLive } from '../features/ledger/lib/cache'
 
@@ -65,18 +66,28 @@ export function withoutHidden<T extends { _id: string }>(rows: T[] | undefined, 
  * Both queues as one list, newest first, each photo saying which queue it is
  * on. The older camera's lettered stacks belong to the sorting site and are
  * left out. Undefined until both have loaded.
+ *
+ * A photo already on a bill is left out too. The list opens on its kept copy,
+ * and a photo filed since — on this PC before a refresh, or on another PC —
+ * was still offered beside the next new bill until the live list came in.
  */
 export function usePhoneQueue(): PhonePhoto[] | undefined {
   const voucher = useLive(api.voucherInbox.list, {}, 'voucher-inbox') as Omit<PhonePhoto, 'source'>[] | undefined
   const legacy = useLive(api.inbox.list, {}, 'inbox') as Omit<PhonePhoto, 'source'>[] | undefined
   const gone = useHidden()
+  const bills = useStore((st) => st.bills)
+  const onBills = useMemo(
+    () => new Set(bills.flatMap((b) => (b.attachments ?? []).map((a) => String(a.storageId)))),
+    [bills],
+  )
   return useMemo(() => {
     if (voucher === undefined || legacy === undefined) return undefined
+    const waiting = <T extends { storageId: string }>(row: T) => !onBills.has(String(row.storageId))
     return [
-      ...withoutHidden(voucher, gone)!.map((row) => ({ ...row, source: 'voucher' as const })),
-      ...withoutHidden(legacy, gone)!.filter((row) => !row.stack).map((row) => ({ ...row, source: 'legacy' as const })),
+      ...withoutHidden(voucher, gone)!.filter(waiting).map((row) => ({ ...row, source: 'voucher' as const })),
+      ...withoutHidden(legacy, gone)!.filter((row) => !row.stack && waiting(row)).map((row) => ({ ...row, source: 'legacy' as const })),
     ].sort((a, b) => b.at - a.at)
-  }, [voucher, legacy, gone])
+  }, [voucher, legacy, gone, onBills])
 }
 
 /** The older camera's own shots, stacks and all, for its capture screen. */
