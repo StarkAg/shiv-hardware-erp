@@ -551,9 +551,6 @@ function DailyView({ cursor, setCursor, staff, statusFor, loading, todayKey, isS
           {isToday && editable && (
             <button className="allbtn" onClick={onSave}>{isSaved ? words.relock : words.save}</button>
           )}
-          {isSaved && !editable && (
-            <div className="savednote">Saved. Tap “tap to edit” and enter the password to change today.</div>
-          )}
 
           <Summary staff={staff} statusFor={statusFor} cursor={cursor} />
         </>
