@@ -89,6 +89,14 @@ const SOUNDS = {
   tick: (c) => tone(c, { dur: 0.03, freq: 1200, vol: 0.06, type: 'square' }),
 }
 
+/** Asks to be allowed to sound. Without a tap first, a phone opening the app says no. */
+export function wakeSound() {
+  try {
+    const c = audio()
+    return c?.state === 'running'
+  } catch { return false }
+}
+
 /** Plays a named sound if the switch allows it. Several may start at their own offsets. */
 export function play(name, at) {
   try {

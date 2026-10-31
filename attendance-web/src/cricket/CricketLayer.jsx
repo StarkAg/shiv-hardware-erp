@@ -8,8 +8,9 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { byRuns, dayScore, IDLE_LINES, MOMENTS, monthScores, tickerLines } from './score.js'
-import { play } from './sound.js'
+import { play, wakeSound } from './sound.js'
 import { Film, FILM_SEEN_KEY } from './Film.jsx'
+import { Replay } from './Replay.jsx'
 import { Settings } from './Panels.jsx'
 import { Sprite } from './Sprite.jsx'
 import ballPng from './art/ball.png'
@@ -20,6 +21,8 @@ import groundPng from './art/ground.png'
 
 const FOUND_KEY = 'shiv-attendance:ck-found'
 const PREFS_KEY = 'shiv-attendance:ck-prefs'
+const REPLAY_SEEN_KEY = 'shiv-attendance:ck-replay-seen'
+const AWAY_MS = 30000
 const REST = { batter: 'stance', bowler: 'mark', umpire: 'still', hit: false }
 const STAMP_MS = 900
 
@@ -56,7 +59,7 @@ function burst(root, x, y, colours, count = 12, spread = 70) {
   }
 }
 
-export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading, onRefresh }) {
+export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading, freshTick, todaySaved, onRefresh }) {
   const [prefs, setPrefs] = useState(() => ({ effects: !stillPhone(), sounds: true, ...readJson(PREFS_KEY, {}) }))
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
@@ -76,6 +79,7 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
   const [found, setFound] = useState(() => readJson(FOUND_KEY, []))
   const [film, setFilm] = useState(() => !stillPhone() && !readJson(FILM_SEEN_KEY, false))
   const [pull, setPull] = useState(0)
+  const [replay, setReplay] = useState(null)
 
   const fxRoot = useRef(null)
   const stage = useRef(null)
@@ -349,6 +353,41 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
 
   // Pull the page down from the very top: the batter winds up; let go and it is hit.
   const pullRef = useRef(0)
+
+  // Today's play. Each opening of the app looks once, on marks fresh from Convex
+  // rather than the cache, and plays when the day is done and this phone has not
+  // seen these exact marks. A half marked day waits, so nobody gets it mid-marking.
+  const todayPlays = () => staff.map((name) => ({ name, status: statusFor(new Date(), name) }))
+  const lookForReplay = useRef(true)
+  const onCurrentMonth = cursor.getFullYear() === new Date().getFullYear() && cursor.getMonth() === new Date().getMonth()
+  const onCurrentMonthRef = useRef(onCurrentMonth)
+  onCurrentMonthRef.current = onCurrentMonth
+  useEffect(() => {
+    if (!lookForReplay.current || freshTick === 0 || staff.length === 0) return
+    lookForReplay.current = false
+    if (!prefsRef.current.effects || !onCurrentMonth) return
+    const plays = todayPlays()
+    if (!plays.some((p) => p.status === 'P' || p.status === 'H' || p.status === 'N')) return
+    if (!todaySaved && plays.some((p) => !p.status)) return
+    const marks = `${keyOf(new Date())}|${plays.map((p) => `${p.name}:${p.status}`).join(',')}`
+    if (readJson(REPLAY_SEEN_KEY, '') === marks) return
+    writeJson(REPLAY_SEEN_KEY, marks)
+    setReplay(plays)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freshTick, staff.length])
+  useEffect(() => {
+    let hiddenAt = 0
+    const onShow = () => {
+      if (document.hidden) { hiddenAt = Date.now(); return }
+      if (hiddenAt && Date.now() - hiddenAt > AWAY_MS && onCurrentMonthRef.current) {
+        lookForReplay.current = true
+        onRefresh()
+      }
+    }
+    document.addEventListener('visibilitychange', onShow)
+    return () => document.removeEventListener('visibilitychange', onShow)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   useEffect(() => {
     let startY = null, startX = 0
     const down = (e) => {
@@ -499,6 +538,9 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
           onPrefs={changePrefs}
           found={found}
           onFilm={() => { setSettingsOpen(false); setFilm(true) }}
+          onReplay={onCurrentMonth && todayPlays().some((p) => p.status === 'P' || p.status === 'H' || p.status === 'N')
+            ? () => { setSettingsOpen(false); setReplay(todayPlays()) }
+            : null}
           onClose={() => setSettingsOpen(false)}
         />
       )}
@@ -508,8 +550,17 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
           top={top}
           yet={dayNow.yet}
           month={cursor}
-          sfx={sfx}
+          sfx={(name, delay) => { if (wakeSound()) sfx(name, delay) }}
           onDone={() => { writeJson(FILM_SEEN_KEY, true); setFilm(false); if (fxOn()) setWipe((n) => n + 1) }}
+        />
+      )}
+      {replay && !film && (
+        <Replay
+          plays={replay}
+          rows={rows}
+          soundsOn={prefs.sounds}
+          sfx={sfx}
+          onClose={() => setReplay(null)}
         />
       )}
     </>

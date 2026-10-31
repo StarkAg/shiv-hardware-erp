@@ -70,7 +70,7 @@ export function RunChase({ name, attended, threshold, unlocked, missedCount }) {
   )
 }
 
-export function Settings({ prefs, onPrefs, found, onFilm, onClose }) {
+export function Settings({ prefs, onPrefs, found, onFilm, onReplay, onClose }) {
   return (
     <div className="modal" onClick={onClose}>
       <div className="sheet histsheet" onClick={(e) => e.stopPropagation()}>
@@ -79,6 +79,7 @@ export function Settings({ prefs, onPrefs, found, onFilm, onClose }) {
         <PrefRow label="Effects" hint="The match, stamps, wipes and buzzes" on={prefs.effects} onChange={(v) => onPrefs({ effects: v })} />
         <PrefRow label="Sounds" hint="The bat, the stumps and the crowd" on={prefs.sounds} onChange={(v) => onPrefs({ sounds: v })} />
         <button className="allbtn ghost" onClick={onFilm}>Watch the opening again</button>
+        {onReplay && <button className="allbtn ghost" onClick={onReplay}>Watch today's play</button>}
         <div className="ck-moments-head">Moments found: {found.length} of {MOMENTS.length}</div>
         <div className="ck-moments">
           {MOMENTS.map((m) => {

@@ -128,6 +128,7 @@ export default function App() {
   const [trustTick, setTrustTick] = useState(0)
   const theme = useAttendanceTheme(convex)
   const [refreshTick, setRefreshTick] = useState(0) // the theme's pull to refresh
+  const [freshTick, setFreshTick] = useState(0) // month marks just came from Convex, not the cache
   const goTo = (next) => {
     if (next !== mode) cricketEvent('tab', { from: mode, to: next })
     setMode(next)
@@ -239,6 +240,7 @@ export default function App() {
       if (off || !rows) return
       setDays(rows)
       writeCache(MONTH_CACHE_KEY, { ...readCache(MONTH_CACHE_KEY, {}), [month]: rows })
+      setFreshTick((t) => t + 1)
     }).catch(() => {})
     return () => { off = true }
   }, [month, currentMonth, convex, refreshTick])
@@ -406,6 +408,7 @@ export default function App() {
       {theme.on && (
         <CricketLayer
           staff={staff} statusFor={statusFor} cursor={cursor} todayKey={todayKey} mode={mode} loading={loading}
+          freshTick={freshTick} todaySaved={lockedByDate[todayKey] === true}
           onRefresh={() => setRefreshTick((t) => t + 1)}
         />
       )}

@@ -132,6 +132,7 @@ shape everybody in India reads at a glance.
 - `attendance-web/src/cricket/score.js`: runs, wickets, chase, milestones, ticker.
 - `attendance-web/src/cricket/CricketLayer.jsx`: ground strip with its day score, ticker, overlays, reactions, pull to refresh.
 - `attendance-web/src/cricket/Film.jsx`: the opening film.
+- `attendance-web/src/cricket/Replay.jsx`: today's play, every marked player in turn, then the card.
 - `attendance-web/src/cricket/Sprite.jsx`: sprite frames and pixel icons.
 - `attendance-web/src/cricket/Panels.jsx`: points table, run chase, Ground settings.
 - `attendance-web/src/cricket/sound.js`: every sound, synthesised, no audio files.
@@ -143,3 +144,15 @@ shape everybody in India reads at a glance.
 
 More shots to find, a real day-time ground for bright sun, and the Workshop or
 Khata apps only if the owner asks. Nothing here applies outside attendance.
+
+## Today's play: how staff see the marks
+
+Only the owner marks, so only the owner's phone saw the effects. So every phone plays
+the whole team's day when the app is opened, or comes back after 30 seconds away.
+
+- It plays only when the day is done: everyone has a mark, or the day is saved.
+- Once per phone for one set of marks; if a mark changes, it plays once more.
+- It reads marks fresh from Convex, never the cache. Rain-only days do not play.
+- Absent players are shown by name, at the owner's request. The film still names no one for absences.
+- It obeys the Effects switch, and Ground settings has "Watch today's play".
+- A phone will not make sound before a tap, so it asks "Tap for sound" rather than saving the sounds up.
