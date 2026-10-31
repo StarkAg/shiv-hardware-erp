@@ -173,7 +173,7 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
       className="ck-rp"
       role="dialog"
       aria-label="Today's play"
-      onPointerDown={() => { if (askSound) { wakeSound(); setAskSound(false) } }}
+      onClick={() => { if (askSound) { wakeSound(); setAskSound(false) } }}
     >
       <div className="ck-rp-board">
         <div>

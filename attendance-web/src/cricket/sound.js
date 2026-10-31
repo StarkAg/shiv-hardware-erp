@@ -9,12 +9,20 @@ function audio() {
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext
     if (!AC) return null
+    // An iPhone on silent mutes web sound unless the page says it is playing media.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback' } catch { /* older phone */ }
     ctx = new AC()
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
     const data = noiseBuf.getChannelData(0)
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
   }
-  if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+  if (ctx.state !== 'running') {
+    ctx.resume().catch(() => {})
+    const hush = ctx.createBufferSource()
+    hush.buffer = ctx.createBuffer(1, 1, ctx.sampleRate)
+    hush.connect(ctx.destination)
+    hush.start()
+  }
   return ctx
 }
 

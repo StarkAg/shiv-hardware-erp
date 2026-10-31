@@ -65,6 +65,14 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
   prefsRef.current = prefs
   const changePrefs = (patch) => setPrefs((p) => { const n = { ...p, ...patch }; writeJson(PREFS_KEY, n); return n })
   const sfx = (name, at) => { if (prefsRef.current.sounds) play(name, at) }
+
+  // A phone only lets sound start from a finished tap, so every tap asks again.
+  useEffect(() => {
+    const wake = () => { if (prefsRef.current.sounds) wakeSound() }
+    const events = ['touchend', 'click', 'keydown']
+    events.forEach((e) => document.addEventListener(e, wake, true))
+    return () => events.forEach((e) => document.removeEventListener(e, wake, true))
+  }, [])
   const fxOn = () => prefsRef.current.effects
 
   const [scene, setScene] = useState(REST)
