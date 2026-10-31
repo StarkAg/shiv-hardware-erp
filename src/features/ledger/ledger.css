@@ -329,8 +329,13 @@
   border-radius: 18px; padding: 18px 20px; box-shadow: var(--shadow);}
 .ledger-root .partyhead-main{min-width: 0; overflow-wrap: anywhere;}
 .ledger-root .party-fit{display: flex; align-items: center; gap: 10px;}
+/* The name, then its tag and pencil on the same line; a long name wraps beside them. */
+.ledger-root .partyname{display: flex; align-items: center; gap: 8px; margin: 8px 0 4px;}
+.ledger-root .partyname .tagpick{flex: none;}
+.ledger-root .partyname .tagdots{margin-left: 0;}
+.ledger-root .partyname .tagdots.empty{opacity: 0.55;}
 .ledger-root .partyname .xbtn{flex: none;}
-.ledger-root .partyhead h1{margin: 8px 0 4px; font-size: 25px; font-weight: 800; letter-spacing: -0.01em;}
+.ledger-root .partyhead h1{min-width: 0; margin: 0; font-size: 25px; font-weight: 800; letter-spacing: -0.01em;}
 .ledger-root .partyhead-figure{text-align: right;}
 .ledger-root .partyhead-figure .card-amt{color: var(--brass-text);}
 .ledger-root .partyhead-actions{grid-column: 1 / -1; display: flex; align-items: center;
