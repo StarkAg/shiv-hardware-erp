@@ -6,6 +6,7 @@ import {
   CATEGORY_ORDER,
   GROUP_ORDER,
   type CategoryIcon,
+  type ProductCategory,
 } from '../../lib/types'
 
 const CATEGORY_ICONS: Record<CategoryIcon, LucideIcon> = {
@@ -14,8 +15,20 @@ const CATEGORY_ICONS: Record<CategoryIcon, LucideIcon> = {
   window: AppWindow,
 }
 
-/** The doors quoted most often, ruled in blue so they are found first. */
-const HIGHLIGHTED = new Set<string>(['readymade-door', 'flush-door'])
+/**
+ * Quoted most often, most first: the top row, ruled in blue so they are found
+ * first. From the saved quotations (1 Nov 2026: 30, 14, 10, 7; the next has 2),
+ * then Bed Inner Ply, new that day, at the owner's ask.
+ */
+const TOP_ROW: ProductCategory[] = ['readymade-door', 'flush-door', 'block-board-19', 'aluminium-door', 'bed-inner-ply']
+
+const SECTIONS = [
+  { name: 'Most Quoted', items: TOP_ROW },
+  ...GROUP_ORDER.map((group) => ({
+    name: group,
+    items: CATEGORY_ORDER.filter((category) => CATEGORY_META[category].group === group && !TOP_ROW.includes(category)),
+  })),
+].filter((section) => section.items.length > 0)
 
 /**
  * What to quote for: every product, grouped, on one screen.
@@ -48,15 +61,14 @@ export function QuotationOptions() {
     <div className="mobile-panel-screen overflow-hidden">
       <div className="h-full overflow-y-auto overscroll-contain px-3 pb-3 pt-4 sm:p-6">
         <div className="grid grid-flow-row-dense grid-cols-3 gap-x-2 gap-y-4 sm:gap-x-4 sm:gap-y-6">
-          {GROUP_ORDER.map((group) => {
-            const items = CATEGORY_ORDER.filter((category) => CATEGORY_META[category].group === group)
+          {SECTIONS.map(({ name, items }) => {
             const span = items.length >= 3 ? 'col-span-3' : items.length === 2 ? 'col-span-2' : 'col-span-1'
             return (
-              <section key={group} className={span}>
+              <section key={name} className={span}>
                 <h2 className="mb-2 border-b-2 border-stone-900 pb-0.5 text-sm font-extrabold uppercase tracking-wider text-stone-900 sm:text-base">
-                  {group}
+                  {name}
                 </h2>
-                <div className={`grid gap-2 sm:gap-4 ${span === 'col-span-3' ? 'grid-cols-3' : span === 'col-span-2' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <div className={`grid gap-2 sm:gap-4 ${items === TOP_ROW ? 'grid-cols-3 sm:grid-cols-5' : span === 'col-span-3' ? 'grid-cols-3' : span === 'col-span-2' ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   {items.map((category) => {
                     const meta = CATEGORY_META[category]
                     const Icon = CATEGORY_ICONS[meta.icon]
@@ -65,7 +77,7 @@ export function QuotationOptions() {
                         key={category}
                         to={`/product/${category}`}
                         className={`flex h-[5.25rem] flex-col justify-between border-2 p-2.5 text-stone-900 active:translate-y-0.5 active:border-shiv-green sm:h-32 sm:p-4 ${
-                          HIGHLIGHTED.has(category)
+                          TOP_ROW.includes(category)
                             ? 'border-shiv-green bg-shiv-green/10 hover:bg-shiv-green/20'
                             : 'border-stone-200 bg-white hover:border-stone-900'
                         }`}

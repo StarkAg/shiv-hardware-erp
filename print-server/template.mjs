@@ -271,7 +271,7 @@ function doorFittingHtml(top) {
 
 // Bed Inner Ply: the boards, their total sq ft, each grade on that total. Same
 // positions as BedPlyPrint (BED) in src/features/print/BedPlyPrint.tsx.
-const BED = { band: 100, rowH: 7, gapToHead: 11, headToRows: 8, gradeH: 9 }
+const BED = { band: 100, rowH: 7, gapToHead: 11, headToRows: 12, gradeH: 9 }
 async function buildBedPlyHtml(quote) {
   const header = await b64('aluminium/header-door.jpeg')
   const { pieces, grades, totalSqft } = quote.bed
@@ -299,7 +299,7 @@ async function buildBedPlyHtml(quote) {
     ${pieceRows}
     <div style="position:absolute;left:29mm;right:34mm;top:${rule}mm;border-top:1.5px solid #000"></div>
     ${at(29, rule + 1.3, 'Total', 'font-weight:700;')}${center(148, 30, rule + 1.3, totalSqft, 'font-weight:700;')}
-    ${at(24, head, 'Rate/Sqft', 'width:27mm;text-align:right;')}${at(56.4, head, 'Grade')}${center(102, 20, head, 'Husk')}${at(127, head, 'Cost')}${center(148, 30, head, 'Guarantee')}
+    ${at(24, head, 'Rate', 'width:27mm;text-align:right;')}${at(56.4, head, 'Grade')}${center(102, 20, head, 'Husk')}${at(127, head, 'Cost')}${center(148, 30, head, 'Guarantee')}
     ${gradeRows}
     </div>`)
 }

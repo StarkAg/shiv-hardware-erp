@@ -9,7 +9,7 @@ import { yearsColor } from './QuotationPrint'
  * columns and type as the other quotations. print-server/template.mjs
  * bedPlyHtml draws the same page; positions are mm and must stay the same there.
  */
-export const BED = { band: 100, rowH: 7, gapToHead: 11, headToRows: 8, gradeH: 9 }
+export const BED = { band: 100, rowH: 7, gapToHead: 11, headToRows: 12, gradeH: 9 }
 
 export function BedPlyPrint({ quote }: { quote: Quotation }) {
   const bed = quote.bed
@@ -47,7 +47,7 @@ export function BedPlyPrint({ quote }: { quote: Quotation }) {
         <div className="absolute left-[29mm] font-bold" style={{ top: `${rule + 1.3}mm` }}>Total</div>
         <div className="absolute left-[148mm] w-[30mm] text-center font-bold" style={{ top: `${rule + 1.3}mm` }}>{bed.totalSqft}</div>
 
-        <div className="absolute left-[24mm] w-[27mm] whitespace-nowrap text-right" style={{ top: `${head}mm` }}>Rate/Sqft</div>
+        <div className="absolute left-[24mm] w-[27mm] whitespace-nowrap text-right" style={{ top: `${head}mm` }}>Rate</div>
         <div className="absolute left-[56.4mm]" style={{ top: `${head}mm` }}>Grade</div>
         <div className="absolute left-[102mm] w-[20mm] text-center" style={{ top: `${head}mm` }}>Husk</div>
         <div className="absolute left-[127mm]" style={{ top: `${head}mm` }}>Cost</div>
