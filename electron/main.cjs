@@ -117,7 +117,7 @@ function createWindow() {
       showScreens()
     })
     showScreens()
-    const stop = screens.watch(app.getPath('userData'), offerNewScreens)
+    const stop = screens.watch(app.getPath('userData'), takeNewScreens)
     const stopSite = watchScreensSite()
     mainWindow.on('closed', () => { stop(); stopSite() })
   }
@@ -127,7 +127,6 @@ function createWindow() {
 // The copy of the screens in the window, and any that failed to load this run.
 let showing = null
 const refusedScreens = new Set()
-let askingAboutScreens = false
 
 function newestScreens() {
   return screens.pick({
@@ -147,11 +146,11 @@ function showScreens() {
 // The panel website serves the same build as these screens, a minute after a push.
 const SCREENS_SITE = 'https://shiv-panel.vercel.app'
 /**
- * How often the website is looked at for newer screens. Shiv Counter never asks:
- * new screens go up the moment they arrive, even over a quotation being written
- * (Tony's choice, 2026-11-01). The panel app asks, and looks every five minutes.
+ * How often the website is looked at for newer screens. Neither app asks: new
+ * screens go up the moment they arrive, even over a form being filled in (Tony's
+ * choice, 2026-11-01).
  */
-const SCREENS_EVERY = IS_QUOTATION_APP ? 60_000 : 5 * 60_000
+const SCREENS_EVERY = 60_000
 
 /**
  * Looks at the website for newer screens: soon after opening, then every few
@@ -181,29 +180,14 @@ function watchScreensSite() {
   return () => { clearTimeout(first); clearInterval(every) }
 }
 
-/** Newer screens have been put in: take them now, or when the app next opens. */
-async function offerNewScreens() {
-  if (askingAboutScreens || !mainWindow || mainWindow.isDestroyed() || !showing) return
+/** Newer screens have been put in: show them. */
+function takeNewScreens() {
+  if (!mainWindow || mainWindow.isDestroyed() || !showing) return
   const newest = newestScreens()
   if (newest.builtAt <= showing.builtAt) return
   // The same commit built twice (here by a deploy, and by the website) is no update.
   if (newest.commit && newest.commit === showing.commit) return
-  if (IS_QUOTATION_APP) return showScreens()
-  askingAboutScreens = true
-  try {
-    const { response } = await dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      buttons: ['Update now', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-      title: 'Update ready',
-      message: `${APP_TITLE} has an update.`,
-      detail: 'It takes a second. Anything typed and not yet saved is cleared. Later: it is there when the app next opens.',
-    })
-    if (response === 0 && !mainWindow.isDestroyed()) showScreens()
-  } finally {
-    askingAboutScreens = false
-  }
+  showScreens()
 }
 
 function setupAutoUpdater() {
