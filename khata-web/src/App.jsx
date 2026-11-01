@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useConvex, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 import { SCREEN, THUMB, saveEverything, saveLedger, savedLedger, sized } from './offline.js'
@@ -23,25 +23,82 @@ import { SCREEN, THUMB, saveEverything, saveLedger, savedLedger, sized } from '.
  * for a few seconds. In the shop's own colours (the attendance app's).
  *
  * Kept on the phone: each time it opens, every account and every bill photo
- * is saved to the phone in the background (src/offline.js), so an account
- * opens at once from there, the live figures replacing it a moment later.
+ * is saved to the phone in the background (src/offline.js). Those copies are
+ * shown only when the phone has no line, and the header then says so. Old
+ * figures are never shown as if they were today's (owner's ask, 1 Nov 2026):
+ * while the live ones come, the screen shows grey skeletons instead.
  */
 const api = anyApi
 
-// The last answer is kept on the phone, so it opens on figures at once and
-// swaps in the live ones a moment later.
 const read = (key) => { try { const raw = localStorage.getItem(`khata:${key}`); return raw ? JSON.parse(raw) : undefined } catch { return undefined } }
 const write = (key, value) => { try { localStorage.setItem(`khata:${key}`, JSON.stringify(value)) } catch { /* phone storage full: it just opens cold */ } }
+
+/**
+ * Whether what is on screen can be trusted as it stands:
+ *
+ *   'live'    connected: the books' answer is shown, a skeleton until it comes;
+ *   'wait'    connecting, or just back after a while away: a skeleton, never the
+ *             figures from before, which may have moved meanwhile;
+ *   'offline' no line for a few seconds: the copy kept on the phone, and the
+ *             header says that is what it is.
+ */
+const Line = createContext('wait')
+const NO_LINE_MS = 8000
+const AWAY_MS = 60000
+const SETTLE_MS = 1500
+function useLineState() {
+  const convex = useConvex()
+  const [state, setState] = useState('wait')
+  useEffect(() => {
+    let downSince = Date.now()
+    let upSince = 0
+    let hiddenAt = 0
+    let waking = 0
+    const check = () => {
+      const now = Date.now()
+      const phoneOff = navigator.onLine === false
+      const up = !phoneOff && convex.connectionState().isWebSocketConnected
+      if (up) { downSince = 0; upSince ||= now } else { upSince = 0; downSince ||= now }
+      // Back from a while away, the answers on hand are from before: they are
+      // held back until the line has been up long enough to bring new ones.
+      if (up && waking && now - Math.max(upSince, waking) >= SETTLE_MS) waking = 0
+      setState(up ? (waking ? 'wait' : 'live') : phoneOff || now - downSince >= NO_LINE_MS ? 'offline' : 'wait')
+    }
+    const onShow = () => {
+      if (document.hidden) { hiddenAt = Date.now(); return }
+      if (hiddenAt && Date.now() - hiddenAt > AWAY_MS) waking = Date.now()
+      check()
+    }
+    const timer = setInterval(check, 500)
+    document.addEventListener('visibilitychange', onShow)
+    window.addEventListener('online', check)
+    window.addEventListener('offline', check)
+    check()
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onShow)
+      window.removeEventListener('online', check)
+      window.removeEventListener('offline', check)
+    }
+  }, [convex])
+  return state
+}
+
+/** A list from the books. Undefined, for a skeleton, until the live answer is in. */
 function useCached(fn, args, key) {
+  const line = useContext(Line)
   const live = useQuery(fn, args)
   const [cached, setCached] = useState(() => read(key))
   useEffect(() => { setCached(read(key)) }, [key])
   useEffect(() => { if (live !== undefined) write(key, live) }, [live, key])
-  return live !== undefined ? live : cached
+  if (line === 'wait') return undefined
+  if (line === 'offline') return live ?? cached
+  return live
 }
 
-/** An account's page: the copy kept on the phone at once, then the live one, which is kept in turn. */
+/** An account's page, the same way: live, or the phone's copy only with no line. */
 function useLedger(id) {
+  const line = useContext(Line)
   const live = useQuery(api.reports.ledger, { ledgerId: id })
   const [kept, setKept] = useState(undefined)
   useEffect(() => {
@@ -51,7 +108,9 @@ function useLedger(id) {
     return () => { current = false }
   }, [id])
   useEffect(() => { if (live !== undefined && live !== null) void saveLedger(id, live) }, [live, id])
-  return live !== undefined ? live : kept
+  if (line === 'wait') return undefined
+  if (line === 'offline') return live ?? kept
+  return live
 }
 
 // Accounts were first kept in localStorage, which a few hundred of them
@@ -108,15 +167,11 @@ function useSaveToPhone() {
 const rupees = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
 const bare = (name) => String(name ?? '').replace(/^m\/s\.?\s+/i, '').trim()
 
-/** The light that says the figures on screen are the live ones. */
+/** The light that says whether the figures on screen are the live ones, or the phone's copy. */
 function LiveLight() {
-  const convex = useConvex()
-  const [on, setOn] = useState(() => convex.connectionState().isWebSocketConnected)
-  useEffect(() => {
-    const timer = setInterval(() => setOn(convex.connectionState().isWebSocketConnected), 1500)
-    return () => clearInterval(timer)
-  }, [convex])
-  return <span className={`live ${on ? 'on' : ''}`} role="status"><i />{on ? 'Live' : 'Connecting'}</span>
+  const line = useContext(Line)
+  const say = { live: 'Live', wait: 'Connecting', offline: 'No internet · saved copy' }[line]
+  return <span className={`live ${line === 'live' ? 'on' : line === 'offline' ? 'away' : ''}`} role="status"><i />{say}</span>
 }
 const dayOf = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 /** Dr / Cr in plain words: Dr on a party is money we get, Cr money we pay. */
@@ -178,9 +233,45 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
   const openParty = (party) => { window.history.pushState({ party: party.id }, ''); setOpen(party) }
-  return open
-    ? <Party party={open} onBack={() => window.history.back()} />
-    : <Lists tab={tab} setTab={setTab} onOpen={openParty} saving={saving} />
+  const line = useLineState()
+  return (
+    <Line.Provider value={line}>
+      {open
+        ? <Party party={open} onBack={() => window.history.back()} />
+        : <Lists tab={tab} setTab={setTab} onOpen={openParty} saving={saving} />}
+    </Line.Provider>
+  )
+}
+
+/** Grey shapes where the rows will be, while the live figures come. */
+function SkeletonRows({ count = 8, face = true }) {
+  return Array.from({ length: count }, (_, i) => (
+    <li key={`sk-${i}`} className="skrow" aria-hidden="true">
+      {face && <span className="sk skface" />}
+      <span className="skwho">
+        <span className="sk" style={{ width: `${46 + ((i * 17) % 36)}%` }} />
+        <span className="sk sm" style={{ width: `${28 + ((i * 23) % 30)}%` }} />
+      </span>
+      <span className="sk skamt" />
+    </li>
+  ))
+}
+
+/** An account's thread as grey bubbles, left and right as a chat, while it comes. */
+function SkeletonThread() {
+  const bubbles = [['left', 64], ['right', 50], ['left', 72], ['right', 58], ['left', 46], ['right', 66]]
+  return (
+    <>
+      <div className="daytag" aria-hidden="true"><i className="sk sm skday" /></div>
+      {bubbles.map(([side, width], i) => (
+        <div key={i} className={`bubble ${side} skbubble`} style={{ width: `${width}%` }} aria-hidden="true">
+          <span className="sk sm" style={{ width: '56%' }} />
+          <span className="sk" style={{ width: '82%' }} />
+          {i % 3 === 1 && <span className="sk skphoto" />}
+        </div>
+      ))}
+    </>
+  )
 }
 
 /**
@@ -298,8 +389,13 @@ function Lists({ tab, setTab, onOpen, saving }) {
         <Saving saving={saving} />
       </header>
       {tab === 'quotes' ? <Quotes /> : <>
-      <div className="summary">
-        {!book ? 'Loading…' : tab === 'customers' ? (
+      <div className="summary" aria-busy={!book}>
+        {!book ? (
+          <>
+            <span className="sksum" aria-hidden="true"><i className="sk sm" /><i className="sk" /></span>
+            <span className="sksum" aria-hidden="true"><i className="sk sm" /><i className="sk" /></span>
+          </>
+        ) : tab === 'customers' ? (
           <>
             <span className="in"><small>To get</small>{rupees(dr)}</span>
             <span><small>Advance, to pay</small>{rupees(cr)}</span>
@@ -318,7 +414,8 @@ function Lists({ tab, setTab, onOpen, saving }) {
       </div>
       {panel === 'sort' && pick(SORTS, sort, setSort)}
       {panel === 'filter' && pick(FILTERS, filter, setFilter)}
-      <ul className="chats">
+      <ul className="chats" aria-busy={!book}>
+        {!book && <SkeletonRows />}
         {rows.map((r) => {
           const name = bare(r.ledger.name)
           const zero = r.closing < 0.5
@@ -465,7 +562,7 @@ function Party({ party, onBack }) {
     el?.scrollIntoView({ block: 'center' })
   }
 
-  const closing = data ? (data.closing < 0.5 ? SETTLED : `${rupees(data.closing)} ${sideWord(data.closingSide)}`) : 'Loading…'
+  const closing = data ? (data.closing < 0.5 ? SETTLED : `${rupees(data.closing)} ${sideWord(data.closingSide)}`) : <i className="sk sm skinline" aria-label="Loading" />
 
   return (
     <div className="app chat">
@@ -490,7 +587,8 @@ function Party({ party, onBack }) {
           </a>
         )}
       </header>
-      <main className="thread" ref={thread}>
+      <main className="thread" ref={thread} aria-busy={!data}>
+        {!data && <SkeletonThread />}
         {data && !items.length && <p className="note">No bills or payments yet.</p>}
         {items.map((it) => {
           if (it.day) return <div key={it.key} className="daytag"><span>{it.day}</span></div>
@@ -542,6 +640,9 @@ function Party({ party, onBack }) {
         })}
         <div ref={end} />
       </main>
+      {!data && (
+        <footer className="due skdue" aria-hidden="true"><small className="sk sm" /><b className="sk" /></footer>
+      )}
       {data && (
         <footer className={`due ${data.closing < 0.5 ? '' : data.closingSide === 'Dr' ? 'in' : 'out'}`}>
           <small>{data.closing < 0.5 ? SETTLED : data.closingSide === 'Dr' ? 'To get' : 'To pay'}</small>
@@ -1199,13 +1300,14 @@ function Quotes() {
   return (
     <>
       <div className="qtoggle">
-        <button type="button" className={show === 'open' ? 'on' : ''} onClick={() => setShow('open')}>Open ({openCount})</button>
-        <button type="button" className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>All ({all.length})</button>
+        <button type="button" className={show === 'open' ? 'on' : ''} onClick={() => setShow('open')}>Open{list ? ` (${openCount})` : ''}</button>
+        <button type="button" className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>All{list ? ` (${all.length})` : ''}</button>
       </div>
       <div className="searchbar">
         <input type="search" placeholder="Search name, phone, item or number" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
-      <ul className="chats quotes">
+      <ul className="chats quotes" aria-busy={!list}>
+        {!list && <SkeletonRows count={6} face={false} />}
         {rows.map((x, i) => (
           <li key={x.id}>
             <button type="button" className="row" onClick={() => openAt(i)}>
@@ -1220,7 +1322,6 @@ function Quotes() {
             </button>
           </li>
         ))}
-        {!list && <li className="empty">Loading…</li>}
         {list && !rows.length && <li className="empty">{q ? 'No quotation matches.' : show === 'open' ? 'No open quotations.' : 'No quotations yet.'}</li>}
       </ul>
       {at !== null && rows[at] && <QuoteReader rows={rows} at={at} onAt={setAt} onClose={() => window.history.back()} />}
