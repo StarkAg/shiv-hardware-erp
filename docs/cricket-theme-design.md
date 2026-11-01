@@ -160,3 +160,14 @@ the whole team's day when the app is opened, or comes back after 30 seconds away
 ## The switch is one switch
 
 Turning it on or off on any phone changes every phone, live, including ones already open. It is the app's only live Convex subscription. Using the switch also ends that phone's `?cricket=` try-out.
+
+## Sixes carry over the 1st
+
+From the sixth present in a row, every present is a six until a half day or an
+absence. Closed and unmarked days do not break the run, and since 1 Nov 2026
+(owner's ask) neither does a new month: Anand's run of presents from 25 Oct
+made 1 Nov his seventh in a row, which used to score a four because the count
+started over. With the theme on, the app also reads the month before (the month
+just ended fresh once per open, older months from the cache), and the run is
+counted back to that month's 1st at most. The month's points table still adds up
+only that month's runs, and the honours (Long innings and so on) stay per month.

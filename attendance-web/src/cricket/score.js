@@ -7,28 +7,38 @@
  *
  * A good attender hits sixes: from the sixth present in a row, every present is a
  * six until the run breaks. A half day or an absence breaks it and the climb starts
- * again; a closed or unmarked day does not, and each month starts fresh.
+ * again; a closed or unmarked day does not, and neither does the 1st of a month:
+ * a run carries over from the month before (owner's ask, 1 Nov 2026). Only the
+ * month before is loaded, so the run is counted back to its 1st at most.
  */
 export const RUNS = { P: 4, H: 2 }
 export const SIX_RUNS = 6
 export const SIX_AFTER = 6
 export const runsFor = (days) => days * RUNS.P
 
-/** How long the run is if this day is hit for six; otherwise 0. */
-export function sixRun(statusFor, name, date) {
-  let run = 1
+/** Presents in a row just before this day, back to the 1st of the month before. */
+export function runBefore(statusFor, name, date) {
+  let run = 0
+  const stop = new Date(date.getFullYear(), date.getMonth() - 1, 1)
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1)
-  for (; d.getMonth() === date.getMonth(); d.setDate(d.getDate() - 1)) {
+  for (; d >= stop; d.setDate(d.getDate() - 1)) {
     const st = statusFor(d, name)
     if (st === 'P') run++
     else if (st === 'H' || st === 'N') break
   }
+  return run
+}
+
+/** How long the run is if this day is hit for six; otherwise 0. */
+export function sixRun(statusFor, name, date) {
+  const run = runBefore(statusFor, name, date) + 1
   return run >= SIX_AFTER ? run : 0
 }
 
 export function monthScores(staff, days, statusFor, todayKey, keyOf) {
   return staff.map((name) => {
-    let runs = 0, wickets = 0, fours = 0, twos = 0, sixes = 0, streak = 0, best = 0, run = 0
+    let runs = 0, wickets = 0, fours = 0, twos = 0, sixes = 0, streak = 0, best = 0
+    let run = days.length ? runBefore(statusFor, name, days[0]) : 0
     for (const d of days) {
       if (keyOf(d) > todayKey) break
       const st = statusFor(d, name)
@@ -84,7 +94,7 @@ export const HONOUR_INFO = {
 }
 
 export const COLUMN_INFO = {
-  R: 'Runs: present 4, half day 2. After 6 presents in a row, every present is 6 until a half day or absence',
+  R: 'Runs: present 4, half day 2. After 6 presents in a row, every present is 6 until a half day or absence. A run carries over into the next month',
   W: 'Wickets: days absent',
   SR: 'Strike rate: out of 100, 100 means present every day',
 }

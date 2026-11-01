@@ -245,6 +245,29 @@ export default function App() {
     return () => { off = true }
   }, [month, currentMonth, convex, refreshTick])
 
+  // The month before, for the cricket theme only: a run of presents carries over
+  // the 1st, so a six on the first days needs the last days of the month before.
+  // The month just ended is read fresh once per open, because this phone may have
+  // cached it before its last days were marked; older months come from the cache.
+  const prevMonth = ym(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))
+  const lastMonth = ym(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1))
+  const [prevDays, setPrevDays] = useState(undefined)
+  const prevRead = useRef({})
+  useEffect(() => {
+    if (!theme.on) return undefined
+    const cache = readCache(MONTH_CACHE_KEY, {})
+    setPrevDays(cache[prevMonth])
+    if (prevRead.current[prevMonth] || (cache[prevMonth] && prevMonth !== lastMonth)) return undefined
+    let off = false
+    convex.query(api.attendance.getMonth, { month: prevMonth }).then((rows) => {
+      if (off || !rows) return
+      prevRead.current[prevMonth] = true
+      setPrevDays(rows)
+      writeCache(MONTH_CACHE_KEY, { ...readCache(MONTH_CACHE_KEY, {}), [prevMonth]: rows })
+    }).catch(() => {})
+    return () => { off = true }
+  }, [prevMonth, lastMonth, convex, theme.on])
+
   /**
    * What each man still owes on an advance, and at what rate.
    *
@@ -321,17 +344,19 @@ export default function App() {
     convex.mutation(api.attendance.lockDay, { date, marks }).catch(() => {})
   }
 
+  // The month before is in here too when the cricket theme has read it, for the
+  // six count only; every view walks its own month's days, so nothing else sees it.
   const marksByDate = useMemo(() => {
     const m = {}
-    for (const d of days || []) m[d.date] = d.marks || {}
+    for (const d of [...(prevDays || []), ...(days || [])]) m[d.date] = d.marks || {}
     return m
-  }, [days])
+  }, [days, prevDays])
   // Tuesdays the shop opened after all (marked open on the Day Paper).
   const shopOpenByDate = useMemo(() => {
     const m = {}
-    for (const d of days || []) if (d.shopOpen) m[d.date] = true
+    for (const d of [...(prevDays || []), ...(days || [])]) if (d.shopOpen) m[d.date] = true
     return m
-  }, [days])
+  }, [days, prevDays])
   // The weekly day off: a Tuesday, unless the shop opened on it.
   const dayOff = (d) => isTue(d) && !shopOpenByDate[dateKey(d)]
   const lockedByDate = useMemo(() => {
