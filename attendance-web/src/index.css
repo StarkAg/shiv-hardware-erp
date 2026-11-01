@@ -212,6 +212,18 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .paydaily th:first-child, .paydaily td:first-child, .paydaily th:nth-child(2), .paydaily td:nth-child(2) { text-align: left; }
 .paydaily td[data-kind="due"] { color: var(--must); font-weight: 700; }
 .paydaily td[data-kind="adv"] { font-weight: 700; }
+.paybtn { background: var(--must); }
+.paydone { margin-top: 10px; padding: 10px 12px; background: var(--safe); color: #fff; font-size: 16px; font-weight: 700; line-height: 1.35; }
+.paysheet .paylabel { display: block; margin: 14px 0 6px; color: var(--dim); font: 700 15px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .05em; }
+.payamt { display: flex; align-items: center; gap: 8px; border: 2px solid var(--ink); background: #fff; padding-left: 12px; font: 800 30px/1 var(--sign); }
+.paysheet .payamt input { flex: 1; min-width: 0; border: 0; outline: none; -moz-appearance: textfield; padding: 8px 12px 8px 0; text-align: left; letter-spacing: 0; font: 800 32px/1 var(--sign); }
+.payamt:focus-within { box-shadow: 0 0 0 3px var(--must); }
+.paysheet .payamt input::-webkit-inner-spin-button, .paysheet .payamt input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.paysheet .paynoteinput { text-align: left; letter-spacing: 0; font: 500 18px/1.2 var(--text); min-height: 48px; }
+.paypicks, .paymode { display: flex; gap: 8px; margin-top: 8px; }
+.paypicks button, .paymode button { flex: 1; min-width: 0; min-height: 52px; padding: 6px 8px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 700 17px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .02em; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.paypicks button b { font-size: 20px; }
+.paypicks button.on, .paymode button.on { background: var(--ink); color: #fff; box-shadow: none; }
 .paygrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; margin-top: 14px; border-top: 2px solid var(--ink); }
 .paygrid > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .paygrid > div.netrow { grid-column: 1 / -1; border-bottom: 0; border-top: 2px solid var(--ink); margin-top: -1px; }

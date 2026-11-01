@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react'
 import { monthPay, ATTEND_THRESHOLD } from './pay.js'
 import { monthBook } from './payBook.js'
 import { RunChase } from './cricket/lazy.jsx'
+import { PaySheet, readPending } from './PaySheet.jsx'
 
 /*
- * The Pay tab: read only, straight from the Staff Payments register.
+ * The Pay tab, straight from the Staff Payments register.
  *
- * Money is given in one place only, Cashier → Staff Payments, which writes the
- * cash book too. This tab used to work out its own take-home and take its own
+ * Money goes through one register, Staff Payments, which writes the cash book
+ * too. The Pay button here (PaySheet.jsx) pays today's wages into that same
+ * register; advances, rates and reversals stay in Cashier. This tab used to work out its own take-home and take its own
  * advances, so it could disagree with the register and an advance typed here was
  * refused by the server without a word. Now it shows the register's own figures
- * for the month and the sum that gets there, line by line, and changes nothing.
+ * for the month and the sum that gets there, line by line, and the Pay button
+ * is the only thing on it that writes.
  *
  * Tuesday pay is the one figure the register does not hold; it is shown apart,
  * worked out by pay.js, and kept out of the sum.
@@ -34,7 +37,7 @@ function balanceSay(n) {
   return { word: 'Settled', amount: 0, kind: 'zero' }
 }
 
-export function PayView({ cursor, setCursor, staff, statusFor, loading, board, boardLoading, boardFailed, asOf, cricket }) {
+export function PayView({ cursor, setCursor, staff, statusFor, loading, board, boardLoading, boardFailed, asOf, cricket, onPay }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const month = ym(cursor)
@@ -47,6 +50,13 @@ export function PayView({ cursor, setCursor, staff, statusFor, loading, board, b
 
   const row = board?.date === asOf ? board.rows.find((r) => r.staff === sel) : null
   const book = row ? monthBook(row, month) : null
+  const [paying, setPaying] = useState(false)
+  const [paid, setPaid] = useState(null)
+  useEffect(() => { setPaid(null) }, [sel, month])
+  // Pay is for today only: this month's figures are as of today.
+  const isThisMonth = month === todayKey.slice(0, 7)
+  const canPay = isThisMonth && !!book && asOf >= row.profile.startDate
+  const pendingHere = canPay && readPending()?.staff === sel
 
   let body
   if (future) body = <div className="paynote">Nothing yet for {MON[m0]} {y}.</div>
@@ -63,7 +73,7 @@ export function PayView({ cursor, setCursor, staff, statusFor, loading, board, b
   return (
     <div className="card">
       <div className="payhdr"><span className="mgttl">Wages</span></div>
-      <div className="payread">Read only. Wages and advances are given in Cashier, Staff Payments.</div>
+      <div className="payread">Advances, rates and reversals are done in Cashier, Staff Payments.</div>
 
       <div className="datenav">
         <button onClick={() => stepM(-1)} aria-label="Previous month">‹</button>
@@ -78,7 +88,19 @@ export function PayView({ cursor, setCursor, staff, statusFor, loading, board, b
         </select>
       </div>
 
+      {canPay && (
+        <button className="allbtn paybtn" onClick={() => { setPaid(null); setPaying(true) }}>
+          {pendingHere ? `Finish paying ${sel}` : `Pay ${sel}`}
+        </button>
+      )}
+      {paid && <div className="paydone" role="status">Paid {sel} {inr(paid.amount)} {paid.mode === 'online' ? 'online' : 'in cash'}. It is in Staff Payments and the cash book.</div>}
+
       {body}
+
+      {paying && row && (
+        <PaySheet row={row} date={asOf} onPay={onPay} onClose={() => setPaying(false)}
+          onDone={(p) => { setPaying(false); setPaid(p) }} />
+      )}
     </div>
   )
 }

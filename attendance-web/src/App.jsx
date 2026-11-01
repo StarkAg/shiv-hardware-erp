@@ -261,6 +261,9 @@ export default function App() {
   const [board, setBoard] = useState(() => readCache(BOARD_CACHE_KEY, null))
   const [boardLoading, setBoardLoading] = useState(false)
   const [boardFailed, setBoardFailed] = useState(false)
+  const [payTick, setPayTick] = useState(0)
+  // Today's wages from the Pay tab: the register's own payment, then a fresh read.
+  const payStaff = (payload) => convex.mutation(anyApi.staffPay.pay, payload).then((r) => { setPayTick((t) => t + 1); return r })
   useEffect(() => {
     if (mode !== 'pay' || !deviceToken()) return undefined
     let off = false
@@ -273,7 +276,7 @@ export default function App() {
       .catch(() => { if (!off) setBoardFailed(true) })
       .finally(() => { if (!off) setBoardLoading(false) })
     return () => { off = true }
-  }, [mode, payAsOf, convex, trustTick, refreshTick])
+  }, [mode, payAsOf, convex, trustTick, refreshTick, payTick])
 
   // Optimistic local write + cache, then fire the Convex mutation (write only).
   const applyLocal = (dateStr, patchFn) => {
@@ -446,7 +449,7 @@ export default function App() {
           <OnTrusted onTrusted={() => setTrustTick((t) => t + 1)} />
           <PayView
             cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
-            board={board} boardLoading={boardLoading} boardFailed={boardFailed} asOf={payAsOf} cricket={theme.on}
+            board={board} boardLoading={boardLoading} boardFailed={boardFailed} asOf={payAsOf} cricket={theme.on} onPay={payStaff}
           />
         </PinGate>
       )}
