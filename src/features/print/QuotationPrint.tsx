@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { BrandQuoteRow, ProductCategory, Quotation } from '../../lib/types'
 import { CATEGORY_LABELS } from '../../lib/types'
 import { isAluminium } from '../../lib/aluminium'
@@ -135,30 +136,40 @@ const FIT_GAP = 6 // mm below the last rate row
 
 /** How many doors the box can work out side by side, one column each. */
 export const DOOR_FITTING_COLS = 3
-const FIT_LABEL_MM = 58
+
+/**
+ * Laid out in the sheet's own manner: a green title like the product's, column
+ * headings like Rate/Brand/Cost, the row to write in on a yellow band like the
+ * size, and the black rule of the size row above the total. Positions are mm
+ * from the block's top; print-server/template.mjs doorFittingHtml uses the same.
+ */
+const FIT = {
+  labelLeft: 29, colLeft: 86, colW: 30, right: 34,
+  head: 7, rate: 14, rateH: 8, fitting: 22.6, labour: 29, rowH: 6.39, rule: 36.4, total: 37.2, totalH: 8, note: 47,
+}
 
 function DoorFittingBox({ top }: { top: number }) {
   const cols = Array.from({ length: DOOR_FITTING_COLS }, (_, i) => i)
-  const rows: { label: string; value: string; h: number; bold?: boolean; head?: boolean }[] = [
-    { label: '', value: '', h: 7, head: true },
-    { label: 'Door Rate', value: '', h: 11 },
-    { label: 'Fitting Items (Approx.)', value: String(DOOR_FITTING_ITEMS), h: 9 },
-    { label: 'Labour', value: String(DOOR_FITTING_LABOUR), h: 9 },
-    { label: 'Total', value: '', h: 11, bold: true },
-  ]
-  return (
-    <div className="absolute left-[29mm] right-[34mm] text-[15pt] leading-[1.1]" style={{ top: `${top}mm`, border: '1.5px solid #000' }}>
-      {rows.map((r, i) => (
-        <div key={i} className="flex" style={{ height: `${r.h}mm`, borderTop: i ? (r.bold ? '1.5px solid #000' : '1px solid #000') : undefined, fontWeight: r.bold ? 700 : 400 }}>
-          <div className="flex items-center" style={{ width: `${FIT_LABEL_MM}mm`, flex: 'none', paddingLeft: '2mm' }}>{r.label}</div>
-          {cols.map((c) => (
-            <div key={c} className={`flex flex-1 items-center justify-center ${r.head ? 'text-[12pt]' : ''}`} style={{ borderLeft: '1px solid #000' }}>
-              {r.head ? `Door ${c + 1}` : r.value}
-            </div>
-          ))}
-        </div>
+  const at = (y: number) => `${top + y}mm`
+  const row = (y: number, h: number, label: string, cell: (c: number) => string, style?: CSSProperties) => (
+    <div className="absolute left-0 right-0 flex items-center" style={{ top: at(y), height: `${h}mm`, ...style }}>
+      <span className="absolute" style={{ left: `${FIT.labelLeft}mm` }}>{label}</span>
+      {cols.map((c) => (
+        <span key={c} className="absolute text-center" style={{ left: `${FIT.colLeft + c * FIT.colW}mm`, width: `${FIT.colW}mm` }}>{cell(c)}</span>
       ))}
-      <div className="absolute left-0 right-0 text-[12pt] leading-[1.25]" style={{ top: 'calc(100% + 2.5mm)' }}>{DOOR_FITTING_NOTE}</div>
+    </div>
+  )
+  return (
+    <div className="absolute inset-0 text-[15pt] leading-[1.1]">
+      <div className="absolute text-[#00b050]" style={{ left: `${FIT.labelLeft}mm`, top: at(0) }}>Door with Fitting</div>
+      {row(FIT.head, FIT.rowH, '', (c) => `Door ${c + 1}`)}
+      <div className="absolute" style={{ left: `${FIT.labelLeft}mm`, right: `${FIT.right}mm`, top: at(FIT.rate), height: `${FIT.rateH}mm`, backgroundColor: '#FFFF00' }} />
+      {row(FIT.rate, FIT.rateH, 'Door Rate', () => '')}
+      {row(FIT.fitting, FIT.rowH, 'Fitting Items (Approx.)', () => String(DOOR_FITTING_ITEMS))}
+      {row(FIT.labour, FIT.rowH, 'Labour', () => String(DOOR_FITTING_LABOUR))}
+      <div className="absolute border-t-[1.5px] border-black" style={{ left: `${FIT.labelLeft}mm`, right: `${FIT.right}mm`, top: at(FIT.rule) }} />
+      {row(FIT.total, FIT.totalH, 'Total', () => '', { fontWeight: 700 })}
+      <div className="absolute text-[12pt] leading-[1.25]" style={{ left: `${FIT.labelLeft}mm`, right: `${FIT.right}mm`, top: at(FIT.note) }}>{DOOR_FITTING_NOTE}</div>
     </div>
   )
 }

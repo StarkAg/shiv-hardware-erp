@@ -241,21 +241,30 @@ const DOOR_FITTING_ITEMS = 1000
 const DOOR_FITTING_LABOUR = 200
 const DOOR_FITTING_NOTE = 'Labour 200 covers both visits: the mechanic first comes home to take measurements, then comes again to fit the door once it arrives.'
 const DOOR_FITTING_COLS = 3
+// Same layout as DoorFittingBox (FIT) in src/features/print/QuotationPrint.tsx.
+const FIT = {
+  labelLeft: 29, colLeft: 86, colW: 30, right: 34,
+  head: 7, rate: 14, rateH: 8, fitting: 22.6, labour: 29, rowH: 6.39, rule: 36.4, total: 37.2, totalH: 8, note: 47,
+}
 function doorFittingHtml(top) {
-  const rows = [
-    ['', '', 7, false, true],
-    ['Door Rate', '', 11, false],
-    ['Fitting Items (Approx.)', String(DOOR_FITTING_ITEMS), 9, false],
-    ['Labour', String(DOOR_FITTING_LABOUR), 9, false],
-    ['Total', '', 11, true],
-  ]
+  const at = y => `${top + y}mm`
   const cols = Array.from({ length: DOOR_FITTING_COLS }, (_, c) => c)
-  return `<div style="position:absolute;left:29mm;right:34mm;top:${top}mm;border:1.5px solid #000;font-size:15pt;line-height:1.1">${rows.map(([label, value, h, bold, head], i) =>
-    `<div style="display:flex;height:${h}mm;${i ? `border-top:${bold ? '1.5px' : '1px'} solid #000;` : ''}${bold ? 'font-weight:700;' : ''}">` +
-    `<div style="display:flex;align-items:center;flex:none;width:58mm;padding-left:2mm">${label}</div>` +
-    cols.map(c => `<div style="display:flex;flex:1;align-items:center;justify-content:center;border-left:1px solid #000;${head ? 'font-size:12pt;' : ''}">${head ? `Door ${c + 1}` : value}</div>`).join('') +
-    `</div>`).join('')}` +
-    `<div style="position:absolute;left:0;right:0;top:calc(100% + 2.5mm);font-size:12pt;line-height:1.25">${DOOR_FITTING_NOTE}</div></div>`
+  const row = (y, h, label, cell, extra = '') =>
+    `<div style="position:absolute;left:0;right:0;top:${at(y)};height:${h}mm;display:flex;align-items:center;${extra}">` +
+    `<span style="position:absolute;left:${FIT.labelLeft}mm">${label}</span>` +
+    cols.map(c => `<span style="position:absolute;left:${FIT.colLeft + c * FIT.colW}mm;width:${FIT.colW}mm;text-align:center">${cell(c)}</span>`).join('') +
+    `</div>`
+  return `<div style="position:absolute;inset:0;font-size:15pt;line-height:1.1">` +
+    `<div style="position:absolute;left:${FIT.labelLeft}mm;top:${at(0)};color:#00b050">Door with Fitting</div>` +
+    row(FIT.head, FIT.rowH, '', c => `Door ${c + 1}`) +
+    `<div style="position:absolute;left:${FIT.labelLeft}mm;right:${FIT.right}mm;top:${at(FIT.rate)};height:${FIT.rateH}mm;background:#FFFF00"></div>` +
+    row(FIT.rate, FIT.rateH, 'Door Rate', () => '') +
+    row(FIT.fitting, FIT.rowH, 'Fitting Items (Approx.)', () => String(DOOR_FITTING_ITEMS)) +
+    row(FIT.labour, FIT.rowH, 'Labour', () => String(DOOR_FITTING_LABOUR)) +
+    `<div style="position:absolute;left:${FIT.labelLeft}mm;right:${FIT.right}mm;top:${at(FIT.rule)};border-top:1.5px solid #000"></div>` +
+    row(FIT.total, FIT.totalH, 'Total', () => '', 'font-weight:700;') +
+    `<div style="position:absolute;left:${FIT.labelLeft}mm;right:${FIT.right}mm;top:${at(FIT.note)};font-size:12pt;line-height:1.25">${DOOR_FITTING_NOTE}</div>` +
+    `</div>`
 }
 
 export async function buildQuotationHtml(quote) {
