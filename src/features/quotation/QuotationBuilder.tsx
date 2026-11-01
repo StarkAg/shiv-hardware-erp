@@ -133,6 +133,16 @@ export function QuotationBuilder() {
     try { localStorage.setItem('shiv-quote:water-proof-only', on ? '0' : '1') } catch { /* private window */ }
     return !on
   })
+  // Readymade door's "Experiment 1": the Door with Fitting section under the
+  // rates. Remembered on this device, like the water proof switch.
+  const [fitting, setFitting] = useState(() => {
+    if (existing) return !!existing.fitting
+    try { return localStorage.getItem('shiv-quote:door-fitting') === '1' } catch { return false }
+  })
+  const toggleFitting = () => setFitting((on) => {
+    try { localStorage.setItem('shiv-quote:door-fitting', on ? '0' : '1') } catch { /* private window */ }
+    return !on
+  })
   const allRows = !aluLike && !fixed ? buildBrandRows(brands, h, w, Math.max(1, qty)) : []
   const rows = waterProofOnly && hasSections(cat) ? firstSectionRows(cat, allRows) : allRows
 
@@ -163,7 +173,7 @@ export function QuotationBuilder() {
     if (fixed) {
       return { ...base, fixedRows: FIXED_CARDS[cat] ?? [] }
     }
-    return { ...base, rows }
+    return { ...base, rows, ...(cat === 'readymade-door' && fitting ? { fitting: true } : {}) }
   }
 
   function save({ silent = false }: { silent?: boolean } = {}) {
@@ -759,6 +769,20 @@ export function QuotationBuilder() {
                   {s.name}
                 </button>
               ))}
+              {cat === 'readymade-door' && (
+                <button
+                  onClick={toggleFitting}
+                  aria-pressed={fitting}
+                  title="Print the Door with Fitting section under the rates"
+                  className={`min-h-11 rounded-lg border px-3 py-1 text-xs font-medium transition md:min-h-0 ${
+                    fitting
+                      ? 'border-stone-900 bg-stone-900 text-white shadow-sm dark:border-white dark:bg-white dark:text-stone-950'
+                      : 'border-stone-300 bg-stone-100 text-stone-600 hover:border-stone-900 hover:bg-stone-50 dark:border-white/15 dark:bg-white/5 dark:text-stone-300 dark:hover:bg-white/10'
+                  }`}
+                >
+                  Experiment 1
+                </button>
+              )}
               <button
                 onClick={() => setSetId(addSet(setId))}
                 className="flex min-h-11 items-center gap-1 rounded-lg border border-dashed border-stone-400 px-3 py-1 text-xs font-medium text-muted hover:border-shiv-green hover:bg-white dark:border-white/20 dark:hover:bg-white/10 md:min-h-0"

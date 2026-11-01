@@ -189,6 +189,12 @@ export interface Quotation {
     }[]
   }
   notes?: string
+  /**
+   * Readymade door only, "Experiment 1" beside the price sets: print the Door
+   * with Fitting section (door rate, fitting items, labour, total) under the
+   * rates. Absent or false on every other quotation.
+   */
+  fitting?: boolean
 }
 
 export const SHOP = {

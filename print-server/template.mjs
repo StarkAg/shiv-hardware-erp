@@ -235,7 +235,7 @@ function cardPage(body) {
 </head><body>${body}${FIT_SCRIPT}</body></html>`
 }
 
-// Readymade door only: a box under the rates for the door fitted, filled in by
+// Readymade door only, when its "Experiment 1" is on (quote.fitting): a box under the rates for the door fitted, filled in by
 // hand. Same as DoorFittingBox in src/features/print/QuotationPrint.tsx.
 const DOOR_FITTING_ITEMS = 1000
 const DOOR_FITTING_LABOUR = 200
@@ -278,7 +278,7 @@ export async function buildQuotationHtml(quote) {
   const tintRight = twoCol ? '2mm' : '32mm'
   const printItems = buildPrintItems(category, rows)
   const lastTop = printItems.length ? printItems[printItems.length - 1].top : BRAND_START - ROW_H
-  const fittingHtml = category === 'readymade-door' ? doorFittingHtml(lastTop + ROW_H + 6) : ''
+  const fittingHtml = category === 'readymade-door' && quote.fitting ? doorFittingHtml(lastTop + ROW_H + 6) : ''
   const rowsHtml = printItems.map(item => {
     if (item.kind === 'section') {
       return `<div style="position:absolute;left:29mm;top:${item.top}mm;font-size:15pt;line-height:1.1;color:#00B0F0">${esc(item.label)}</div>`

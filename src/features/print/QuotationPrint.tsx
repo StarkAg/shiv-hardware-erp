@@ -124,7 +124,7 @@ function buildPrintItems(category: ProductCategory, rows: BrandQuoteRow[]): Prin
 }
 
 /**
- * Readymade door only (owner's trial, 1 Nov 2026): a box under the rates for the
+ * Readymade door only, when "Experiment 1" is on (owner's trial, 1 Nov 2026): a box under the rates for the
  * door fitted, filled in by hand. The door's rate and the total are left blank
  * to write in; fitting items and labour are the shop's usual approximate
  * figures. print-server/template.mjs draws the same box.
@@ -266,7 +266,7 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
             )
           })}
         </div>
-        {quote.category === 'readymade-door' && <DoorFittingBox top={lastTop + ROW_H + FIT_GAP} />}
+        {quote.category === 'readymade-door' && quote.fitting && <DoorFittingBox top={lastTop + ROW_H + FIT_GAP} />}
         </div>
       </div>
     </A4Page>
