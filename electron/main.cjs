@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, net } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, shell, net, powerMonitor } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -146,17 +146,15 @@ function showScreens() {
 
 // The panel website serves the same build as these screens, a minute after a push.
 const SCREENS_SITE = 'https://shiv-panel.vercel.app'
+// How often the website is looked at for newer screens.
+const SCREENS_EVERY = 5 * 60_000
 /**
- * How often the website is looked at for newer screens. Shiv Counter is the
- * counter's working screen all day, and a push every few minutes put an
- * "Update ready" box in front of the quotation being written each time; it
- * looks every three hours, and asks at most once while it is open (taken or
- * not, the newest screens are there when it next opens). The panel app looks
- * every five minutes, as before.
+ * Shiv Counter is the counter's working screen all day and never asks: it takes
+ * new screens by itself once this PC has had no keyboard or mouse for this long
+ * (seconds). A reload clears a quotation being written, so not while one could be.
  */
-const SCREENS_EVERY = IS_QUOTATION_APP ? 3 * 60 * 60_000 : 5 * 60_000
-const ASK_ONCE = IS_QUOTATION_APP
-let askedThisRun = false
+const QUIET_BEFORE_UPDATE = 5 * 60
+let quietWatch = null
 
 /**
  * Looks at the website for newer screens: soon after opening, then every few
@@ -186,16 +184,31 @@ function watchScreensSite() {
   return () => { clearTimeout(first); clearInterval(every) }
 }
 
+/** Waits for a quiet PC, then shows the newest screens. */
+function takeScreensWhenQuiet() {
+  if (quietWatch) return
+  quietWatch = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return stopQuietWatch()
+    if (powerMonitor.getSystemIdleTime() < QUIET_BEFORE_UPDATE) return
+    stopQuietWatch()
+    showScreens()
+  }, 15_000)
+}
+
+function stopQuietWatch() {
+  clearInterval(quietWatch)
+  quietWatch = null
+}
+
 /** Newer screens have been put in: take them now, or when the app next opens. */
 async function offerNewScreens() {
   if (askingAboutScreens || !mainWindow || mainWindow.isDestroyed() || !showing) return
-  if (ASK_ONCE && askedThisRun) return
   const newest = newestScreens()
   if (newest.builtAt <= showing.builtAt) return
   // The same commit built twice (here by a deploy, and by the website) is no update.
   if (newest.commit && newest.commit === showing.commit) return
+  if (IS_QUOTATION_APP) return takeScreensWhenQuiet()
   askingAboutScreens = true
-  askedThisRun = true
   try {
     const { response } = await dialog.showMessageBox(mainWindow, {
       type: 'info',

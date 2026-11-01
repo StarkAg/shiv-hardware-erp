@@ -409,7 +409,7 @@ const QUOTATION_DIR = ['Shiv Quotation', 'Shiv Counter']
 /**
  * Screens only: the build copied into the installed app's data folder, where
  * the app finds it (electron/screens.cjs). No installer, and the app stays
- * open: it asks to update, or shows the new screens when it next opens.
+ * open: it shows the new screens by itself once the PC has gone quiet.
  */
 async function pushQuotationScreens() {
   // The sites built from this same commit have already been type-checked.
@@ -422,7 +422,7 @@ async function pushQuotationScreens() {
   // Written last and put in place whole: the app watches this file.
   writeFileSync(join(home, 'current.json.part'), JSON.stringify({ dir: name, builtAt: built.builtAt }))
   renameSync(join(home, 'current.json.part'), join(home, 'current.json'))
-  return 'screens updated, no installer: the app asks to update (or shows them when next opened)'
+  return 'screens updated, no installer: the app shows them by itself after 5 quiet minutes (or when next opened)'
 }
 
 async function deployQuotation(quick = false) {
