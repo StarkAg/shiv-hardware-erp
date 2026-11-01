@@ -31,8 +31,20 @@ export function PaySheet({ row, date, onPay, onClose, onDone }) {
   // The most that may go as wages: every wage earned less what was handed over,
   // advance or no advance. Cutting the advance is the shop's choice.
   const most = Math.max(due, row.payableMax ?? due)
+  // Staff are paid at the end of each day, so the box opens on today's wage:
+  // what today's mark earned, or a full day at the rate while today is unmarked.
+  // With an advance running, the register's cut (`due`) comes first, as in Cashier.
+  const marked = !!row.status
+  const today = Math.min(marked ? row.earnedToday || 0 : row.rate || 0, most)
+  const advanceOut = (row.advance || 0) > 0
+  const start = advanceOut ? Math.min(due, today) : today
+  const picks = [
+    today > 0 && { label: marked ? "Today's wage" : 'A full day', amount: today },
+    advanceOut && due !== today && { label: 'Cut advance', amount: due },
+    most > Math.max(today, due) && { label: 'Everything owed', amount: most },
+  ].filter(Boolean)
   const [attempt, setAttempt] = useState(resume)
-  const [value, setValue] = useState(String(resume?.amount ?? (due || most || '')))
+  const [value, setValue] = useState(String(resume?.amount ?? (start || '')))
   const [mode, setMode] = useState(resume?.mode || 'cash')
   const [note, setNote] = useState(resume?.note || '')
   const [busy, setBusy] = useState(false)
@@ -74,6 +86,7 @@ export function PaySheet({ row, date, onPay, onClose, onDone }) {
       <div className="sheet paysheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheettitle">Pay {row.staff}</div>
         <div className="sheetsub">Wages, {fmtDay(attempt?.date || date)}. Saved in Staff Payments and the cash book.</div>
+        {!marked && !attempt && <div className="sheetsub">Today is not marked yet, so this is a full day at {inr(row.rate)}.</div>}
 
         {most <= 0 && !attempt ? (
           <div className="sheeterr">Nothing earned is left to pay. Money ahead of wages is an advance, given in Cashier.</div>
@@ -85,14 +98,13 @@ export function PaySheet({ row, date, onPay, onClose, onDone }) {
               <input id="payamt" autoFocus type="number" inputMode="decimal" min="0" step="0.01" value={value}
                 disabled={locked} onChange={(e) => setValue(e.target.value)} />
             </div>
-            {most > due && !attempt && (
+            {picks.length > 1 && !attempt && (
               <div className="paypicks">
-                <button type="button" className={amount === due ? 'on' : ''} disabled={locked} onClick={() => setValue(String(due))}>
-                  Cut advance<b>{inr(due)}</b>
-                </button>
-                <button type="button" className={amount === most ? 'on' : ''} disabled={locked} onClick={() => setValue(String(most))}>
-                  Full wages<b>{inr(most)}</b>
-                </button>
+                {picks.map((p) => (
+                  <button type="button" key={p.label} className={amount === p.amount ? 'on' : ''} disabled={locked} onClick={() => setValue(String(p.amount))}>
+                    {p.label}<b>{inr(p.amount)}</b>
+                  </button>
+                ))}
               </div>
             )}
 

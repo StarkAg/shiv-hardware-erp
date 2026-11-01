@@ -79,6 +79,11 @@ html.ck-root body { background: transparent; }
 /* Fields were white on the plain look. */
 .ck .addrow input, .ck .advrow input, .ck .sheet input, .ck .payselect select { background: #06101a; border-color: var(--line); color: var(--ink); }
 .ck .sheet { background: var(--wall); border-color: var(--wait); }
+/* The Pay sheet: the plain look paints these white with ink on top, and ink is
+ * near white here. */
+.ck .payamt { background: #06101a; border-color: var(--ink); color: var(--wait); }
+.ck .paysheet .payamt input { background: transparent; color: var(--ink); }
+.ck .paypicks button.on, .ck .paymode button.on { background: var(--wait); color: #0e1318; }
 .ck .modal { background: rgba(3, 8, 14, .78); }
 .ck .primbtn { background: var(--must); }
 .ck .themeswitch-key { box-shadow: inset 0 0 0 2px var(--dim); }

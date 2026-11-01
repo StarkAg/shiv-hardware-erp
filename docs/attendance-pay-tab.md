@@ -39,9 +39,14 @@ by cash or online, with an optional note (`attendance-web/src/PaySheet.jsx`).
 It calls the register's own `staffPay.pay`, so it is the same payment as
 Cashier: it lands in Staff Payments and the cash book, and is reversed there.
 
-- Wages only, up to what is earned and not yet paid (`payableMax`). The sheet
-  offers "Cut advance" (the register's `due`) and "Full wages" when they differ.
-  More than that is an advance, given in Cashier.
+- Wages only, up to what is earned and not yet paid (`payableMax`). More than
+  that is an advance, given in Cashier.
+- Staff are paid at the end of each day, so the box opens on **today's wage**
+  (the register's `earnedToday`), or a full day at the rate while today is not
+  marked. With an advance running it opens on the register's cut (`due`), as
+  Cashier does. Buttons offer "Today's wage", "Cut advance" and "Everything
+  owed" when they differ. (Before 1 Nov 2026 it opened on the whole balance,
+  which offered ₹21,700 to a man paid daily.)
 - The server's refusals are shown as they come: a closed cash register day, a
   later payment already recorded, and so on.
 - The payment reference is kept on the phone (`shiv-attendance:staff-payment-pending`)
