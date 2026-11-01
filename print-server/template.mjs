@@ -269,7 +269,43 @@ function doorFittingHtml(top) {
     `</div>`
 }
 
+// Bed Inner Ply: the boards, their total sq ft, each grade on that total. Same
+// positions as BedPlyPrint (BED) in src/features/print/BedPlyPrint.tsx.
+const BED = { band: 100, rowH: 7, gapToHead: 11, headToRows: 8, gradeH: 9 }
+async function buildBedPlyHtml(quote) {
+  const header = await b64('aluminium/header-door.jpeg')
+  const { pieces, grades, totalSqft } = quote.bed
+  const at = (left, top, text, extra = '') =>
+    `<div style="position:absolute;left:${left}mm;top:${top}mm;white-space:nowrap;${extra}">${esc(text)}</div>`
+  const center = (left, width, top, text, extra = '') => at(left, top, text, `width:${width}mm;text-align:center;${extra}`)
+  const rule = BED.band + pieces.length * BED.rowH
+  const head = rule + BED.gapToHead
+  const pieceRows = pieces.map((p, i) => {
+    const top = BED.band + 1.3 + i * BED.rowH
+    return at(29, top, `${p.thicknessMm}mm`) + at(72, top, `${p.length} X ${p.width}`) + center(112, 15, top, p.qty) + center(148, 30, top, p.sqft)
+  }).join('')
+  const gradeRows = grades.map((g, i) => {
+    const top = head + BED.headToRows + i * BED.gradeH
+    const years = Number(g.guaranteeYears)
+    return at(29, top, g.rate, 'width:22mm;text-align:right;') + at(56.4, top, g.name) + center(102, 20, top, `${g.huskPercent}%`) + at(127, top, g.amount) +
+      center(148, 30, top, years ? `${years} Years` : '', `color:${years === 7 ? '#000000' : 'red'};`)
+  }).join('')
+  return page(`
+    <div style="position:absolute;inset:0;font-family:Arial,Helvetica,sans-serif;font-size:15pt;line-height:1.1;color:#000">
+    <img src="${header}" style="position:absolute;left:27.94mm;top:22.47mm;width:88.06mm;height:53.53mm;display:block" />
+    ${at(29, 81.3, 'Bed Inner Ply', 'color:#00b050;')}
+    ${at(29, 94.6, 'Thickness')}${at(72, 94.6, 'Size (ft)')}${center(112, 15, 94.6, 'Pcs')}${center(148, 30, 94.6, 'Sq Ft')}
+    <div style="position:absolute;left:29mm;right:34mm;top:${BED.band}mm;height:${pieces.length * BED.rowH}mm;background:#FFFF00"></div>
+    ${pieceRows}
+    <div style="position:absolute;left:29mm;right:34mm;top:${rule}mm;border-top:1.5px solid #000"></div>
+    ${at(29, rule + 1.3, 'Total', 'font-weight:700;')}${center(148, 30, rule + 1.3, totalSqft, 'font-weight:700;')}
+    ${at(24, head, 'Rate/Sqft', 'width:27mm;text-align:right;')}${at(56.4, head, 'Grade')}${center(102, 20, head, 'Husk')}${at(127, head, 'Cost')}${center(148, 30, head, 'Guarantee')}
+    ${gradeRows}
+    </div>`)
+}
+
 export async function buildQuotationHtml(quote) {
+  if (quote.bed) return buildBedPlyHtml(quote)
   if (quote.alu) return buildAluminiumHtml(quote)
 
   const header = await b64('aluminium/header-door.jpeg')

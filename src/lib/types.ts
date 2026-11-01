@@ -12,6 +12,7 @@ export type ProductCategory =
   | 'block-board-12'
   | 'block-board-19'
   | 'film-face-ply'
+  | 'bed-inner-ply'
   | 'aluminium-door'
   | 'window-2-track'
   | 'window-3-track'
@@ -195,6 +196,33 @@ export interface Quotation {
    * rates. Absent or false on every other quotation.
    */
   fitting?: boolean
+  /** Bed Inner Ply only: several boards, their total sq ft, and each grade on that total. */
+  bed?: BedPly
+}
+
+/** One board of a bed, sizes in feet. */
+export interface BedPlyPiece {
+  thicknessMm: number
+  length: number
+  width: number
+  qty: number
+  sqft: number
+}
+
+/** One grade of ply, priced on the boards' total sq ft. */
+export interface BedPlyGrade {
+  name: string
+  /** Husk in the board, as told to the customer. Not part of the sum. */
+  huskPercent: number
+  rate: number
+  guaranteeYears: GuaranteeYears
+  amount: number
+}
+
+export interface BedPly {
+  pieces: BedPlyPiece[]
+  totalSqft: number
+  grades: BedPlyGrade[]
 }
 
 export const SHOP = {
@@ -214,6 +242,7 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'block-board-12': 'Water Proof Block Board 12mm',
   'block-board-19': 'Water Proof Block Board 19mm',
   'film-face-ply': 'Film Face Ply',
+  'bed-inner-ply': 'Bed Inner Ply',
   'aluminium-door': 'Aluminium Door',
   'window-2-track': '2 Track Sliding Window',
   'window-3-track': '3 Track Sliding Window',
@@ -251,6 +280,7 @@ export const CATEGORY_META: Record<
   'block-board-12': { short: 'Block Board 12mm', icon: 'board', group: 'Plywoods' },
   'block-board-19': { short: 'Block Board 19mm', icon: 'board', group: 'Plywoods' },
   'film-face-ply': { short: 'Film Face Ply', icon: 'board', group: 'Plywoods' },
+  'bed-inner-ply': { short: 'Bed Inner Ply', icon: 'board', group: 'Plywoods' },
   'aluminium-door': { short: 'Aluminium Door', icon: 'door', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
   'window-2-track': { short: '2 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
   'window-3-track': { short: '3 Track Window', icon: 'window', image: assetPath('assets/products/aluminium-window.png'), group: 'Aluminium' },
@@ -664,6 +694,7 @@ export const CATEGORY_ORDER: ProductCategory[] = [
   'block-board-12',
   'block-board-19',
   'film-face-ply',
+  'bed-inner-ply',
   'aluminium-door',
   'window-2-track',
   'window-3-track',

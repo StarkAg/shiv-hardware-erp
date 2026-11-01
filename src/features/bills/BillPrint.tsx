@@ -12,6 +12,7 @@ const BILL_LABEL: Record<ProductCategory, string> = {
   'block-board-12': '12mm Block Board',
   'plywood-6':      '6mm Plywood',
   'film-face-ply':  'Film Face Ply',
+  'bed-inner-ply':  'Bed Inner Ply',
   'flush-door':     'Flush Door',
   'readymade-door': 'Readymade Door',
   'aluminium-door': 'Aluminium Door',

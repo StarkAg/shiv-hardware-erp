@@ -35,6 +35,7 @@ import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
 import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/GuaranteeBuilder'
+import { BedPlyBuilder } from './BedPlyBuilder'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -53,7 +54,15 @@ function tintedRowStyle(item: Pick<Brand, 'accentColor'> | Pick<BrandQuoteRow, '
   return item.accentColor ? { backgroundColor: item.accentColor } : undefined
 }
 
+/** Bed Inner Ply has boards and grades rather than one size and a price set: its own screen. */
 export function QuotationBuilder() {
+  const { id, category } = useParams()
+  const { quotations } = useStore()
+  const bed = category === 'bed-inner-ply' || quotations.find((q) => q.id === id)?.category === 'bed-inner-ply'
+  return bed ? <BedPlyBuilder Preview={InlineQuotationPreview} /> : <RateCardBuilder />
+}
+
+function RateCardBuilder() {
   const { id, category } = useParams()
   const { sets, quotations, nextQuoteNumber, saveQuotation, upsertCustomer, addSet, removeSet, updateBrand, removeBrand, addBrand } = useStore()
   const existing = quotations.find((q) => q.id === id)

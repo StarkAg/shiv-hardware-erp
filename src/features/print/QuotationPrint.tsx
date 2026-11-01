@@ -8,6 +8,7 @@ import { UpvcPrint } from './UpvcPrint'
 import { FixedCardPrint } from './FixedCardPrint'
 import { A4Page } from './A4Page'
 import { AluminiumPrint } from './AluminiumPrint'
+import { BedPlyPrint } from './BedPlyPrint'
 import { assetPath } from '../../lib/assets'
 import { enrichQuotation } from '../../lib/pricing'
 
@@ -20,6 +21,7 @@ const legacyCategoryLabel = (category: Quotation['category']) => ({
   'block-board-12': 'Water Proof Block Board',
   'block-board-19': 'Water Proof Block Board',
   'film-face-ply': 'Film Face Ply',
+  'bed-inner-ply': CATEGORY_LABELS['bed-inner-ply'],
   'aluminium-door': CATEGORY_LABELS['aluminium-door'],
   'window-2-track': CATEGORY_LABELS['window-2-track'],
   'window-3-track': CATEGORY_LABELS['window-3-track'],
@@ -42,6 +44,7 @@ const legacyThickness = (category: Quotation['category']) => ({
   'block-board-12': '12mm',
   'block-board-19': '19mm',
   'film-face-ply': '12mm',
+  'bed-inner-ply': '',
   'aluminium-door': '',
   'window-2-track': '',
   'window-3-track': '',
@@ -179,6 +182,7 @@ function DoorFittingBox({ top }: { top: number }) {
 }
 
 export function QuotationPrint({ quote }: { quote: Quotation }) {
+  if (quote.bed) return <BedPlyPrint quote={quote} />
   if (isAluminium(quote.category)) return <AluminiumPrint quote={quote} />
   if (isUpvc(quote.category)) return <UpvcPrint quote={quote} />
   if (isFixedCard(quote.category)) return <FixedCardPrint quote={quote} />
