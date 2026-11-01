@@ -29,6 +29,7 @@ const NAV = [
     label: 'Quotations',
     items: [
       { to: '/quote-options', label: 'Quote', icon: FileText },
+      { to: '/history', label: 'Quote history', icon: History },
     ],
   },
   {
@@ -37,7 +38,7 @@ const NAV = [
       { to: '/guarantee/card', label: 'Card', icon: ShieldCheck },
       { to: '/guarantee/backs', label: 'Card backs', icon: CreditCard },
       { to: '/guarantee/list', label: 'To make', icon: ClipboardList },
-      { to: '/guarantee/history', label: 'History', icon: History },
+      { to: '/guarantee/history', label: 'Card history', icon: History },
       { to: '/guarantee/claims', label: 'Claims', icon: Inbox, badge: true },
     ],
   },
@@ -50,6 +51,16 @@ const NAV = [
       { to: '/transport', label: 'Toto', icon: CarTaxiFront },
     ],
   },
+]
+
+// The phone's bottom bar shows four rows before a swipe: Quote, its history,
+// Card, and the card history moved up beside it.
+const CARD_HISTORY = '/guarantee/history'
+const ALL_ROWS = NAV.flatMap((area) => area.items)
+const PHONE_ROWS = [
+  ...ALL_ROWS.slice(0, 3),
+  ...ALL_ROWS.filter((item) => item.to === CARD_HISTORY),
+  ...ALL_ROWS.slice(3).filter((item) => item.to !== CARD_HISTORY),
 ]
 
 /** Which entry the address belongs to, so a deep link still lights its row. */
@@ -65,7 +76,6 @@ const convexReady = Boolean(import.meta.env.VITE_CONVEX_URL)
 export function CounterLayout() {
   const { pathname } = useLocation()
 
-  const rows = NAV.flatMap((area) => area.items)
   // Keep the page in use visible in the bottom bar, wherever it scrolled to.
   const bar = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -153,7 +163,7 @@ export function CounterLayout() {
         ref={bar}
         className="no-print flex flex-none snap-x snap-mandatory overflow-x-auto overscroll-x-contain border-t-4 border-stone-900 bg-white [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
       >
-        {rows.map((item) => (
+        {PHONE_ROWS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

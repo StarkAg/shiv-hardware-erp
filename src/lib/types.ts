@@ -158,6 +158,8 @@ export interface Quotation {
   /** sequential, human-facing number e.g. SH-2026-0007 */
   number: string
   date: string // ISO
+  /** Set on saving; says which copy is newer when another device's arrives. */
+  updatedAt?: number
   customer: Customer
   category: ProductCategory
   height: Dimension

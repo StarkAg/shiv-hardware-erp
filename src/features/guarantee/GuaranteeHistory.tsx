@@ -218,15 +218,15 @@ function CloudGuaranteeSync() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // No button: History fetches every counter's cards by itself each time it
-  // opens (above). Only a device that has never been given the shop code is
-  // offered the one-time link to enter it.
+  // No sync button: History fetches every counter's cards by itself each time it
+  // opens (above). Only a device that has never been given the shop code, which
+  // is every new phone, is offered the one-time button to enter it.
   return (
     <div className="flex flex-wrap items-center gap-2">
       {!pin && (
-        <button type="button" onClick={() => setAsking(true)} className="flex items-center gap-1 text-xs font-semibold text-muted underline hover:text-stone-700 dark:hover:text-stone-200">
-          <CloudDownload size={13} /> Enter shop code to see every counter's cards
-        </button>
+        <Button className="flex items-center gap-1.5" onClick={() => setAsking(true)}>
+          <CloudDownload size={15} /> Enter shop code to see all cards
+        </Button>
       )}
       {!pin && status && <span className="text-xs text-muted">{status}</span>}
       {asking && (

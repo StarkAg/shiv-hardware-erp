@@ -133,6 +133,8 @@ interface AppState {
   nextQuoteNumber: () => string
   saveQuotation: (q: Quotation) => void
   deleteQuotation: (id: string) => void
+  /** Brings in quotations made on other devices, and newer copies of ones held here. */
+  mergeQuotationsFromCloud: (cloud: Quotation[]) => void
 
   // customers
   upsertCustomer: (c: Customer) => void
@@ -234,6 +236,28 @@ function startingSeq(saved: number | undefined, guarantees: GuaranteeDocument[])
   const ok = sane(saved ?? 0)
   if (ok != null) return ok
   return Math.max(0, ...guarantees.map((g) => guaranteeSeqOf(g.number) ?? 0))
+}
+
+// Quotations deleted on this device, so a cloud sync doesn't bring them back.
+const DELETED_QUOTATIONS_KEY = 'shiv-panel:quotations-deleted:v1'
+
+function deletedQuotationIds(): Set<string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DELETED_QUOTATIONS_KEY) || '[]')
+    return new Set(Array.isArray(parsed) ? parsed : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function rememberDeletedQuotation(id: string) {
+  const ids = deletedQuotationIds()
+  ids.add(id)
+  try {
+    localStorage.setItem(DELETED_QUOTATIONS_KEY, JSON.stringify([...ids]))
+  } catch {
+    /* ignore quota errors */
+  }
 }
 
 function deletedGuaranteeKeys(): Set<string> {
@@ -390,7 +414,8 @@ export const useStore = create<AppState>((set, get) => ({
     return `SH-${year}-${String(seq).padStart(4, '0')}`
   },
 
-  saveQuotation: (q) => {
+  saveQuotation: (given) => {
+    const q = { ...given, updatedAt: Date.now() }
     set((st) => {
       const i = st.quotations.findIndex((x) => x.id === q.id)
       const quotations = [...st.quotations]
@@ -409,8 +434,31 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteQuotation: (id) => {
+    rememberDeletedQuotation(id)
     set((st) => ({ quotations: st.quotations.filter((q) => q.id !== id) }))
     persist(get)
+  },
+
+  mergeQuotationsFromCloud: (cloud) => {
+    const deleted = deletedQuotationIds()
+    const quotations = [...get().quotations]
+    const held = new Map(quotations.map((q, i) => [q.id, i]))
+    let changed = false
+    for (const remote of cloud) {
+      if (deleted.has(remote.id)) continue
+      const i = held.get(remote.id)
+      if (i === undefined) {
+        quotations.push(remote)
+        changed = true
+      } else if (quotations[i].updatedAt && (remote.updatedAt ?? 0) > quotations[i].updatedAt) {
+        // An edit here still waiting to upload is newer, so it is never reverted.
+        quotations[i] = remote
+        changed = true
+      }
+    }
+    if (!changed) return
+    set({ quotations })
+    keepLocal(get)
   },
 
   upsertCustomer: (c) => {
