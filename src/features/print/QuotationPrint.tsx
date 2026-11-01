@@ -140,22 +140,24 @@ export const DOOR_FITTING_COLS = 3
 /**
  * Laid out in the sheet's own manner: a green title like the product's, column
  * headings like Rate/Brand/Cost, the row to write in on a yellow band like the
- * size, and the black rule of the size row above the total. Positions are mm
+ * size, and the black rule of the size row above the total. Door 1 carries the
+ * usual fitting and labour; doors 2 and 3 get empty boxes to fill in. Positions are mm
  * from the block's top; print-server/template.mjs doorFittingHtml uses the same.
  */
 const FIT = {
-  labelLeft: 29, colLeft: 86, colW: 30, right: 34,
+  labelLeft: 29, colLeft: 86, colW: 30, right: 34, boxW: 20, boxH: 5.2,
   head: 7, rate: 14, rateH: 8, fitting: 22.6, labour: 29, rowH: 6.39, rule: 36.4, total: 37.2, totalH: 8, note: 47,
 }
 
 function DoorFittingBox({ top }: { top: number }) {
   const cols = Array.from({ length: DOOR_FITTING_COLS }, (_, i) => i)
   const at = (y: number) => `${top + y}mm`
-  const row = (y: number, h: number, label: string, cell: (c: number) => string, style?: CSSProperties) => (
+  // A cell of null is an empty box, to be written in by hand.
+  const row = (y: number, h: number, label: string, cell: (c: number) => string | null, style?: CSSProperties) => (
     <div className="absolute left-0 right-0 flex items-center" style={{ top: at(y), height: `${h}mm`, ...style }}>
       <span className="absolute" style={{ left: `${FIT.labelLeft}mm` }}>{label}</span>
       {cols.map((c) => (
-        <span key={c} className="absolute text-center" style={{ left: `${FIT.colLeft + c * FIT.colW}mm`, width: `${FIT.colW}mm` }}>{cell(c)}</span>
+        <span key={c} className="absolute text-center" style={{ left: `${FIT.colLeft + c * FIT.colW}mm`, width: `${FIT.colW}mm` }}>{cell(c) ?? <span className="inline-block align-middle" style={{ width: `${FIT.boxW}mm`, height: `${FIT.boxH}mm`, border: '1px solid #000' }} />}</span>
       ))}
     </div>
   )
@@ -165,8 +167,8 @@ function DoorFittingBox({ top }: { top: number }) {
       {row(FIT.head, FIT.rowH, '', (c) => `Door ${c + 1}`)}
       <div className="absolute" style={{ left: `${FIT.labelLeft}mm`, right: `${FIT.right}mm`, top: at(FIT.rate), height: `${FIT.rateH}mm`, backgroundColor: '#FFFF00' }} />
       {row(FIT.rate, FIT.rateH, 'Door Rate', () => '')}
-      {row(FIT.fitting, FIT.rowH, 'Fitting Items (Approx.)', () => String(DOOR_FITTING_ITEMS))}
-      {row(FIT.labour, FIT.rowH, 'Labour', () => String(DOOR_FITTING_LABOUR))}
+      {row(FIT.fitting, FIT.rowH, 'Fitting Items (Approx.)', (c) => (c === 0 ? String(DOOR_FITTING_ITEMS) : null))}
+      {row(FIT.labour, FIT.rowH, 'Labour', (c) => (c === 0 ? String(DOOR_FITTING_LABOUR) : null))}
       <div className="absolute border-t-[1.5px] border-black" style={{ left: `${FIT.labelLeft}mm`, right: `${FIT.right}mm`, top: at(FIT.rule) }} />
       {row(FIT.total, FIT.totalH, 'Total', () => '', { fontWeight: 700 })}
       <div className="absolute text-[12pt] leading-[1.25]" style={{ left: `${FIT.labelLeft}mm`, right: `${FIT.right}mm`, top: at(FIT.note) }}>{DOOR_FITTING_NOTE}</div>

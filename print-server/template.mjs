@@ -243,7 +243,7 @@ const DOOR_FITTING_NOTE = 'Labour 200 covers both visits: the mechanic first com
 const DOOR_FITTING_COLS = 3
 // Same layout as DoorFittingBox (FIT) in src/features/print/QuotationPrint.tsx.
 const FIT = {
-  labelLeft: 29, colLeft: 86, colW: 30, right: 34,
+  labelLeft: 29, colLeft: 86, colW: 30, right: 34, boxW: 20, boxH: 5.2,
   head: 7, rate: 14, rateH: 8, fitting: 22.6, labour: 29, rowH: 6.39, rule: 36.4, total: 37.2, totalH: 8, note: 47,
 }
 function doorFittingHtml(top) {
@@ -252,15 +252,15 @@ function doorFittingHtml(top) {
   const row = (y, h, label, cell, extra = '') =>
     `<div style="position:absolute;left:0;right:0;top:${at(y)};height:${h}mm;display:flex;align-items:center;${extra}">` +
     `<span style="position:absolute;left:${FIT.labelLeft}mm">${label}</span>` +
-    cols.map(c => `<span style="position:absolute;left:${FIT.colLeft + c * FIT.colW}mm;width:${FIT.colW}mm;text-align:center">${cell(c)}</span>`).join('') +
+    cols.map(c => `<span style="position:absolute;left:${FIT.colLeft + c * FIT.colW}mm;width:${FIT.colW}mm;text-align:center">${cell(c) ?? `<span style="display:inline-block;vertical-align:middle;width:${FIT.boxW}mm;height:${FIT.boxH}mm;border:1px solid #000"></span>`}</span>`).join('') +
     `</div>`
   return `<div style="position:absolute;inset:0;font-size:15pt;line-height:1.1">` +
     `<div style="position:absolute;left:${FIT.labelLeft}mm;top:${at(0)};color:#00b050">Door with Fitting</div>` +
     row(FIT.head, FIT.rowH, '', c => `Door ${c + 1}`) +
     `<div style="position:absolute;left:${FIT.labelLeft}mm;right:${FIT.right}mm;top:${at(FIT.rate)};height:${FIT.rateH}mm;background:#FFFF00"></div>` +
     row(FIT.rate, FIT.rateH, 'Door Rate', () => '') +
-    row(FIT.fitting, FIT.rowH, 'Fitting Items (Approx.)', () => String(DOOR_FITTING_ITEMS)) +
-    row(FIT.labour, FIT.rowH, 'Labour', () => String(DOOR_FITTING_LABOUR)) +
+    row(FIT.fitting, FIT.rowH, 'Fitting Items (Approx.)', c => (c === 0 ? String(DOOR_FITTING_ITEMS) : null)) +
+    row(FIT.labour, FIT.rowH, 'Labour', c => (c === 0 ? String(DOOR_FITTING_LABOUR) : null)) +
     `<div style="position:absolute;left:${FIT.labelLeft}mm;right:${FIT.right}mm;top:${at(FIT.rule)};border-top:1.5px solid #000"></div>` +
     row(FIT.total, FIT.totalH, 'Total', () => '', 'font-weight:700;') +
     `<div style="position:absolute;left:${FIT.labelLeft}mm;right:${FIT.right}mm;top:${at(FIT.note)};font-size:12pt;line-height:1.25">${DOOR_FITTING_NOTE}</div>` +
