@@ -104,12 +104,43 @@ html.ck-root body { background: transparent; }
 @keyframes ck-tick { to { transform: translateX(-50%); } }
 
 /* ── the match on the Play screen ──────────────────────────────────────────── */
-.ck-stage { position: relative; height: 136px; margin: 0 -12px; overflow: hidden; background: #0d3a22 url("./art/strip.png") center bottom / 920px 188px no-repeat; image-rendering: pixelated; border-bottom: 3px solid #071f12; touch-action: pan-y; }
-.ck-stage[data-hop] { animation: ck-hop .24s steps(2) 4; }
+.ck-stage { position: relative; height: 136px; margin: 0 -12px; overflow: hidden; background: #0d3a22; border-bottom: 3px solid #071f12; touch-action: pan-y; }
+/* Everything the camera sees, so a push-in on a wicket moves the ground too. The
+ * scoreboard sits outside it and never moves. */
+.ck-world { position: absolute; inset: 0; background: #0d3a22 url("./art/strip.png") center bottom / 920px 188px no-repeat; image-rendering: pixelated; }
+.ck-world[data-hop] { animation: ck-hop .24s steps(2) 4; }
 @keyframes ck-hop { 50% { background-position: center calc(100% + 3px); } }
+
+/* The pitch under the batter, side on: rolled clay with the creases chalked in. */
+.ck-pitch { position: absolute; left: calc(11% - 40px); right: -12px; bottom: 0; height: 24px; background: repeating-linear-gradient(90deg, rgba(90, 60, 20, .1) 0 2px, transparent 2px 7px), repeating-linear-gradient(0deg, rgba(255, 255, 255, .06) 0 2px, transparent 2px 5px), #c2a874; box-shadow: inset 0 3px 0 #d8c391, 0 -2px 0 #0f4a2a; }
+.ck-pitch i { position: absolute; top: 3px; bottom: 0; width: 3px; background: #f4f4ee; transform: skewX(-24deg); }
+.ck-pitch .bat-end { left: 84px; }
+.ck-pitch .bat-end::before { content: ""; position: absolute; left: -42px; top: 0; bottom: 0; width: 2px; background: #f4f4ee; }
+.ck-pitch .bowl-end { right: calc(2% + 84px); }
+
+/* Floodlight glow drifting over the stands, the Mexican wave, the boards lit. */
+.ck-floods { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(150px 70px at 18% -10px, rgba(255, 250, 215, .14), transparent), radial-gradient(150px 70px at 82% -10px, rgba(255, 250, 215, .14), transparent); animation: ck-flood 7s steps(4) infinite; }
+@keyframes ck-flood { 50% { opacity: .55; } }
+.ck-wave { position: absolute; left: 0; top: 0; z-index: 1; width: 36%; height: 62px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(255, 236, 190, .3) 35%, rgba(255, 255, 255, .38) 50%, rgba(255, 236, 190, .3) 65%, transparent); animation: ck-wave 2.2s steps(22) both; }
+@keyframes ck-wave { from { transform: translateX(-110%); } to { transform: translateX(300%); } }
+.ck-boards { position: absolute; left: 0; right: 0; top: 64px; height: 26px; z-index: 1; pointer-events: none; background: rgba(255, 204, 0, .5); mix-blend-mode: screen; box-shadow: 0 0 18px rgba(255, 204, 0, .6); animation: ck-boards .76s both; }
+@keyframes ck-boards { 0%, 49% { opacity: 1; } 25%, 74% { opacity: .15; } 50% { opacity: 1; } 100% { opacity: 0; } }
+
+/* The pieces fx.js throws: ball, its shadow and after-images, spark, a stump. */
+.ck-ballfly { position: absolute; left: 0; top: 0; z-index: 3; image-rendering: pixelated; pointer-events: none; filter: drop-shadow(0 0 3px #ffb0b0); }
+.ck-ballfly.ghost { filter: none; }
+.ck-shadow { position: absolute; left: 0; top: 0; z-index: 1; height: 4px; border-radius: 2px; background: rgba(0, 0, 0, .55); pointer-events: none; }
+.ck-world .ck-bit { z-index: 3; }
+.ck-spark { position: absolute; z-index: 4; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; pointer-events: none; box-shadow: 0 -8px #fff, 0 8px #fff, -8px 0 #fff, 8px 0 #fff, 0 -4px #fff, 0 4px #fff, -4px 0 #fff, 4px 0 #fff, -6px -6px #ffe27a, 6px -6px #ffe27a, -6px 6px #ffe27a, 6px 6px #ffe27a; animation: ck-spark .24s steps(4) both; }
+.ck-rp-world .ck-spark { animation-name: ck-spark-big; }
+@keyframes ck-spark { 0% { transform: scale(.4); } 60% { transform: scale(1.5); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+@keyframes ck-spark-big { 0% { transform: scale(.8); } 60% { transform: scale(2.6); opacity: 1; } 100% { transform: scale(3.2); opacity: 0; } }
+.ck-stumpfly { position: absolute; z-index: 3; image-rendering: pixelated; pointer-events: none; }
+.ck-camflash { position: absolute; z-index: 1; width: 3px; height: 3px; background: #fff; box-shadow: 0 0 6px 2px rgba(255, 255, 255, .85); pointer-events: none; animation: ck-camflash .2s steps(2) both; }
+@keyframes ck-camflash { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 .ck-who { padding: 0; border: 0; background: none; cursor: pointer; }
-.ck-stage > .ck-who { position: absolute; bottom: 2px; z-index: 2; width: 96px; height: 96px; }
-.ck-stage > .ck-who:focus-visible { outline-offset: -3px; }
+.ck-world > .ck-who { position: absolute; bottom: 2px; z-index: 2; width: 96px; height: 96px; }
+.ck-world > .ck-who:focus-visible { outline-offset: -3px; }
 .ck-who.batter { left: 11%; animation: ck-breathe 1.8s steps(2) infinite; }
 .ck-who.umpire { left: 44%; }
 .ck-who.bowler { right: 2%; animation: ck-breathe 2.2s steps(2) infinite; }
@@ -121,11 +152,11 @@ html.ck-root body { background: transparent; }
 .ck-bail { position: absolute; top: 2px; width: 12px; height: 4px; image-rendering: pixelated; }
 .ck-bail.a { left: 4px; }
 .ck-bail.b { left: 19px; }
-.ck-ball { position: absolute; top: 0; left: 0; z-index: 3; width: 12px; height: 12px; opacity: 0; image-rendering: pixelated; pointer-events: none; filter: drop-shadow(0 0 3px #ffb0b0); }
 
 .ck-board { position: absolute; left: 50%; top: 6px; translate: -50% 0; z-index: 1; display: flex; align-items: baseline; gap: 8px; padding: 5px 10px; background: #03090e; border: 2px solid var(--line); color: var(--wait); white-space: nowrap; }
 .ck-board b { font: 800 24px/1 var(--sign); font-variant-numeric: tabular-nums; }
 .ck-board b i { font-style: normal; opacity: .6; margin: 0 1px; }
+.ck-count { display: inline-block; animation: ck-pop .24s steps(4); }
 .ck-board small { font: 700 13px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: #d6e0dc; }
 
 .ck-bubble { position: absolute; left: 50%; bottom: 92px; translate: -50% 0; z-index: 4; width: max-content; max-width: 190px; padding: 5px 8px; background: #fff; color: #0e1318; font: 700 14px/1.15 var(--sign); text-align: center; animation: ck-pop .2s steps(3); }
@@ -135,7 +166,15 @@ html.ck-root body { background: transparent; }
 .ck-fx { position: fixed; inset: 0; z-index: 45; overflow: hidden; pointer-events: none; }
 .ck-bit { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; }
 .ck-stamp { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; animation: ck-stamp .9s both; }
-.ck-stamp b { padding: 6px 16px 3px; background: var(--safe); color: #fff; font: 800 54px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; rotate: -3deg; box-shadow: 6px 6px 0 #03090e; }
+.ck-stamp b { position: relative; overflow: hidden; padding: 6px 16px 3px; background: var(--safe); color: #fff; font: 800 54px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; rotate: -3deg; box-shadow: 6px 6px 0 #03090e; }
+/* A broadcast graphic: a band of light runs across the word once it lands. */
+.ck-stamp b::after { content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 26%; background: rgba(255, 255, 255, .5); transform: skewX(-20deg); animation: ck-shine .9s steps(9) both; }
+@keyframes ck-shine { 0%, 16% { left: -40%; } 56%, 100% { left: 130%; } }
+/* A six gets rays turning behind it; an out lands with a jolt. */
+.ck-stamp.six::before { content: ""; position: absolute; left: 50%; top: 50%; z-index: -1; width: 300px; height: 300px; margin: -170px 0 0 -150px; border-radius: 50%; background: repeating-conic-gradient(rgba(255, 204, 0, .34) 0 10deg, transparent 10deg 24deg); -webkit-mask: radial-gradient(circle, #000 25%, transparent 68%); mask: radial-gradient(circle, #000 25%, transparent 68%); animation: ck-rays .9s steps(12) both; }
+@keyframes ck-rays { 0% { transform: rotate(0) scale(.4); opacity: 0; } 20% { opacity: 1; } 100% { transform: rotate(70deg) scale(1.15); opacity: 0; } }
+.ck-stamp.out b { animation: ck-jolt .3s steps(6) .1s; }
+@keyframes ck-jolt { 20% { translate: -6px 0; } 40% { translate: 5px 0; } 60% { translate: -3px 0; } 80% { translate: 2px 0; } }
 .ck-stamp small { padding: 3px 8px; background: #03090e; color: #fff; font: 700 15px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
 .ck-stamp.two b { background: var(--wait); color: #0e1318; font-size: 42px; }
 .ck-stamp.six b { background: #ffcc00; color: #0e1318; font-size: 64px; }
@@ -148,7 +187,7 @@ html.ck-root body { background: transparent; }
   22%, 76% { transform: scale(1); opacity: 1; }
   100% { transform: translateY(-16px) scale(1); opacity: 0; }
 }
-.ck-flash { position: absolute; inset: 0; background: rgba(217, 48, 58, .32); }
+.ck-flash { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(217, 48, 58, .08) 30%, rgba(217, 48, 58, .55) 100%); }
 .ck-dusk { position: absolute; inset: 0; background: rgba(40, 18, 60, .52); animation: ck-fade 1.6s both; }
 @keyframes ck-fade { 0%, 100% { opacity: 0; } 25%, 70% { opacity: 1; } }
 .ck-rain { position: absolute; inset: 0; background: repeating-linear-gradient(105deg, transparent 0 13px, rgba(190, 220, 255, .38) 13px 15px), rgba(18, 34, 58, .5); background-size: 100% 200%; animation: ck-rain .34s linear infinite, ck-fade 1.7s both; }
@@ -254,7 +293,13 @@ html.ck-root body { background: transparent; }
 .ck-rp-board small + small { color: #d6e0dc; }
 .ck-rp-board b { font: 800 44px/1 var(--sign); font-variant-numeric: tabular-nums; }
 .ck-rp-board b i { font-style: normal; opacity: .6; margin: 0 2px; }
-.ck-rp-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #0d3a22 url("./art/ground.png") center bottom / cover no-repeat; image-rendering: pixelated; }
+.ck-rp-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #0d3a22; }
+.ck-rp-world { background: #0d3a22 url("./art/ground.png") center bottom / cover no-repeat; }
+/* On a phone held upright the ground picture fills the height, so the stands and
+ * boards sit at these shares of it (rows 72-124 and 124-137 of 240). */
+.ck-rp-world .ck-wave { top: 30%; height: 22%; }
+.ck-rp-world .ck-boards { top: 51.7%; height: 5.6%; }
+.ck-rp-world .ck-floods { background: radial-gradient(40% 22% at 9% 7%, rgba(255, 250, 215, .16), transparent), radial-gradient(40% 22% at 89% 7%, rgba(255, 250, 215, .16), transparent); }
 .ck-rp-who { position: absolute; bottom: max(16%, calc(env(safe-area-inset-bottom, 0px) + 92px)); width: calc(144px * var(--k)); height: calc(144px * var(--k)); }
 .ck-rp-who.batter { left: 8%; z-index: 2; }
 .ck-rp-who.umpire { bottom: max(27%, calc(env(safe-area-inset-bottom, 0px) + 150px)); left: 50%; width: 144px; height: 144px; margin-left: -72px; z-index: 1; }
@@ -265,7 +310,6 @@ html.ck-root body { background: transparent; }
 .ck-rp-stumps > .a, .ck-rp-stumps > .b { top: calc(3px * var(--k)); width: calc(18px * var(--k)); height: calc(6px * var(--k)); }
 .ck-rp-stumps > .a { left: calc(6px * var(--k)); }
 .ck-rp-stumps > .b { left: calc(28px * var(--k)); }
-.ck-rp-ball { position: absolute; top: 0; left: 0; z-index: 3; width: calc(16px * var(--k)); height: calc(16px * var(--k)); opacity: 0; image-rendering: pixelated; filter: drop-shadow(0 0 3px #ffb0b0); }
 .ck-rp-stage .ck-stamp { top: 13%; z-index: 4; gap: 6px; }
 .ck-rp-stage .ck-stamp b { font-size: 76px; }
 .ck-rp-stage .ck-stamp.two b { font-size: 58px; }
@@ -300,6 +344,8 @@ html.ck-root body { background: transparent; }
   .ck-table-row { grid-template-columns: 14px minmax(0, 1fr) 26px 18px 26px; gap: 4px; font-size: 17px; }
   .ck-table-name { font-size: 16px; }
 }
+.ck-stage[data-still] .ck-floods { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .ck .card, .ck .card::before, .ck .card::after, .ck .segb.sel, .ck .tabitem[data-on], .ck-who, .ck-table-row, .ck-chase-ball, .ck-ticker-run { animation: none; }
+  .ck .card, .ck .card::before, .ck .card::after, .ck .segb.sel, .ck .tabitem[data-on], .ck-who, .ck-table-row, .ck-chase-ball, .ck-ticker-run, .ck-floods, .ck-count { animation: none; }
+  .ck-stamp b::after, .ck-stamp.six::before { display: none; }
 }

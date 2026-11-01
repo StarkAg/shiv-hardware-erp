@@ -133,6 +133,7 @@ shape everybody in India reads at a glance.
 - `attendance-web/src/cricket/CricketLayer.jsx`: ground strip with its day score, ticker, overlays, reactions, pull to refresh.
 - `attendance-web/src/cricket/Film.jsx`: the opening film.
 - `attendance-web/src/cricket/Replay.jsx`: today's play, every marked player in turn, then the card.
+- `attendance-web/src/cricket/fx.js`: what both of those throw: the ball with its shadow and after-images, spark, dust, a cartwheeling stump, fireworks, camera flashes, shake and push-in.
 - `attendance-web/src/cricket/Sprite.jsx`: sprite frames and pixel icons.
 - `attendance-web/src/cricket/Panels.jsx`: points table, run chase, Ground settings.
 - `attendance-web/src/cricket/sound.js`: every sound, synthesised, no audio files.
@@ -160,6 +161,29 @@ the whole team's day when the app is opened, or comes back after 30 seconds away
 ## The switch is one switch
 
 Turning it on or off on any phone changes every phone, live, including ones already open. It is the app's only live Convex subscription. Using the switch also ends that phone's `?cricket=` try-out.
+
+## Each shot looks like its own shot (1 Nov 2026)
+
+The owner asked for finer effects and more real cricket. What changed:
+
+- **The figures** have a dark rim so they hold up over grass and crowd, ribbed pads
+  with a knee roll, gloves, a helmet with grille and peak, a bat with a grip and a
+  maker's band. The bowler has a cap peak and a wristband.
+- **Every ball pitches.** It lands short of the batter in a puff of dust, with a
+  shadow under it that shrinks as it climbs, and a short trail. A spark at the bat.
+- **A four** runs along the grass, hops twice and reaches the rope; the boundary
+  boards flash and the stands clap.
+- **A six** goes up and over the stand: fireworks, phones flashing in the crowd,
+  a Mexican wave, a bigger roar, rays behind the stamp.
+- **Out** sends the middle stump cartwheeling; the camera pushes in on the broken
+  wicket and shakes, the stamp lands with a jolt.
+- **Two runs** kicks up dust at each end.
+- **The strip** has a pitch with creases under the batter. Now and then a phone
+  flashes in the crowd, and after a quiet spell a wave goes round.
+- **The board** counts the runs up one at a time.
+
+The scoreboard sits outside the part the camera moves, so a push-in never moves a
+figure. All of it is behind the Effects switch, as before.
 
 ## Sixes carry over the 1st
 

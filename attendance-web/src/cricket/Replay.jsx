@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { byRuns, RUNS, SIX_RUNS } from './score.js'
 import { wakeSound } from './sound.js'
 import { Sprite } from './Sprite.jsx'
-import ballPng from './art/ball.png'
+import { clearFlying, dust, firework, flashes, flight, punch, shake, spark, stumpFly } from './fx.js'
 import bailPng from './art/bail.png'
 import stumpsPng from './art/stumps.png'
 import stumpsHitPng from './art/stumps-hit.png'
@@ -22,6 +22,7 @@ const STAMP = {
 }
 
 const runsOf = (p) => (p.run ? SIX_RUNS : RUNS[p.status] || 0)
+const PARTY = ['#ffcc00', '#5fe39a', '#ffffff', '#6fb4ff']
 
 export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
   const [big] = useState(() => window.innerWidth >= 360)
@@ -32,11 +33,14 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
   const [score, setScore] = useState({ runs: 0, wickets: 0 })
   const [stamp, setStamp] = useState(null)
   const [flash, setFlash] = useState(false)
+  const [boards, setBoards] = useState(false)
+  const [wave, setWave] = useState(0)
   const [done, setDone] = useState(false)
   const [askSound, setAskSound] = useState(() => soundsOn && !wakeSound())
 
   const stage = useRef(null)
-  const ballEl = useRef(null)
+  const world = useRef(null)
+  const stumpsEl = useRef(null)
   const batterEl = useRef(null)
   const bowlerEl = useRef(null)
   const bailA = useRef(null)
@@ -49,31 +53,31 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
   const stopAll = () => {
     timers.current.forEach(clearTimeout)
     timers.current = []
-    for (const el of [ballEl.current, batterEl.current, bailA.current, bailB.current]) {
+    clearFlying(world.current)
+    setBoards(false)
+    for (const el of [stage.current, world.current, batterEl.current, bailA.current, bailB.current]) {
       el?.getAnimations().forEach((a) => a.cancel())
     }
-    if (ballEl.current) ballEl.current.style.opacity = 0
   }
   const quiet = (name, delay) => { if (wakeSound()) sound.current(name, delay) }
 
-  const moveBall = (keys, duration, easing = 'linear') => {
-    const el = ballEl.current
-    if (!el) return
-    el.style.opacity = 1
-    el.animate(
-      keys.map((k) => ({ transform: `translate(${k.x}px, ${k.y}px) rotate(${k.r || 0}deg)` })),
-      { duration, easing, fill: 'forwards' },
-    ).onfinish = () => { el.style.opacity = 0 }
-  }
+  // In stage pixels, the ball's top-left. The ball is 16 (x k) pixels, the
+  // figures 144 (x k) with their feet on row 44 of 48.
+  const size = 16 * k
   const places = () => {
     const box = stage.current.getBoundingClientRect()
     const bt = batterEl.current.getBoundingClientRect()
     const bw = bowlerEl.current.getBoundingClientRect()
+    const st = stumpsEl.current.getBoundingClientRect()
     return {
       w: box.width,
+      h: box.height,
       from: { x: bw.left - box.left + 39 * k, y: bw.top - box.top + 33 * k },
       bat: { x: bt.left - box.left + 108 * k, y: bt.top - box.top + 87 * k },
       stumps: { x: bt.left - box.left + 9 * k, y: bt.top - box.top + 96 * k },
+      ground: bt.top - box.top + bt.height * (44 / 48) - size,
+      feet: { x: bt.left - box.left + bt.width * 0.5, y: bt.top - box.top + bt.height * (43 / 48) },
+      middle: { x: st.left - box.left + st.width * (8 / 18), y: st.top - box.top + st.height * (4 / 24) },
     }
   }
 
@@ -91,9 +95,13 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
     at(340, () => setScene((s) => ({ ...s, batter: 'stance', bowler: 'load' })))
     at(620, () => {
       setScene((s) => ({ ...s, batter: 'lift', bowler: 'throw' }))
+      // Down the pitch, lands short in a puff of dust, up at the bat or the stumps.
       const p = places()
       const aim = status === 'N' ? p.stumps : p.bat
-      moveBall([p.from, { x: (p.from.x + aim.x) / 2, y: aim.y + 18 }, aim], 170)
+      const land = { x: aim.x + (p.from.x - aim.x) * 0.3, y: p.ground }
+      flight(world.current, [{ ...p.from, o: 0 }, { ...land, r: 220, o: 0.62 }, { ...aim, r: 320, o: 1 }], { duration: 170, ground: p.ground, size })
+      at(105, () => dust(world.current, land.x + size / 2, p.ground + size, 6))
+      quiet('bounce', 0.105)
     })
     at(710, () => setScene((s) => ({ ...s, bowler: 'after' })))
     at(790, () => {
@@ -103,27 +111,53 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
         ? { id: i, word: 'SIX!', sub: `${name}: ${run} days in a row`, kind: 'six' }
         : { id: i, word: s.word, sub: `${name}: ${s.say}`, kind: s.kind })
       setScore((old) => ({ runs: old.runs + runsOf(batting[i]), wickets: old.wickets + (status === 'N' ? 1 : 0) }))
+      if (status !== 'N') spark(world.current, p.bat.x + size / 2, p.bat.y + size / 2)
       if (run) {
+        // Up and over the stand: fireworks, phones flashing, a wave round the ground.
         quiet('crack')
-        quiet('crowd', 0.08)
-        quiet('crowd', 0.5)
+        quiet('roar', 0.06)
         setScene((c) => ({ ...c, batter: 'pull', umpire: 'six' }))
-        moveBall([p.bat, { x: p.w * 0.6, y: -40, r: 500 }, { x: p.w + 20, y: -60, r: 1000 }], 700, 'ease-out')
+        shake(stage.current, 3, 180)
+        flight(world.current, [
+          { ...p.bat, o: 0 },
+          { x: p.w * 0.55, y: p.h * 0.12, r: 540, o: 0.5 },
+          { x: p.w * 0.85, y: -60, r: 1000, o: 1 },
+        ], { duration: 720, easing: 'cubic-bezier(.2,.7,.4,1)', ground: p.ground, size })
+        ;[[0.25, 0.14, 0], [0.75, 0.1, 170], [0.5, 0.2, 340]].forEach(([fx, fy, ms]) => at(420 + ms, () => (
+          firework(world.current, p.w * fx, p.h * fy, PARTY, { rise: 90, ring: 54 })
+        )))
+        flashes(world.current, { x0: 6, x1: p.w - 6, y0: p.h * 0.32, y1: p.h * 0.5 }, 22, 1300)
+        at(200, () => setWave((n) => n + 1))
         at(240, () => setScene((c) => ({ ...c, batter: 'cheer' })))
-        at(1300, () => playTurn(i + 1))
+        at(1450, () => playTurn(i + 1))
       } else if (status === 'P') {
+        // Along the ground: two hops, beats the field to the rope, boards light up.
         quiet('crack')
-        quiet('crowd', 0.08)
+        quiet('claps', 0.4)
+        quiet('crowd', 0.35)
         setScene((c) => ({ ...c, batter: 'drive' }))
-        moveBall([p.bat, { x: p.w * 0.7, y: 10, r: 360 }, { x: p.w + 20, y: 50, r: 720 }], 520, 'ease-out')
+        const run = (f) => p.bat.x + (p.w + 24 - p.bat.x) * f
+        flight(world.current, [
+          { ...p.bat, o: 0 },
+          { x: run(0.28), y: p.ground - 22 * k, r: 260, o: 0.26 },
+          { x: run(0.48), y: p.ground, r: 480, o: 0.44 },
+          { x: run(0.66), y: p.ground - 8 * k, r: 660, o: 0.62 },
+          { x: run(0.8), y: p.ground, r: 820, o: 0.78 },
+          { x: run(1), y: p.ground, r: 1080, o: 1 },
+        ], { duration: 600, easing: 'cubic-bezier(.25,.6,.45,1)', ground: p.ground, size })
+        at(160, () => dust(world.current, run(0.48) + size / 2, p.ground + size, 5))
+        at(320, () => dust(world.current, run(0.8) + size / 2, p.ground + size, 4))
         at(150, () => setScene((c) => ({ ...c, batter: 'follow', umpire: 'fourA' })))
         at(350, () => setScene((c) => ({ ...c, umpire: 'fourB' })))
+        at(430, () => setBoards(true))
         at(550, () => setScene((c) => ({ ...c, umpire: 'fourA' })))
-        at(960, () => playTurn(i + 1))
+        at(1000, () => playTurn(i + 1))
       } else if (status === 'H') {
         quiet('crack')
         quiet('run', 0.12)
         setScene((c) => ({ ...c, batter: 'runA' }))
+        dust(world.current, p.feet.x, p.feet.y, 6)
+        at(320, () => dust(world.current, p.feet.x + 70, p.feet.y, 6))
         batterEl.current?.animate(
           [{ transform: 'translateX(0)' }, { transform: 'translateX(70px)' }, { transform: 'translateX(0)' }],
           { duration: 640, easing: 'steps(8)' },
@@ -131,9 +165,14 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
         ;[110, 270, 430, 590].forEach((ms, n) => at(ms, () => setScene((c) => ({ ...c, batter: n % 2 ? 'runA' : 'runB' }))))
         at(960, () => playTurn(i + 1))
       } else {
+        // Bowled: the middle stump cartwheels, the camera pushes in and shakes.
         quiet('stumps')
-        quiet('groan', 0.12)
+        quiet('clatter', 0.04)
+        quiet('groan', 0.14)
         setScene((c) => ({ ...c, hit: true, batter: 'stance', bowler: 'appeal' }))
+        stumpFly(world.current, p.middle.x, p.middle.y, 1.5 * k)
+        punch(world.current, p.middle.x, p.middle.y + 30 * k, 1.14, 560)
+        shake(stage.current, 5, 300)
         for (const [el, dx] of [[bailA.current, -40], [bailB.current, 36]]) {
           el?.animate(
             [
@@ -213,15 +252,19 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
       ) : (
         <>
           <div className="ck-rp-stage" ref={stage} style={{ '--k': k }}>
-            <div className="ck-rp-stumps" aria-hidden="true">
-              <img src={scene.hit ? stumpsHitPng : stumpsPng} alt="" />
-              <img ref={bailA} className="a" src={bailPng} alt="" />
-              <img ref={bailB} className="b" src={bailPng} alt="" />
+            <div className="ck-world ck-rp-world" ref={world}>
+              <div className="ck-floods" aria-hidden="true" />
+              {wave > 0 && <i className="ck-wave" key={wave} aria-hidden="true" />}
+              {boards && <i className="ck-boards" aria-hidden="true" />}
+              <div className="ck-rp-stumps" ref={stumpsEl} aria-hidden="true">
+                <img src={scene.hit ? stumpsHitPng : stumpsPng} alt="" />
+                <img ref={bailA} className="a" src={bailPng} alt="" />
+                <img ref={bailB} className="b" src={bailPng} alt="" />
+              </div>
+              <div className="ck-rp-who batter" ref={batterEl}><Sprite frame={`batter-${scene.batter}`} scale={big ? 4 : 3} flip={walkingOff} /></div>
+              <div className="ck-rp-who umpire"><Sprite frame={`umpire-${scene.umpire}`} scale={3} /></div>
+              <div className="ck-rp-who bowler" ref={bowlerEl}><Sprite frame={`bowler-${scene.bowler}`} scale={big ? 4 : 3} flip /></div>
             </div>
-            <div className="ck-rp-who batter" ref={batterEl}><Sprite frame={`batter-${scene.batter}`} scale={big ? 4 : 3} flip={walkingOff} /></div>
-            <div className="ck-rp-who umpire"><Sprite frame={`umpire-${scene.umpire}`} scale={3} /></div>
-            <div className="ck-rp-who bowler" ref={bowlerEl}><Sprite frame={`bowler-${scene.bowler}`} scale={big ? 4 : 3} flip /></div>
-            <img ref={ballEl} className="ck-rp-ball" src={ballPng} alt="" aria-hidden="true" />
             {flash && <div className="ck-flash" />}
             {stamp && (
               <div className={`ck-stamp ${stamp.kind}`} key={stamp.id}>

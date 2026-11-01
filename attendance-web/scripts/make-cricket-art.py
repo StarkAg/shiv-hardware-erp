@@ -34,6 +34,9 @@ UMP_TROUSER, UMP_TROUSER_D = (32, 38, 50), (18, 22, 30)
 UMP_HAT = (240, 232, 205)
 BALL, BALL_D = (214, 40, 46), (140, 18, 26)
 STUMP, STUMP_D = (235, 215, 170), (176, 146, 96)
+PAD, PAD_D = (252, 252, 248), (192, 199, 197)
+GLOVE, GLOVE_D = (248, 248, 244), (160, 170, 168)
+OUTLINE = (6, 12, 20)
 
 CELL = 48  # one pose: 48 x 48 pixels, feet on line 44, facing right
 
@@ -45,13 +48,54 @@ def limb(d, a, b, width, col, dark=None):
     d.line([a, b], fill=col, width=width)
 
 
+def outlined(im):
+    """A dark rim round the figure, so it holds up over grass and crowd at any size."""
+    w, h = im.size
+    px = im.load()
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    op = out.load()
+    for y in range(h):
+        for x in range(w):
+            if px[x, y][3]:
+                continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if 0 <= x + dx < w and 0 <= y + dy < h and px[x + dx, y + dy][3]:
+                    op[x, y] = OUTLINE + (255,)
+                    break
+    out.alpha_composite(im)
+    return out
+
+
 def bat(d, hand, angle_deg, length=15):
+    """Grip, a maker's band under the shoulder, the blade, and a darker toe."""
     a = math.radians(angle_deg)
-    gx, gy = hand[0] + math.cos(a) * 4, hand[1] + math.sin(a) * 4
-    ex, ey = hand[0] + math.cos(a) * length, hand[1] + math.sin(a) * length
-    d.line([hand, (gx, gy)], fill=GRIP, width=2)
-    d.line([(gx, gy), (ex, ey)], fill=WOOD_D, width=4)
-    d.line([(gx, gy), (ex, ey)], fill=WOOD, width=3)
+    c, s = math.cos(a), math.sin(a)
+    at = lambda k: (hand[0] + c * k, hand[1] + s * k)  # noqa: E731
+    d.line([hand, at(4)], fill=GRIP, width=2)
+    d.line([at(4), at(length)], fill=WOOD_D, width=4)
+    d.line([at(4), at(length)], fill=WOOD, width=3)
+    d.line([at(5.5), at(7)], fill=TRIM, width=3)
+    d.line([at(length - 2), at(length)], fill=WOOD_D, width=3)
+
+
+def pad(d, knee, foot, back=False):
+    """A batting pad from just over the knee to the boot: ribbed, with a knee roll."""
+    top = (knee[0] - (foot[0] - knee[0]) * 0.25, knee[1] - (foot[1] - knee[1]) * 0.25)
+    d.line([top, foot], fill=PAD_D, width=6)
+    d.line([top, foot], fill=PAD_D if back else PAD, width=5)
+    d.line([top, foot], fill=(170, 178, 176) if back else PAD_D, width=1)
+    d.line([(top[0] - 2, top[1]), (top[0] + 2, top[1])], fill=(170, 178, 176), width=2)
+
+
+def glove(d, hand):
+    x, y = hand
+    d.rectangle([x - 2, y - 1, x + 1, y + 2], fill=GLOVE)
+    d.line([(x - 2, y + 2), (x + 1, y + 2)], fill=GLOVE_D)
+
+
+def boot(d, foot):
+    d.rectangle([foot[0] - 1, foot[1], foot[0] + 3, foot[1] + 1], fill=SHOE)
+    d.point((foot[0] + 3, foot[1] + 1), fill=(150, 150, 146))
 
 
 def batter(p):
@@ -61,32 +105,36 @@ def batter(p):
     hip, chest, head = p["hip"], p["chest"], p["head"]
     # back leg, then back arm, go behind the body
     limb(d, hip, p["bknee"], 4, WHITE_D)
-    limb(d, p["bknee"], p["bfoot"], 5, WHITE_D)
-    d.rectangle([p["bfoot"][0] - 1, p["bfoot"][1], p["bfoot"][0] + 3, p["bfoot"][1] + 1], fill=SHOE)
+    pad(d, p["bknee"], p["bfoot"], back=True)
+    boot(d, p["bfoot"])
     limb(d, chest, p["bhand"], 3, JERSEY_D)
     if p.get("bat") is not None and p.get("bat_behind"):
         bat(d, p["hand"], p["bat"], p.get("batlen", 15))
+    glove(d, p["bhand"])
     # front leg with its pad
     limb(d, hip, p["fknee"], 4, WHITE)
-    limb(d, p["fknee"], p["ffoot"], 5, WHITE)
-    d.line([p["fknee"], p["ffoot"]], fill=WHITE_D, width=1)
-    d.rectangle([p["ffoot"][0] - 1, p["ffoot"][1], p["ffoot"][0] + 3, p["ffoot"][1] + 1], fill=SHOE)
-    # body
+    pad(d, p["fknee"], p["ffoot"])
+    boot(d, p["ffoot"])
+    # body, with the trim on the chest and the collar
     limb(d, hip, chest, 7, JERSEY, JERSEY_D)
     d.line([(chest[0] - 3, chest[1] + 3), (chest[0] + 3, chest[1] + 3)], fill=TRIM)
-    # helmet
+    d.point((chest[0], chest[1] - 2), fill=TRIM)
+    # helmet: dome with a shine, peak, ear guard and a grille over the face
     hx, hy = head
     d.ellipse([hx - 4, hy - 4, hx + 4, hy + 4], fill=SKIN)
     d.pieslice([hx - 5, hy - 6, hx + 4, hy + 3], 170, 360, fill=HELMET)
+    d.point([(hx - 2, hy - 4), (hx - 1, hy - 5)], fill=(70, 92, 140))
     d.line([(hx - 5, hy - 1), (hx + 6, hy - 1)], fill=HELMET_D)
+    d.rectangle([hx - 3, hy, hx - 1, hy + 2], fill=HELMET)
     d.line([(hx + 1, hy + 1), (hx + 5, hy + 1)], fill=GRILL)
     d.line([(hx + 2, hy + 3), (hx + 4, hy + 3)], fill=GRILL)
+    d.line([(hx + 5, hy), (hx + 5, hy + 3)], fill=GRILL)
     # front arm and the bat
     limb(d, chest, p["hand"], 3, JERSEY)
-    d.rectangle([p["hand"][0] - 1, p["hand"][1] - 1, p["hand"][0] + 1, p["hand"][1] + 1], fill=WHITE)
     if p.get("bat") is not None and not p.get("bat_behind"):
         bat(d, p["hand"], p["bat"], p.get("batlen", 15))
-    return im
+    glove(d, p["hand"])
+    return outlined(im)
 
 
 def bowler(p):
@@ -101,14 +149,22 @@ def bowler(p):
     limb(d, p["fknee"], p["ffoot"], 3, WHITE)
     d.rectangle([p["ffoot"][0] - 1, p["ffoot"][1], p["ffoot"][0] + 2, p["ffoot"][1] + 1], fill=SHOE)
     limb(d, hip, chest, 7, (196, 52, 56), (150, 34, 40))
+    d.point([(chest[0] - 1, chest[1] - 2), (chest[0] + 1, chest[1] - 2)], fill=WHITE)  # collar
     hx, hy = head
     d.ellipse([hx - 4, hy - 4, hx + 4, hy + 4], fill=SKIN)
     d.pieslice([hx - 4, hy - 5, hx + 4, hy + 2], 180, 360, fill=(120, 26, 32))
-    d.line([(hx + 3, hy - 2), (hx + 6, hy - 2)], fill=(120, 26, 32))
+    d.line([(hx + 3, hy - 2), (hx + 7, hy - 2)], fill=(90, 18, 24))  # cap peak
+    d.point((hx + 2, hy), fill=BLACK)  # eye
     limb(d, chest, p["hand"], 3, (196, 52, 56))
+    # a white wristband, then the hand
+    w = (p["hand"][0] + (chest[0] - p["hand"][0]) * 0.2, p["hand"][1] + (chest[1] - p["hand"][1]) * 0.2)
+    d.point((round(w[0]), round(w[1])), fill=WHITE)
     if p.get("ball"):
         d.rectangle([p["hand"][0] - 1, p["hand"][1] - 1, p["hand"][0] + 1, p["hand"][1] + 1], fill=BALL)
-    return im
+        d.point((p["hand"][0], p["hand"][1] - 1), fill=(245, 225, 200))
+    else:
+        d.rectangle([p["hand"][0] - 1, p["hand"][1] - 1, p["hand"][0], p["hand"][1]], fill=SKIN)
+    return outlined(im)
 
 
 def umpire(pose):
@@ -126,7 +182,10 @@ def umpire(pose):
     d.ellipse([cx - 4, 8, cx + 4, 17], fill=SKIN)
     d.rectangle([cx - 8, 7, cx + 8, 8], fill=UMP_HAT)
     d.rectangle([cx - 5, 2, cx + 5, 7], fill=UMP_HAT)
+    d.line([(cx - 5, 6), (cx + 5, 6)], fill=(40, 60, 110))  # hat band
+    d.line([(cx - 8, 8), (cx + 8, 8)], fill=(200, 192, 166))  # brim shade
     d.point([(cx + 2, 12)], fill=BLACK)
+    d.point([(cx - 2, 19), (cx + 2, 19)], fill=UMP_SHIRT_D)  # collar
     d.line([(cx - 3, 15), (cx + 2, 15)], fill=SKIN_D)
     sleeve, hand = UMP_SHIRT, SKIN
     if pose == "still":
@@ -153,7 +212,7 @@ def umpire(pose):
         limb(d, (cx + 7, 21), (cx + 17, 21), 3, sleeve)
         d.rectangle([cx - 20, 20, cx - 18, 22], fill=hand)
         d.rectangle([cx + 18, 20, cx + 20, 22], fill=hand)
-    return im
+    return outlined(im)
 
 
 BATTER_POSES = {
@@ -331,14 +390,26 @@ def stumps_whole(d):
     for x in (3, 8, 13):
         d.rectangle([x, 4, x + 1, 23], fill=STUMP)
         d.point([(x + 1, y) for y in range(4, 24)], fill=STUMP_D)
+        d.point((x, 4), fill=(250, 238, 210))  # the rounded top catching the light
     d.rectangle([3, 2, 7, 3], fill=WOOD)
     d.rectangle([9, 2, 14, 3], fill=WOOD)
+    d.point([(7, 3), (14, 3)], fill=WOOD_D)
 
 
 def stumps_hit(d):
-    d.line([(3, 23), (1, 5)], fill=STUMP, width=2)
-    d.line([(8, 23), (8, 6)], fill=STUMP, width=2)
-    d.line([(13, 23), (16, 7)], fill=STUMP, width=2)
+    """Off and leg stumps knocked back; the middle one is gone (it flies on its own)."""
+    d.line([(3, 23), (0, 7)], fill=STUMP, width=2)
+    d.line([(4, 23), (1, 7)], fill=STUMP_D)
+    d.line([(13, 23), (17, 8)], fill=STUMP, width=2)
+    d.line([(14, 23), (17, 10)], fill=STUMP_D)
+    d.rectangle([7, 21, 9, 23], fill=(120, 96, 60))  # the hole the middle one left
+
+
+def stump(d):
+    d.rectangle([0, 0, 1, 19], fill=STUMP)
+    d.line([(1, 0), (1, 19)], fill=STUMP_D)
+    d.point((0, 0), fill=(250, 238, 210))
+    d.line([(0, 18), (1, 19)], fill=(150, 120, 80))  # the spike
 
 
 def ball(d):
@@ -364,6 +435,7 @@ def main():
     ground()
     small("stumps", (18, 24), stumps_whole)
     small("stumps-hit", (18, 24), stumps_hit)
+    small("stump", (2, 20), stump)
     small("ball", (8, 8), ball)
     small("bail", (6, 2), bail)
     small("coin", (16, 16), coin)

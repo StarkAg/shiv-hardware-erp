@@ -69,6 +69,27 @@ const SOUNDS = {
     noise(c, { at, dur: 1.1, freq: 1500, q: 0.5, vol: 0.13, attack: 0.28 })
     noise(c, { at, dur: 0.9, freq: 620, q: 0.6, vol: 0.1, attack: 0.2 })
   },
+  // The ball pitching: a dull thud off a hard surface.
+  bounce: (c, at = 0) => {
+    tone(c, { at, dur: 0.07, freq: 190, to: 90, vol: 0.22 })
+    noise(c, { at, dur: 0.03, freq: 900, q: 1.2, vol: 0.08 })
+  },
+  // A four: the stands clap, a ragged patter rather than one beat.
+  claps: (c, at = 0) => {
+    for (let i = 0; i < 14; i++) {
+      noise(c, { at: at + i * 0.045 + Math.random() * 0.03, dur: 0.04, freq: 1800 + Math.random() * 900, q: 1.4, vol: 0.06 + Math.random() * 0.05 })
+    }
+  },
+  // A six: the whole ground on its feet, swelling then falling away.
+  roar: (c, at = 0) => {
+    noise(c, { at, dur: 1.9, freq: 1100, q: 0.4, vol: 0.2, attack: 0.35 })
+    noise(c, { at, dur: 1.6, freq: 480, q: 0.5, vol: 0.14, attack: 0.3 })
+    noise(c, { at: at + 0.1, dur: 1.2, freq: 2800, q: 0.7, vol: 0.06, attack: 0.25 })
+  },
+  // Wood on wood: the stumps and bails hitting each other on the way down.
+  clatter: (c, at = 0) => {
+    ;[0, 0.07, 0.15, 0.26].forEach((d, i) => tone(c, { at: at + d, dur: 0.05, freq: 1300 - i * 180, to: 500, vol: 0.12 - i * 0.02, type: 'triangle' }))
+  },
   stumps: (c, at = 0) => {
     tone(c, { at, dur: 0.1, freq: 980, to: 420, vol: 0.24, type: 'square' })
     tone(c, { at: at + 0.05, dur: 0.12, freq: 720, to: 300, vol: 0.2, type: 'square' })
