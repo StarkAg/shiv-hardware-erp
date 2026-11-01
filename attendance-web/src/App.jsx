@@ -11,11 +11,11 @@ function OnTrusted({ onTrusted }) {
   useEffect(() => { onTrusted() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return null
 }
-import { monthPay, ATTEND_THRESHOLD } from './pay.js'
+import { PayView } from './PayView.jsx'
 import { useAttendanceTheme, useWords, WordsProvider } from './cricket/theme.jsx'
 import { cricketEvent } from './cricket/bus.js'
 import { ThemeSwitch } from './cricket/ThemeSwitch.jsx'
-import { CricketKey, CricketLayer, CricketTabIcon, PointsTable, RunChase } from './cricket/lazy.jsx'
+import { CricketKey, CricketLayer, CricketTabIcon, PointsTable } from './cricket/lazy.jsx'
 import { monthScores } from './cricket/score.js'
 
 const api = anyApi
@@ -41,14 +41,9 @@ function saveUnlocked(m) {
 // Local cache so the app renders instantly (today first) and refreshes in the background.
 const MONTH_CACHE_KEY = 'shiv-attendance:months'
 const STAFF_CACHE_KEY = 'shiv-attendance:staff'
-const RATES_CACHE_KEY = 'shiv-attendance:rates'
-const ADV_CACHE_KEY = 'shiv-attendance:advances'
-const OWING_CACHE_KEY = 'shiv-attendance:owing'
+const BOARD_CACHE_KEY = 'shiv-attendance:pay-register'
 const HISTORY_SEEN_KEY = 'shiv-attendance:history-seen'
 const DEVICE_ID_KEY = 'shiv-attendance:device-id'
-// The pay rule itself lives in pay.js, apart from the screen, so that the one
-// calculation deciding what somebody is paid can be tested on its own.
-const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
 function readCache(key, fallback) {
   try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v ?? fallback } catch { return fallback }
 }
@@ -123,7 +118,7 @@ export default function App() {
   const [unlockedDates, setUnlockedDates] = useState(loadUnlocked) // per-day unlock, persisted 10h
   useEffect(() => { saveUnlocked(unlockedDates) }, [unlockedDates])
   const convex = useConvex()
-  // Rates, advances and staff pay move money: read only on a phone given the
+  // Staff pay is money: read only on a phone given the
   // PIN, and read again the moment the Pay tab's PIN screen lets it through.
   const [trustTick, setTrustTick] = useState(0)
   const theme = useAttendanceTheme(convex)
@@ -210,22 +205,6 @@ export default function App() {
     return () => { off = true }
   }, [convex, refreshTick])
 
-  // Per-staff daily rates — cache-first; one-shot refresh.
-  const [rates, setRates] = useState(() => readCache(RATES_CACHE_KEY, {}) || {})
-  useEffect(() => {
-    if (!deviceToken()) return
-    let off = false
-    convex.query(api.attendance.getRates, {}).then((r) => {
-      if (off || !r) return
-      setRates(r); writeCache(RATES_CACHE_KEY, r)
-    }).catch(() => {})
-    return () => { off = true }
-  }, [convex, trustTick])
-  const setRate = (name, rate) => {
-    setRates((prev) => { const n = { ...prev, [name]: rate }; writeCache(RATES_CACHE_KEY, n); return n })
-    convex.mutation(api.attendance.setRate, { staff: name, rate }).catch(() => {})
-  }
-
   // Month data — cache-first. Past (immutable) months are served from the device
   // cache with ZERO Convex reads; only the current month is fetched on open.
   const month = ym(cursor)
@@ -269,55 +248,32 @@ export default function App() {
   }, [prevMonth, lastMonth, convex, theme.on])
 
   /**
-   * What each man still owes on an advance, and at what rate.
-   *
-   * The advance rows below say what was TAKEN in a month. What the shop is
-   * asked at the counter is what is still to be worked off, which only payroll
-   * knows — it nets every day earned against it. Read once and cached; a stale
-   * figure here is better than none, and it refreshes on the next open.
+   * The Staff Payments register, for the Pay tab. Read only when Pay is open on a
+   * phone given the PIN, as of the month's last day (today for this month), and
+   * the last one read is kept so the tab opens on figures while it refreshes.
    */
-  const [owing, setOwing] = useState(() => readCache(OWING_CACHE_KEY, {}))
+  const indiaToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
+  const payAsOf = (() => {
+    const end = `${month}-${pad(daysInMonth(cursor.getFullYear(), cursor.getMonth() + 1))}`
+    const t = indiaToday()
+    return end < t ? end : t
+  })()
+  const [board, setBoard] = useState(() => readCache(BOARD_CACHE_KEY, null))
+  const [boardLoading, setBoardLoading] = useState(false)
+  const [boardFailed, setBoardFailed] = useState(false)
   useEffect(() => {
-    if (!deviceToken()) return
-    convex.query(anyApi.staffPay.board, { date: new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10) })
-      .then((board) => {
-        if (!board?.rows) return
-        const next = {}
-        for (const row of board.rows) if (row.profile) next[row.staff] = { advance: row.advance, rate: row.rate }
-        setOwing(next); writeCache(OWING_CACHE_KEY, next)
+    if (mode !== 'pay' || !deviceToken()) return undefined
+    let off = false
+    setBoardLoading(true); setBoardFailed(false)
+    convex.query(anyApi.staffPay.board, { date: payAsOf })
+      .then((b) => {
+        if (off || !b?.rows) return
+        setBoard(b); writeCache(BOARD_CACHE_KEY, b)
       })
-      .catch(() => {})
-  }, [convex, trustTick])
-
-  // Advances for the month — cache-first (past months skip the read).
-  const [advances, setAdvances] = useState(() => readCache(ADV_CACHE_KEY, {})[ym(cursor)])
-  const refetchAdvances = (mo) => {
-    convex.query(api.attendance.getAdvances, { month: mo }).then((rows) => {
-      if (!rows) return
-      setAdvances(rows)
-      writeCache(ADV_CACHE_KEY, { ...readCache(ADV_CACHE_KEY, {}), [mo]: rows })
-    }).catch(() => {})
-  }
-  useEffect(() => {
-    const cache = readCache(ADV_CACHE_KEY, {})
-    setAdvances(cache[month])
-    if (!deviceToken()) return
-    if (cache[month] && month !== currentMonth && !trustTick) return
-    refetchAdvances(month)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, currentMonth, convex, trustTick])
-  const addAdvance = (name, amount, note, date) => {
-    if (!date) date = month === currentMonth ? dateKey(new Date()) : `${month}-01`
-    const optimistic = { _id: `tmp-${Date.now()}`, staff: name, date, amount, note: note || '' }
-    setAdvances((prev) => { const n = [...(prev || []), optimistic]; writeCache(ADV_CACHE_KEY, { ...readCache(ADV_CACHE_KEY, {}), [month]: n }); return n })
-    convex.mutation(api.attendance.addAdvance, { staff: name, date, amount, note: note || undefined })
-      .then(() => refetchAdvances(month)).catch(() => {})
-  }
-  const removeAdvance = (id) => {
-    setAdvances((prev) => { const n = (prev || []).filter((a) => a._id !== id); writeCache(ADV_CACHE_KEY, { ...readCache(ADV_CACHE_KEY, {}), [month]: n }); return n })
-    if (String(id).startsWith('tmp-')) return
-    convex.mutation(api.attendance.removeAdvance, { id }).then(() => refetchAdvances(month)).catch(() => {})
-  }
+      .catch(() => { if (!off) setBoardFailed(true) })
+      .finally(() => { if (!off) setBoardLoading(false) })
+    return () => { off = true }
+  }, [mode, payAsOf, convex, trustTick, refreshTick])
 
   // Optimistic local write + cache, then fire the Convex mutation (write only).
   const applyLocal = (dateStr, patchFn) => {
@@ -490,8 +446,7 @@ export default function App() {
           <OnTrusted onTrusted={() => setTrustTick((t) => t + 1)} />
           <PayView
             cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
-            rates={rates} advances={advances} owing={owing} unlockThen={unlockThen} cricket={theme.on}
-            onSetRate={setRate} onAddAdvance={addAdvance} onRemoveAdvance={removeAdvance}
+            board={board} boardLoading={boardLoading} boardFailed={boardFailed} asOf={payAsOf} cricket={theme.on}
           />
         </PinGate>
       )}
@@ -727,187 +682,6 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
         <span className="pill n">{legend.n}</span>
         <span className="pill h">{legend.h}</span>
         <span className="pill c">{legend.c}</span>
-      </div>
-    </div>
-  )
-}
-
-function PayView({ cursor, setCursor, staff, statusFor, loading, rates, advances, owing, unlockThen, cricket, onSetRate, onAddAdvance, onRemoveAdvance }) {
-  const y = cursor.getFullYear()
-  const m0 = cursor.getMonth()
-  const dim = daysInMonth(y, m0 + 1)
-  const days = Array.from({ length: dim }, (_, i) => new Date(y, m0, i + 1))
-  const stepM = (n) => setCursor(new Date(y, m0 + n, 1))
-  const tuesdays = days.filter((d) => isTue(d)).length
-  const monthStr = ym(cursor)
-  const isCurMonth = monthStr === ym(new Date())
-  const todayKey = dateKey(new Date())
-  const isFuture = (d) => dateKey(d) > todayKey
-
-  const [sel, setSel] = useState(staff[0] || '')
-  useEffect(() => { if (!staff.includes(sel)) setSel(staff[0] || '') }, [staff, sel])
-  const [ratesOpen, setRatesOpen] = useState(false)
-  const [amt, setAmt] = useState('')
-  const [note, setNote] = useState('')
-  const [advDate, setAdvDate] = useState(isCurMonth ? dateKey(new Date()) : `${monthStr}-01`)
-  useEffect(() => { setAdvDate(isCurMonth ? dateKey(new Date()) : `${monthStr}-01`) }, [monthStr, isCurMonth])
-
-  const advByStaff = useMemo(() => {
-    const m = {}
-    for (const a of advances || []) (m[a.staff] ||= []).push(a)
-    return m
-  }, [advances])
-
-  const computeRow = (name) => {
-    const rate = Number(rates?.[name] || 0)
-    const list = (advByStaff[name] || []).slice().sort((a, b) => a.date.localeCompare(b.date))
-    const advances = list.reduce((s, a) => s + Number(a.amount || 0), 0)
-    const row = monthPay({
-      entries: days.map((d) => ({ date: d, status: statusFor(d, name), future: isFuture(d) })),
-      rate,
-      advances,
-    })
-    return { name, rate, advList: list, ...row }
-  }
-
-  const r = sel ? computeRow(sel) : null
-
-  const addAdv = () => {
-    const v = Math.round(Number(amt) || 0)
-    if (!sel || v <= 0) return
-    unlockThen(() => { onAddAdvance(sel, v, note.trim(), advDate); setAmt(''); setNote('') })
-  }
-  const remAdv = (id) => unlockThen(() => onRemoveAdvance(id))
-  const openRates = () => unlockThen(() => setRatesOpen(true))
-
-  const progress = r ? Math.min(r.attended / ATTEND_THRESHOLD, 1) : 0
-  const remaining = r ? Math.max(0, Math.ceil(ATTEND_THRESHOLD - r.attended)) : 0
-
-  return (
-    <div className="card">
-      <div className="payhdr">
-        <span className="mgttl">Wages</span>
-        <button className="iconbtn" aria-label="Set daily income" title="Set daily income" onClick={openRates}>
-          <EditIcon />
-        </button>
-      </div>
-
-      <div className="datenav">
-        <button onClick={() => stepM(-1)} aria-label="Previous month">‹</button>
-        <div className="dbig">{MON[m0]} {y}</div>
-        <button onClick={() => stepM(1)} aria-label="Next month">›</button>
-      </div>
-
-      {loading || !r ? (
-        <div className="muted center">Loading…</div>
-      ) : (
-        <>
-          <div className="payselect">
-            <label>Worker</label>
-            <select value={sel} onChange={(e) => setSel(e.target.value)}>
-              {staff.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
-
-          <div className="motcard">
-            {cricket && <RunChase name={sel} attended={r.attended} threshold={ATTEND_THRESHOLD} unlocked={r.unlocked} missedCount={r.missed.length} />}
-            <div className="motlabel">{sel}&rsquo;s earnings this month</div>
-            <div className="motnet">{inr(r.net)}</div>
-            <div className="motdays">{r.attended} / {ATTEND_THRESHOLD} days present</div>
-            <div className="progress"><span className={r.unlocked ? 'full' : ''} style={{ width: `${progress * 100}%` }} /></div>
-            <div className={`motmsg ${r.unlocked ? 'good' : ''}`}>
-              {r.rate <= 0
-                ? 'Daily income not set yet.'
-                : r.unlocked
-                  ? `Well done! You unlocked Tuesday pay — an extra ${inr(r.tueBonus)} this month.`
-                  : r.missed.length > 0
-                    ? `${inr(tuesdays * r.rate)} Tuesday pay is lost this month — `
-                      + `${r.missed.map((d) => `${WD[d.getDay()]} ${d.getDate()}`).join(', ')} `
-                      + `${r.missed.length === 1 ? 'was' : 'were'} not a full day.`
-                    : `Attend ${remaining} more day${remaining === 1 ? '' : 's'} to unlock ${inr(tuesdays * r.rate)} Tuesday pay.`}
-            </div>
-
-            <div className="paygrid">
-              <div><span className="pk">Daily income</span><span className="pv">{inr(r.rate)}</span></div>
-              <div><span className="pk">Base ({r.paidDays}d)</span><span className="pv">{inr(r.base)}</span></div>
-              <div>
-                <span className="pk">Tuesdays ({tuesdays})</span>
-                <span className="pv">
-                  {r.unlocked ? inr(r.tueBonus) : r.missed.length > 0 ? 'Mon/Wed missed' : '—'}
-                </span>
-              </div>
-              <div><span className="pk">Advances</span><span className="pv neg">{r.advTotal ? `- ${inr(r.advTotal)}` : inr(0)}</span></div>
-              {/* What is still to be worked off, and how long that takes at
-                  his own rate — the question actually asked at the counter. */}
-              {owing?.[sel]?.advance > 0 && <div>
-                <span className="pk">Advance left</span>
-                <span className="pv neg">{inr(owing[sel].advance)}
-                  {owing[sel].rate > 0 && <small> · {Math.ceil(owing[sel].advance / owing[sel].rate)} days</small>}
-                </span>
-              </div>}
-              <div className="netrow"><span className="pk">Take-home</span><span className="pv strong">{inr(r.net)}</span></div>
-            </div>
-          </div>
-
-          <div className="advbox">
-            <div className="mgttl">Add advance</div>
-            <div className="advrow">
-              <input type="date" value={advDate} onChange={(e) => setAdvDate(e.target.value)} />
-              <input type="number" inputMode="numeric" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="Amount ₹" />
-            </div>
-            <div className="advrow">
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="note (optional)" />
-              <button className="advbtn" onClick={addAdv}>Add</button>
-            </div>
-
-            {r.advList.length > 0 && (
-              <div className="advlist">
-                {r.advList.map((a) => (
-                  <div className="advchip" key={a._id}>
-                    <span>{inr(a.amount)}{a.note ? ` · ${a.note}` : ''} <em>{fmtDay(a.date)}</em></span>
-                    <button aria-label="Remove advance" onClick={() => remAdv(a._id)}><TrashIcon /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {ratesOpen && (
-        <PayRatesModal staff={staff} rates={rates} onSetRate={onSetRate} onClose={() => setRatesOpen(false)} />
-      )}
-    </div>
-  )
-}
-
-function PayRatesModal({ staff, rates, onSetRate, onClose }) {
-  return (
-    <div className="modal" onClick={onClose}>
-      <div className="sheet histsheet" onClick={(e) => e.stopPropagation()}>
-        <div className="sheettitle">Set daily income</div>
-        <div className="sheetsub">₹ paid per working day, per worker</div>
-        <div className="ratelist">
-          {staff.map((n) => (
-            <div className="raterow" key={n}>
-              <span className="pname">{n}</span>
-              <div className="rateinput">
-                <span>₹</span>
-                <input
-                  type="number" inputMode="numeric" defaultValue={rates?.[n] || ''}
-                  placeholder="0"
-                  onBlur={(e) => {
-                    const v = Math.max(0, Math.round(Number(e.target.value) || 0))
-                    if (v !== Number(rates?.[n] || 0)) onSetRate(n, v)
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="sheetbtns">
-          <button className="primbtn" onClick={onClose}>Done</button>
-        </div>
       </div>
     </div>
   )
@@ -1184,18 +958,6 @@ function TabBar({ mode, setMode, cricket }) {
 function HistoryIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l4 2" /></svg>
-  )
-}
-
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M10 11v6M14 11v6" /></svg>
-  )
-}
-
-function EditIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
   )
 }
 
