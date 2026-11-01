@@ -133,8 +133,14 @@ export const DOOR_FITTING_LABOUR = 200
 export const DOOR_FITTING_NOTE = 'Labour 200 covers both visits: the mechanic first comes home to take measurements, then comes again to fit the door once it arrives.'
 const FIT_GAP = 6 // mm below the last rate row
 
+/** How many doors the box can work out side by side, one column each. */
+export const DOOR_FITTING_COLS = 3
+const FIT_LABEL_MM = 58
+
 function DoorFittingBox({ top }: { top: number }) {
-  const rows: { label: string; value: string; h: number; bold?: boolean }[] = [
+  const cols = Array.from({ length: DOOR_FITTING_COLS }, (_, i) => i)
+  const rows: { label: string; value: string; h: number; bold?: boolean; head?: boolean }[] = [
+    { label: '', value: '', h: 7, head: true },
     { label: 'Door Rate', value: '', h: 11 },
     { label: 'Fitting Items (Approx.)', value: String(DOOR_FITTING_ITEMS), h: 9 },
     { label: 'Labour', value: String(DOOR_FITTING_LABOUR), h: 9 },
@@ -143,9 +149,13 @@ function DoorFittingBox({ top }: { top: number }) {
   return (
     <div className="absolute left-[29mm] right-[34mm] text-[15pt] leading-[1.1]" style={{ top: `${top}mm`, border: '1.5px solid #000' }}>
       {rows.map((r, i) => (
-        <div key={r.label} className="flex" style={{ height: `${r.h}mm`, borderTop: i ? (r.bold ? '1.5px solid #000' : '1px solid #000') : undefined, fontWeight: r.bold ? 700 : 400 }}>
-          <div className="flex items-center" style={{ width: '88mm', paddingLeft: '2mm', borderRight: '1px solid #000' }}>{r.label}</div>
-          <div className="flex flex-1 items-center justify-end" style={{ paddingRight: '4mm' }}>{r.value}</div>
+        <div key={i} className="flex" style={{ height: `${r.h}mm`, borderTop: i ? (r.bold ? '1.5px solid #000' : '1px solid #000') : undefined, fontWeight: r.bold ? 700 : 400 }}>
+          <div className="flex items-center" style={{ width: `${FIT_LABEL_MM}mm`, flex: 'none', paddingLeft: '2mm' }}>{r.label}</div>
+          {cols.map((c) => (
+            <div key={c} className={`flex flex-1 items-center justify-center ${r.head ? 'text-[12pt]' : ''}`} style={{ borderLeft: '1px solid #000' }}>
+              {r.head ? `Door ${c + 1}` : r.value}
+            </div>
+          ))}
         </div>
       ))}
       <div className="absolute left-0 right-0 text-[12pt] leading-[1.25]" style={{ top: 'calc(100% + 2.5mm)' }}>{DOOR_FITTING_NOTE}</div>
