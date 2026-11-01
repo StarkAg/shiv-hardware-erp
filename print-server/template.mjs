@@ -239,6 +239,7 @@ function cardPage(body) {
 // hand. Same as DoorFittingBox in src/features/print/QuotationPrint.tsx.
 const DOOR_FITTING_ITEMS = 1000
 const DOOR_FITTING_LABOUR = 200
+const DOOR_FITTING_NOTE = 'Labour 200 covers both visits: the mechanic first comes home to take measurements, then comes again to fit the door once it arrives.'
 function doorFittingHtml(top) {
   const rows = [
     ['Door Rate', '', 11, false],
@@ -249,7 +250,8 @@ function doorFittingHtml(top) {
   return `<div style="position:absolute;left:29mm;right:34mm;top:${top}mm;border:1.5px solid #000;font-size:15pt;line-height:1.1">${rows.map(([label, value, h, bold], i) =>
     `<div style="display:flex;height:${h}mm;${i ? `border-top:${bold ? '1.5px' : '1px'} solid #000;` : ''}${bold ? 'font-weight:700;' : ''}">` +
     `<div style="display:flex;align-items:center;width:88mm;padding-left:2mm;border-right:1px solid #000">${label}</div>` +
-    `<div style="display:flex;flex:1;align-items:center;justify-content:flex-end;padding-right:4mm">${value}</div></div>`).join('')}</div>`
+    `<div style="display:flex;flex:1;align-items:center;justify-content:flex-end;padding-right:4mm">${value}</div></div>`).join('')}` +
+    `<div style="position:absolute;left:0;right:0;top:calc(100% + 2.5mm);font-size:12pt;line-height:1.25">${DOOR_FITTING_NOTE}</div></div>`
 }
 
 export async function buildQuotationHtml(quote) {

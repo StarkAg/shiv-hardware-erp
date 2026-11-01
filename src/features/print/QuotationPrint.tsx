@@ -130,6 +130,7 @@ function buildPrintItems(category: ProductCategory, rows: BrandQuoteRow[]): Prin
  */
 export const DOOR_FITTING_ITEMS = 1000
 export const DOOR_FITTING_LABOUR = 200
+export const DOOR_FITTING_NOTE = 'Labour 200 covers both visits: the mechanic first comes home to take measurements, then comes again to fit the door once it arrives.'
 const FIT_GAP = 6 // mm below the last rate row
 
 function DoorFittingBox({ top }: { top: number }) {
@@ -147,6 +148,7 @@ function DoorFittingBox({ top }: { top: number }) {
           <div className="flex flex-1 items-center justify-end" style={{ paddingRight: '4mm' }}>{r.value}</div>
         </div>
       ))}
+      <div className="absolute left-0 right-0 text-[12pt] leading-[1.25]" style={{ top: 'calc(100% + 2.5mm)' }}>{DOOR_FITTING_NOTE}</div>
     </div>
   )
 }
