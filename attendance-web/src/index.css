@@ -224,6 +224,34 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .paypicks button, .paymode button { flex: 1; min-width: 0; min-height: 52px; padding: 6px 8px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 700 17px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .02em; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
 .paypicks button b { font-size: 20px; }
 .paypicks button.on, .paymode button.on { background: var(--ink); color: #fff; box-shadow: none; }
+/* Pay: every worker on one screen. */
+.paytotals { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; background: var(--key); }
+.paytotals > div { display: flex; flex-direction: column; gap: 2px; }
+.paytotals small { color: var(--dim); font: 700 13px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; }
+.paytotals b { font: 800 30px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.paytotals [data-kind="due"] b { color: var(--must); }
+.paytotals span { margin-left: auto; color: var(--dim); font-size: 14px; font-weight: 600; }
+.paylist { margin-top: 12px; border-top: 2px solid var(--ink); }
+.spitem { border-bottom: 1px solid var(--line); }
+.spitem[data-open] { border-bottom: 2px solid var(--ink); }
+.sprow { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 6px 0 6px 10px; box-shadow: inset 5px 0 0 transparent; }
+.sprow[data-kind="due"] { box-shadow: inset 5px 0 0 var(--must); }
+.sprow[data-kind="adv"] { box-shadow: inset 5px 0 0 var(--wait); }
+.sprow[data-kind="zero"] { box-shadow: inset 5px 0 0 var(--safe); }
+.spmain { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 4px 0; text-align: left; background: none; color: var(--ink); }
+.spmain:disabled { cursor: default; }
+.spname { font: 800 23px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.spmain[aria-expanded]::after { content: none; }
+.spsub { color: var(--dim); font-size: 14px; font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.spfig { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.spfig small { color: var(--dim); font: 700 12px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; }
+.spfig b { font: 800 26px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.sprow[data-kind="due"] .spfig b { color: var(--must); }
+.sppay { flex: none; min-width: 64px; min-height: 48px; padding: 0 10px; background: var(--must); color: #fff; font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+.sppay:active { transform: translateY(2px); }
+.spdetail { padding: 0 0 14px 10px; }
+.spdetail .paysum:first-child, .spdetail > .paynote:first-child + .paysum { margin-top: 8px; }
+.spitem > .paydone { margin: 0 0 8px; }
 .paygrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; margin-top: 14px; border-top: 2px solid var(--ink); }
 .paygrid > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .paygrid > div.netrow { grid-column: 1 / -1; border-bottom: 0; border-top: 2px solid var(--ink); margin-top: -1px; }

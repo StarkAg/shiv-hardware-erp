@@ -46,3 +46,12 @@ Cashier: it lands in Staff Payments and the cash book, and is reversed there.
   later payment already recorded, and so on.
 - The payment reference is kept on the phone (`shiv-attendance:staff-payment-pending`)
   until the server confirms, so a lost answer is retried without paying twice.
+
+## Every worker on one screen (same day, owner's ask)
+
+The worker picker is gone. Pay lists every worker at once: at the top, what is
+to pay across all staff and how much advance is out; then one row per worker
+with a blue edge (to pay), yellow (advance left) or green (settled), the
+figure, a line for the month (days, earned, given) and a Pay button on this
+month. Tapping a name opens that worker's sum, payments, Tuesday pay and every
+day underneath. A worker not in the register says so and has no Pay button.

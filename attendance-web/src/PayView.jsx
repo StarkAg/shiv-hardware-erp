@@ -44,31 +44,27 @@ export function PayView({ cursor, setCursor, staff, statusFor, loading, board, b
   const stepM = (n) => setCursor(new Date(y, m0 + n, 1))
   const todayKey = dateKey(new Date())
   const future = month > todayKey.slice(0, 7)
-
-  const [sel, setSel] = useState(staff[0] || '')
-  useEffect(() => { if (!staff.includes(sel)) setSel(staff[0] || '') }, [staff, sel])
-
-  const row = board?.date === asOf ? board.rows.find((r) => r.staff === sel) : null
-  const book = row ? monthBook(row, month) : null
-  const [paying, setPaying] = useState(false)
-  const [paid, setPaid] = useState(null)
-  useEffect(() => { setPaid(null) }, [sel, month])
   // Pay is for today only: this month's figures are as of today.
   const isThisMonth = month === todayKey.slice(0, 7)
-  const canPay = isThisMonth && !!book && asOf >= row.profile.startDate
-  const pendingHere = canPay && readPending()?.staff === sel
 
-  let body
-  if (future) body = <div className="paynote">Nothing yet for {MON[m0]} {y}.</div>
-  else if (!board || board.date !== asOf) {
-    body = <div className="paynote">{boardLoading ? 'Loading the register…' : boardFailed ? 'Could not reach the register. Check the internet and open Pay again.' : 'Loading…'}</div>
-  } else if (!row || !row.profile) {
-    body = <div className="paynote">{sel}&rsquo;s pay is not kept in the register yet. Set it up in Cashier, Staff Payments.</div>
-  } else if (asOf < row.profile.startDate) {
-    body = <div className="paynote">{sel}&rsquo;s pay is kept from {fmtDay(row.profile.startDate)} {row.profile.startDate.slice(0, 4)}.</div>
-  } else {
-    body = <Book name={sel} book={book} asOf={asOf} cursor={cursor} statusFor={statusFor} loading={loading} cricket={cricket} todayKey={todayKey} />
-  }
+  const [open, setOpen] = useState('')
+  const [paying, setPaying] = useState('')
+  const [paid, setPaid] = useState(null)
+  useEffect(() => { setPaid(null); setOpen('') }, [month])
+
+  const ready = !future && board?.date === asOf
+  // Every worker on one screen, in the staff list's order, plus anybody the
+  // register keeps who has since left the list.
+  const names = ready ? [...new Set([...staff, ...board.rows.filter((r) => r.profile).map((r) => r.staff)])] : staff
+  const lines = ready ? names.map((name) => {
+    const row = board.rows.find((r) => r.staff === name) || null
+    const kept = !!row?.profile && asOf >= row.profile.startDate
+    return { name, row, kept, book: kept ? monthBook(row, month) : null }
+  }) : []
+  const totalDue = lines.reduce((n, l) => n + (l.book && l.book.closing > 0 ? l.book.closing : 0), 0)
+  const totalAdv = lines.reduce((n, l) => n + (l.book && l.book.closing < 0 ? -l.book.closing : 0), 0)
+  const pending = readPending()
+  const payingLine = lines.find((l) => l.name === paying)
 
   return (
     <div className="card">
@@ -81,25 +77,66 @@ export function PayView({ cursor, setCursor, staff, statusFor, loading, board, b
         <button onClick={() => stepM(1)} aria-label="Next month">›</button>
       </div>
 
-      <div className="payselect">
-        <label htmlFor="payworker">Worker</label>
-        <select id="payworker" value={sel} onChange={(e) => setSel(e.target.value)}>
-          {staff.map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-      </div>
+      {future ? (
+        <div className="paynote">Nothing yet for {MON[m0]} {y}.</div>
+      ) : !ready ? (
+        <div className="paynote">{boardLoading ? 'Loading the register…' : boardFailed ? 'Could not reach the register. Check the internet and open Pay again.' : 'Loading…'}</div>
+      ) : (
+        <>
+          <div className="paytotals">
+            <div data-kind="due"><small>To pay, all staff</small><b>{inr(totalDue)}</b></div>
+            <div data-kind="adv"><small>Advance out</small><b>{inr(totalAdv)}</b></div>
+            <span>on {fmtDay(asOf)}</span>
+          </div>
 
-      {canPay && (
-        <button className="allbtn paybtn" onClick={() => { setPaid(null); setPaying(true) }}>
-          {pendingHere ? `Finish paying ${sel}` : `Pay ${sel}`}
-        </button>
+          <div className="paylist">
+            {lines.map(({ name, row, kept, book }) => {
+              const now = book ? balanceSay(book.closing) : null
+              const isOpen = open === name && !!book
+              const canPay = isThisMonth && kept
+              return (
+                <div className="spitem" key={name} data-open={isOpen || undefined}>
+                  <div className="sprow" data-kind={now?.kind}>
+                    <button className="spmain" disabled={!book} aria-expanded={book ? isOpen : undefined}
+                      onClick={() => setOpen(isOpen ? '' : name)}>
+                      <span className="spname">{name}</span>
+                      <span className="spsub">
+                        {!row?.profile ? 'Not in the register yet'
+                          : !kept ? `Kept from ${fmtDay(row.profile.startDate)}`
+                            : `${book.worked} day${book.worked === 1 ? '' : 's'} · earned ${inr(book.earned)} · given ${inr(book.paid + book.advanced)}`}
+                      </span>
+                    </button>
+                    {now && (
+                      <div className="spfig">
+                        <small>{now.word}</small>
+                        <b>{now.kind === 'zero' ? inr(0) : inr(now.amount)}</b>
+                      </div>
+                    )}
+                    {canPay && (
+                      <button className="sppay" onClick={() => { setPaid(null); setPaying(name) }}>
+                        {pending?.staff === name ? 'Finish' : 'Pay'}
+                      </button>
+                    )}
+                  </div>
+                  {paid?.staff === name && (
+                    <div className="paydone" role="status">Paid {name} {inr(paid.amount)} {paid.mode === 'online' ? 'online' : 'in cash'}. It is in Staff Payments and the cash book.</div>
+                  )}
+                  {isOpen && (
+                    <div className="spdetail">
+                      <Book name={name} book={book} asOf={asOf} cursor={cursor} statusFor={statusFor} loading={loading} cricket={cricket} todayKey={todayKey} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {!isThisMonth && <div className="paynote">Pay is only for today, on this month.</div>}
+        </>
       )}
-      {paid && <div className="paydone" role="status">Paid {sel} {inr(paid.amount)} {paid.mode === 'online' ? 'online' : 'in cash'}. It is in Staff Payments and the cash book.</div>}
 
-      {body}
-
-      {paying && row && (
-        <PaySheet row={row} date={asOf} onPay={onPay} onClose={() => setPaying(false)}
-          onDone={(p) => { setPaying(false); setPaid(p) }} />
+      {payingLine?.row && (
+        <PaySheet row={payingLine.row} date={asOf} onPay={onPay} onClose={() => setPaying('')}
+          onDone={(p) => { setPaying(''); setPaid(p) }} />
       )}
     </div>
   )
@@ -113,15 +150,7 @@ function Book({ name, book, asOf, cursor, statusFor, loading, cricket, todayKey 
 
   return (
     <>
-      <div className="paybig" data-kind={now.kind}>
-        <div className="motlabel">{now.word} on {fmtDay(asOf)}</div>
-        <div className="motnet">{inr(now.amount)}</div>
-        <div className="paysub">
-          {now.kind === 'due' && `The shop owes ${name} this much in wages.`}
-          {now.kind === 'adv' && `${name} still has this much advance to work off${daysToClear ? `, about ${daysToClear} working day${daysToClear === 1 ? '' : 's'} at ${inr(book.rate)} a day` : ''}.`}
-          {now.kind === 'zero' && `Nothing owed either way.`}
-        </div>
-      </div>
+      {daysToClear > 0 && <div className="paynote">About {daysToClear} working day{daysToClear === 1 ? '' : 's'} to work the advance off at {inr(book.rate)} a day.</div>}
 
       <div className="paysum" aria-label="How it adds up">
         <div className="mgttl">How it adds up</div>
