@@ -25,7 +25,6 @@ import { sendGuaranteeWhatsApp, isWhatsAppNotConnectedError, type ServerPrintPay
 import { printViaShop } from '../../lib/printViaShop'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
-import Confirm from '../ledger/components/Confirm'
 import { indiaYear } from '../../lib/businessDate'
 import { rateFromAmount } from '../../lib/guaranteeRate'
 import { BillDock, readDockSize, type DockSize } from '../../components/BillDock'
@@ -355,7 +354,6 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // off the Guarantee list.
   const [saved] = useState(() => readDraft(layout))
   const [fromBillId, setFromBillId] = useState<string | null>(saved?.fromBillId ?? null)
-  const [askNew, setAskNew] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   // Each Save or Print mints a fresh GC-YYYY-NNNN ref number from the store sequence,
@@ -519,7 +517,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     writeDraft(layout, touched ? { ref, ref2, customer, customer2, rows, rows2, brand1, brand2, period1, period2, termite1, termite2, secondCardOn, tab, cardDate, fromBillId } : null)
   }, [layout, editing, touched, ref, ref2, customer, customer2, rows, rows2, brand1, brand2, period1, period2, termite1, termite2, secondCardOn, tab, cardDate, fromBillId])
 
-  /** New: an empty card with fresh numbers, the kept draft thrown away. */
+  /** New: an empty card with fresh numbers, the kept draft thrown away. No "are you sure" (owner's ask, 1 Nov 2026): a saved or printed card is in History anyway. */
   function newCard() {
     const number = `GC-${indiaYear()}-${Date.now().toString().slice(-5)}`
     const number2 = `GC-${indiaYear()}-${(Date.now() + 1).toString().slice(-5)}`
@@ -915,7 +913,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
             ) : (
               <div className="no-print flex flex-wrap items-center justify-center gap-3">
                 {/* On a phone these live in the bar at the bottom, next to where the card is filled in. */}
-                <Button variant="outline" onClick={() => (touched ? setAskNew(true) : newCard())} disabled={generating} className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
+                <Button variant="outline" onClick={newCard} disabled={generating} className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
                   <FilePlus size={20} /> New
                 </Button>
                 <Button variant="outline" onClick={saveCard} disabled={!hasRows || generating} className="hidden min-w-32 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold md:flex">
@@ -1108,7 +1106,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
 
         {!editing && (
           <div className="no-print sticky -bottom-3 z-10 -mx-3 -mb-3 mt-3 flex gap-2 border-t border-stone-200/90 bg-stone-100/95 px-3 py-2 backdrop-blur dark:border-white/10 dark:bg-stone-950/95 md:hidden">
-            <Button variant="outline" onClick={() => (touched ? setAskNew(true) : newCard())} disabled={generating} aria-label="New card" className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-base font-semibold">
+            <Button variant="outline" onClick={newCard} disabled={generating} aria-label="New card" className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-base font-semibold">
               <FilePlus size={18} /> New
             </Button>
             <Button variant="outline" onClick={saveCard} disabled={!hasRows || generating} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl text-base font-semibold">
@@ -1124,16 +1122,6 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
         )}
       </div>
 
-      {askNew && (
-        <Confirm
-          title="Start a new card?"
-          body="What is filled in now is cleared. A card you already saved or printed is kept in History."
-          confirmLabel="New card"
-          danger
-          onConfirm={newCard}
-          onClose={() => setAskNew(false)}
-        />
-      )}
       <WhatsAppLoginModal open={showWhatsAppLogin} onClose={() => setShowWhatsAppLogin(false)} />
     </div>
   )
