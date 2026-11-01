@@ -35,7 +35,7 @@
  *   DATA_DIR     the service's volume (/data)
  */
 import http from 'node:http'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { birthdaysOn, indiaDate, sentKey } from './dates.mjs'
 
@@ -250,11 +250,23 @@ async function startWhatsApp() {
           version = (await fetchLatestBaileysVersion().catch(() => null))?.version ?? null
         }
         log(`[whatsapp] closed code=${code}`)
-        // A logged-out link is not retried: it needs a new scan, which is a restart with the old link moved off the volume by hand.
         if (state.status !== 'logged_out') {
           attempts += 1
           setTimeout(() => void connect(), Math.min(60_000, 10_000 * attempts))
+          return
         }
+        // The phone removed this link, so its login is no good. It is moved
+        // aside on the volume (kept, dated) and a fresh one started, so /login
+        // shows a new QR to scan with nobody touching the volume by hand.
+        const aside = `${AUTH_DIR}-logged-out-${new Date().toISOString().replace(/[:.]/g, '-')}`
+        // If it cannot be moved, it stays logged out rather than redialling the dead login.
+        const moved = await rename(AUTH_DIR, aside).then(() => true, (err) => {
+          log('[whatsapp] logged out, and the old login could not be moved:', err?.message ?? err)
+          return false
+        })
+        if (!moved) return
+        log(`[whatsapp] logged out; old login kept at ${aside}, asking for a new scan`)
+        setTimeout(() => void startWhatsApp(), 2_000)
       }
     })
   }

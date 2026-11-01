@@ -11,7 +11,7 @@ Which number sends what. Checked 2026-10-30. Update this file when a link change
 
 ## Birthday reminders
 
-Railway service `whatsapp-reminders` sends the GradeX birthdays to 87099 64141 at 12:00 am India time. It is meant to be linked to Shop as its own linked device, separate from the shop PC's link, so it works with the PC off. It sends only when the linked number is `FROM_NUMBER` (917970550954), and sends nothing on the day it is first linked. Scan the QR at `/login?key=LOGIN_KEY` (`railway variables --service whatsapp-reminders --kv`). To change the list, edit `whatsapp-reminders/birthdays.json`, then `npm run deploy -- --only whatsapp-reminders`.
+Railway service `whatsapp-reminders` sends the GradeX birthdays to 87099 64141 at 12:00 am India time. It is meant to be linked to Shop as its own linked device, separate from the shop PC's link, so it works with the PC off. It sends only when the linked number is `FROM_NUMBER` (917970550954), and sends nothing on the day it is first linked. Scan the QR at `/login?key=LOGIN_KEY` (`railway variables --service whatsapp-reminders --kv`). Since 1 Nov 2026, when the phone removes the link the service moves the dead login aside on the volume (`/data/auth-logged-out-<time>`) and shows a new QR there by itself; before, the page just said "Unlinked" until someone cleared the volume by hand. To change the list, edit `whatsapp-reminders/birthdays.json`, then `npm run deploy -- --only whatsapp-reminders`.
 
 ## Still open
 
