@@ -122,6 +122,35 @@ function buildPrintItems(category: ProductCategory, rows: BrandQuoteRow[]): Prin
   return items
 }
 
+/**
+ * Readymade door only (owner's trial, 1 Nov 2026): a box under the rates for the
+ * door fitted, filled in by hand. The door's rate and the total are left blank
+ * to write in; fitting items and labour are the shop's usual approximate
+ * figures. print-server/template.mjs draws the same box.
+ */
+export const DOOR_FITTING_ITEMS = 1000
+export const DOOR_FITTING_LABOUR = 200
+const FIT_GAP = 6 // mm below the last rate row
+
+function DoorFittingBox({ top }: { top: number }) {
+  const rows: { label: string; value: string; h: number; bold?: boolean }[] = [
+    { label: 'Door Rate', value: '', h: 11 },
+    { label: 'Fitting Items (Approx.)', value: String(DOOR_FITTING_ITEMS), h: 9 },
+    { label: 'Labour', value: String(DOOR_FITTING_LABOUR), h: 9 },
+    { label: 'Total', value: '', h: 11, bold: true },
+  ]
+  return (
+    <div className="absolute left-[29mm] right-[34mm] text-[15pt] leading-[1.1]" style={{ top: `${top}mm`, border: '1.5px solid #000' }}>
+      {rows.map((r, i) => (
+        <div key={r.label} className="flex" style={{ height: `${r.h}mm`, borderTop: i ? (r.bold ? '1.5px solid #000' : '1px solid #000') : undefined, fontWeight: r.bold ? 700 : 400 }}>
+          <div className="flex items-center" style={{ width: '88mm', paddingLeft: '2mm', borderRight: '1px solid #000' }}>{r.label}</div>
+          <div className="flex flex-1 items-center justify-end" style={{ paddingRight: '4mm' }}>{r.value}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function QuotationPrint({ quote }: { quote: Quotation }) {
   if (isAluminium(quote.category)) return <AluminiumPrint quote={quote} />
   if (isUpvc(quote.category)) return <UpvcPrint quote={quote} />
@@ -130,6 +159,7 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
   const twoCol = hasTwoGtyCols(quote.category)
   const tintRight = twoCol ? '2mm' : '32mm'
   const printItems = buildPrintItems(quote.category, enrichedQuote.rows ?? [])
+  const lastTop = printItems.length ? printItems[printItems.length - 1].top : BRAND_START - ROW_H
 
   return (
     <A4Page>
@@ -209,6 +239,7 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
             )
           })}
         </div>
+        {quote.category === 'readymade-door' && <DoorFittingBox top={lastTop + ROW_H + FIT_GAP} />}
         </div>
       </div>
     </A4Page>

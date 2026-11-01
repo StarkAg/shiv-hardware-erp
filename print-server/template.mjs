@@ -235,6 +235,23 @@ function cardPage(body) {
 </head><body>${body}${FIT_SCRIPT}</body></html>`
 }
 
+// Readymade door only: a box under the rates for the door fitted, filled in by
+// hand. Same as DoorFittingBox in src/features/print/QuotationPrint.tsx.
+const DOOR_FITTING_ITEMS = 1000
+const DOOR_FITTING_LABOUR = 200
+function doorFittingHtml(top) {
+  const rows = [
+    ['Door Rate', '', 11, false],
+    ['Fitting Items (Approx.)', String(DOOR_FITTING_ITEMS), 9, false],
+    ['Labour', String(DOOR_FITTING_LABOUR), 9, false],
+    ['Total', '', 11, true],
+  ]
+  return `<div style="position:absolute;left:29mm;right:34mm;top:${top}mm;border:1.5px solid #000;font-size:15pt;line-height:1.1">${rows.map(([label, value, h, bold], i) =>
+    `<div style="display:flex;height:${h}mm;${i ? `border-top:${bold ? '1.5px' : '1px'} solid #000;` : ''}${bold ? 'font-weight:700;' : ''}">` +
+    `<div style="display:flex;align-items:center;width:88mm;padding-left:2mm;border-right:1px solid #000">${label}</div>` +
+    `<div style="display:flex;flex:1;align-items:center;justify-content:flex-end;padding-right:4mm">${value}</div></div>`).join('')}</div>`
+}
+
 export async function buildQuotationHtml(quote) {
   if (quote.alu) return buildAluminiumHtml(quote)
 
@@ -243,6 +260,8 @@ export async function buildQuotationHtml(quote) {
   const twoCol = hasTwoGtyCols(category)
   const tintRight = twoCol ? '2mm' : '32mm'
   const printItems = buildPrintItems(category, rows)
+  const lastTop = printItems.length ? printItems[printItems.length - 1].top : BRAND_START - ROW_H
+  const fittingHtml = category === 'readymade-door' ? doorFittingHtml(lastTop + ROW_H + 6) : ''
   const rowsHtml = printItems.map(item => {
     if (item.kind === 'section') {
       return `<div style="position:absolute;left:29mm;top:${item.top}mm;font-size:15pt;line-height:1.1;color:#00B0F0">${esc(item.label)}</div>`
@@ -304,6 +323,7 @@ export async function buildQuotationHtml(quote) {
     <div class="legacy-info" style="left:148mm;top:113.5mm;width:30mm;text-align:center">Guarantee</div>
     ${twoCol ? '<div class="legacy-info" style="left:178mm;top:113.5mm;width:30mm;text-align:center">Warranty</div>' : ''}
     ${rowsHtml}
+    ${fittingHtml}
     </div>`)
 }
 
