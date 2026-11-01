@@ -64,3 +64,39 @@ export function monthBook(row, month) {
     payments,
   }
 }
+
+/**
+ * Every pay event in a month, for all staff, newest first: wages and advances
+ * handed over, payments reversed, rate changes and the day tracking began.
+ * Read from the same register rows, so it shows exactly what the register holds.
+ */
+export function monthEvents(rows, month) {
+  const out = []
+  const inMonth = (date) => !!date && date.startsWith(month)
+  for (const row of rows || []) {
+    if (!row?.profile) continue
+    const staff = row.staff
+    for (const p of row.payments || []) {
+      if (inMonth(p.date)) {
+        out.push({ key: `p-${p._id}`, staff, date: p.date, at: p.at, type: p.kind === 'advance' ? 'advance' : 'wage',
+          amount: p.amount, mode: p.mode, note: p.note, reversed: !!p.voided, legacy: !!p.legacy })
+      }
+      if (p.voided && p.voidedAt && inMonth(p.date)) {
+        // Shown on the day it was reversed (India time), not the day it was paid.
+        const on = new Date(p.voidedAt + 330 * 60_000).toISOString().slice(0, 10)
+        out.push({ key: `r-${p._id}`, staff, date: on, at: p.voidedAt, type: 'reversed',
+          amount: p.amount, of: p.kind === 'advance' ? 'advance' : 'wages', paidOn: p.date })
+      }
+    }
+    const pr = row.profile
+    if (inMonth(pr.startDate)) {
+      out.push({ key: `s-${staff}`, staff, date: pr.startDate, at: pr.createdAt, type: 'start',
+        rate: pr.rates?.[0]?.rate ?? 0, openingDue: pr.openingDue || 0, openingAdvance: pr.openingAdvance || 0 })
+    }
+    for (const r of (pr.rates || []).slice(1)) {
+      if (inMonth(r.from)) out.push({ key: `c-${staff}-${r.from}`, staff, date: r.from, type: 'rate', rate: r.rate })
+    }
+  }
+  const when = (e) => e.at ?? Date.parse(`${e.date}T23:59:00+05:30`)
+  return out.sort((a, b) => when(b) - when(a))
+}

@@ -252,6 +252,16 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .spdetail { padding: 0 0 14px 10px; }
 .spdetail .paysum:first-child, .spdetail > .paynote:first-child + .paysum { margin-top: 8px; }
 .spitem > .paydone { margin: 0 0 8px; }
+.payhist { margin-top: 20px; padding-top: 12px; border-top: 4px solid var(--ink); }
+.histline { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 16px; font-weight: 600; }
+.histline > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.histline em { font-style: normal; }
+.histline em b { font-weight: 800; }
+.histline small { color: var(--dim); font-size: 14px; font-weight: 500; }
+.histline .histamt { flex: none; font: 700 20px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.histline[data-reversed] .histamt { text-decoration: line-through; color: var(--dim); }
+.histline[data-type="reversed"] .histamt { color: var(--stop); }
+.histline[data-type="rate"], .histline[data-type="start"] { color: var(--dim); }
 .paygrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; margin-top: 14px; border-top: 2px solid var(--ink); }
 .paygrid > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .paygrid > div.netrow { grid-column: 1 / -1; border-bottom: 0; border-top: 2px solid var(--ink); margin-top: -1px; }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { monthPay, ATTEND_THRESHOLD } from './pay.js'
-import { monthBook } from './payBook.js'
+import { monthBook, monthEvents } from './payBook.js'
 import { RunChase } from './cricket/lazy.jsx'
 import { PaySheet, readPending } from './PaySheet.jsx'
 
@@ -131,6 +131,8 @@ export function PayView({ cursor, setCursor, staff, statusFor, loading, board, b
             })}
           </div>
           {!isThisMonth && <div className="paynote">Pay is only for today, on this month.</div>}
+
+          <PayHistory events={monthEvents(board.rows, month)} monthName={MON[m0]} />
         </>
       )}
 
@@ -138,6 +140,45 @@ export function PayView({ cursor, setCursor, staff, statusFor, loading, board, b
         <PaySheet row={payingLine.row} date={asOf} onPay={onPay} onClose={() => setPaying('')}
           onDone={(p) => { setPaying(''); setPaid(p) }} />
       )}
+    </div>
+  )
+}
+
+// Shop time, whatever the phone's clock is set to.
+const fmtTime = (ms) => {
+  const d = new Date(ms + 330 * 60_000)
+  const h = d.getUTCHours()
+  return `${(h % 12) || 12}:${pad(d.getUTCMinutes())} ${h < 12 ? 'am' : 'pm'}`
+}
+
+/** Every pay event of the month, all staff, newest first (payBook.js monthEvents). */
+function PayHistory({ events, monthName }) {
+  const say = (e) => {
+    if (e.type === 'wage') return 'Wages'
+    if (e.type === 'advance') return e.legacy ? 'Advance (old attendance record)' : 'Advance'
+    if (e.type === 'reversed') return `Reversed ${e.of} paid ${fmtDay(e.paidOn)}`
+    if (e.type === 'rate') return `Rate now ${inr(e.rate)} a day`
+    return `Pay tracking started at ${inr(e.rate)} a day${e.openingDue ? `, wages owed ${inr(e.openingDue)}` : ''}${e.openingAdvance ? `, advance ${inr(e.openingAdvance)}` : ''}`
+  }
+  return (
+    <div className="payhist">
+      <div className="mgttl">History, {monthName}</div>
+      {events.length === 0 ? (
+        <div className="paynote">Nothing paid or changed this month.</div>
+      ) : events.map((e) => (
+        <div className="histline" key={e.key} data-type={e.type} data-reversed={e.reversed || undefined}>
+          <span>
+            <em><b>{e.staff}</b> {say(e)}</em>
+            <small>
+              {wdOf(e.date)} {fmtDay(e.date)}{e.at ? `, ${fmtTime(e.at)}` : ''}
+              {e.mode ? ` · ${e.mode === 'online' ? 'Online' : 'Cash'}` : ''}
+              {e.note ? ` · ${e.note}` : ''}
+              {e.reversed ? ' · reversed' : ''}
+            </small>
+          </span>
+          {e.amount != null && <b className="histamt">{e.type === 'reversed' ? '+ ' : ''}{inr(e.amount)}</b>}
+        </div>
+      ))}
     </div>
   )
 }

@@ -55,3 +55,13 @@ with a blue edge (to pay), yellow (advance left) or green (settled), the
 figure, a line for the month (days, earned, given) and a Pay button on this
 month. Tapping a name opens that worker's sum, payments, Tuesday pay and every
 day underneath. A worker not in the register says so and has no Pay button.
+
+## History on the Pay screen (same day, owner's ask)
+
+Under the staff list, "History, <month>" lists every pay event of the month
+for all staff, newest first: wages and advances (date, shop time, cash or
+online, note), payments reversed (on the day reversed, the struck-out payment
+kept), rate changes and the day pay tracking began. It is built from the
+register rows the screen already loads (`monthEvents` in `payBook.js`), so it
+costs no extra read and shows exactly what the register holds. The app's
+Change history (the clock in the header) keeps logging the same payments too.
