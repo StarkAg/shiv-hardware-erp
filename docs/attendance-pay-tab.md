@@ -70,3 +70,28 @@ kept), rate changes and the day pay tracking began. It is built from the
 register rows the screen already loads (`monthEvents` in `payBook.js`), so it
 costs no extra read and shows exactly what the register holds. The app's
 Change history (the clock in the header) keeps logging the same payments too.
+
+## The attendance ladder (2 Nov 2026, owner's ask)
+
+Tuesday pay became the first step of a ladder, worked out in
+`attendance-web/src/pay.js` (`monthPay`, `ladderFor`) and pinned by
+`tests/attendancePay.test.ts`. Attendance is a share of the month's open days:
+every day but Tuesdays and days marked closed. Each step is rounded down to the
+half day.
+
+| Step | Share | 26 open days | Pays |
+|---|---|---|---|
+| 1 | 77%, never more than 20 days | 20 | Tuesday pay |
+| 2 | 81% | 21 | Tuesday pay + ₹300 |
+| 3 | 85% | 22 | Tuesday pay + ₹500 |
+
+- A full day on every Monday and every Wednesday of the month stays
+  mandatory: one miss loses the month's Tuesday pay and the bonus.
+- It stops at 85% on purpose: the owner wants about 22 days from each, not
+  everyone every day.
+- The bonus, like Tuesday pay, is not in the register and stays out of the sum.
+- Stats (no PIN) shows each worker's % of open days and a line in days, e.g.
+  "Tuesday pay ✓ · 1 more day for ₹500". No wage or rate, only the fixed bonus
+  amounts. Pay (PIN) shows the three steps with rupees.
+- Run on May to Oct 2026 marks: Tuesday pay unchanged (₹19,620), bonus ₹3,000
+  in all, ₹1,500 of it in October.

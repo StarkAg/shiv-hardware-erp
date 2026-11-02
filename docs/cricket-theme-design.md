@@ -86,7 +86,7 @@ thinking, so the story is rebuilt from what this app really holds.
 | Month | Scorecard | Rows and columns already look like one |
 | Stats | Points table | Sorted by runs |
 | Pay | Purse, with a run chase | See below |
-| 20 days for Tuesday pay | Target of 80 runs | 20 days x 4 runs, the rule in `pay.js` |
+| Days for Tuesday pay (20 in a normal month) | Target, 4 runs a day | The first step of the ladder in `pay.js` |
 | Missed Monday or Wednesday | Chase lost | Same rule, same wording beside it |
 | 25 full days | Century | 25 x 4, a full month reads as a hundred |
 

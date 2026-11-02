@@ -17,6 +17,7 @@ import { cricketEvent } from './cricket/bus.js'
 import { ThemeSwitch } from './cricket/ThemeSwitch.jsx'
 import { CricketKey, CricketLayer, CricketTabIcon, PointsTable } from './cricket/lazy.jsx'
 import { monthScores } from './cricket/score.js'
+import { monthPay, ladderLine } from './pay.js'
 
 const api = anyApi
 const EDIT_PASSWORD = '262003'
@@ -697,7 +698,8 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, t
   const days = Array.from({ length: dim }, (_, i) => new Date(y, m0, i + 1))
   const stepM = (n) => setCursor(new Date(y, m0 + n, 1))
 
-  // Per-staff tally for the month.
+  // Per-staff tally for the month, and where each stands on the ladder (pay.js).
+  // Today counts once it is marked.
   const stats = staff.map((name) => {
     let p = 0, n = 0, h = 0
     for (const d of days) {
@@ -707,8 +709,12 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, t
       else if (st === 'H') h++
     }
     const counted = p + n + h
-    const pct = counted ? Math.round(((p + 0.5 * h) / counted) * 100) : 0
-    return { name, p, n, h, counted, pct }
+    const ladder = monthPay({ entries: days.map((d) => {
+      const status = statusFor(d, name)
+      return { date: d, status, future: dateKey(d) > todayKey || (dateKey(d) === todayKey && !status) }
+    }) })
+    const pct = Math.round(ladder.share * 100)
+    return { name, p, n, h, counted, pct, ladder }
   })
   let closed = 0
   for (const d of days) if (statusFor(d, staff[0]) === 'C' || dayOff(d)) closed++
@@ -739,7 +745,7 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, t
               <div className="statrow" key={s.name}>
                 <div className="stathead">
                   <span className="pname">{s.name}</span>
-                  <span className={`pct ${s.pct >= 90 ? 'good' : s.pct >= 75 ? 'ok' : 'bad'}`}>{s.pct}%</span>
+                  <span className={`pct ${s.pct >= 85 ? 'good' : s.pct >= 77 ? 'ok' : 'bad'}`}>{s.pct}%</span>
                 </div>
                 <div className="bar">
                   <span className="b p" style={{ flex: s.p }} />
@@ -751,7 +757,9 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, t
                   <span className="mp">{s.p} present</span>
                   {s.h > 0 && <span className="mh">{s.h} half</span>}
                   <span className="mn">{s.n} absent</span>
+                  <span>of {s.ladder.open} open days</span>
                 </div>
+                <div className={`statladder ${s.ladder.missed.length ? 'lost' : s.ladder.enough ? 'good' : ''}`}>{ladderLine(s.ladder)}</div>
               </div>
             ))}
           </div>

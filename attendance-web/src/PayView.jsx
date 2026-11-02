@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { monthPay, ATTEND_THRESHOLD } from './pay.js'
+import { monthPay, ladderLine, halves } from './pay.js'
 import { monthBook, monthEvents } from './payBook.js'
 import { RunChase } from './cricket/lazy.jsx'
 import { PaySheet, readPending } from './PaySheet.jsx'
@@ -15,8 +15,8 @@ import { PaySheet, readPending } from './PaySheet.jsx'
  * for the month and the sum that gets there, line by line, and the Pay button
  * is the only thing on it that writes.
  *
- * Tuesday pay is the one figure the register does not hold; it is shown apart,
- * worked out by pay.js, and kept out of the sum.
+ * Tuesday pay and the attendance bonus are the figures the register does not
+ * hold; they are shown apart, worked out by pay.js, and kept out of the sum.
  */
 
 const pad = (n) => String(n).padStart(2, '0')
@@ -263,28 +263,44 @@ function Book({ name, book, asOf, cursor, statusFor, loading, cricket, todayKey 
   )
 }
 
-/** Tuesday pay: the shop's rule from pay.js, not in the register, so shown apart. */
+/** Tuesday pay and the bonus ladder: the shop's rule from pay.js, not in the register, so shown apart. */
 function TuesdayNote({ name, rate, cursor, statusFor, loading, cricket, todayKey }) {
   if (loading) return null
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const dim = new Date(y, m0 + 1, 0).getDate()
   const days = Array.from({ length: dim }, (_, i) => new Date(y, m0, i + 1))
-  const r = monthPay({ entries: days.map((d) => ({ date: d, status: statusFor(d, name), future: dateKey(d) > todayKey })), rate })
-  const remaining = Math.max(0, Math.ceil(ATTEND_THRESHOLD - r.attended))
-  const worth = r.tuesdays * rate
+  const r = monthPay({ entries: days.map((d) => {
+    const status = statusFor(d, name)
+    return { date: d, status, future: dateKey(d) > todayKey || (dateKey(d) === todayKey && !status) }
+  }), rate })
+  const top = r.steps[r.steps.length - 1].need
+  const rungs = [
+    { need: r.need, say: `Tuesday pay, ${inr(r.tuesdays * rate)} for ${r.tuesdays} Tuesdays`, reached: r.enough },
+    ...r.steps.map((s) => ({ need: s.need, say: `+ ${inr(s.amount)} bonus`, reached: s.reached })),
+  ]
+  const ahead = r.best > r.attended
   return (
     <div className="paytue">
-      <div className="mgttl">Tuesday pay, not in the sum above</div>
-      {cricket && <RunChase name={name} attended={r.attended} threshold={ATTEND_THRESHOLD} unlocked={r.unlocked} missedCount={r.missed.length} />}
-      <div className="motdays">{r.attended} / {ATTEND_THRESHOLD} days present</div>
-      <div className="progress"><span className={r.unlocked ? 'full' : ''} style={{ width: `${Math.min(r.attended / ATTEND_THRESHOLD, 1) * 100}%` }} /></div>
+      <div className="mgttl">Tuesday pay and bonus, not in the sum above</div>
+      {cricket && <RunChase name={name} attended={r.attended} threshold={r.need} unlocked={r.unlocked} missedCount={r.missed.length} />}
+      <div className="motdays">{halves(r.attended)} days of {r.open} open</div>
+      <div className="progress"><span className={r.unlocked ? 'full' : ''} style={{ width: `${Math.min(r.attended / top, 1) * 100}%` }} /></div>
+      <div className="ladder">
+        {rungs.map((g) => (
+          <div className="rung" key={g.need + g.say} data-on={(g.reached && !r.missed.length) || undefined}>
+            <b>{halves(g.need)} days</b><span>{g.say}</span>
+          </div>
+        ))}
+      </div>
       <div className={`motmsg ${r.unlocked ? 'good' : ''}`}>
-        {r.unlocked
-          ? `Earned: ${inr(worth)} for ${r.tuesdays} Tuesdays. Not added by the register.`
-          : r.missed.length > 0
-            ? `Lost this month: ${r.missed.map((d) => `${WD[d.getDay()]} ${d.getDate()}`).join(', ')} ${r.missed.length === 1 ? 'was' : 'were'} not a full day.`
-            : `${remaining} more day${remaining === 1 ? '' : 's'}, with every Monday and Wednesday present, earns ${inr(worth)}.`}
+        {r.missed.length > 0
+          ? `Lost this month: ${r.missed.map((d) => `${WD[d.getDay()]} ${d.getDate()}`).join(', ')} ${r.missed.length === 1 ? 'was' : 'were'} not a full day. No Tuesday pay or bonus.`
+          : r.unlocked
+            ? `Earned: ${inr(r.tueBonus + r.bonus)}${ahead ? ' so far, if every Monday and Wednesday left is a full day' : ''}. Not added by the register.`
+            : ahead
+              ? `${ladderLine(r)}, with every Monday and Wednesday a full day.`
+              : `Not earned: ${halves(r.attended)} days, Tuesday pay needed ${halves(r.need)}.`}
       </div>
     </div>
   )

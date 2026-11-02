@@ -130,6 +130,9 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .statmeta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 15px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .statmeta .mp { color: var(--safe); font-weight: 700; }
 .statmeta .mn { color: var(--ink); font-weight: 700; }
+.statladder { margin-top: 6px; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); }
+.statladder.good { color: var(--safe); }
+.statladder.lost { color: var(--dim); }
 
 .manage, .advbox { margin-top: 20px; padding-top: 12px; border-top: 4px solid var(--ink); }
 .mgttl { margin-bottom: 10px; font: 700 15px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
@@ -184,6 +187,11 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .progress span.full { background: var(--safe); box-shadow: none; }
 .motmsg { margin-top: 10px; font-size: 16px; font-weight: 600; line-height: 1.35; }
 .motmsg.good { color: var(--safe); }
+.ladder { margin-top: 10px; border-top: 1px solid var(--line); }
+.rung { display: flex; gap: 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 16px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.rung b { flex: none; min-width: 72px; font: 700 17px/1.1 var(--sign); color: var(--ink); }
+.rung[data-on] { color: var(--safe); font-weight: 600; }
+.rung[data-on] b { color: var(--safe); }
 
 /* Pay: read only, the register's figures and the sum that reaches them. */
 .payread { margin: -2px 0 10px; color: var(--dim); font-size: 15px; font-weight: 600; }
