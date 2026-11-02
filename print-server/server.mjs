@@ -2760,18 +2760,25 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
       ? { printer: primaryPrinter, printSettings: QUOTATION_PRINT_SETTINGS, fallback: null }
       : await routeBwPrinterOnError(primaryPrinter, documentKind === 'bill' ? billPrintSettings : [], `document-print:${documentKind}`)
   let { printer } = route
-  // Auto-route away from an offline printer to any online one (cards need the
-  // EPSON ID-card tray, so they are never re-routed).
-  if (!isCard) {
-    const picked = await pickReachablePrinter(printer)
-    if (picked.switched) {
-      console.log(`[auto-printer] "${picked.from}" offline → routing to "${picked.printer}"`)
-      printer = picked.printer
+  // The printer checks run while the page renders, not before it: each is a
+  // PowerShell of a second or more, and a quotation from a phone used to wait
+  // 3-9s here before Chrome even started (owner's ask, 2 Nov 2026).
+  const printerReady = (async () => {
+    let chosen = printer
+    // Auto-route away from an offline printer to any online one (cards need the
+    // EPSON ID-card tray, so they are never re-routed).
+    if (!isCard) {
+      const picked = await pickReachablePrinter(chosen)
+      if (picked.switched) {
+        console.log(`[auto-printer] "${picked.from}" offline → routing to "${picked.printer}"`)
+        chosen = picked.printer
+      }
     }
-  }
-  if (documentKind === 'quotation' && printer === COLOR_PRINTER) {
-    await prepareEpsonPlainA4ColorDefaults(printer, 'document-print:quotation')
-  }
+    if (documentKind === 'quotation' && chosen === COLOR_PRINTER) {
+      await prepareEpsonPlainA4ColorDefaults(chosen, 'document-print:quotation')
+    }
+    return chosen
+  })()
 
   let page
   let tmp
@@ -2819,6 +2826,7 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
         await writeFile(tmp2, png2)
       }
 
+      printer = await printerReady
       const printResult = await printCardImage(tmp, copies, `Shiv ${documentKind}`, printer, {
         slot: Number(slot) === 2 ? 2 : 1,
         filePath2: tmp2 ?? null,
@@ -2844,6 +2852,7 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
         : { format: 'A4', printBackground: true })
     tmp = join(tmpdir(), `shiv-print-${Date.now()}.pdf`)
     await writeFile(tmp, pdf)
+    printer = await printerReady
     const printResult = await printFileWithLp(tmp, copies, `Shiv ${documentKind}`, printer, route.printSettings)
     return {
       printer,

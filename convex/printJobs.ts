@@ -8,6 +8,31 @@ const jobSource = v.union(v.literal('android'), v.literal('web'), v.literal('wha
 
 const ACTIVE_LEASE_MS = 2 * 60 * 1000
 
+/**
+ * Quotations from a phone print from the Shiv Counter app on the shop PC.
+ *
+ * The print server rebuilt each one as a PDF and sent it through SumatraPDF:
+ * 5-18s before the Epson moved. The Counter app draws the same quotation it
+ * draws for the counter and prints it straight away, so while it is open
+ * (it checks in every 30s) the print server leaves a new quotation alone for
+ * HOLD_FOR_APP_MS. If the app is shut or cannot print, the print server takes
+ * it as before. Owner's ask, 2 Nov 2026.
+ */
+const COUNTER_APP_KEY = 'counter-app-printer'
+const COUNTER_APP_FRESH_MS = 90 * 1000
+const HOLD_FOR_APP_MS = 8 * 1000
+
+async function counterAppOpen(ctx: MutationCtx, now: number) {
+  const row = await ctx.db.query('watcherState').withIndex('by_key', q => q.eq('key', COUNTER_APP_KEY)).unique()
+  return !!row && now - row.updatedAt < COUNTER_APP_FRESH_MS
+}
+
+async function markCounterApp(ctx: MutationCtx, printerId: string, now: number) {
+  const row = await ctx.db.query('watcherState').withIndex('by_key', q => q.eq('key', COUNTER_APP_KEY)).unique()
+  if (row) await ctx.db.patch(row._id, { value: printerId, updatedAt: now })
+  else await ctx.db.insert('watcherState', { key: COUNTER_APP_KEY, value: printerId, updatedAt: now })
+}
+
 function publicJob(job: {
   _id: unknown
   status: string
@@ -174,14 +199,17 @@ export const claimNext = mutation({
       .take(limit)
 
     const unassignedNeeded = Math.max(0, limit - assigned.length)
+    // A new quotation waits a moment for the Counter app, while it is open.
+    const leaveForApp = await counterAppOpen(ctx, now)
     const unassigned = unassignedNeeded === 0
       ? []
       : (await ctx.db
         .query('printJobs')
         .withIndex('by_status_created_at', q => q.eq('status', 'pending'))
         .order('asc')
-        .take(limit * 3))
+        .take(limit * 3 + 10))
         .filter(job => !job.assignedPrinterId)
+        .filter(job => !(leaveForApp && job.kind === 'quotation' && now - job.createdAt < HOLD_FOR_APP_MS))
         .slice(0, unassignedNeeded)
 
     const jobs = [...assigned, ...unassigned]
@@ -208,6 +236,56 @@ export const claimNext = mutation({
         },
       }
     }))
+  },
+})
+
+/** The Counter app on the shop PC saying it is open and printing phone quotations. */
+export const counterAppHere = mutation({
+  args: { printerId: v.string() },
+  handler: async (ctx, { printerId }) => {
+    await markCounterApp(ctx, printerId, Date.now())
+  },
+})
+
+/** The oldest phone quotation still waiting, taken by the Counter app; null when there is none. */
+export const claimQuotationForApp = mutation({
+  args: { printerId: v.string() },
+  handler: async (ctx, { printerId }) => {
+    const now = Date.now()
+    await markCounterApp(ctx, printerId, now)
+    const job = (await ctx.db
+      .query('printJobs')
+      .withIndex('by_status_created_at', q => q.eq('status', 'pending'))
+      .order('asc')
+      .take(30))
+      .find(j => j.kind === 'quotation' && !j.assignedPrinterId)
+    if (!job) return null
+    await ctx.db.patch(job._id, {
+      status: 'printing',
+      claimedBy: printerId,
+      claimedAt: now,
+      leaseExpiresAt: now + ACTIVE_LEASE_MS,
+      updatedAt: now,
+    })
+    return { _id: job._id, copies: job.copies, quote: job.payload?.quote ?? job.payload }
+  },
+})
+
+/** The Counter app could not print it: back in the queue for the print server. */
+export const releaseToServer = mutation({
+  args: { id: v.id('printJobs'), printerId: v.string() },
+  handler: async (ctx, { id, printerId }) => {
+    const job = await ctx.db.get(id)
+    if (!job || job.claimedBy !== printerId || job.status === 'printed') return
+    await ctx.db.patch(id, {
+      status: 'pending',
+      claimedBy: undefined,
+      claimedAt: undefined,
+      leaseExpiresAt: undefined,
+      // Older than the hold, so the print server takes it on its next look.
+      createdAt: job.createdAt - HOLD_FOR_APP_MS,
+      updatedAt: Date.now(),
+    })
   },
 })
 

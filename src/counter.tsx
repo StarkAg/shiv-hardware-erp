@@ -10,6 +10,7 @@ import './index.css'
 import './counter-signs.css'
 import { CounterLayout } from './components/CounterLayout'
 import { ConvexSync } from './components/ConvexSync'
+import { PhoneQuotePrinter } from './components/PhoneQuotePrinter'
 import { QuotationBuilder } from './features/quotation/QuotationBuilder'
 import { QuotationOptions } from './features/quotation/QuotationOptions'
 import { QuoteHistory } from './features/quotation/QuoteHistory'
@@ -137,6 +138,7 @@ const app = convex
       {/* The shop PIN once per device; nothing reaches the server before it. */}
       <PinGate convexUrl={CONVEX_URL} app="Counter" client={convex}>
         <ConvexSync />
+        <PhoneQuotePrinter />
         <RouterProvider router={router} future={{ v7_startTransition: true }} />
       </PinGate>
     </ConvexProvider>
