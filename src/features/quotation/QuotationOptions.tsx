@@ -23,11 +23,11 @@ const CATEGORY_ICONS: Record<CategoryIcon, LucideIcon> = {
 const TOP_ROW: ProductCategory[] = ['readymade-door', 'flush-door', 'block-board-19', 'aluminium-door', 'bed-inner-ply']
 
 /**
- * Another name the counter asks for, opening the same quote. Plain Ply is the
- * flush door by its other name (its quotation already reads "Flush Door
- * (Plain Door)"), so its tile sits beside it. Owner's ask, 2 Nov 2026.
+ * A product's other name, on its own tile. Flush door and plain ply are one
+ * thing (its quotation already reads "Flush Door (Plain Door)"), so the tile
+ * says both. Owner's ask, 2 Nov 2026.
  */
-const ALSO_AS: Partial<Record<ProductCategory, string[]>> = { 'flush-door': ['Plain Ply'] }
+const ALSO_AS: Partial<Record<ProductCategory, string>> = { 'flush-door': 'Plain Ply' }
 
 const SECTIONS = [
   { name: 'Most Quoted', items: TOP_ROW },
@@ -75,16 +75,14 @@ export function QuotationOptions() {
                 <h2 className="mb-2 border-b-2 border-stone-900 pb-0.5 text-sm font-extrabold uppercase tracking-wider text-stone-900 sm:text-base">
                   {name}
                 </h2>
-                <div className={`grid gap-2 sm:gap-4 ${items === TOP_ROW ? 'grid-cols-3 sm:grid-cols-6' : span === 'col-span-3' ? 'grid-cols-3' : span === 'col-span-2' ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                  {items.flatMap((category) => [
-                    { category, short: CATEGORY_META[category].short },
-                    ...(items === TOP_ROW ? ALSO_AS[category] ?? [] : []).map((short) => ({ category, short })),
-                  ]).map(({ category, short }) => {
+                <div className={`grid gap-2 sm:gap-4 ${items === TOP_ROW ? 'grid-cols-3 sm:grid-cols-5' : span === 'col-span-3' ? 'grid-cols-3' : span === 'col-span-2' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {items.map((category) => {
                     const meta = CATEGORY_META[category]
                     const Icon = CATEGORY_ICONS[meta.icon]
+                    const short = ALSO_AS[category] ? `${meta.short} / ${ALSO_AS[category]}` : meta.short
                     return (
                       <Link
-                        key={short}
+                        key={category}
                         to={`/product/${category}`}
                         className={`flex h-[5.25rem] flex-col justify-between border-2 p-2.5 text-stone-900 active:translate-y-0.5 active:border-shiv-green sm:h-32 sm:p-4 ${
                           TOP_ROW.includes(category)
