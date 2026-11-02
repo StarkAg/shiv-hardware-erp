@@ -311,7 +311,7 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
       )}
 
       {askSound && !done && <div className="ck-rp-hint">Tap for sound</div>}
-      <button className={done ? 'ck-rp-go' : 'ck-skip'} onClick={done ? onClose : skip}>{done ? 'Play on' : 'Skip'}</button>
+      <button className={done ? 'ck-rp-go' : 'ck-skip'} onClick={done ? onClose : skip}>{done ? 'Back to work' : 'Skip'}</button>
     </div>
   )
 }
