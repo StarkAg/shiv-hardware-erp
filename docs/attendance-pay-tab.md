@@ -90,8 +90,11 @@ half day.
 - It stops at 85% on purpose: the owner wants about 22 days from each, not
   everyone every day.
 - The bonus, like Tuesday pay, is not in the register and stays out of the sum.
-- Stats (no PIN) shows each worker's % of open days and a line in days, e.g.
-  "Tuesday pay ✓ · 1 more day for ₹500". No wage or rate, only the fixed bonus
-  amounts. Pay (PIN) shows the three steps with rupees.
+- The Bonus tab (no PIN, `attendance-web/src/Bonus.jsx`) shows the month's
+  steps in days, then each worker's climb with a mark at each step, a line in
+  days such as "Tuesday pay ✓ · 1 more day for ₹500", and every Monday and
+  Wednesday of the month (green kept, red missed). Stats shows each worker's %
+  of open days. No wage or rate on either, only the fixed bonus amounts. Pay
+  (PIN) shows the three steps with rupees.
 - Run on May to Oct 2026 marks: Tuesday pay unchanged (₹19,620), bonus ₹3,000
   in all, ₹1,500 of it in October.

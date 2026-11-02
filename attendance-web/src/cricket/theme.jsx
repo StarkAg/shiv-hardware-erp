@@ -56,7 +56,7 @@ export function useAttendanceTheme(convex) {
 }
 
 const PLAIN = {
-  tabs: { day: 'Daily', month: 'Month', stats: 'Stats', pay: 'Pay' },
+  tabs: { day: 'Daily', month: 'Month', stats: 'Stats', bonus: 'Bonus', pay: 'Pay' },
   save: 'Save & lock this day',
   relock: 'Re-lock this day',
   lockedTitle: 'This day is locked',
@@ -65,7 +65,7 @@ const PLAIN = {
   legend: { p: 'P present', n: 'N absent', h: '½ half', c: 'C closed' },
 }
 const CRICKET = {
-  tabs: { day: 'Play', month: 'Card', stats: 'Table', pay: 'Purse' },
+  tabs: { day: 'Play', month: 'Card', stats: 'Table', bonus: 'Prize', pay: 'Purse' },
   save: 'Stumps: save & lock the day',
   relock: 'Stumps again: re-lock',
   lockedTitle: 'Third umpire',

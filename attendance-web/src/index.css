@@ -130,9 +130,31 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .statmeta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 15px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .statmeta .mp { color: var(--safe); font-weight: 700; }
 .statmeta .mn { color: var(--ink); font-weight: 700; }
-.statladder { margin-top: 6px; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); }
-.statladder.good { color: var(--safe); }
-.statladder.lost { color: var(--dim); }
+
+/* Bonus: the ladder's steps, then each person's climb. */
+.bnrules { padding-bottom: 12px; border-bottom: 2px solid var(--ink); }
+.bnrules p { margin: 10px 0 0; font-size: 15px; line-height: 1.4; color: var(--dim); }
+.bnstep { display: flex; gap: 12px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); font-size: 16px; font-weight: 600; }
+.bnstep b { flex: none; min-width: 76px; font: 700 18px/1.1 var(--sign); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.bnlist { display: flex; flex-direction: column; }
+.bnrow { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.bnhead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.bndays { font: 800 24px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.bndays small { font-size: 15px; font-weight: 700; color: var(--dim); }
+.bntrack { position: relative; height: 14px; margin: 8px 0 6px; overflow: hidden; background: var(--key); }
+.bnfill { position: absolute; inset: 0 auto 0 0; background: var(--wait); }
+.bnrow[data-state="on"] .bnfill { background: var(--safe); }
+.bnrow[data-state="lost"] .bnfill { background: var(--line); }
+.bntick { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -3px; background: var(--ink); }
+.bntick[data-on] { background: #fff; }
+.bnsay { font-size: 16px; font-weight: 600; line-height: 1.35; }
+.bnrow[data-state="on"] .bnsay { color: var(--safe); }
+.bnrow[data-state="lost"] .bnsay { color: var(--stop); }
+.bnguards { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.bnguard { padding: 4px 6px 3px; background: var(--key); color: var(--dim); font: 700 14px/1 var(--sign); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.bnguard[data-state="ok"] { background: var(--safe); color: #fff; }
+.bnguard[data-state="miss"] { background: var(--stop); color: #fff; }
+.bnguard[data-state="shut"] { background: var(--key); color: var(--dim); text-decoration: line-through; }
 
 .manage, .advbox { margin-top: 20px; padding-top: 12px; border-top: 4px solid var(--ink); }
 .mgttl { margin-bottom: 10px; font: 700 15px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }

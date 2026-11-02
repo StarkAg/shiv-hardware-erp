@@ -12,12 +12,13 @@ function OnTrusted({ onTrusted }) {
   return null
 }
 import { PayView } from './PayView.jsx'
+import { BonusView } from './Bonus.jsx'
 import { useAttendanceTheme, useWords, WordsProvider } from './cricket/theme.jsx'
 import { cricketEvent } from './cricket/bus.js'
 import { ThemeSwitch } from './cricket/ThemeSwitch.jsx'
 import { CricketKey, CricketLayer, CricketTabIcon, PointsTable } from './cricket/lazy.jsx'
 import { monthScores } from './cricket/score.js'
-import { monthPay, ladderLine } from './pay.js'
+import { monthPay } from './pay.js'
 
 const api = anyApi
 const EDIT_PASSWORD = '262003'
@@ -444,6 +445,10 @@ export default function App() {
           cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading} dayOff={dayOff}
           unlockThen={unlockThen} theme={theme} todayKey={todayKey}
         />
+      ) : mode === 'bonus' ? (
+        <BonusView
+          cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading} todayKey={todayKey}
+        />
       ) : (
         // Pay is money: the shop PIN, once on this phone, before it opens.
         <PinGate convexUrl={CONVEX_URL} app="Attendance" client={convex}>
@@ -698,8 +703,8 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, t
   const days = Array.from({ length: dim }, (_, i) => new Date(y, m0, i + 1))
   const stepM = (n) => setCursor(new Date(y, m0 + n, 1))
 
-  // Per-staff tally for the month, and where each stands on the ladder (pay.js).
-  // Today counts once it is marked.
+  // Per-staff tally for the month, the % out of open days as the ladder counts
+  // it (pay.js; the Bonus tab shows the steps). Today counts once it is marked.
   const stats = staff.map((name) => {
     let p = 0, n = 0, h = 0
     for (const d of days) {
@@ -759,7 +764,6 @@ function StatsView({ cursor, setCursor, staff, statusFor, loading, unlockThen, t
                   <span className="mn">{s.n} absent</span>
                   <span>of {s.ladder.open} open days</span>
                 </div>
-                <div className={`statladder ${s.ladder.missed.length ? 'lost' : s.ladder.enough ? 'good' : ''}`}>{ladderLine(s.ladder)}</div>
               </div>
             ))}
           </div>
@@ -930,6 +934,13 @@ const NAV_ICONS = {
       <path d="M4 13.5h3.5V21H4zM10.25 8h3.5v13h-3.5zM16.5 3.5H20V21h-3.5z" />
     </svg>
   ),
+  bonus: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="14.5" r="6.5" />
+      <path d="M8.5 2.5l2.2 5.3M15.5 2.5l-2.2 5.3" />
+      <path d="M12 11.3l1 2 2.2.3-1.6 1.5.4 2.2-2-1.1-2 1.1.4-2.2-1.6-1.5 2.2-.3z" />
+    </svg>
+  ),
   pay: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2.5 8.5A3.5 3.5 0 0 1 6 5h12a3.5 3.5 0 0 1 3.5 3.5v7A3.5 3.5 0 0 1 18 19H6a3.5 3.5 0 0 1-3.5-3.5z" />
@@ -943,6 +954,7 @@ const NAV_ITEMS = [
   { id: 'day', label: 'Daily' },
   { id: 'month', label: 'Month' },
   { id: 'stats', label: 'Stats' },
+  { id: 'bonus', label: 'Bonus' },
   { id: 'pay', label: 'Pay' },
 ]
 
