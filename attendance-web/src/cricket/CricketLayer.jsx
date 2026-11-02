@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { byRuns, dayScore, IDLE_LINES, MOMENTS, monthScores, sixRun, tickerLines } from './score.js'
+import { ladderLine, monthPay } from '../pay.js'
 import { play, wakeSound } from './sound.js'
 import { Film, FILM_SEEN_KEY } from './Film.jsx'
 import { Replay } from './Replay.jsx'
@@ -445,10 +446,36 @@ export function CricketLayer({ staff, statusFor, cursor, todayKey, mode, loading
   // Today's play. Every opening of the app, on every phone, looks once on marks fresh
   // from Convex rather than the cache, and plays when the day is done, even with the
   // effects off. A half marked day waits, so nobody gets it mid-marking.
-  const todayPlays = () => staff.map((name) => {
-    const status = statusFor(new Date(), name)
-    return { name, status, run: status === 'P' ? sixRun(statusFor, name, new Date()) : 0 }
-  })
+  // Each batter carries where they stand on the bonus ladder (pay.js) after
+  // today's mark, said in days, shown under their name as the shot lands.
+  const todayPlays = () => {
+    const now = new Date()
+    const monthDays = Array.from(
+      { length: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() },
+      (_, i) => new Date(now.getFullYear(), now.getMonth(), i + 1),
+    )
+    return staff.map((name) => {
+      const status = statusFor(now, name)
+      const ladder = monthPay({ entries: monthDays.map((d) => {
+        const s = statusFor(d, name)
+        return { date: d, status: s, future: keyOf(d) > todayKey || (keyOf(d) === todayKey && !s) }
+      }) })
+      return {
+        name,
+        status,
+        run: status === 'P' ? sixRun(statusFor, name, now) : 0,
+        bonus: {
+          days: ladder.attended,
+          gain: status === 'P' ? 1 : status === 'H' ? 0.5 : 0,
+          // An out is a leave, unless today is the Tuesday off.
+          leaves: ladder.leaves,
+          leaveGain: status === 'N' && now.getDay() !== 2 ? 1 : 0,
+          say: ladderLine(ladder),
+          state: ladder.missed.length ? 'lost' : ladder.enough ? 'on' : 'climb',
+        },
+      }
+    })
+  }
   const lookForReplay = useRef(true)
   const onCurrentMonth = cursor.getFullYear() === new Date().getFullYear() && cursor.getMonth() === new Date().getMonth()
   const onCurrentMonthRef = useRef(onCurrentMonth)

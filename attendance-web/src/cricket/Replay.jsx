@@ -22,6 +22,35 @@ const STAMP = {
 }
 
 const runsOf = (p) => (p.run ? SIX_RUNS : RUNS[p.status] || 0)
+const halves = (n) => `${Math.floor(n)}${n % 1 ? '½' : ''}`
+
+/**
+ * Revealed as the shot lands: a run ticks the month's days over ("+1 day"),
+ * an out ticks the month's leaves over ("+1 leave"), then where that leaves
+ * them on the bonus ladder.
+ */
+function DayReveal({ days, gain, leaves, leaveGain, say, state }) {
+  const out = !gain
+  const target = out ? leaves : days
+  const step = out ? leaveGain : gain
+  const [shown, setShown] = useState(target - step)
+  useEffect(() => {
+    if (!step) return undefined
+    const t = setTimeout(() => setShown(target), 260)
+    return () => clearTimeout(t)
+  }, [target, step])
+  const up = shown === target && step > 0
+  const word = out ? (shown === 1 ? 'leave' : 'leaves') : (shown === 1 ? 'day' : 'days')
+  return (
+    <small className="ck-rp-bonus" data-state={state}>
+      <span className="ck-rp-days" data-out={out || undefined} data-up={up || undefined}>
+        {halves(shown)} {word}
+        {up && <i>+{out ? '1 leave' : step === 1 ? '1 day' : '½ day'}</i>}
+      </span>
+      <span className="ck-rp-ladder">{say}</span>
+    </small>
+  )
+}
 const PARTY = ['#ffcc00', '#5fe39a', '#ffffff', '#6fb4ff']
 
 export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
@@ -273,7 +302,11 @@ export function Replay({ plays, rows, soundsOn, sfx, onClose }) {
               </div>
             )}
           </div>
-          <div className="ck-rp-name" key={turn}>{current ? current.name : ''}</div>
+          <div className="ck-rp-name" key={turn}>
+            {current ? current.name : ''}
+            {/* Where the shot leaves them on the bonus ladder, once it lands. */}
+            {stamp && current?.bonus && <DayReveal key={turn} {...current.bonus} />}
+          </div>
         </>
       )}
 
