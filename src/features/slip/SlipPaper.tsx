@@ -24,7 +24,7 @@ const TORN_EDGE = (() => {
 /** Item names are written smaller, not cut off, when they run long. */
 const itemSize = (name: string) => {
   const room = QTY_LEFT - ITEM_LEFT - 10
-  return Math.max(12, Math.min(22, room / (0.62 * Math.max(name.length, 1))))
+  return Math.max(12, Math.min(25, room / (0.52 * Math.max(name.length, 1))))
 }
 
 /** Flecks in the pulp and the blue that rubs off a carbon, scattered once for the whole sheet. */
@@ -67,10 +67,10 @@ function InkFilters() {
     <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
       <filter id="slip-ink" x="-2%" y="-2%" width="104%" height="104%">
         <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="3" result="warp" />
-        <feDisplacementMap in="SourceGraphic" in2="warp" scale="1.5" result="rough" />
+        <feDisplacementMap in="SourceGraphic" in2="warp" scale="1" result="rough" />
         <feGaussianBlur in="rough" stdDeviation="0.55" result="bleed" />
         <feTurbulence type="fractalNoise" baseFrequency="1.5" numOctaves="1" seed="8" />
-        <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -4 3.1" result="gaps" />
+        <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -3 2.9" result="gaps" />
         <feComposite in="rough" in2="gaps" operator="in" result="line" />
         <feMerge>
           <feMergeNode in="bleed" />
@@ -221,7 +221,7 @@ export default function SlipPaper({ slip }: { slip: Slip }) {
                 {row.item}
               </Hand>
               {qty && (
-                <Hand center={center} left={QTY_LEFT + wobble(seed + 30, 5)} size={20} seed={seed + 2}>
+                <Hand center={center} left={QTY_LEFT + wobble(seed + 30, 5)} size={22} seed={seed + 2}>
                   {qty}<span style={{ marginLeft: 3 }}>{row.unit}</span>
                 </Hand>
               )}
