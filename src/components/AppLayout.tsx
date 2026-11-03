@@ -22,7 +22,7 @@ import {
   NotebookPen,
   Scale,
   TrendingUp, HandCoins, Coins, CalendarClock, PackageCheck,
-  ReceiptIndianRupee, MessageCircle, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, Inbox, ShieldCheck, ClipboardList, Truck } from 'lucide-react'
+  ReceiptIndianRupee, MessageCircle, PackagePlus, PackageX, BanknoteArrowDown, BanknoteArrowUp, FileText, FileStack, ScrollText, Inbox, ShieldCheck, ClipboardList, Truck } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { UpdateBanner } from './UpdateBanner'
 import { Toaster } from './Toast'
@@ -160,6 +160,8 @@ const AREAS: { label: string; items: NavItem[] }[] = [
       // A price given, not a sale: kept with the bills, never in the books.
       // Alt+F10 — F10 is Tally's "Other Vouchers", and a quotation is one.
       { to: '/bills?new=quotation', label: 'Quotation', icon: FileText, key: 'Alt+F10' },
+      // The handwritten slip, for the customer: nothing goes in the books.
+      { to: '/slip', label: 'Slip', icon: ScrollText },
     ],
   },
   {

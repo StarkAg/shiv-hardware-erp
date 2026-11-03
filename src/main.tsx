@@ -85,6 +85,7 @@ const Receive = page(() => import('./features/receive/Receive'), 'Receive')
 const BillFlow = page(() => import('./features/flow/BillFlow'), 'BillFlow')
 const TrustedDevices = page(() => import('./features/devices/TrustedDevices'), 'TrustedDevices')
 const WhatsAppBills = page(() => import('./features/whatsapp/WhatsAppBills'), 'WhatsAppBills')
+const SlipMaker = page(() => import('./features/slip/SlipMaker'), 'SlipMaker')
 
 // Theme is applied by the inline <script> in index.html before any CSS loads.
 
@@ -215,6 +216,7 @@ const router = createHashRouter([
       { path: 'bills/:id',      element: <BillBuilder /> },
       // Every quotation given, open and sold.
       { path: 'quotations',     element: <QuotationList /> },
+      { path: 'slip',           element: <SlipMaker /> },
       // Sales switched to "Order" / "Guarantee card" in the sale form.
       { path: 'work-list',      element: <WorkOrders /> },
       { path: 'delivery',       element: <DeliveryList /> },

@@ -1,0 +1,66 @@
+/* The shop's writing is two hands in one: rushed, joined words and upright, careful
+   figures. Homemade Apple (Apache 2.0) for the words, Kalam (SIL OFL) for the figures
+   and for the capitals Homemade Apple makes unreadable: its S reads as L, F as 7, T as J.
+   Kept with the slip so nothing is downloaded from elsewhere. */
+@font-face {
+  font-family: 'Slip Hand';
+  src: url('./homemade-apple.woff2') format('woff2');
+  font-display: block;
+}
+@font-face {
+  font-family: 'Slip Hand';
+  src: url('./kalam.woff2') format('woff2');
+  font-display: block;
+  unicode-range: U+22, U+2E-39, U+46, U+4F, U+50, U+53, U+54;
+}
+
+/* Carbon-copy paper, greyed a little. PaperFlecks scatters the pulp on top. */
+.slip-sheet {
+  background-color: #dfe5e0;
+  background-image:
+    radial-gradient(ellipse at 70% 0%, rgba(255, 255, 255, 0.4), transparent 62%),
+    radial-gradient(ellipse at 10% 100%, rgba(124, 136, 128, 0.16), transparent 60%);
+  box-shadow: inset 0 0 26px rgba(92, 104, 96, 0.14);
+}
+
+.slip-ink {
+  filter: url(#slip-ink);
+}
+
+.slip-hand {
+  font-family: 'Slip Hand', cursive;
+  /* A ballpoint pressed through a carbon lays down more than the font's thin line. */
+  -webkit-text-stroke: 0.5px currentColor;
+  /* This font's own space is so thin that words join up. */
+  word-spacing: 0.3em;
+}
+
+/* The numbering machine: tall, narrow digits in grey ink, worn in patches. */
+.slip-stamp {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 37px;
+  font-weight: 700;
+  letter-spacing: -3px;
+  line-height: 1;
+  color: #55585a;
+  -webkit-text-stroke: 0.7px currentColor;
+  transform: scaleX(0.72);
+  transform-origin: left center;
+  filter: url(#slip-worn);
+}
+
+/* On real paper the sheet is the paper: ink only. */
+@media print {
+  body.printing-slip * { visibility: hidden !important; }
+  body.printing-slip .slip-sheet,
+  body.printing-slip .slip-sheet * { visibility: visible !important; }
+  body.printing-slip .slip-sheet {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    background: none !important;
+    box-shadow: none !important;
+    clip-path: none !important;
+  }
+  body.printing-slip .slip-sheet > svg:first-child { display: none !important; }
+}
