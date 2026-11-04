@@ -95,8 +95,9 @@ half day.
 - The bonus, like Tuesday pay, is not in the register and stays out of the sum.
 - The Bonus tab (no PIN, `attendance-web/src/Bonus.jsx`) shows the month's
   steps in days, then each worker's climb with a mark at each step, a line in
-  days such as "Tuesday pay ✓ · 1 more day for ₹500", and every Monday and
-  Wednesday of the month (green kept, red missed). Stats shows each worker's %
+  days such as "Tuesday pay ✓ · 1 more day for ₹500" or "3rd Nov Tuesday lost",
+  and every Monday and Wednesday of the month (green kept, yellow missed). The
+  steps show their share beside the days. Stats shows each worker's %
   of open days. No wage or rate on either, only the fixed bonus amounts. Pay
   (PIN) shows the three steps with rupees.
 - Run on May to Oct 2026 marks, before the week-by-week change: Tuesday pay

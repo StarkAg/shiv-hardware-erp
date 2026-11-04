@@ -135,7 +135,8 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .bnrules { padding-bottom: 12px; border-bottom: 2px solid var(--ink); }
 .bnrules p { margin: 10px 0 0; font-size: 15px; line-height: 1.4; color: var(--dim); }
 .bnstep { display: flex; gap: 12px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); font-size: 16px; font-weight: 600; }
-.bnstep b { flex: none; min-width: 76px; font: 700 18px/1.1 var(--sign); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.bnstep b { flex: none; min-width: 80px; font: 700 18px/1.1 var(--sign); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.bnstep i { flex: none; min-width: 34px; font: 700 18px/1.1 var(--sign); font-style: normal; color: var(--dim); font-variant-numeric: tabular-nums; }
 .bnlist { display: flex; flex-direction: column; }
 .bnrow { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .bnhead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -144,16 +145,16 @@ input, select { font: inherit; color: inherit; border-radius: 0; }
 .bntrack { position: relative; height: 14px; margin: 8px 0 6px; overflow: hidden; background: var(--key); }
 .bnfill { position: absolute; inset: 0 auto 0 0; background: var(--wait); }
 .bnrow[data-state="on"] .bnfill { background: var(--safe); }
-.bnrow[data-state="lost"] .bnfill { background: var(--line); }
 .bntick { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -3px; background: var(--ink); }
 .bntick[data-on] { background: #fff; }
 .bnsay { font-size: 16px; font-weight: 600; line-height: 1.35; }
 .bnrow[data-state="on"] .bnsay { color: var(--safe); }
-.bnrow[data-state="lost"] .bnsay { color: var(--stop); }
+/* A lost Tuesday is a notice, not an error: the yellow sign, black print in either theme. */
+.bnrow[data-state="lost"] .bnsay { display: inline-block; padding: 3px 8px 2px; background: var(--wait); color: #0e1318; }
 .bnguards { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .bnguard { padding: 4px 6px 3px; background: var(--key); color: var(--dim); font: 700 14px/1 var(--sign); text-transform: uppercase; font-variant-numeric: tabular-nums; }
 .bnguard[data-state="ok"] { background: var(--safe); color: #fff; }
-.bnguard[data-state="miss"] { background: var(--stop); color: #fff; }
+.bnguard[data-state="miss"] { background: var(--wait); color: #0e1318; }
 .bnguard[data-state="shut"] { background: var(--key); color: var(--dim); text-decoration: line-through; }
 
 .manage, .advbox { margin-top: 20px; padding-top: 12px; border-top: 4px solid var(--ink); }

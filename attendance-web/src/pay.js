@@ -62,17 +62,20 @@ export function ladderFor(open) {
   };
 }
 
-const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** 20.5 as "20½". */
 export const halves = (n) => `${Math.floor(n)}${n % 1 ? '½' : ''}`;
 
-const dayNames = (dates) => dates.map((d) => `${WD[d.getDay()]} ${d.getDate()}`).join(', ');
+/** 3 as "3rd", 13 as "13th". */
+const ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'}`;
+const dates = (ds) => `${ds.map((d) => ordinal(d.getDate())).join(', ')} ${MON[ds[0].getMonth()]}`;
 
-/** Which Tuesdays went and why, e.g. "Tue 6 lost: Wed 7 not a full day". Empty for a clean month. */
+/** What a miss cost, e.g. "3rd Nov Tuesday lost". Empty for a clean month. */
 export function lostLine(r) {
   if (!r.missed.length) return '';
-  const why = `${dayNames(r.missed)} not a full day`;
-  return r.lostTuesdays.length ? `${dayNames(r.lostTuesdays)} lost: ${why}` : why;
+  const lost = r.lostTuesdays;
+  // A miss at the month's edge has no Tuesday here to lose, only the bonus.
+  return lost.length ? `${dates(lost)} ${lost.length === 1 ? 'Tuesday' : 'Tuesdays'} lost` : `No bonus: ${dates(r.missed)} not a full day`;
 }
 
 /**
@@ -80,15 +83,7 @@ export function lostLine(r) {
  * no wage or rate in it, only the fixed bonus amounts everybody is told.
  */
 export function ladderLine(r) {
-  if (r.missed.length) {
-    const more = r.need - r.attended;
-    const days = r.enough
-      ? `${r.tuesdaysPaid} of ${r.tuesdays} Tuesdays paid`
-      : r.best >= r.need
-        ? `${halves(more)} more day${more === 1 ? '' : 's'} for Tuesday pay`
-        : `Tuesday pay needs ${halves(r.need)} days`;
-    return `${days} · ${lostLine(r)} · No bonus`;
-  }
+  if (r.missed.length) return lostLine(r);
   const goals = [
     { need: r.need, say: 'Tuesday pay', reached: r.enough },
     ...r.steps.map((s) => ({ need: s.need, say: `₹${s.amount}`, reached: s.reached })),

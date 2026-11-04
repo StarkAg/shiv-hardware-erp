@@ -1,4 +1,4 @@
-import { monthPay, ladderFor, ladderLine, halves } from './pay.js'
+import { monthPay, ladderFor, ladderLine, halves, TUESDAY_SHARE, BONUS_STEPS } from './pay.js'
 
 /*
  * The Bonus tab: the attendance ladder (pay.js) for every phone, no PIN.
@@ -47,9 +47,9 @@ export function BonusView({ cursor, setCursor, staff, statusFor, loading, todayK
         <>
           <div className="bnrules">
             <div className="mgttl">{rows[0]?.r.open ?? 0} open days this month</div>
-            <div className="bnstep"><b>{halves(ladder.tuesday)} days</b><span>Tuesday pay</span></div>
-            {ladder.bonus.map((s) => (
-              <div className="bnstep" key={s.amount}><b>{halves(s.need)} days</b><span>Tuesday pay + ₹{s.amount}</span></div>
+            <div className="bnstep"><b>{halves(ladder.tuesday)} days</b><i>{Math.round(TUESDAY_SHARE * 100)}%</i><span>Tuesday pay</span></div>
+            {ladder.bonus.map((s, i) => (
+              <div className="bnstep" key={s.amount}><b>{halves(s.need)} days</b><i>{Math.round(BONUS_STEPS[i].share * 100)}%</i><span>Tuesday pay + ₹{s.amount}</span></div>
             ))}
             <p>And a full day on the Monday and Wednesday beside each Tuesday. Miss one and that Tuesday is not paid, and the month has no bonus.</p>
           </div>

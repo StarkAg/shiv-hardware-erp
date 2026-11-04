@@ -180,6 +180,10 @@ describe('pay', () => {
 
   it('says where somebody stands without a wage in it', () => {
     expect(ladderLine(monthPay({ entries: month('P', off(5)), rate }))).toBe('Tuesday pay ✓ · ₹300 ✓')
-    expect(ladderLine(monthPay({ entries: month('P', { 7: 'N' }), rate }))).toBe('4 of 5 Tuesdays paid · Tue 8 lost: Mon 7 not a full day · No bonus')
+    expect(ladderLine(monthPay({ entries: month('P', { 7: 'N' }), rate }))).toBe('8th Sep Tuesday lost')
+    expect(ladderLine(monthPay({ entries: month('P', { 7: 'N', 16: 'N' }), rate }))).toBe('8th, 15th Sep Tuesdays lost')
+    // April 2026 starts on a Wednesday, so a miss on the 1st has no Tuesday here to lose.
+    const april = days(2026, 3).map((date) => ({ date, status: date.getDate() === 1 ? 'N' : 'P', future: false }))
+    expect(ladderLine(monthPay({ entries: april, rate }))).toBe('No bonus: 1st Apr not a full day')
   })
 })
