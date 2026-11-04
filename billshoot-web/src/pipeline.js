@@ -114,6 +114,8 @@ export function turnRight(src) {
 
 // Big enough to read, small enough for every phone to draw and share.
 const MAX_PIXELS = 14e6
+// A picture goes to the group inside a request, and WhatsApp itself takes 16 MB.
+const MAX_BYTES = 9e6
 
 /** The pages laid one under another on one picture, as a JPEG blob. */
 export async function sheetOf(pages) {
@@ -130,5 +132,9 @@ export async function sheetOf(pages) {
     x.drawImage(b, r.x * s, r.y * s, r.w * s, r.h * s)
     b.close?.()
   })
-  return toBlob(c, 0.88)
+  for (const quality of [0.88, 0.8, 0.7]) {
+    const blob = await toBlob(c, quality)
+    if (blob.size <= MAX_BYTES) return blob
+  }
+  return toBlob(c, 0.6)
 }

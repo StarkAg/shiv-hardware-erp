@@ -1,8 +1,8 @@
 /* Bill Shoot, in the Signs look (DESIGN.md; the colours, lettering and
  * buttons come from ./signs/signs.css).
  *
- * One screen, never scrolled: the camera, the pages so far, three keys. The
- * camera reaches the top of the screen, so its header is a dark strip laid
+ * One screen, never scrolled: the camera, the pages so far, three keys; over it
+ * the adjust screen and the finished picture, which does scroll. The camera reaches the top of the screen, so its header is a dark strip laid
  * over the picture rather than a white bar that would hide part of the page
  * being shot. Everything under the camera is the white wall.
  */
@@ -55,13 +55,26 @@ button { touch-action: manipulation; }
 .bar { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); background: var(--wall); border-top: 4px solid var(--ink); }
 .bar .side { justify-self: start; min-width: 64px; min-height: 56px; }
 .bar .share { justify-self: end; min-width: 112px; background: var(--safe); font-size: 21px; }
-/* A circle is the thing to do: take the photo. */
-.shutter { width: 76px; height: 76px; border: 6px solid #fff; border-radius: 50%; background: var(--must); box-shadow: 0 0 0 4px var(--must); }
+/* A circle is the thing to do: take the photo. It says so, Start or Next. */
+.shutter { width: 76px; height: 76px; padding: 0; border: 6px solid #fff; border-radius: 50%; background: var(--must); box-shadow: 0 0 0 4px var(--must); color: #fff; font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
 .shutter:active:not(:disabled) { transform: scale(.94); }
 
 /* Said once, with a way back. */
 .toast { position: fixed; left: 50%; bottom: calc(118px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 24px); padding: 8px 8px 8px 14px; background: var(--ink); color: #fff; font: 700 18px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; z-index: 20; }
 .toast button { min-height: 40px; padding: 0 12px; background: #fff; color: var(--ink); font: 800 17px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+
+/* ── The finished picture, as it will go ─────────────────────────────────── */
+.review { position: fixed; inset: 0; z-index: 9; display: flex; flex-direction: column; background: var(--wall); }
+.review .fix-top .title { text-align: right; }
+.review-sheet { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--key); }
+.review-sheet img { display: block; width: 100%; height: auto; }
+.review-wait { padding: 32px 16px; text-align: center; font-size: 17px; font-weight: 600; }
+.review .strip { padding-bottom: 8px; border-top: 4px solid var(--ink); }
+.send-error { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--ink); color: #fff; font-size: 15px; font-weight: 600; }
+.send-error p { flex: 1; min-width: 0; margin: 0; }
+.review-bar { flex: none; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); border-top: 4px solid var(--ink); }
+/* Green sends. */
+.review-bar .send { width: 100%; min-height: 64px; background: var(--safe); font-size: 26px; }
 
 /* ── Putting one page right ──────────────────────────────────────────────── */
 .fix { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; background: #000; }
@@ -75,6 +88,7 @@ button { touch-action: manipulation; }
 .fix-photo { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: none; }
 .fix-photo img { position: absolute; pointer-events: none; }
 .fix-photo svg { position: absolute; inset: 0; pointer-events: none; }
+.fix-say { flex: none; margin: 0; padding: 6px 12px; background: var(--ink); color: #fff; font-size: 15px; font-weight: 600; text-align: center; }
 .fix-photo polygon { fill: rgba(255, 255, 255, .16); stroke: #fff; stroke-width: 2.5; }
 /* A corner to drag: round and blue, the thing to do. */
 .handle { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; touch-action: none; }

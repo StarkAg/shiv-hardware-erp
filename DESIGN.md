@@ -157,7 +157,7 @@ node ~/.claude/skills/web-designer/scripts/shoot.mjs http://localhost:PORT/ --ap
 | Attendance | `attendance-web/` | Signs, 11 Oct 2026 |
 | Sort (bill sorting) | `sort-web/` | Signs, 11 Oct 2026 |
 | Cashier | `cash-web/` | Signs round the book, 11 Oct 2026: the register page stays the drawn paper page, and Online keeps its yellow highlighter |
-| Bill Shoot | `billshoot-web/` | Signs, 12 Oct 2026 (not live yet) |
+| Bill Shoot | `billshoot-web/` | Signs, 12 Oct 2026 |
 | Shiv Money | `money-web/` | Signs, 23 Oct 2026 (built in it) |
 | Orders, and its Workshop panel | `order-web/` | Signs, 11 Oct 2026 (what it prints is unchanged) |
 | Price List | `prices-web/` | Signs, 14 Oct 2026 (built in it) |
