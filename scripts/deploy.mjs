@@ -355,10 +355,19 @@ async function deployVercel(t, sha) {
 }
 
 // ── Railway ────────────────────────────────────────────────────────────────
-const railwayUser = readJson(join(homedir(), '.railway', 'config.json'))?.user
-const RAILWAY_TOKEN = railwayUser?.token || railwayUser?.accessToken
+const railwayUser = () => readJson(join(homedir(), '.railway', 'config.json'))?.user
+
+// The CLI's saved login lasts about an hour and only the CLI renews it; read
+// after that, every service came back "Not Authorized" (4 Nov 2026).
+async function railwayToken() {
+  const expires = railwayUser()?.tokenExpiresAt
+  if (expires && expires * 1000 < Date.now() + 60_000) await run('railway', ['whoami']).catch(() => undefined)
+  const user = railwayUser()
+  return user?.token || user?.accessToken
+}
 
 async function railwayDeployments() {
+  const RAILWAY_TOKEN = await railwayToken()
   if (!RAILWAY_TOKEN) throw new Error('Railway login not found — run `railway login`')
   const query = `query{project(id:"${RAILWAY_PROJECT}"){services{edges{node{name serviceInstances{edges{node{latestDeployment{status createdAt meta}}}}}}}}}`
   const res = await fetch('https://backboard.railway.com/graphql/v2', {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  Calculator, CarTaxiFront, ClipboardList, CreditCard, FileText, History, IndianRupee, Inbox, Package, ShieldCheck,
+  Calculator, CarTaxiFront, ClipboardList, CreditCard, FileText, History, IndianRupee, Inbox, Package, ScrollText, ShieldCheck,
 } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { Toaster } from './Toast'
@@ -30,6 +30,8 @@ const NAV = [
     items: [
       { to: '/quote-options', label: 'Quote', icon: FileText },
       { to: '/history', label: 'Quote history', icon: History },
+      // The handwritten slip, for the customer: nothing goes in the books.
+      { to: '/slip', label: 'Slip', icon: ScrollText },
     ],
   },
   {
@@ -54,13 +56,15 @@ const NAV = [
 ]
 
 // The phone's bottom bar shows four rows before a swipe: Quote, its history,
-// Card, and the card history moved up beside it.
+// Card, and the card history moved up beside it. Slip follows them.
+const CARD = '/guarantee/card'
 const CARD_HISTORY = '/guarantee/history'
+const SLIP = '/slip'
 const ALL_ROWS = NAV.flatMap((area) => area.items)
+const PHONE_FIRST = ['/quote-options', '/history', CARD, CARD_HISTORY, SLIP]
 const PHONE_ROWS = [
-  ...ALL_ROWS.slice(0, 3),
-  ...ALL_ROWS.filter((item) => item.to === CARD_HISTORY),
-  ...ALL_ROWS.slice(3).filter((item) => item.to !== CARD_HISTORY),
+  ...PHONE_FIRST.flatMap((to) => ALL_ROWS.filter((item) => item.to === to)),
+  ...ALL_ROWS.filter((item) => !PHONE_FIRST.includes(item.to)),
 ]
 
 /** Which entry the address belongs to, so a deep link still lights its row. */

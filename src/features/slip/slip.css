@@ -47,6 +47,11 @@
   filter: url(#slip-worn);
 }
 
+/* The preview fits a phone's width. Only on screen: the picture and the print stay full size. */
+@media screen and (max-width: 560px) { .slip-preview { zoom: 0.72; } }
+@media screen and (max-width: 420px) { .slip-preview { zoom: 0.66; } }
+@media screen and (max-width: 370px) { .slip-preview { zoom: 0.56; } }
+
 /* On real paper the sheet is the paper: ink only. */
 @media print {
   body.printing-slip * { visibility: hidden !important; }

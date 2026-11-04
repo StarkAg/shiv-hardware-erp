@@ -23,6 +23,7 @@ import { CardBacks } from './features/guarantee/CardBacks'
 import { Inventory } from './features/inventory/Inventory'
 import { RateManager } from './features/rates/RateManager'
 import { AluminiumCosting } from './features/rates/AluminiumCosting'
+import { SlipMaker } from './features/slip/SlipMaker'
 import { Transport } from './features/transport/Transport'
 import { Customers } from './features/customers/Customers'
 import { AppError, HOME, NotFound } from './components/RouteFallbacks'
@@ -47,8 +48,9 @@ HOME.path = '/quote-options'
  * The counter, as its own site.
  *
  * Everything a customer is standing in front of you for: a quotation, a
- * guarantee card, what a sheet costs, what the toto charges. None of it posts
- * to an account, which is why it can live apart from the books at all.
+ * guarantee card, a handwritten slip, what a sheet costs, what the toto
+ * charges. None of it posts to an account, which is why it can live apart from
+ * the books at all.
  *
  * The same `src/` as the panel — this is a second entry point of one project,
  * not a second copy of it.
@@ -116,6 +118,7 @@ const router = createHashRouter([
       { path: 'rates/:category', element: <RateManager /> },
       { path: 'aluminium-rates', element: <AluminiumCosting /> },
       { path: 'aluminium-rates/:product', element: <AluminiumCosting /> },
+      { path: 'slip', element: <SlipMaker /> },
       { path: 'transport', element: <Transport /> },
       { path: 'transport/:view', element: <Transport /> },
       { path: 'customers', element: <Customers /> },

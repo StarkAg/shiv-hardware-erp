@@ -31,6 +31,8 @@ function readDraft(): Slip {
 }
 
 const cellClass = 'px-2 py-1.5'
+// A phone gives the item its own line above the figures; wider, one line each.
+const rowClass = 'grid-cols-[1fr_1fr_1fr_1fr_2rem] items-center gap-1 md:grid-cols-[minmax(0,1fr)_4rem_6rem_5rem_6rem_2rem]'
 
 /** Makes a bill on the shop's own handwritten slip: for the customer, not the books. */
 export function SlipMaker() {
@@ -109,64 +111,60 @@ export function SlipMaker() {
       />
       <Page>
         <div className="flex flex-wrap items-start gap-6">
-          <div className="min-w-[520px] flex-1 space-y-3">
-            <div className="grid grid-cols-3 gap-3">
+          <div className="w-full min-w-0 flex-1 space-y-3 md:w-auto md:min-w-[520px]">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               <Input label="Slip no." inputMode="numeric" value={slip.number} onChange={(e) => setField('number', e.target.value)} />
               <Input label="Previous balance" inputMode="decimal" value={slip.previous} onChange={(e) => setField('previous', e.target.value)} />
-              <Input label="Written beside the total" value={slip.note} onChange={(e) => setField('note', e.target.value)} />
+              <div className="col-span-2 md:col-span-1">
+                {/* Written as typed: the shop's "P.TO" is not a name to tidy. */}
+                <Input label="Written beside the total" data-case="raw" value={slip.note} onChange={(e) => setField('note', e.target.value)} />
+              </div>
             </div>
 
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold text-muted">
-                  <th className="pb-1 font-semibold">Item</th>
-                  <th className="w-16 pb-1 font-semibold">Qty</th>
-                  <th className="w-24 pb-1 font-semibold">Unit</th>
-                  <th className="w-20 pb-1 font-semibold">Rate</th>
-                  <th className="w-24 pb-1 font-semibold">Amount</th>
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {slip.rows.map((row, index) => (
-                  <tr key={row.id}>
-                    <td className="py-0.5 pr-1">
-                      <Input className={cellClass} autoFocus={index > 0 && index === slip.rows.length - 1 && !row.item} value={row.item} onChange={(e) => setRow(row.id, { item: e.target.value })} />
-                    </td>
-                    <td className="py-0.5 pr-1">
-                      <Input className={cellClass} inputMode="decimal" value={row.qty} onChange={(e) => setRow(row.id, { qty: e.target.value })} />
-                    </td>
-                    <td className="py-0.5 pr-1">
-                      <Input className={cellClass} list="slip-units" value={row.unit} onChange={(e) => setRow(row.id, { unit: e.target.value })} />
-                    </td>
-                    <td className="py-0.5 pr-1">
-                      <Input className={cellClass} inputMode="decimal" value={row.rate} onChange={(e) => setRow(row.id, { rate: e.target.value })} />
-                    </td>
-                    <td className="py-0.5 pr-1">
-                      <Input
-                        className={cellClass}
-                        inputMode="decimal"
-                        value={row.amount}
-                        onChange={(e) => setRow(row.id, { amount: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && index === slip.rows.length - 1) addRow()
-                        }}
-                      />
-                    </td>
-                    <td className="py-0.5 text-right">
-                      <button
-                        type="button"
-                        aria-label={`Remove ${row.item || 'row'}`}
-                        onClick={() => removeRow(row.id)}
-                        className="inline-flex h-8 w-8 items-center justify-center text-muted hover:text-shiv-red"
-                      >
-                        <X size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="text-sm">
+              <div className={`${rowClass} mb-1 hidden text-left text-xs font-semibold text-muted md:grid`}>
+                <span>Item</span>
+                <span>Qty</span>
+                <span>Unit</span>
+                <span>Rate</span>
+                <span>Amount</span>
+                <span />
+              </div>
+              {slip.rows.map((row, index) => (
+                <div key={row.id} className={`${rowClass} mb-3 grid md:mb-1`}>
+                  <div className="col-span-5 md:col-span-1">
+                    <Input className={cellClass} placeholder="Item" aria-label="Item" autoFocus={index > 0 && index === slip.rows.length - 1 && !row.item} value={row.item} onChange={(e) => setRow(row.id, { item: e.target.value })} />
+                  </div>
+                  <Input className={cellClass} placeholder="Qty" aria-label="Qty" inputMode="decimal" value={row.qty} onChange={(e) => setRow(row.id, { qty: e.target.value })} />
+                  <Input className={cellClass} placeholder="Unit" aria-label="Unit" list="slip-units" value={row.unit} onChange={(e) => setRow(row.id, { unit: e.target.value })} />
+                  <Input className={cellClass} placeholder="Rate" aria-label="Rate" inputMode="decimal" value={row.rate} onChange={(e) => setRow(row.id, { rate: e.target.value })} />
+                  <Input
+                    className={cellClass}
+                    placeholder="Amount"
+                    aria-label="Amount"
+                    inputMode="decimal"
+                    value={row.amount}
+                    onChange={(e) => setRow(row.id, { amount: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' || index !== slip.rows.length - 1) return
+                      // The new row takes the focus; the Counter's Enter walk stays out of it.
+                      e.preventDefault()
+                      addRow()
+                    }}
+                  />
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      aria-label={`Remove ${row.item || 'row'}`}
+                      onClick={() => removeRow(row.id)}
+                      className="inline-flex h-8 w-8 items-center justify-center text-muted hover:text-shiv-red"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
             <datalist id="slip-units">
               <option value="Pc" />
               <option value="Set" />
@@ -185,7 +183,7 @@ export function SlipMaker() {
             </div>
           </div>
 
-          <div className="sticky top-4 shrink-0">
+          <div className="slip-preview shrink-0 md:sticky md:top-4">
             <SlipPaper slip={slip} />
           </div>
         </div>
