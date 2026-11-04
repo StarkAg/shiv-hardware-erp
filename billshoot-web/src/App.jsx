@@ -2,17 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { canvasOf, cutPage, findIn, sheetOf, shotPage, toBlob, turnRight } from './pipeline.js'
 import Fix from './Fix.jsx'
 import { sendToGroup } from './send.js'
+import { removeBill, saveBill, savedBills } from './outbox.js'
 
 /**
- * Bill Shoot: the camera, open at once, with the page outlined live. Start takes
- * the page, finds it, and shows the crop for its corners to be put right, with
- * no other change to the picture: the
- * finder is right on about three camera photos in four. Then the finished picture,
- * all the pages one under another, and Send to group puts it in the shop's
- * WhatsApp group from the Shop number, through Railway (./send.js). Share from
- * phone stays for when that cannot be reached.
+ * Bill Shoot, on one screen: the live camera, the cropped bill under it, the
+ * shutter and Send. The shutter takes a page and never stops: its crop appears
+ * in the bill box as soon as it is ready, so one page is two taps and three pages
+ * are four. The finder is right on about three camera photos in four,
+ * so a tap on a page opens its corners; nothing else is ever in the way.
  *
- * Nothing leaves the phone until one of those two is pressed.
+ * Send puts the bill in the shop's WhatsApp group from the Shop number, through
+ * Railway (./send.js), several pages as one picture. It is written to this phone
+ * first (./outbox.js) and goes from there, so the camera is free at once and no
+ * failure loses it: it stays, and is tried again by itself, until it has gone.
+ * Nothing leaves the phone until Send or Share from phone is pressed.
  */
 
 const LIVE_EVERY = 300 // ms between looks for the page in the live picture
@@ -61,20 +64,24 @@ function useBox(ref) {
 
 const newId = () => Math.random().toString(36).slice(2, 9)
 
+const RETRY_EVERY = 30_000 // ms between tries while a bill is waiting to go
+
 export default function App() {
   const view = useRef(null)
   const video = useRef(null)
+  const pane = useRef(null)
   const box = useBox(view)
   const [camera, setCamera] = useState('opening') // opening | on | off
   const [outline, setOutline] = useState(null)
-  const [pages, setPages] = useState([]) // { id, photo (canvas), corners, page (canvas), blob, url, busy }
+  const [pages, setPages] = useState([]) // { id, photo (canvas), corners, page (canvas), blob, url, busy, turns }
   const [sheet, setSheet] = useState(null) // { blob, key }
   const [fixing, setFixing] = useState(null)
-  // The page just shot: its adjust screen offers Retake and Use, and Use goes on to the picture.
-  const [fresh, setFresh] = useState(null)
-  const [reviewing, setReviewing] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
+  const [outbox, setOutbox] = useState([]) // bills saved on this phone, still to go
+  const [outboxError, setOutboxError] = useState('')
+  const [discarding, setDiscarding] = useState(false)
+  const flushing = useRef(false)
   const [flash, setFlash] = useState(false)
   const [torch, setTorch] = useState(null) // null: none on this phone
   const [toast, setToast] = useState(null)
@@ -112,7 +119,7 @@ export default function App() {
 
   /* ── the page, outlined live ── */
   useEffect(() => {
-    if (camera !== 'on' || fixing || reviewing) return undefined
+    if (camera !== 'on' || fixing) return undefined
     let stop = false
     const look = async () => {
       const v = video.current
@@ -123,9 +130,9 @@ export default function App() {
     }
     void look()
     return () => { stop = true }
-  }, [camera, fixing, reviewing])
+  }, [camera, fixing])
 
-  /* ── the shared picture, made as pages come in, so Share is instant ── */
+  /* ── the picture to send, made as pages come in, so Send is instant ── */
   useEffect(() => {
     const ready = pages.filter((p) => p.blob)
     if (!ready.length || ready.length !== pages.length) { setSheet(null); return undefined }
@@ -135,17 +142,19 @@ export default function App() {
     return () => { gone = true }
   }, [pages])
 
-  const addPhoto = useCallback(async (photo, adjust = false) => {
+  // The newest page in view in the bill box.
+  const count = pages.length
+  useEffect(() => {
+    pane.current?.scrollTo({ left: pane.current.scrollWidth, behavior: 'smooth' })
+  }, [count])
+
+  const addPhoto = useCallback(async (photo) => {
     const id = newId()
     setPages((ps) => [...ps, { id, v: 0, busy: true, url: photo.toDataURL('image/jpeg', 0.5) }])
     try {
       const { corners, page } = await shotPage(photo)
       const blob = await toBlob(page)
       setPages((ps) => ps.map((p) => (p.id === id ? { id, v: 1, photo, corners, page, blob, url: URL.createObjectURL(blob) } : p)))
-      if (adjust) {
-        setFresh(id)
-        setFixing(id)
-      }
     } catch (err) {
       console.warn('[billshoot] page', err)
       setPages((ps) => ps.filter((p) => p.id !== id))
@@ -163,12 +172,11 @@ export default function App() {
     setFlash(true)
     setTimeout(() => setFlash(false), 140)
     navigator.vibrate?.(15)
-    void addPhoto(photo, true)
+    setSendError('')
+    void addPhoto(photo)
   }
 
   const fromGallery = async (files) => {
-    // One photo goes the way a shot does; several wait in the row, to be opened if one needs it.
-    const adjust = files.length === 1
     for (const file of files) {
       try {
         const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
@@ -176,7 +184,7 @@ export default function App() {
         const photo = canvasOf(Math.round(bmp.width * s), Math.round(bmp.height * s))
         photo.getContext('2d').drawImage(bmp, 0, 0, photo.width, photo.height)
         bmp.close?.()
-        await addPhoto(photo, adjust)
+        await addPhoto(photo)
       } catch { setToast({ text: `${file.name} could not be opened` }) }
     }
   }
@@ -192,21 +200,98 @@ export default function App() {
     return `bill-${d.getDate()}-${d.getMonth() + 1}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.jpg`
   }
 
-  /** Into the shop's group. The pages stay until it has gone, so a failure loses nothing. */
+  /** The saved bills, oldest first, each sent and only then let go of; stops at the first failure. */
+  const flush = useCallback(async () => {
+    if (flushing.current) return
+    flushing.current = true
+    try {
+      let bills = await savedBills()
+      setOutbox(bills)
+      while (bills.length) {
+        setOutboxError('')
+        await sendToGroup(bills[0].blob, bills[0].name)
+        await removeBill(bills[0].id)
+        setToast({ text: 'Sent to the group' })
+        bills = await savedBills()
+        setOutbox(bills)
+      }
+    } catch (err) {
+      setOutboxError(err?.message || 'It did not send.')
+    } finally {
+      flushing.current = false
+    }
+  }, [])
+
+  // Waiting bills go when the app opens, when it comes back, when the signal does, and every so often.
+  useEffect(() => {
+    const go = () => { if (document.visibilityState === 'visible') void flush() }
+    go()
+    const every = setInterval(go, RETRY_EVERY)
+    document.addEventListener('visibilitychange', go)
+    addEventListener('online', go)
+    return () => {
+      clearInterval(every)
+      document.removeEventListener('visibilitychange', go)
+      removeEventListener('online', go)
+    }
+  }, [flush])
+
+  /** Safe on this phone first, then on its way; the camera is free for the next bill at once. */
   const send = async () => {
     if (!sheet || sending) return
-    setSending(true)
     setSendError('')
     try {
-      await sendToGroup(sheet.blob, sheetName())
-      setPages([])
-      setReviewing(false)
-      setToast({ text: 'Sent to the group' })
-    } catch (err) {
-      setSendError(err?.message || 'It did not send.')
-    } finally {
-      setSending(false)
+      await saveBill(sheet.blob, sheetName())
+    } catch {
+      // This phone would not keep it: send it here and now, with the pages held until it has gone.
+      setSending(true)
+      try {
+        await sendToGroup(sheet.blob, sheetName())
+        setPages([])
+        setToast({ text: 'Sent to the group' })
+      } catch (err) {
+        setSendError(err?.message || 'It did not send.')
+      } finally {
+        setSending(false)
+      }
+      return
     }
+    setPages([])
+    setDiscarding(false)
+    if (flushing.current) setOutbox(await savedBills())
+    else void flush()
+  }
+
+  /** A waiting bill sent by the phone's own share instead; it has gone, so it is let go of. */
+  const shareSaved = async () => {
+    const bill = outbox[0]
+    if (!bill) return
+    const file = new File([bill.blob], bill.name, { type: 'image/jpeg' })
+    if (!navigator.canShare?.({ files: [file] })) {
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(bill.blob)
+      a.download = bill.name
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    } else {
+      try {
+        await navigator.share({ files: [file] })
+      } catch (err) {
+        if (err?.name !== 'AbortError') setToast({ text: 'Could not share — try again' })
+        return
+      }
+    }
+    await removeBill(bill.id)
+    setOutbox(await savedBills())
+  }
+
+  const discardSaved = async () => {
+    const bill = outbox[0]
+    if (!bill) return
+    if (!discarding) { setDiscarding(true); return }
+    setDiscarding(false)
+    await removeBill(bill.id)
+    setOutbox(await savedBills())
   }
 
   const share = async () => {
@@ -231,7 +316,6 @@ export default function App() {
     }
     // Sent: ready for the next bill, with a moment to bring these back.
     setPages([])
-    setReviewing(false)
     setSendError('')
     setToast({ text: 'Shared', undo: () => setPages(kept) })
   }
@@ -242,26 +326,19 @@ export default function App() {
     return () => clearTimeout(t)
   }, [toast])
 
-  // The picture as it will go. Its address is let go of once a newer one replaces it.
-  const [sheetUrl, setSheetUrl] = useState(null)
+  // The first waiting bill's picture, let go of when it has gone.
+  const [waitingUrl, setWaitingUrl] = useState(null)
+  const waitingBlob = outbox[0]?.blob
   useEffect(() => {
-    if (!sheet) { setSheetUrl(null); return undefined }
-    const url = URL.createObjectURL(sheet.blob)
-    setSheetUrl(url)
+    if (!waitingBlob) { setWaitingUrl(null); return undefined }
+    const url = URL.createObjectURL(waitingBlob)
+    setWaitingUrl(url)
     return () => URL.revokeObjectURL(url)
-  }, [sheet])
-
-  /** Out of the adjust screen: a page just shot goes on to the picture. */
-  const closeFix = () => {
-    if (fresh === fixing) setReviewing(true)
-    setFresh(null)
-    setFixing(null)
-  }
+  }, [waitingBlob])
 
   const rect = shownRect(video.current, box)
   const fixPage = pages.find((p) => p.id === fixing)
-  const ready = pages.length > 0 && pages.every((p) => p.blob)
-  const finding = pages.some((p) => p.busy)
+  const ready = count > 0 && pages.every((p) => p.blob) && !!sheet
 
   return (
     <div className="app">
@@ -286,76 +363,64 @@ export default function App() {
             <button type="button" className="primary" onClick={() => gallery.current?.click()}>Take photos instead</button>
           </div>
         )}
-        {camera === 'on' && !toast && (
-          <div className="hint">{finding ? 'Finding the page…' : pages.length ? 'Next page, or see the picture' : 'Line up the bill, then press Start'}</div>
-        )}
       </div>
 
-      {pages.length > 0 && (
-        <div className="strip">
-          {pages.map((p, i) => (
-            <button type="button" key={p.id} className={`thumb${p.busy ? ' busy' : ''}`} disabled={p.busy} onClick={() => setFixing(p.id)} aria-label={`Page ${i + 1}: fix`}>
-              <img src={p.url} alt="" />
-              <span>{i + 1}</span>
-            </button>
-          ))}
+      {/* The bill, as it will go. A tap on a page opens its corners. */}
+      <div className="pane" ref={pane}>
+        {count === 0 && <p className="pane-empty">The cropped bill shows here</p>}
+        {pages.map((p, i) => (
+          <button type="button" key={p.id} className={`thumb${p.busy ? ' busy' : ''}`} disabled={p.busy || sending} onClick={() => setFixing(p.id)} aria-label={`Page ${i + 1}: adjust`}>
+            <img src={p.url} alt="" />
+            <span>{i + 1}</span>
+            {!p.busy && !p.corners && <em>Whole photo</em>}
+          </button>
+        ))}
+      </div>
+
+      {outbox.length > 0 && (
+        <div className={`outbox${outboxError ? ' stuck' : ''}`} role="status">
+          {waitingUrl && <img src={waitingUrl} alt="" />}
+          <p>
+            {outboxError
+              ? <><b>{outbox.length} {outbox.length === 1 ? 'bill' : 'bills'} safe on this phone, not sent.</b> Trying again by itself. {outboxError}</>
+              : <b>Sending{outbox.length > 1 ? ` ${outbox.length} bills` : ''}…</b>}
+          </p>
+          {outboxError && (
+            <div className="outbox-keys">
+              <button type="button" className="glass" onClick={() => void flush()}>Retry</button>
+              <button type="button" className="glass" onClick={() => void shareSaved()}>Share</button>
+              <button type="button" className={`glass${discarding ? ' danger' : ''}`} onClick={() => void discardSaved()}>{discarding ? 'Sure?' : 'Delete'}</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {sendError && (
+        <div className="send-error" role="alert">
+          <p>Not sent: {sendError}</p>
+          <button type="button" className="glass" onClick={share}>Share from phone</button>
         </div>
       )}
 
       <footer className="bar">
         <button type="button" className="glass side" onClick={() => gallery.current?.click()} aria-label="Add from photos"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg></button>
-        <button type="button" className="shutter" onClick={shoot} disabled={camera !== 'on' || finding}>{pages.length ? 'Next' : 'Start'}</button>
-        <button type="button" className="primary side share" disabled={!ready || !sheet} onClick={() => setReviewing(true)}>
-          {pages.length ? (ready && sheet ? `See ${pages.length}` : '…') : 'See'}
+        <button type="button" className="shutter" onClick={shoot} disabled={camera !== 'on' || sending} aria-label="Shoot a page" />
+        <button type="button" className="primary side share" disabled={!ready || sending} onClick={send}>
+          {sending || (count > 0 && !ready) ? '…' : sendError ? 'Retry' : count > 1 ? `Send ${count}` : 'Send'}
         </button>
       </footer>
 
       <input ref={gallery} type="file" accept="image/*" multiple hidden onChange={(e) => { void fromGallery([...e.target.files]); e.target.value = '' }} />
 
-      {reviewing && (
-        <div className="review" role="dialog" aria-label="The picture to send">
-          <header className="fix-top">
-            <button type="button" className="glass" onClick={() => setReviewing(false)}>Add page</button>
-            <span className="title">{pages.length} {pages.length === 1 ? 'page' : 'pages'}</span>
-          </header>
-          <div className="review-sheet">
-            {sheetUrl ? <img src={sheetUrl} alt="The bill, as it will be sent" /> : <p className="review-wait">Making the picture…</p>}
-          </div>
-          <div className="strip">
-            {pages.map((p, i) => (
-              <button type="button" key={p.id} className={`thumb${p.busy ? ' busy' : ''}`} disabled={p.busy || sending} onClick={() => setFixing(p.id)} aria-label={`Page ${i + 1}: adjust`}>
-                <img src={p.url} alt="" />
-                <span>{i + 1}</span>
-              </button>
-            ))}
-          </div>
-          {sendError && (
-            <div className="send-error" role="alert">
-              <p>Not sent: {sendError}</p>
-              <button type="button" className="glass" onClick={share}>Share from phone</button>
-            </div>
-          )}
-          <footer className="review-bar">
-            <button type="button" className="primary send" disabled={!ready || !sheet || sending} onClick={send}>
-              {sending ? 'Sending…' : sendError ? 'Try again' : 'Send to group'}
-            </button>
-          </footer>
-        </div>
-      )}
-
       {fixPage && (
         <Fix
           page={fixPage}
           index={pages.indexOf(fixPage)}
-          count={pages.length}
-          fresh={fresh === fixPage.id}
-          onClose={closeFix}
+          count={count}
+          onClose={() => setFixing(null)}
           onDelete={() => {
-            const left = pages.filter((p) => p.id !== fixPage.id)
-            setPages(left)
-            setFresh(null)
+            setPages((ps) => ps.filter((p) => p.id !== fixPage.id))
             setFixing(null)
-            if (!left.length) setReviewing(false)
           }}
           onMove={(by) => setPages((ps) => {
             const i = ps.indexOf(fixPage), j = i + by
@@ -365,10 +430,13 @@ export default function App() {
           onTurn={async () => {
             const page = turnRight(fixPage.page)
             const blob = await toBlob(page)
-            setPages((ps) => ps.map((p) => (p.id === fixPage.id ? { ...p, v: p.v + 1, page, blob, url: URL.createObjectURL(blob) } : p)))
+            const turns = ((fixPage.turns ?? 0) + 1) % 4
+            setPages((ps) => ps.map((p) => (p.id === fixPage.id ? { ...p, v: p.v + 1, turns, page, blob, url: URL.createObjectURL(blob) } : p)))
           }}
           onRecut={async (corners) => {
-            const page = await cutPage(fixPage.photo, corners)
+            // A new crop starts from the photo, so a turn already given is given again.
+            let page = await cutPage(fixPage.photo, corners)
+            for (let t = 0; t < (fixPage.turns ?? 0); t += 1) page = turnRight(page)
             const blob = await toBlob(page)
             setPages((ps) => ps.map((p) => (p.id === fixPage.id ? { ...p, v: p.v + 1, corners, page, blob, url: URL.createObjectURL(blob) } : p)))
           }}

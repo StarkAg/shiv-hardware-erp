@@ -5,10 +5,9 @@ import { WHOLE } from './crop.js'
  * One page, put right: the photo it came from with the four corners the
  * finder chose, each dragged to where the paper really ends. A magnifier
  * shows what is under the finger, which hides the very corner being placed.
- * Also: turn the page, move it earlier or later, or take it out. A page just
- * shot opens here by itself, with Retake and Use.
+ * Also: turn the page, move it earlier or later, or take it out.
  */
-export default function Fix({ page, index, count, fresh = false, onClose, onDelete, onMove, onTurn, onRecut }) {
+export default function Fix({ page, index, count, onClose, onDelete, onMove, onTurn, onRecut }) {
   const box = useRef(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [corners, setCorners] = useState(page.corners ?? WHOLE)
@@ -55,11 +54,9 @@ export default function Fix({ page, index, count, fresh = false, onClose, onDele
   return (
     <div className="fix">
       <header className="fix-top">
-        {fresh
-          ? <button type="button" className="glass" onClick={onDelete}>Retake</button>
-          : <button type="button" className="glass" onClick={onClose} aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>}
+        <button type="button" className="glass" onClick={onClose} aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
         <span className="title">Page {index + 1} of {count}</span>
-        <button type="button" className="primary" disabled={busy} onClick={done}>{busy ? '…' : fresh ? 'Use' : 'Done'}</button>
+        <button type="button" className="primary" disabled={busy} onClick={done}>{busy ? '…' : 'Done'}</button>
       </header>
       <div
         className="fix-photo"
@@ -97,13 +94,13 @@ export default function Fix({ page, index, count, fresh = false, onClose, onDele
           />
         )}
       </div>
-      <p className="fix-say">{page.corners ? 'Drag a corner if the line is off the paper' : 'Page not found: drag the corners to the paper'}</p>
+      <p className="fix-say">{page.corners ? 'Drag a corner to where the paper ends' : 'Page not found: the whole photo goes, or drag the corners'}</p>
       <footer className="fix-bar">
         <button type="button" className="glass" onClick={() => setCorners(WHOLE)}>Whole</button>
         <button type="button" className="glass" disabled={busy} onClick={() => void onTurn()} aria-label="Turn the page"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 4v5h-5" /></svg></button>
-        <button type="button" className="glass" disabled={index === 0} onClick={() => onMove(-1)} aria-label="Move page earlier"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button>
-        <button type="button" className="glass" disabled={index === count - 1} onClick={() => onMove(1)} aria-label="Move page later"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button>
-        {!fresh && <button type="button" className="glass danger" onClick={onDelete}>Delete</button>}
+        {count > 1 && <button type="button" className="glass" disabled={index === 0} onClick={() => onMove(-1)} aria-label="Move page earlier"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg></button>}
+        {count > 1 && <button type="button" className="glass" disabled={index === count - 1} onClick={() => onMove(1)} aria-label="Move page later"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button>}
+        <button type="button" className="glass danger" onClick={onDelete}>Delete</button>
       </footer>
     </div>
   )
