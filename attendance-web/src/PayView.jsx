@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { monthPay, ladderLine, halves } from './pay.js'
+import { monthPay, ladderLine, lostLine, halves } from './pay.js'
 import { monthBook, monthEvents } from './payBook.js'
 import { RunChase } from './cricket/lazy.jsx'
 import { PaySheet, readPending } from './PaySheet.jsx'
@@ -276,28 +276,29 @@ function TuesdayNote({ name, rate, cursor, statusFor, loading, cricket, todayKey
   }), rate })
   const top = r.steps[r.steps.length - 1].need
   const rungs = [
-    { need: r.need, say: `Tuesday pay, ${inr(r.tuesdays * rate)} for ${r.tuesdays} Tuesdays`, reached: r.enough },
-    ...r.steps.map((s) => ({ need: s.need, say: `+ ${inr(s.amount)} bonus`, reached: s.reached })),
+    { need: r.need, say: `Tuesday pay, ${inr(r.tuesdaysPaid * rate)} for ${r.tuesdaysPaid} of ${r.tuesdays} Tuesdays`, on: r.unlocked },
+    ...r.steps.map((s) => ({ need: s.need, say: `+ ${inr(s.amount)} bonus`, on: s.reached && !r.missed.length })),
   ]
   const ahead = r.best > r.attended
+  const lost = r.missed.length ? `${lostLine(r)}. No bonus. ` : ''
   return (
     <div className="paytue">
       <div className="mgttl">Tuesday pay and bonus, not in the sum above</div>
-      {cricket && <RunChase name={name} attended={r.attended} threshold={r.need} unlocked={r.unlocked} missedCount={r.missed.length} />}
+      {cricket && <RunChase name={name} attended={r.attended} threshold={r.need} unlocked={r.unlocked} allLost={r.tuesdaysPaid === 0} />}
       <div className="motdays">{halves(r.attended)} days of {r.open} open</div>
       <div className="progress"><span className={r.unlocked ? 'full' : ''} style={{ width: `${Math.min(r.attended / top, 1) * 100}%` }} /></div>
       <div className="ladder">
         {rungs.map((g) => (
-          <div className="rung" key={g.need + g.say} data-on={(g.reached && !r.missed.length) || undefined}>
+          <div className="rung" key={g.need + g.say} data-on={g.on || undefined}>
             <b>{halves(g.need)} days</b><span>{g.say}</span>
           </div>
         ))}
       </div>
-      <div className={`motmsg ${r.unlocked ? 'good' : ''}`}>
-        {r.missed.length > 0
-          ? `Lost this month: ${r.missed.map((d) => `${WD[d.getDay()]} ${d.getDate()}`).join(', ')} ${r.missed.length === 1 ? 'was' : 'were'} not a full day. No Tuesday pay or bonus.`
-          : r.unlocked
-            ? `Earned: ${inr(r.tueBonus + r.bonus)}${ahead ? ' so far, if every Monday and Wednesday left is a full day' : ''}. Not added by the register.`
+      <div className={`motmsg ${r.unlocked && !r.missed.length ? 'good' : ''}`}>
+        {r.unlocked
+          ? `${lost}Earned: ${inr(r.tueBonus + r.bonus)}${ahead ? ' so far, if every Monday and Wednesday left is a full day' : ''}. Not added by the register.`
+          : r.missed.length > 0
+            ? ladderLine(r)
             : ahead
               ? `${ladderLine(r)}, with every Monday and Wednesday a full day.`
               : `Not earned: ${halves(r.attended)} days, Tuesday pay needed ${halves(r.need)}.`}

@@ -85,8 +85,11 @@ half day.
 | 2 | 81% | 21 | Tuesday pay + ₹300 |
 | 3 | 85% | 22 | Tuesday pay + ₹500 |
 
-- A full day on every Monday and every Wednesday of the month stays
-  mandatory: one miss loses the month's Tuesday pay and the bonus.
+- Tuesday pay is earned week by week (owner's word, 4 Nov 2026): each Tuesday
+  needs a full day on the Monday before and the Wednesday after. A miss loses
+  that one Tuesday, and any miss in the month loses the bonus. The month's days
+  above are still needed for any Tuesday pay. Only days inside the month are
+  checked, so a Tuesday at the month's edge answers for the side it can see.
 - It stops at 85% on purpose: the owner wants about 22 days from each, not
   everyone every day.
 - The bonus, like Tuesday pay, is not in the register and stays out of the sum.
@@ -96,5 +99,5 @@ half day.
   Wednesday of the month (green kept, red missed). Stats shows each worker's %
   of open days. No wage or rate on either, only the fixed bonus amounts. Pay
   (PIN) shows the three steps with rupees.
-- Run on May to Oct 2026 marks: Tuesday pay unchanged (₹19,620), bonus ₹3,000
-  in all, ₹1,500 of it in October.
+- Run on May to Oct 2026 marks, before the week-by-week change: Tuesday pay
+  unchanged (₹19,620), bonus ₹3,000 in all, ₹1,500 of it in October.

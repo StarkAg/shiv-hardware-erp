@@ -21,11 +21,13 @@
  * 22 days each, not everyone every day; a day past that is a wage paid on a
  * day the shop may not need it.
  *
- * And on top of the days, a full day present on EVERY Monday and EVERY
- * Wednesday of the month. This is what stops the holiday being stretched into
- * a long weekend from either side. It is strict on purpose (owner's word,
- * 2 Nov 2026: mandatory): a half day satisfies neither, and one missed day of
- * either kind costs the whole month's Tuesday pay and the bonus with it.
+ * And on top of the days, Tuesday pay is earned week by week (owner's word,
+ * 4 Nov 2026): each Tuesday is paid only with a full day present on the Monday
+ * before it and the Wednesday after it. This is what stops the holiday being
+ * stretched into a long weekend from either side. A half day satisfies neither.
+ * A miss costs that one Tuesday, and any miss in the month costs the bonus.
+ * Only days inside the month are checked, so a Tuesday whose Monday or Wednesday
+ * falls in the next or last month answers for the side it can see.
  *
  * Two things are deliberately not held against anybody. A day the shop was
  * shut cannot be attended, so it is neither open nor missed. And a day that
@@ -64,13 +66,28 @@ const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 /** 20.5 as "20½". */
 export const halves = (n) => `${Math.floor(n)}${n % 1 ? '½' : ''}`;
 
+const dayNames = (dates) => dates.map((d) => `${WD[d.getDay()]} ${d.getDate()}`).join(', ');
+
+/** Which Tuesdays went and why, e.g. "Tue 6 lost: Wed 7 not a full day". Empty for a clean month. */
+export function lostLine(r) {
+  if (!r.missed.length) return '';
+  const why = `${dayNames(r.missed)} not a full day`;
+  return r.lostTuesdays.length ? `${dayNames(r.lostTuesdays)} lost: ${why}` : why;
+}
+
 /**
  * Where somebody stands on the ladder, in days, for screens any phone can see:
  * no wage or rate in it, only the fixed bonus amounts everybody is told.
  */
 export function ladderLine(r) {
   if (r.missed.length) {
-    return `No Tuesday pay this month: ${r.missed.map((d) => `${WD[d.getDay()]} ${d.getDate()}`).join(', ')} not a full day`;
+    const more = r.need - r.attended;
+    const days = r.enough
+      ? `${r.tuesdaysPaid} of ${r.tuesdays} Tuesdays paid`
+      : r.best >= r.need
+        ? `${halves(more)} more day${more === 1 ? '' : 's'} for Tuesday pay`
+        : `Tuesday pay needs ${halves(r.need)} days`;
+    return `${days} · ${lostLine(r)} · No bonus`;
   }
   const goals = [
     { need: r.need, say: 'Tuesday pay', reached: r.enough },
@@ -99,13 +116,13 @@ export function monthPay({ entries, rate = 0, advances = 0 }) {
   let openPast = 0;
   let attendedOpen = 0;
   let openAhead = 0;
-  let tuesdays = 0;
+  const allTuesdays = [];
   const missed = [];
 
   for (const { date, status, future } of entries) {
     const day = date.getDay();
     const isTue = day === 2;
-    if (isTue) tuesdays += 1;
+    if (isTue) allTuesdays.push(date);
     if ((day === 1 || day === 3) && !future && status !== PRESENT && status !== CLOSED) {
       missed.push(date);
     }
@@ -122,12 +139,16 @@ export function monthPay({ entries, rate = 0, advances = 0 }) {
 
   const ladder = ladderFor(open);
   const enough = attended >= ladder.tuesday;
-  const unlocked = enough && missed.length === 0;
+  // Every date here is in the one month, so a Monday or Wednesday touching this Tuesday is one date away.
+  const lostTuesdays = allTuesdays.filter((t) => missed.some((m) => Math.abs(m.getDate() - t.getDate()) === 1));
+  const tuesdays = allTuesdays.length;
+  const tuesdaysPaid = tuesdays - lostTuesdays.length;
+  const unlocked = enough && tuesdaysPaid > 0;
   const steps = ladder.bonus.map((s) => ({ ...s, reached: attended >= s.need }));
-  // Each step is Tuesday pay plus its bonus, so the bonus needs Tuesday pay.
-  const bonus = unlocked ? steps.reduce((n, s) => (s.reached ? s.amount : n), 0) : 0;
+  // Each step is Tuesday pay plus its bonus, and any missed Monday or Wednesday costs the bonus.
+  const bonus = enough && missed.length === 0 ? steps.reduce((n, s) => (s.reached ? s.amount : n), 0) : 0;
   const base = paidDays * rate;
-  const tueBonus = unlocked ? tuesdays * rate : 0;
+  const tueBonus = enough ? tuesdaysPaid * rate : 0;
   // The most attendance the rest of the month can still reach.
   const best = attended + openAhead;
 
@@ -141,6 +162,8 @@ export function monthPay({ entries, rate = 0, advances = 0 }) {
     need: ladder.tuesday,
     steps,
     tuesdays,
+    tuesdaysPaid,
+    lostTuesdays,
     missed,
     enough,
     unlocked,

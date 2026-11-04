@@ -5,7 +5,7 @@ import { monthPay, ladderFor, ladderLine, halves } from './pay.js'
  *
  * Staff see the month's three steps in days, how far each of them has climbed,
  * and every Monday and Wednesday of the month, because one of those missed
- * loses the lot. Nothing here shows a wage or a rate: only days and the fixed
+ * loses the Tuesday beside it and the bonus. Nothing here shows a wage or a rate: only days and the fixed
  * bonus amounts everybody is told. Rupees for Tuesday pay stay behind the PIN.
  */
 
@@ -51,7 +51,7 @@ export function BonusView({ cursor, setCursor, staff, statusFor, loading, todayK
             {ladder.bonus.map((s) => (
               <div className="bnstep" key={s.amount}><b>{halves(s.need)} days</b><span>Tuesday pay + ₹{s.amount}</span></div>
             ))}
-            <p>And a full day on every Monday and Wednesday. Miss one and the month has no Tuesday pay and no bonus.</p>
+            <p>And a full day on the Monday and Wednesday beside each Tuesday. Miss one and that Tuesday is not paid, and the month has no bonus.</p>
           </div>
 
           <div className="bnlist">
@@ -59,7 +59,9 @@ export function BonusView({ cursor, setCursor, staff, statusFor, loading, todayK
               const top = r.steps[r.steps.length - 1].need
               const lost = r.missed.length > 0
               const marks = [r.need, ...r.steps.map((s) => s.need)]
-              const reached = lost ? 0 : [r.enough, ...r.steps.map((s) => s.reached)].filter(Boolean).length
+              // Tuesday pay can survive a miss; the bonus steps cannot.
+              const earned = [r.unlocked, ...r.steps.map((s) => !lost && s.reached)]
+              const reached = earned.filter(Boolean).length
               return (
                 <div className="bnrow" key={name} data-state={lost ? 'lost' : reached ? 'on' : undefined}>
                   <div className="bnhead">
@@ -69,7 +71,7 @@ export function BonusView({ cursor, setCursor, staff, statusFor, loading, todayK
                   <div className="bntrack" aria-hidden="true">
                     <span className="bnfill" style={{ width: `${Math.min(r.attended / top, 1) * 100}%` }} />
                     {marks.map((m, i) => (
-                      <span className="bntick" key={i} data-on={(!lost && r.attended >= m) || undefined} style={{ left: `${(m / top) * 100}%` }} />
+                      <span className="bntick" key={i} data-on={earned[i] || undefined} style={{ left: `${(m / top) * 100}%` }} />
                     ))}
                   </div>
                   <div className="bnsay">{ladderLine(r)}</div>

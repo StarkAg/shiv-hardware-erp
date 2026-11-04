@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 /**
- * Tuesday pay and the bonus ladder: the steps, the Monday and Wednesday rule,
- * and what does and does not forfeit them.
+ * Tuesday pay and the bonus ladder: the steps, the week-by-week Monday and
+ * Wednesday rule, and what does and does not forfeit them.
  *
  * This is the only calculation in the shop that decides what a person is paid,
  * so the rule is pinned down here rather than left to be read off a screen.
@@ -84,35 +84,69 @@ describe('the ladder', () => {
   })
 })
 
-describe('every Monday and Wednesday', () => {
-  it('loses the whole month, bonus too, when a single Monday is missed', () => {
-    // The 7th of September 2026 is a Monday.
+describe('week by week', () => {
+  const lostDates = (r: { lostTuesdays: Date[] }) => r.lostTuesdays.map((d) => d.getDate())
+
+  it('loses only the next Tuesday, and the bonus, when a Monday is missed', () => {
+    // The 7th of September 2026 is a Monday, the 8th its Tuesday.
     expect(days()[6].getDay()).toBe(1)
     const r = monthPay({ entries: month('P', { 7: 'N' }), rate })
     expect(r.enough).toBe(true)          // still well past the days
     expect(r.missed.map((d: Date) => d.getDate())).toEqual([7])
-    expect(r.unlocked).toBe(false)
-    expect(r.tueBonus).toBe(0)
+    expect(lostDates(r)).toEqual([8])
+    expect(r.tuesdaysPaid).toBe(4)
+    expect(r.unlocked).toBe(true)
+    expect(r.tueBonus).toBe(4 * rate)
     expect(r.bonus).toBe(0)
   })
 
-  it('loses it for a missed Wednesday too', () => {
+  it('loses only the Tuesday before a missed Wednesday', () => {
     expect(days()[8].getDay()).toBe(3)
     const r = monthPay({ entries: month('P', { 9: '' }), rate })
     expect(r.missed.map((d: Date) => d.getDate())).toEqual([9])
-    expect(r.unlocked).toBe(false)
+    expect(lostDates(r)).toEqual([8])
+    expect(r.tueBonus).toBe(4 * rate)
+  })
+
+  it('loses one Tuesday, not two, for missing both sides of it', () => {
+    const r = monthPay({ entries: month('P', { 7: 'N', 9: 'N' }), rate })
+    expect(lostDates(r)).toEqual([8])
+    expect(r.tueBonus).toBe(4 * rate)
+  })
+
+  it('loses a Tuesday for each week missed', () => {
+    const r = monthPay({ entries: month('P', { 7: 'N', 16: 'N' }), rate })
+    expect(lostDates(r)).toEqual([8, 15])
+    expect(r.tueBonus).toBe(3 * rate)
+  })
+
+  it('takes the bonus for a missed day with no Tuesday beside it in the month', () => {
+    // April 2026 starts on a Wednesday, whose Tuesday is in March.
+    const april = days(2026, 3).map((date) => ({ date, status: date.getDate() === 1 ? 'N' : date.getDay() === 2 ? 'C' : 'P', future: false }))
+    const a = monthPay({ entries: april, rate })
+    expect(a.missed.map((d: Date) => d.getDate())).toEqual([1])
+    expect(a.lostTuesdays).toHaveLength(0)
+    expect(a.tueBonus).toBe(a.tuesdays * rate)
+    expect(a.bonus).toBe(0)
+  })
+
+  it('still pays nothing short of the days, however clean the weeks', () => {
+    const r = monthPay({ entries: month('P', { ...off(6), 12: 'H' }), rate })
+    expect(r.missed).toHaveLength(0)
+    expect(r.tueBonus).toBe(0)
   })
 
   it('does not accept a half day on a Monday or Wednesday', () => {
     const r = monthPay({ entries: month('P', { 7: 'H' }), rate })
     expect(r.attended).toBe(24.5)        // the half still counts towards the days
     expect(r.missed.map((d: Date) => d.getDate())).toEqual([7])
-    expect(r.unlocked).toBe(false)
+    expect(lostDates(r)).toEqual([8])
   })
 
   it('does not hold a closed Monday against anybody', () => {
     const r = monthPay({ entries: month('P', { 7: 'C' }), rate })
     expect(r.missed).toHaveLength(0)
+    expect(r.tuesdaysPaid).toBe(5)
     expect(r.unlocked).toBe(true)
   })
 
@@ -146,6 +180,6 @@ describe('pay', () => {
 
   it('says where somebody stands without a wage in it', () => {
     expect(ladderLine(monthPay({ entries: month('P', off(5)), rate }))).toBe('Tuesday pay ✓ · ₹300 ✓')
-    expect(ladderLine(monthPay({ entries: month('P', { 7: 'N' }), rate }))).toBe('No Tuesday pay this month: Mon 7 not a full day')
+    expect(ladderLine(monthPay({ entries: month('P', { 7: 'N' }), rate }))).toBe('4 of 5 Tuesdays paid · Tue 8 lost: Mon 7 not a full day · No bonus')
   })
 })

@@ -79,12 +79,12 @@ export function PointsTable({ rows }) {
  * The Tuesday pay rule as a run chase. It reads the result of monthPay, the same
  * figures shown beside it, and works out nothing about money itself.
  */
-export function RunChase({ name, attended, threshold, unlocked, missedCount }) {
+export function RunChase({ name, attended, threshold, unlocked, allLost }) {
   const target = runsFor(threshold)
   const runs = Math.min(target, Math.round(runsFor(attended)))
   const needDays = Math.max(0, threshold - attended)
   const need = target - runs
-  const lost = !unlocked && missedCount > 0
+  const lost = !unlocked && allLost
   const pct = (runs / target) * 100
   return (
     <div className="ck-chase" data-state={unlocked ? 'won' : lost ? 'lost' : 'on'}>
@@ -99,7 +99,7 @@ export function RunChase({ name, attended, threshold, unlocked, missedCount }) {
       </div>
       <div className="ck-chase-say">
         {unlocked ? 'Chased down. Tuesday pay is earned.'
-          : lost ? 'Chase lost this month: a Monday or Wednesday was missed.'
+          : lost ? 'Chase lost this month: every Tuesday went to a missed Monday or Wednesday.'
             : `Need ${need} runs: ${needDays} more day${needDays === 1 ? '' : 's'}.`}
       </div>
     </div>
