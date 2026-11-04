@@ -304,8 +304,33 @@ async function buildBedPlyHtml(quote) {
     </div>`)
 }
 
+// Size Rates: the brand, then each size and its cost. Same positions as
+// SizeRatesPrint (SIZES) in src/features/print/SizeRatesPrint.tsx.
+const SIZES = { top: 100, rowH: 7 }
+async function buildSizeRatesHtml(quote) {
+  const header = await b64('aluminium/header-door.jpeg')
+  const { brand, rows } = quote.sizeRates
+  const at = (left, top, text, extra = '') =>
+    `<div style="position:absolute;left:${left}mm;top:${top}mm;white-space:nowrap;${extra}">${esc(text)}</div>`
+  const rule = (top, colour, weight) => `<div style="position:absolute;left:29mm;right:34mm;top:${top}mm;border-top:${weight} solid ${colour}"></div>`
+  const costAt = (top, text, extra = '') => at(146, top, text, `width:30mm;text-align:right;${extra}`)
+  const sizeRows = rows.map((row, i) => {
+    const top = SIZES.top + i * SIZES.rowH
+    return at(29, top + 1.3, row.size) + costAt(top + 1.3, row.cost) + rule(top + SIZES.rowH, '#bbbbbb', '1px')
+  }).join('')
+  return page(`
+    <div style="position:absolute;inset:0;font-family:Arial,Helvetica,sans-serif;font-size:15pt;line-height:1.1;color:#000">
+    <img src="${header}" style="position:absolute;left:27.94mm;top:22.47mm;width:88.06mm;height:53.53mm;display:block" />
+    ${at(29, 81.3, brand, 'color:#00b050;')}
+    ${at(29, 94.6, 'Size', 'font-weight:700;')}${costAt(94.6, 'Cost', 'font-weight:700;')}
+    ${rule(SIZES.top, '#000', '1.5px')}
+    ${sizeRows}
+    </div>`)
+}
+
 export async function buildQuotationHtml(quote) {
   if (quote.bed) return buildBedPlyHtml(quote)
+  if (quote.sizeRates) return buildSizeRatesHtml(quote)
   if (quote.alu) return buildAluminiumHtml(quote)
 
   const header = await b64('aluminium/header-door.jpeg')

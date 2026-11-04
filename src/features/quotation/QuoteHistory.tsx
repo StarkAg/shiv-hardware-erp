@@ -67,7 +67,11 @@ export function QuoteHistory() {
     )
     .sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))
 
-  const sizeOf = (x: Quotation) => (x.bed ? `${x.bed.totalSqft} sq ft` : formatSize(x.height, x.width, x.category) || '—')
+  const sizeOf = (x: Quotation) => {
+    if (x.bed) return `${x.bed.totalSqft} sq ft`
+    if (x.sizeRates) return [x.sizeRates.brand, `${x.sizeRates.rows.length} sizes`].filter(Boolean).join(' · ')
+    return formatSize(x.height, x.width, x.category) || '—'
+  }
 
   /** A quotation's buttons; `big` gives each a thumb-sized target on a phone. */
   const actionsFor = (x: Quotation, big: boolean) => (

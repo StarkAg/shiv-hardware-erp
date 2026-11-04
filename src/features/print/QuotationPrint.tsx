@@ -9,6 +9,7 @@ import { FixedCardPrint } from './FixedCardPrint'
 import { A4Page } from './A4Page'
 import { AluminiumPrint } from './AluminiumPrint'
 import { BedPlyPrint } from './BedPlyPrint'
+import { SizeRatesPrint } from './SizeRatesPrint'
 import { assetPath } from '../../lib/assets'
 import { enrichQuotation } from '../../lib/pricing'
 
@@ -30,6 +31,7 @@ const legacyCategoryLabel = (category: Quotation['category']) => ({
   'upvc-3-track': CATEGORY_LABELS['upvc-3-track'],
   'upvc-door': CATEGORY_LABELS['upvc-door'],
   'wpc-door-frame': CATEGORY_LABELS['wpc-door-frame'],
+  'size-rates': CATEGORY_LABELS['size-rates'],
   'hinge': '', 'screw': '', 'aldrop': '', 'handle': '', 'tb': '', 'fevicol': '', 'mica': '', 'tape': '',
 }[category])
 
@@ -48,7 +50,7 @@ const legacyThickness = (category: Quotation['category']) => ({
   'aluminium-door': '',
   'window-2-track': '',
   'window-3-track': '',
-  'upvc-2-track': '', 'upvc-2.5-track': '', 'upvc-3-track': '', 'upvc-door': '', 'wpc-door-frame': '',
+  'upvc-2-track': '', 'upvc-2.5-track': '', 'upvc-3-track': '', 'upvc-door': '', 'wpc-door-frame': '', 'size-rates': '',
   'hinge': '', 'screw': '', 'aldrop': '', 'handle': '', 'tb': '', 'fevicol': '', 'mica': '', 'tape': '',
 }[category])
 
@@ -183,6 +185,7 @@ function DoorFittingBox({ top }: { top: number }) {
 
 export function QuotationPrint({ quote }: { quote: Quotation }) {
   if (quote.bed) return <BedPlyPrint quote={quote} />
+  if (quote.sizeRates) return <SizeRatesPrint quote={quote} />
   if (isAluminium(quote.category)) return <AluminiumPrint quote={quote} />
   if (isUpvc(quote.category)) return <UpvcPrint quote={quote} />
   if (isFixedCard(quote.category)) return <FixedCardPrint quote={quote} />

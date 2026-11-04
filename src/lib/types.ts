@@ -21,6 +21,7 @@ export type ProductCategory =
   | 'upvc-3-track'
   | 'upvc-door'
   | 'wpc-door-frame'
+  | 'size-rates'
   // Hardware (bill-only, no sqft rate)
   | 'hinge'
   | 'screw'
@@ -200,6 +201,13 @@ export interface Quotation {
   fitting?: boolean
   /** Bed Inner Ply only: several boards, their total sq ft, and each grade on that total. */
   bed?: BedPly
+  /** Size Rates only: a brand, and each size with its cost. */
+  sizeRates?: SizeRates
+}
+
+export interface SizeRates {
+  brand: string
+  rows: { size: string; cost: number }[]
 }
 
 /** One board of a bed, sizes in feet. */
@@ -253,6 +261,7 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'upvc-3-track': '3 Track UPVC Sliding Window',
   'upvc-door': 'UPVC Door',
   'wpc-door-frame': 'WPC Door Frame (Chaukhat)',
+  'size-rates': 'Size Rates',
   'hinge':    'Hinges',
   'screw':    'Screw',
   'aldrop':   'Aldrop',
@@ -266,10 +275,10 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
 /** Icon key (resolved to a lucide-react component in the UI) per category. */
 export type CategoryIcon = 'door' | 'board' | 'window'
 
-export type ProductGroup = 'Doors' | 'Plywoods' | 'Aluminium' | 'UPVC' | 'WPC'
+export type ProductGroup = 'Doors' | 'Plywoods' | 'Aluminium' | 'UPVC' | 'WPC' | 'Any Brand'
 
 /** Sidebar group display order. */
-export const GROUP_ORDER: ProductGroup[] = ['Doors', 'Plywoods', 'Aluminium', 'UPVC', 'WPC']
+export const GROUP_ORDER: ProductGroup[] = ['Doors', 'Plywoods', 'Aluminium', 'UPVC', 'WPC', 'Any Brand']
 
 /** Short label + icon + image for each category, used on the sidebar submenu. */
 export const CATEGORY_META: Record<
@@ -291,6 +300,7 @@ export const CATEGORY_META: Record<
   'upvc-3-track': { short: '3 Track UPVC', icon: 'window', group: 'UPVC' },
   'upvc-door': { short: 'UPVC Door', icon: 'door', group: 'UPVC' },
   'wpc-door-frame': { short: 'WPC Door Frame', icon: 'door', group: 'WPC' },
+  'size-rates': { short: 'Size Rates', icon: 'board', group: 'Any Brand' },
   // Hardware — bill-only, not shown in quotation sidebar
   'hinge':    { short: 'Hinges',   icon: 'board', group: 'Doors' },
   'screw':    { short: 'Screw',    icon: 'board', group: 'Doors' },
@@ -705,6 +715,7 @@ export const CATEGORY_ORDER: ProductCategory[] = [
   'upvc-3-track',
   'upvc-door',
   'wpc-door-frame',
+  'size-rates',
 ]
 
 // ---- Toto drivers (call list for arranging a delivery) --------------------
