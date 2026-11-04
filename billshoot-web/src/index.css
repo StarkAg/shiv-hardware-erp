@@ -2,10 +2,12 @@
  * buttons come from ./signs/signs.css).
  *
  * One screen, never scrolled: the camera, the bill under it, three keys; over it
- * only the corners of a page, when one is opened. The camera reaches the top of
- * the screen, so its header is a dark strip laid over the picture rather than a
- * white bar that would hide part of the page being shot. Everything under the
- * camera is the white wall.
+ * only the corners of a page, when one is opened. The page is not drawn under the
+ * iPhone's status bar (no viewport-fit=cover, no black-translucent bar): drawn
+ * under it, a home-screen app came up short by the bar's height and left a gap
+ * under the keys. The bar is its own dark strip; the camera starts below it, with
+ * its header a dark strip laid over the picture. Everything under the camera is
+ * the white wall.
  */
 @import "./signs/signs.css";
 
