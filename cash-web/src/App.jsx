@@ -4,6 +4,7 @@ import { anyApi } from 'convex/server'
 import { registerPdf } from './pdf.js'
 import StaffPayments from './StaffPayments.jsx'
 import CashSearch from './CashSearch.jsx'
+import PageCheck from './PageCheck.jsx'
 import { enqueuePhotos, flushPhotos, pendingPhotos } from './photoQueue.js'
 
 // The Bill photo button under the note. Off for now (2026-10-09) so the entry
@@ -279,7 +280,9 @@ export default function App() {
   }
 
   const [closes, setCloses] = useState(() => loadCash(CLOSES_KEY))
-  const closeDay = (date, counted, cashCounts) => {
+  // `bookNow`: what the book holds when it is already known, for a caller whose
+  // changes this render has not seen yet.
+  const closeDay = (date, counted, cashCounts, bookNow) => {
     const at = Date.now()
     setCloses((prev) => {
       const next = { ...prev, [date]: { counted, cashCounts, at, updatedAt: at } }
@@ -288,7 +291,7 @@ export default function App() {
     })
     queue({ t: 'close', date, counted, cashCounts, at, updatedAt: at })
     clearCountDraft(`close:${date}`)
-    const book = bookAtEnd(store, closes, openings, date, 'cash')
+    const book = bookNow ?? bookAtEnd(store, closes, openings, date, 'cash')
     const off = counted - book
     record('close', date, `Counted ${inr(counted)}, register ${inr(book)}`,
       { changes: [...(off === 0 ? ['Tallied'] : [`${off < 0 ? 'Short' : 'Over'} ${inr(Math.abs(off))}`]), ...describeCounts(cashCounts)] })
@@ -354,6 +357,17 @@ export default function App() {
     record('opening-off', date, before
       ? `Opening removed — was cash ${inr(before.cash)}, online ${inr(before.online)}`
       : 'Opening removed')
+  }
+
+  // A checked page of the paper register, into the book in one go. Lines first,
+  // then the day's opening and count, the order they happened in.
+  const addPage = ({ date, entries, opening, counted, expected }) => {
+    addEntries(entries)
+    if (opening != null) setOpening(date, opening, balanceOpen(store, closes, openings, date, 'online'))
+    if (counted != null) closeDay(date, counted, undefined, expected)
+    setMode('report')
+    // After the register has moved on from a day just counted, so this page is the one shown.
+    setTimeout(() => setViewing(date), 0)
   }
 
   // ── Sync ──────────────────────────────────────────────────────────────────
@@ -552,6 +566,9 @@ export default function App() {
             <CloudIcon />
             {sync.pending + photoPending > 0 && <span className="syncdot">{sync.pending + photoPending > 99 ? '99+' : sync.pending + photoPending}</span>}
           </button>
+          <button className="themebtn" onClick={() => setMode('page')} aria-label="Check a page of the register" title="Check a page">
+            <CameraIcon />
+          </button>
           <button className="themebtn" onClick={() => setHistoryOpen(true)} aria-label="Change history" title="Change history">
             <HistoryIcon />
           </button>
@@ -564,6 +581,7 @@ export default function App() {
             setViewing(entry.date)
             showInRegister(entry.id)
           }} />
+          : mode === 'page' ? <PageCheck todayKey={todayKey} store={store} closes={closes} guard={guard} onAddPage={addPage} onBack={() => setMode('entry')} cashAtStart={(date) => balanceOpen(store, closes, openings, date, 'cash')} />
           : mode === 'entry' ? <CashEntry {...shared} />
           : mode === 'totals' ? <CashTotals {...shared} />
             : mode === 'report' ? <CashReport {...shared} />

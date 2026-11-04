@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { action } from "./lib/guarded";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { CASH_PAGE_SYSTEM, CASH_PAGE_TOOL } from "./lib/cashPage";
 
 /**
  * Read through MeshAPI, which speaks Anthropic's own /v1/messages and fronts
@@ -246,6 +247,45 @@ export const read = action({
           ? "No key on the deployment — run: npx convex env set MESH_API_KEY <key>"
           : err?.message ?? String(err);
       await ctx.runMutation(internal.review.failReading, { inboxId, error: message });
+      return { ok: false, error: message };
+    }
+  },
+});
+
+/**
+ * A page of the paper cash register, copied down for Check a page in the Cashier.
+ * The photo is not kept and nothing is written: the Cashier checks the sums and
+ * adds the lines, in the cash book only, when somebody says so.
+ */
+export const readCashPage = action({
+  args: { data: v.string() },
+  handler: async (_ctx, { data }): Promise<{ ok: boolean; page?: unknown; error?: string }> => {
+    try {
+      const apiKey = process.env.MESH_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("no api key");
+      const client = new Anthropic({ apiKey, baseURL: BASE_URL });
+      const response = await client.messages.create({
+        model: MODEL,
+        max_tokens: 6000,
+        system: CASH_PAGE_SYSTEM,
+        tools: [CASH_PAGE_TOOL as Anthropic.Tool],
+        tool_choice: { type: "tool", name: CASH_PAGE_TOOL.name },
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: imageType(Buffer.from(data.slice(0, 32), "base64")), data } },
+            { type: "text", text: "Read this page." },
+          ],
+        }],
+      });
+      const call = response.content.find((b) => b.type === "tool_use");
+      if (!call) throw new Error("The reader did not fill the form in");
+      return { ok: true, page: (call as Anthropic.ToolUseBlock).input };
+    } catch (err: any) {
+      const message =
+        err?.status === 401 || /no api key|api[_ ]?key|authentication/i.test(err?.message ?? "")
+          ? "No key on the deployment — run: npx convex env set MESH_API_KEY <key>"
+          : err?.message ?? String(err);
       return { ok: false, error: message };
     }
   },
