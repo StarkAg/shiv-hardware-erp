@@ -227,7 +227,17 @@ export const claimNext = mutation({
         .filter(job => !(leaveForApp && isForCounterApp(job) && now - job.createdAt < HOLD_FOR_APP_MS))
         .slice(0, unassignedNeeded)
 
-    const jobs = [...assigned, ...unassigned]
+    // The Counter app took it and never finished (it hung, was shut, or reloaded
+    // for new screens): the print server takes it once its lease is up.
+    const abandoned = unassignedNeeded === 0
+      ? []
+      : (await ctx.db
+        .query('printJobs')
+        .withIndex('by_status_created_at', q => q.eq('status', 'printing'))
+        .take(20))
+        .filter(job => job.claimedBy?.startsWith('counter-app:') && (job.leaseExpiresAt ?? 0) < now)
+
+    const jobs = [...assigned, ...abandoned, ...unassigned].slice(0, limit)
     for (const job of jobs) {
       await ctx.db.patch(job._id, {
         status: 'claimed',

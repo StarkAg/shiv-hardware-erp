@@ -93,6 +93,20 @@ describe('the Counter app printing a shared photo', () => {
     expect(claimed._id).toBe(id)
   })
 
+  test('a job it takes and never finishes goes to the print server once its lease is up', async () => {
+    const t = convexTest(schema, modules)
+    await t.mutation(api.printJobs.counterAppHere, { printerId: app })
+    const id = await photo(t)
+    await t.mutation(api.printJobs.claimForApp, { printerId: app })
+    // Still within its lease: left alone.
+    expect(await t.mutation(api.printJobs.claimNext, { printerId: 'shop' })).toEqual([])
+    await t.run((ctx) => ctx.db.patch(id, { leaseExpiresAt: Date.now() - 1 }))
+    const [claimed] = await t.mutation(api.printJobs.claimNext, { printerId: 'shop' })
+    expect(claimed._id).toBe(id)
+    expect(claimed.payload.files[0].url).toMatch(/^https?:/)
+    expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({ status: 'claimed', claimedBy: 'shop' })
+  })
+
   test('a photo it hands back goes to the print server and does not come back to it', async () => {
     const t = convexTest(schema, modules)
     await t.mutation(api.printJobs.counterAppHere, { printerId: app })

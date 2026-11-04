@@ -45,6 +45,27 @@ type PhotoJob = {
 type Job = QuoteJob | PhotoJob
 type Photo = { url: string; landscape: boolean }
 
+/**
+ * A picture is ready once it has loaded. Not img.decode(): that waits on the
+ * window drawing, and a minimized Counter does not draw, so a photo hung for
+ * good (4 Nov 2026).
+ */
+const loaded = (img: HTMLImageElement) => new Promise<void>((done, fail) => {
+  if (img.complete) {
+    if (img.naturalWidth) done()
+    else fail(new Error('The photo did not load'))
+    return
+  }
+  img.addEventListener('load', () => done(), { once: true })
+  img.addEventListener('error', () => fail(new Error('The photo did not load')), { once: true })
+})
+
+/** A step that never finishes must not hold the job, or every job after it. */
+const withinTime = <T,>(work: Promise<T>, ms: number) => Promise.race([
+  work,
+  new Promise<never>((_, fail) => window.setTimeout(() => fail(new Error('Took too long')), ms)),
+])
+
 /** Fetches a job's photos into `urls`, reads their colour, and asks which printer takes them. */
 async function loadPhotos(job: PhotoJob, urls: string[]) {
   const images = await Promise.all(job.files.map(async (file) => {
@@ -54,11 +75,11 @@ async function loadPhotos(job: PhotoJob, urls: string[]) {
     urls.push(url)
     const img = new Image()
     img.src = url
-    await img.decode()
+    await loaded(img)
     return { url, img }
   }))
   const mode = job.mode !== 'auto' ? job.mode : images.some(({ img }) => photoIsColour(img)) ? 'color' : 'bw'
-  const res = await fetch(`${LOCAL_PRINT_SERVER_URL}/printer-ready?mode=${mode}`, { signal: AbortSignal.timeout(5000) })
+  const res = await fetch(`${LOCAL_PRINT_SERVER_URL}/printer-ready?mode=${mode}`, { signal: AbortSignal.timeout(8000) })
   const ready = await res.json() as { ok: boolean; printer: string; reason?: string }
   if (!ready.ok) throw new Error(ready.reason || `${ready.printer} cannot print now`)
   return {
@@ -114,16 +135,16 @@ function Relay() {
     document.body.classList.add('printing-phone-quote')
     void (async () => {
       try {
-        const sheet = job.kind === 'photos' ? await loadPhotos(job, urls) : null
+        const sheet = job.kind === 'photos' ? await withinTime(loadPhotos(job, urls), 30_000) : null
         if (!current) return
         if (sheet) setPhotos(sheet.photos)
         await new Promise((done) => window.setTimeout(done, 150))
         if (!current) return
-        if (sheet) await Promise.all([...(root.current?.querySelectorAll('img') ?? [])].map((img) => img.decode()))
-        await window.shivDesktop!.printCurrentPage({
+        if (sheet) await withinTime(Promise.all([...(root.current?.querySelectorAll('img') ?? [])].map(loaded)), 10_000)
+        await withinTime(window.shivDesktop!.printCurrentPage({
           copies: Math.max(1, job.copies || 1),
           ...(sheet ? { deviceName: sheet.printer } : {}),
-        })
+        }), 60_000)
         await complete({ id: job._id, printerId: id }).catch(() => undefined)
         if (sheet && job.kind === 'photos' && job.notify) {
           void fetch(`${LOCAL_PRINT_SERVER_URL}/tell-phone`, {
