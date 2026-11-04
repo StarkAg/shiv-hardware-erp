@@ -207,6 +207,11 @@ export interface Quotation {
 
 export interface SizeRates {
   brand: string
+  /** ₹ per sq ft the costs were worked out from. Not printed. */
+  rate?: number
+  unit?: 'ft' | 'in'
+  /** The product, when the brand came from the price list: a readymade door bills on its next standard size. */
+  category?: ProductCategory
   rows: { size: string; cost: number }[]
 }
 

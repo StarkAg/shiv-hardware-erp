@@ -3,8 +3,8 @@ import { useParams } from 'react-router-dom'
 import { Loader2, Plus, Printer, Share2, Trash2 } from 'lucide-react'
 import { workingDate } from '../../lib/businessDate'
 import { useStore } from '../../lib/store'
-import { CATEGORY_LABELS, type Quotation } from '../../lib/types'
-import { buildSizeRates, lastRatesFor, MAX_SIZES } from '../../lib/sizeRates'
+import { CATEGORY_LABELS, type Quotation, type SizeRates } from '../../lib/types'
+import { autoCost, buildSizeRates, findInPriceList, lastRatesFor, MAX_SIZES, priceList, type SizePricing, type SizeUnit } from '../../lib/sizeRates'
 import { Button, Toggle } from '../../components/ui'
 import { toast } from '../../components/Toast'
 import { printViaShop } from '../../lib/printViaShop'
@@ -16,15 +16,23 @@ import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/G
 
 /**
  * The Size Rates quotation: a brand picked or typed at the top, then as many
- * sizes as it needs, each with its cost. The other quotations work prices out
- * from one size, so this has its own screen; saving, WhatsApp and print are the
- * same as Bed Inner Ply's.
+ * sizes as it needs. A brand from the price list brings its rate and each cost
+ * works itself out; a cost left to work itself out is blank in `rows` and shows
+ * as the box's placeholder, so typing over one takes no clearing. The other
+ * quotations price one size, so this has its own screen; saving, WhatsApp and
+ * print are the same as Bed Inner Ply's.
  */
 const uid = () => Math.random().toString(36).slice(2, 10)
 const blankRow = () => ({ id: uid(), size: '', cost: '' })
 const box = 'h-10 w-full min-w-0 rounded-lg border border-stone-300 bg-white px-2 text-base outline-none focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100'
 const card = 'rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100 md:p-4'
 const field = 'w-full rounded-lg border border-stone-300 bg-stone-50 px-3 py-2 text-sm outline-none transition focus:border-shiv-green focus:ring-2 focus:ring-shiv-green/20 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100'
+
+/** Saved rows back on screen: a cost that matches the sum goes on working itself out. */
+function rowsFrom(saved: SizeRates) {
+  const pricing: SizePricing = { rate: saved.rate ?? 0, unit: saved.unit ?? 'ft', category: saved.category }
+  return saved.rows.map((r) => ({ id: uid(), size: r.size, cost: autoCost(r.size, pricing) === r.cost ? '' : String(r.cost) }))
+}
 
 export function SizeRatesBuilder({ Preview }: { Preview: ComponentType<{ quote: Quotation }> }) {
   const { id } = useParams()
@@ -36,27 +44,30 @@ export function SizeRatesBuilder({ Preview }: { Preview: ComponentType<{ quote: 
   const [customer, setCustomer] = useState(existing?.customer ?? { id: uid(), name: '', mobile: '', altMobile: '', uid: '', address: '' })
   const [withCustomer, setWithCustomer] = useState(!!existing?.customer?.name)
   const [brand, setBrand] = useState(existing?.sizeRates?.brand ?? '')
-  const [rows, setRows] = useState(() => existing?.sizeRates?.rows.length
-    ? existing.sizeRates.rows.map((r) => ({ id: uid(), size: r.size, cost: String(r.cost) }))
-    : [blankRow()])
+  const [rate, setRate] = useState(existing?.sizeRates?.rate ? String(existing.sizeRates.rate) : '')
+  const [unit, setUnit] = useState<SizeUnit>(existing?.sizeRates?.unit ?? 'ft')
+  const [category, setCategory] = useState(existing?.sizeRates?.category)
+  const [rows, setRows] = useState(() => (existing?.sizeRates?.rows.length ? rowsFrom(existing.sizeRates) : [blankRow()]))
   const [justAdded, setJustAdded] = useState('')
   const [printing, setPrinting] = useState(false)
   const [sharing, setSharing] = useState(false)
   const { printNode, mount: localPrintMount } = useLocalPrint()
 
-  // Brands quoted this way before come first, then the price sets' own.
+  const list = useMemo(() => priceList(sets), [sets])
+  // The price list first, then any other brand typed here before.
   const brands = useMemo(() => {
     const quoted = quotations.flatMap((q) => (q.sizeRates?.brand ? [q.sizeRates.brand] : []))
     const seen = new Set<string>()
-    return [...quoted, ...sets.flatMap((s) => s.brands.map((b) => b.name))].filter((name) => {
+    return [...list.map((item) => item.label), ...quoted].filter((name) => {
       const key = name.trim().toLowerCase()
       if (!key || seen.has(key)) return false
       seen.add(key)
       return true
     })
-  }, [quotations, sets])
+  }, [list, quotations])
 
-  const sizeRates = buildSizeRates(brand, rows)
+  const pricing: SizePricing = { rate: Number(rate) || 0, unit, category }
+  const sizeRates = buildSizeRates(brand, rows, pricing)
   const ready = sizeRates.rows.length > 0
   const full = rows.length >= MAX_SIZES
   const setRow = (rowId: string, patch: Partial<ReturnType<typeof blankRow>>) =>
@@ -69,12 +80,29 @@ export function SizeRatesBuilder({ Preview }: { Preview: ComponentType<{ quote: 
     setRows((all) => [...all, row])
   }
 
-  /** A brand quoted before opens on its last sizes and costs, if nothing is typed yet. */
+  /**
+   * A brand on the price list brings its rate and unit. A brand quoted before
+   * opens on its last sizes if nothing is typed yet, at today's rate when the
+   * price list has one.
+   */
   function chooseBrand(name: string) {
     setBrand(name)
+    const listed = findInPriceList(list, name)
+    setCategory(listed?.category)
+    if (listed) {
+      setRate(String(listed.rate))
+      setUnit(listed.unit)
+    }
     if (rows.some((r) => r.size.trim() || r.cost.trim())) return
     const last = lastRatesFor(quotations, name, quoteId)
-    if (last) setRows(last.map((r) => ({ id: uid(), size: r.size, cost: String(r.cost) })))
+    if (!last) return
+    if (listed) {
+      setRows(last.rows.map((r) => ({ id: uid(), size: r.size, cost: '' })))
+      return
+    }
+    if (last.rate) setRate(String(last.rate))
+    if (last.unit) setUnit(last.unit)
+    setRows(rowsFrom(last))
   }
 
   function buildQuote(): Quotation {
@@ -206,6 +234,22 @@ export function SizeRatesBuilder({ Preview }: { Preview: ComponentType<{ quote: 
             <span className="mb-1 block text-sm font-bold uppercase tracking-wide text-muted">Brand</span>
             <ComboBox value={brand} placeholder="Pick or type anything" options={brands} onChange={chooseBrand} className={field} />
           </label>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-muted">Rate ₹ per sq ft</span>
+              <input aria-label="Rate per sq ft" inputMode="decimal" className={`${box} tabular-nums`} value={rate} onChange={(e) => setRate(e.target.value)} />
+            </label>
+            <div>
+              <span className="mb-1 block text-xs font-semibold text-muted">Sizes in</span>
+              <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Sizes in">
+                {([['ft', 'Feet'], ['in', 'Inches']] as const).map(([value, label]) => (
+                  <Button key={value} role="radio" aria-checked={unit === value} variant={unit === value ? 'primary' : 'outline'} onClick={() => setUnit(value)} className="h-10 justify-center">
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className={card}>
@@ -219,6 +263,7 @@ export function SizeRatesBuilder({ Preview }: { Preview: ComponentType<{ quote: 
                 aria-label="Size"
                 data-case="raw"
                 maxLength={40}
+                placeholder={index === 0 ? (unit === 'ft' ? '7 x 3' : '78 x 36') : undefined}
                 autoFocus={row.id === justAdded}
                 className={box}
                 value={row.size}
@@ -227,7 +272,8 @@ export function SizeRatesBuilder({ Preview }: { Preview: ComponentType<{ quote: 
               <input
                 aria-label="Cost"
                 inputMode="decimal"
-                className={`${box} text-right tabular-nums`}
+                className={`${box} text-right tabular-nums placeholder:font-semibold placeholder:text-stone-900 dark:placeholder:text-stone-100`}
+                placeholder={autoCost(row.size, pricing) ? String(autoCost(row.size, pricing)) : undefined}
                 value={row.cost}
                 onChange={(e) => setRow(row.id, { cost: e.target.value })}
                 onKeyDown={(e) => {
