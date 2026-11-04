@@ -15,7 +15,7 @@ import { enrichQuotation } from '../../lib/pricing'
 
 // Mirrors the old Excel Plywood and Door sheets for non-aluminium quotations.
 
-const legacyCategoryLabel = (category: Quotation['category']) => ({
+export const legacyCategoryLabel = (category: Quotation['category']) => ({
   'readymade-door': 'Readymade Door Water Proof',
   'flush-door': 'Flush Door (Plain Door) Water Proof',
   'plywood-6': 'Water Proof Plywood',
@@ -39,7 +39,7 @@ const legacyCategoryLabel = (category: Quotation['category']) => ({
 const hasTwoGtyCols = (cat: ProductCategory) =>
   cat === 'flush-door' || cat === 'block-board-12' || cat === 'block-board-19'
 
-const legacyThickness = (category: Quotation['category']) => ({
+export const legacyThickness = (category: Quotation['category']) => ({
   'readymade-door': '30 mm',
   'flush-door': '30 mm',
   'plywood-6': '6mm',
@@ -54,7 +54,7 @@ const legacyThickness = (category: Quotation['category']) => ({
   'hinge': '', 'screw': '', 'aldrop': '', 'handle': '', 'tb': '', 'fevicol': '', 'mica': '', 'tape': '',
 }[category])
 
-const legacyDimension = (dim: Quotation['height']) => (
+export const legacyDimension = (dim: Quotation['height']) => (
   dim.soot ? `${dim.inches} ${dim.soot}/8"` : dim.inches ? String(dim.inches) : ''
 )
 

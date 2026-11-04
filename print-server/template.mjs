@@ -306,24 +306,30 @@ async function buildBedPlyHtml(quote) {
 
 // Size Rates: the brand, then each size and its cost. Same positions as
 // SizeRatesPrint (SIZES) in src/features/print/SizeRatesPrint.tsx.
-const SIZES = { top: 100, rowH: 7 }
+const SIZES = { first: 120.36, rowH: 6.39 }
 async function buildSizeRatesHtml(quote) {
   const header = await b64('aluminium/header-door.jpeg')
-  const { brand, rows } = quote.sizeRates
+  const { category, name, brand, rate, guaranteeYears, coverage, rows } = quote.sizeRates
   const at = (left, top, text, extra = '') =>
     `<div style="position:absolute;left:${left}mm;top:${top}mm;white-space:nowrap;${extra}">${esc(text)}</div>`
-  const rule = (top, colour, weight) => `<div style="position:absolute;left:29mm;right:34mm;top:${top}mm;border-top:${weight} solid ${colour}"></div>`
-  const costAt = (top, text, extra = '') => at(146, top, text, `width:30mm;text-align:right;${extra}`)
+  const center = (left, width, top, text, extra = '') => at(left, top, text, `width:${width}mm;text-align:center;${extra}`)
+  const years = Number(guaranteeYears) || 0
   const sizeRows = rows.map((row, i) => {
-    const top = SIZES.top + i * SIZES.rowH
-    return at(29, top + 1.3, row.size) + costAt(top + 1.3, row.cost) + rule(top + SIZES.rowH, '#bbbbbb', '1px')
+    const top = SIZES.first + i * SIZES.rowH
+    const line = 'line-height:1.05;'
+    return at(29, top, row.height ? legacyDimension(row.height) : row.size, `width:22mm;text-align:right;${line}`) +
+      (row.width ? center(53, 5, top, 'X', line) + at(60, top, legacyDimension(row.width), line) : '') +
+      at(127, top, Math.round(Number(row.cost) || 0), line)
   }).join('')
   return page(`
     <div style="position:absolute;inset:0;font-family:Arial,Helvetica,sans-serif;font-size:15pt;line-height:1.1;color:#000">
     <img src="${header}" style="position:absolute;left:27.94mm;top:22.47mm;width:88.06mm;height:53.53mm;display:block" />
-    ${at(29, 81.3, brand, 'color:#00b050;')}
-    ${at(29, 94.6, 'Size', 'font-weight:700;')}${costAt(94.6, 'Cost', 'font-weight:700;')}
-    ${rule(SIZES.top, '#000', '1.5px')}
+    ${at(29, 81.3, category ? legacyCategoryLabel(category) : (name ?? brand), 'color:#00b050;')}
+    ${at(29, 94.6, 'Thickness')}${at(60, 94.6, 'Brand')}${at(127, 94.6, 'Rate')}${center(148, 30, 94.6, coverage === 'warranty' ? 'Warranty' : 'Guarantee')}
+    <div style="position:absolute;left:29mm;right:34mm;top:100mm;height:7mm;background:#FFFF00"></div>
+    ${at(29, 101.3, category ? legacyThickness(category) : '')}${at(60, 101.3, name ?? brand)}${at(127, 101.3, rate || '')}${center(148, 30, 101.3, years ? `${years} Years` : '', `color:${years === 7 ? '#000000' : 'red'};`)}
+    <div style="position:absolute;left:29mm;right:34mm;top:107mm;border-top:1.5px solid #000"></div>
+    ${at(29, 113.5, 'Height', 'width:22mm;text-align:right;')}${at(60, 113.5, 'Width')}${at(127, 113.5, 'Cost')}
     ${sizeRows}
     </div>`)
 }

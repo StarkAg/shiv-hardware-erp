@@ -212,7 +212,12 @@ export interface SizeRates {
   unit?: 'ft' | 'in'
   /** The product, when the brand came from the price list: a readymade door bills on its next standard size. */
   category?: ProductCategory
-  rows: { size: string; cost: number }[]
+  /** The brand's own name for the sheet; `brand` is what the box showed. */
+  name?: string
+  guaranteeYears?: GuaranteeYears
+  coverage?: CoverageType
+  /** `size` in words is for History; the sheet prints `height` and `width`. */
+  rows: { size: string; cost: number; height?: Dimension; width?: Dimension }[]
 }
 
 /** One board of a bed, sizes in feet. */

@@ -52,6 +52,20 @@ export const saveQuotation = mutation({
 })
 
 /**
+ * Takes a quotation out of the cloud copy, from the command line only:
+ * `npx convex run --prod documents:removeQuotation '{"localId":"..."}'`.
+ * Deleting one in History is remembered on that device and leaves this copy.
+ */
+export const removeQuotation = internalMutation({
+  args: { localId: v.string() },
+  handler: async (ctx, { localId }) => {
+    const row = await ctx.db.query('quotations').withIndex('by_local_id', q => q.eq('localId', localId)).unique()
+    if (row) await ctx.db.delete(row._id)
+    return row?.number ?? null
+  },
+})
+
+/**
  * Every card, newest first — for the shop, not for the world.
  *
  * This handed out the whole file to anyone who called it: names, mobiles,
