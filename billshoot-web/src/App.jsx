@@ -5,7 +5,8 @@ import { sendToGroup } from './send.js'
 
 /**
  * Bill Shoot: the camera, open at once, with the page outlined live. Start takes
- * the page, finds it, and shows the cut for its corners to be put right: the
+ * the page, finds it, and shows the crop for its corners to be put right, with
+ * no other change to the picture: the
  * finder is right on about three camera photos in four. Then the finished picture,
  * all the pages one under another, and Send to group puts it in the shop's
  * WhatsApp group from the Shop number, through Railway (./send.js). Share from

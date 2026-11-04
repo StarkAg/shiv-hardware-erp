@@ -357,87 +357,16 @@ export function flatten(photo, corners, { trim = 0.006 } = {}) {
 }
 
 /**
- * Paper made white and ink kept: each channel is stretched so the paper (its
- * bright end) sits near white — which also takes off the yellow of shop light
- * — and the darkest ink is deepened a little. Changes the buffer in place.
+ * A photo's page: cut along its corners and nothing else, every colour as the
+ * camera saw it (owner's ask, 4 Nov 2026).
  */
-export function evenLight(page) {
-  const { data } = page
-  const n = data.length / 4
-  const hists = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)]
-  const lum = new Uint32Array(256)
-  const step = Math.max(1, Math.floor(n / 200000))
-  let counted = 0
-  for (let i = 0; i < n; i += step) {
-    const p = i * 4
-    hists[0][data[p]] += 1; hists[1][data[p + 1]] += 1; hists[2][data[p + 2]] += 1
-    lum[(data[p] * 77 + data[p + 1] * 150 + data[p + 2] * 29) >> 8] += 1
-    counted += 1
-  }
-  const at = (hist, share) => {
-    let seen = 0
-    for (let v = 0; v < 256; v += 1) { seen += hist[v]; if (seen >= counted * share) return v }
-    return 255
-  }
-  // Writing covers well under a third of a bill, so the 70th percentile is paper.
-  const white = hists.map((hist) => Math.max(60, at(hist, 0.7)))
-  const black = Math.min(at(lum, 0.01), 90)
-  const lut = white.map((wv) => {
-    const t = new Uint8ClampedArray(256)
-    for (let v = 0; v < 256; v += 1) t[v] = ((v - black * 0.6) / (wv - black * 0.6)) * 246
-    return t
-  })
-  for (let p = 0; p < data.length; p += 4) {
-    data[p] = lut[0][data[p]]; data[p + 1] = lut[1][data[p + 1]]; data[p + 2] = lut[2][data[p + 2]]
-  }
-  return page
-}
-
-/**
- * The counter showing past a torn or curled edge, painted out. Run after
- * evenLight, when paper is near white: anything coloured or dark reaching in
- * from the border, no deeper than a twentieth of the page, is table or
- * shadow, and becomes paper. Writing in the middle is never reached.
- */
-export function cleanEdges(page) {
-  const { data, width: w, height: h } = page
-  const band = Math.max(4, Math.round(Math.min(w, h) * 0.05))
-  const notPaper = (i) => {
-    const p = i * 4, r = data[p], g = data[p + 1], b = data[p + 2]
-    const lo = Math.min(r, g, b), hi = Math.max(r, g, b)
-    return lo < 175 || hi - lo > 45
-  }
-  const seen = new Uint8Array(w * h)
-  const stack = []
-  const push = (x, y) => {
-    const i = y * w + x
-    if (seen[i] || !notPaper(i)) return
-    seen[i] = 1
-    stack.push(i)
-  }
-  for (let x = 0; x < w; x += 1) { push(x, 0); push(x, h - 1) }
-  for (let y = 0; y < h; y += 1) { push(0, y); push(w - 1, y) }
-  while (stack.length) {
-    const i = stack.pop()
-    const x = i % w, y = (i - x) / w
-    data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = 246
-    const deep = (nx, ny) => Math.min(nx, ny, w - 1 - nx, h - 1 - ny) < band
-    if (x > 0 && deep(x - 1, y)) push(x - 1, y)
-    if (x < w - 1 && deep(x + 1, y)) push(x + 1, y)
-    if (y > 0 && deep(x, y - 1)) push(x, y - 1)
-    if (y < h - 1 && deep(x, y + 1)) push(x, y + 1)
-  }
-  return page
-}
-
-/** A photo's page, found, flattened and cleaned — what the app keeps. */
 export function makePage(photo, corners) {
-  return cleanEdges(evenLight(flatten(photo, corners)))
+  return flatten(photo, corners)
 }
 
 /* ── the pages, one under another ─────────────────────────────────────── */
 
-export const SHEET = { column: 1080, gap: 14, margin: 14, background: '#d8d2c6' }
+export const SHEET = { column: 1080, gap: 14, margin: 0, background: '#ffffff' }
 
 /**
  * Where each page goes on the shared picture. Up to three pages run down one

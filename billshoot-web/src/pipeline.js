@@ -93,7 +93,7 @@ export async function shotPage(photo) {
   return { corners, page: c }
 }
 
-/** A photo (canvas) cut along `corners` (or whole) into a flat, cleaned page canvas. */
+/** A photo (canvas) cut along `corners` (or whole) into a flat page canvas. */
 export async function cutPage(photo, corners) {
   const x = photo.getContext('2d', { willReadFrequently: true })
   const data = x.getImageData(0, 0, photo.width, photo.height)
@@ -117,10 +117,16 @@ const MAX_PIXELS = 14e6
 // A picture goes to the group inside a request, and WhatsApp itself takes 16 MB.
 const MAX_BYTES = 9e6
 
-/** The pages laid one under another on one picture, as a JPEG blob. */
+/**
+ * The pages laid one under another on one picture, as a JPEG blob. A single page
+ * goes as it is; several are drawn at the widest one's width, so none is shrunk
+ * unless the picture would be too big to send.
+ */
 export async function sheetOf(pages) {
+  if (pages.length === 1) return pages[0].blob
   const bitmaps = await Promise.all(pages.map((p) => createImageBitmap(p.blob)))
-  const plan = layout(bitmaps.map((b) => ({ w: b.width, h: b.height })))
+  const column = Math.max(...bitmaps.map((b) => b.width))
+  const plan = layout(bitmaps.map((b) => ({ w: b.width, h: b.height })), { ...SHEET, column })
   const s = Math.min(1, Math.sqrt(MAX_PIXELS / (plan.width * plan.height)))
   const c = canvasOf(Math.round(plan.width * s), Math.round(plan.height * s))
   const x = c.getContext('2d')
