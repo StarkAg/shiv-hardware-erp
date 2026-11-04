@@ -26,7 +26,8 @@ button { touch-action: manipulation; }
 .glass:active:not(:disabled), .primary:active:not(:disabled) { transform: translateY(2px); }
 .viewer :focus-visible, .fix-photo :focus-visible { outline-color: #fff; }
 
-.app { height: 100dvh; display: flex; flex-direction: column; max-width: 640px; margin: 0 auto; background: var(--wall); }
+/* Fixed to the screen, not 100dvh: on an iPhone home-screen app dvh can come up short by the status bar, leaving a gap under the foot. */
+.app { position: fixed; top: 0; bottom: 0; left: 0; right: 0; display: flex; flex-direction: column; max-width: 640px; margin: 0 auto; background: var(--wall); }
 
 /* The camera takes all the room the bill box leaves. */
 .viewer { flex: 1; min-height: 0; position: relative; overflow: hidden; background: #000; touch-action: manipulation; }
@@ -42,7 +43,7 @@ button { touch-action: manipulation; }
 
 /* The bill box: the pages as they will go, newest last, each with its number. Always
    there, so the camera does not jump when the first page lands. A tap adjusts a page. */
-.pane { flex: none; height: 32dvh; display: flex; align-items: stretch; gap: 8px; padding: 8px 12px; overflow-x: auto; scrollbar-width: none; background: var(--key); border-top: 4px solid var(--ink); }
+.pane { flex: none; height: 22%; display: flex; align-items: stretch; gap: 8px; padding: 8px 12px; overflow-x: auto; scrollbar-width: none; background: var(--key); border-top: 4px solid var(--ink); }
 .pane::-webkit-scrollbar { display: none; }
 .pane-empty { flex: 1; align-self: center; margin: 0; text-align: center; color: var(--ink); font-size: 16px; font-weight: 600; }
 .thumb { position: relative; flex: none; height: 100%; padding: 0; overflow: hidden; background: #fff; box-shadow: inset 0 0 0 2px var(--ink); }
@@ -55,7 +56,7 @@ button { touch-action: manipulation; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* The foot: photos from the phone, Start, and Send. */
-.bar { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); background: var(--wall); border-top: 4px solid var(--ink); }
+.bar { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 10px 12px max(10px, calc(env(safe-area-inset-bottom) - 12px)); background: var(--wall); border-top: 4px solid var(--ink); }
 .bar .side { justify-self: start; min-width: 64px; min-height: 56px; }
 .bar .share { justify-self: end; min-width: 112px; background: var(--safe); font-size: 21px; }
 /* A circle is the thing to do: take the photo. */
