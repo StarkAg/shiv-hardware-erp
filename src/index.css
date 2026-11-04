@@ -370,7 +370,7 @@ input[type='number'] { -moz-appearance: textfield; }
    "fit" did; a sheet a shade under 297mm cannot spill onto a blank page. */
 .phone-photo-page { width: 210mm; height: 296mm; box-sizing: border-box; padding: 5mm; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; break-after: page; }
 .phone-photo-page:last-child { break-after: auto; }
-.phone-photo-page img { display: block; flex: none; width: 200mm; height: 286mm; object-fit: contain; }
+.phone-photo-page img { display: block; flex: none; width: 200mm; height: 286mm; max-width: none; object-fit: contain; }
 .phone-photo-page img.is-landscape { width: 286mm; height: 200mm; transform: rotate(90deg); }
 
 @media print {
