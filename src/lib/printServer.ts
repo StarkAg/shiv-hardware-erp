@@ -46,6 +46,8 @@ function detectPrintServerUrl() {
 }
 
 export const PRINT_SERVER_URL = detectPrintServerUrl()
+/** The print server on this PC, for the desktop app that runs beside it. */
+export const LOCAL_PRINT_SERVER_URL = `http://localhost:${PRINT_SERVER_PORT}`
 
 export type ServerPrintPayload =
   | { kind: 'quotation'; quote: Quotation }

@@ -293,6 +293,8 @@ export default defineSchema({
     copies: v.number(),
     requestedBy: v.optional(v.string()),
     assignedPrinterId: v.optional(v.string()),
+    // The Counter app could not print it; only the print server takes it now.
+    leftForServer: v.optional(v.boolean()),
     claimedBy: v.optional(v.string()),
     claimedAt: v.optional(v.number()),
     leaseExpiresAt: v.optional(v.number()),

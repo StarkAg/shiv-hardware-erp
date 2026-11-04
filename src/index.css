@@ -365,6 +365,13 @@ input[type='number'] { -moz-appearance: textfield; }
 /* Off-screen mount for direct/silent printing: hidden on screen, but the
    @media print rules below pull it back on-page so it prints correctly. */
 .print-offscreen { position: fixed; left: -10000px; top: 0; width: 210mm; pointer-events: none; }
+/* A photo shared from a phone (PhoneQuotePrinter): fitted to one A4 sheet, turned
+   if it is wide. The 5mm keeps it inside what the printers can reach, as SumatraPDF's
+   "fit" did; a sheet a shade under 297mm cannot spill onto a blank page. */
+.phone-photo-page { width: 210mm; height: 296mm; box-sizing: border-box; padding: 5mm; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; break-after: page; }
+.phone-photo-page:last-child { break-after: auto; }
+.phone-photo-page img { display: block; flex: none; width: 200mm; height: 286mm; object-fit: contain; }
+.phone-photo-page img.is-landscape { width: 286mm; height: 200mm; transform: rotate(90deg); }
 
 @media print {
   @page { size: A4 portrait; margin: 0; }

@@ -1965,9 +1965,14 @@ async function startDropPrintFolder() {
 async function printUploadedFileImpl(file, copies, printerOverride = null, printSettingsOverride = null) {
   const primaryPrinter = printerOverride || selectUploadPrinter(file)
   const primaryPrintSettings = printSettingsOverride || printSettingsForWhatsAppPrinter(primaryPrinter)
-  const route = await routeBwPrinterOnError(primaryPrinter, primaryPrintSettings, 'upload-print')
-  const { printer, printSettings } = route
-  if (printer === COLOR_PRINTER) await prepareEpsonPlainA4ColorDefaults(printer, 'upload-print')
+  // The printer checks run while the page renders, not before it, as for a
+  // quotation: each is a PowerShell of a second or more (owner's ask, 4 Nov 2026).
+  const printerReady = (async () => {
+    const chosen = await routeBwPrinterOnError(primaryPrinter, primaryPrintSettings, 'upload-print')
+    if (chosen.printer === COLOR_PRINTER) await prepareEpsonPlainA4ColorDefaults(chosen.printer, 'upload-print')
+    return chosen
+  })()
+  printerReady.catch(() => {}) // still seen below; here only if the page fails first
   const extension = extensionForMediaType(file.mediaType)
   // If the file was already downloaded to the "whatsapp Prints" folder, print
   // from that stable copy and keep it; otherwise stage a temp copy and clean up.
@@ -1989,6 +1994,8 @@ async function printUploadedFileImpl(file, copies, printerOverride = null, print
       printPath = renderedPdfPath
     }
 
+    const route = await printerReady
+    const { printer, printSettings } = route
     const result = await printFileWithLp(printPath, copies, `WhatsApp ${file.name}`.slice(0, 80), printer, printSettings)
     return {
       name: file.name,
@@ -3547,6 +3554,45 @@ app.post('/queue/cancel', async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err?.message ?? err) })
   }
+})
+
+// ── The Counter app printing a shared photo itself (src/components/PhoneQuotePrinter.tsx) ──
+let bwDefaultIsA4 = false
+/**
+ * The HP's Windows default paper was Letter. SumatraPDF is always told A4, but
+ * a print from the Counter app takes the printer's own default.
+ */
+async function setBwDefaultToA4() {
+  if (bwDefaultIsA4 || process.platform !== 'win32' || BW_PRINTER === COLOR_PRINTER) return
+  await execFileAsync('powershell.exe', ['-NoProfile', '-Command', 'Set-PrintConfiguration -PrinterName $env:SHIV_PRINTER_NAME -PaperSize A4'], {
+    env: { ...process.env, SHIV_PRINTER_NAME: BW_PRINTER },
+    windowsHide: true,
+  })
+  bwDefaultIsA4 = true
+}
+
+// Which printer a photo of this colour goes to, and whether it can print now.
+// When it cannot, the app hands the job back and the print server's fallback takes it.
+app.get('/printer-ready', async (req, res) => {
+  const printer = req.query.mode === 'color' ? COLOR_PRINTER : BW_PRINTER
+  try {
+    const [health] = await Promise.all([
+      getWindowsPrinterHealth(printer),
+      printer === BW_PRINTER ? setBwDefaultToA4() : undefined,
+    ])
+    res.json({ ok: health.ok, printer, reason: health.reason })
+  } catch (err) {
+    res.json({ ok: false, printer, reason: String(err?.message ?? err) })
+  }
+})
+
+// The phone that shared a photo hears "Printed" from here, where the push keys
+// are. For the Counter app on this PC only.
+app.post('/tell-phone', (req, res) => {
+  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) return res.status(403).json({ ok: false })
+  const { id, notify, files, mode, printer } = req.body ?? {}
+  void tellPhone({ _id: id, payload: { notify, files, mode } }, { ok: true, result: { files: [{ printer }] } })
+  res.json({ ok: true })
 })
 
 // ── Health check ─────────────────────────────────────────────────────────────

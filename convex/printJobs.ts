@@ -16,7 +16,8 @@ const ACTIVE_LEASE_MS = 2 * 60 * 1000
  * draws for the counter and prints it straight away, so while it is open
  * (it checks in every 30s) the print server leaves a new quotation alone for
  * HOLD_FOR_APP_MS. If the app is shut or cannot print, the print server takes
- * it as before. Owner's ask, 2 Nov 2026.
+ * it as before. Owner's ask, 2 Nov 2026. Shared photos go the same way (a
+ * PDF stays with the print server), 4 Nov 2026.
  */
 const COUNTER_APP_KEY = 'counter-app-printer'
 const COUNTER_APP_FRESH_MS = 90 * 1000
@@ -31,6 +32,14 @@ async function markCounterApp(ctx: MutationCtx, printerId: string, now: number) 
   const row = await ctx.db.query('watcherState').withIndex('by_key', q => q.eq('key', COUNTER_APP_KEY)).unique()
   if (row) await ctx.db.patch(row._id, { value: printerId, updatedAt: now })
   else await ctx.db.insert('watcherState', { key: COUNTER_APP_KEY, value: printerId, updatedAt: now })
+}
+
+/** What the Counter app prints itself: a quotation, or a shared job of photos only. */
+function isForCounterApp(job: { kind: string; payload?: any; assignedPrinterId?: string; leftForServer?: boolean }) {
+  if (job.assignedPrinterId || job.leftForServer) return false
+  if (job.kind === 'quotation') return true
+  const files = job.kind === 'raw-file' && Array.isArray(job.payload?.files) ? job.payload.files : []
+  return files.length > 0 && files.every((f: any) => f?.storageId && String(f.mediaType).startsWith('image/'))
 }
 
 function publicJob(job: {
@@ -121,6 +130,12 @@ export const sendFiles = mutation({
   },
   handler: async (ctx, { files, mode, copies, notify }) => {
     if (!files.length || files.length > 20) throw new ConvexError('Choose 1 to 20 files.')
+    // One upload sent twice is one print: the same file was queued twice 3s apart
+    // on 4 Nov 2026, and the second job failed once the first had printed.
+    const ids = new Set<string>(files.map(file => file.storageId))
+    const already = (await ctx.db.query('printJobs').order('desc').take(20)).find(job =>
+      job.kind === 'raw-file' && Array.isArray(job.payload?.files) && job.payload.files.some((f: any) => ids.has(f?.storageId)))
+    if (already) return already._id
     for (const file of files) {
       if (!PRINTABLE.has(file.mediaType)) throw new ConvexError(`${file.name}: only PDFs and photos print.`)
       if (!(await ctx.db.system.get(file.storageId))) throw new ConvexError(`${file.name} did not upload. Try again.`)
@@ -199,7 +214,7 @@ export const claimNext = mutation({
       .take(limit)
 
     const unassignedNeeded = Math.max(0, limit - assigned.length)
-    // A new quotation waits a moment for the Counter app, while it is open.
+    // A new quotation or shared photo waits a moment for the Counter app, while it is open.
     const leaveForApp = await counterAppOpen(ctx, now)
     const unassigned = unassignedNeeded === 0
       ? []
@@ -209,7 +224,7 @@ export const claimNext = mutation({
         .order('asc')
         .take(limit * 3 + 10))
         .filter(job => !job.assignedPrinterId)
-        .filter(job => !(leaveForApp && job.kind === 'quotation' && now - job.createdAt < HOLD_FOR_APP_MS))
+        .filter(job => !(leaveForApp && isForCounterApp(job) && now - job.createdAt < HOLD_FOR_APP_MS))
         .slice(0, unassignedNeeded)
 
     const jobs = [...assigned, ...unassigned]
@@ -239,7 +254,7 @@ export const claimNext = mutation({
   },
 })
 
-/** The Counter app on the shop PC saying it is open and printing phone quotations. */
+/** The Counter app on the shop PC saying it is open and printing what phones send. */
 export const counterAppHere = mutation({
   args: { printerId: v.string() },
   handler: async (ctx, { printerId }) => {
@@ -247,8 +262,8 @@ export const counterAppHere = mutation({
   },
 })
 
-/** The oldest phone quotation still waiting, taken by the Counter app; null when there is none. */
-export const claimQuotationForApp = mutation({
+/** The oldest phone quotation or shared photo still waiting, taken by the Counter app; null when there is none. */
+export const claimForApp = mutation({
   args: { printerId: v.string() },
   handler: async (ctx, { printerId }) => {
     const now = Date.now()
@@ -258,7 +273,7 @@ export const claimQuotationForApp = mutation({
       .withIndex('by_status_created_at', q => q.eq('status', 'pending'))
       .order('asc')
       .take(30))
-      .find(j => j.kind === 'quotation' && !j.assignedPrinterId)
+      .find(isForCounterApp)
     if (!job) return null
     await ctx.db.patch(job._id, {
       status: 'printing',
@@ -267,7 +282,19 @@ export const claimQuotationForApp = mutation({
       leaseExpiresAt: now + ACTIVE_LEASE_MS,
       updatedAt: now,
     })
-    return { _id: job._id, copies: job.copies, quote: job.payload?.quote ?? job.payload }
+    if (job.kind === 'quotation') {
+      return { kind: 'quotation' as const, _id: job._id, copies: job.copies, quote: job.payload?.quote ?? job.payload }
+    }
+    return {
+      kind: 'photos' as const,
+      _id: job._id,
+      copies: job.copies,
+      mode: job.payload.mode as 'bw' | 'color' | 'auto',
+      notify: job.payload.notify as { endpoint: string; keys: { p256dh: string; auth: string } } | undefined,
+      files: await Promise.all((job.payload.files as { storageId: Id<'_storage'>; name: string; mediaType: string }[]).map(async (f) => ({
+        name: f.name, mediaType: f.mediaType, url: await ctx.storage.getUrl(f.storageId),
+      }))),
+    }
   },
 })
 
@@ -282,6 +309,7 @@ export const releaseToServer = mutation({
       claimedBy: undefined,
       claimedAt: undefined,
       leaseExpiresAt: undefined,
+      leftForServer: true,
       // Older than the hold, so the print server takes it on its next look.
       createdAt: job.createdAt - HOLD_FOR_APP_MS,
       updatedAt: Date.now(),
