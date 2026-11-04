@@ -48,6 +48,7 @@ import type * as lib_billFlow from "../lib/billFlow.js";
 import type * as lib_billFlowStages from "../lib/billFlowStages.js";
 import type * as lib_billRows from "../lib/billRows.js";
 import type * as lib_billText from "../lib/billText.js";
+import type * as lib_cashPage from "../lib/cashPage.js";
 import type * as lib_contactRead from "../lib/contactRead.js";
 import type * as lib_entries from "../lib/entries.js";
 import type * as lib_guarded from "../lib/guarded.js";
@@ -142,6 +143,7 @@ declare const fullApi: ApiFromModules<{
   "lib/billFlowStages": typeof lib_billFlowStages;
   "lib/billRows": typeof lib_billRows;
   "lib/billText": typeof lib_billText;
+  "lib/cashPage": typeof lib_cashPage;
   "lib/contactRead": typeof lib_contactRead;
   "lib/entries": typeof lib_entries;
   "lib/guarded": typeof lib_guarded;
