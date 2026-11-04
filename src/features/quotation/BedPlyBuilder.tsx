@@ -14,6 +14,7 @@ import { sendWhatsAppDocument } from '../../lib/printServer'
 import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
 import { QuotationPrint } from '../print/QuotationPrint'
 import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/GuaranteeBuilder'
+import { CopiesBox } from './CopiesBox'
 
 /**
  * The Bed Inner Ply quotation: boards in feet, their total sq ft, and what that
@@ -43,6 +44,7 @@ export function BedPlyBuilder({ Preview }: { Preview: ComponentType<{ quote: Quo
   })))
   const [printing, setPrinting] = useState(false)
   const [sharing, setSharing] = useState(false)
+  const [copies, setCopies] = useState(1)
   const { printNode, mount: localPrintMount } = useLocalPrint()
 
   const bed = buildBedPly(
@@ -105,16 +107,19 @@ export function BedPlyBuilder({ Preview }: { Preview: ComponentType<{ quote: Quo
     try {
       if (canLocalPrint()) {
         try {
-          await printNode(<QuotationPrint quote={quote} />)
+          await printNode(<QuotationPrint quote={quote} />, copies)
+          setCopies(1)
           return
         } catch {
           // On to the shop PC below.
         }
       }
       const sent = await printViaShop({ kind: 'quotation', quote }, {
+        copies,
         onDone: (r) => toast(r.ok ? `${quote.number} printed at the shop` : `Not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
       })
       if (sent.via === 'queue') toast(`${quote.number} sent to the shop PC`, 'info')
+      setCopies(1)
     } catch (err) {
       toast(`Not printed: ${err instanceof Error ? err.message : String(err)}`, 'error')
     } finally {
@@ -135,9 +140,10 @@ export function BedPlyBuilder({ Preview }: { Preview: ComponentType<{ quote: Quo
           <Button variant="outline" onClick={share} disabled={!ready || sharing} className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
             <Share2 size={16} /> {sharing ? 'Sharing' : 'WhatsApp'}
           </Button>
+          <CopiesBox copies={copies} onChange={setCopies} />
           <Button onClick={print} disabled={!ready || printing} data-enter-submit className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
             {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
-            {printing ? 'Printing…' : 'Print'}
+            {printing ? 'Printing…' : copies > 1 ? `Print ${copies}` : 'Print'}
           </Button>
         </div>
       </div>

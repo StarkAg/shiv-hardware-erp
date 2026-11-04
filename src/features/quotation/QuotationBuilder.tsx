@@ -37,6 +37,7 @@ import Confirm from '../ledger/components/Confirm'
 import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/GuaranteeBuilder'
 import { BedPlyBuilder } from './BedPlyBuilder'
 import { SizeRatesBuilder } from './SizeRatesBuilder'
+import { CopiesBox } from './CopiesBox'
 import { DimInput } from './DimInput'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
@@ -85,6 +86,7 @@ function RateCardBuilder() {
   const [withCustomer, setWithCustomer] = useState(!!existing?.customer?.name)
   const [printState, setPrintState] = useState<null | 'printing' | 'done' | { error: string }>(null)
   const [sharing, setSharing] = useState(false)
+  const [copies, setCopies] = useState(1)
   const { printNode, mount: localPrintMount } = useLocalPrint()
 
   const [cat, setCat] = useState<ProductCategory>(
@@ -234,7 +236,8 @@ function RateCardBuilder() {
     // instant, and works with no internet (no print-server / no cloud queue).
     if (canLocalPrint()) {
       try {
-        await printNode(<QuotationPrint quote={printDoc} />)
+        await printNode(<QuotationPrint quote={printDoc} />, copies)
+        setCopies(1)
         setPrintState('done')
         setTimeout(() => setPrintState(null), 2500)
         return
@@ -246,9 +249,11 @@ function RateCardBuilder() {
     // The shop PC: directly on its Wi-Fi, or through the online queue from anywhere.
     try {
       const sent = await printViaShop({ kind: 'quotation', quote: printDoc }, {
+        copies,
         onDone: (r) => toast(r.ok ? `${printDoc.number} printed at the shop` : `Not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
       })
       if (sent.via === 'queue') toast(`${printDoc.number} sent to the shop PC`, 'info')
+      setCopies(1)
       setPrintState('done')
       setTimeout(() => setPrintState(null), 2500)
     } catch (err) {
@@ -291,9 +296,10 @@ function RateCardBuilder() {
             >
               <Share2 size={16} /> {sharing ? 'Sharing' : 'WhatsApp'}
             </Button>
+            <CopiesBox copies={copies} onChange={setCopies} />
             <Button onClick={handleDirectPrint} disabled={(!hasSize && !fixed) || printState === 'printing'} data-enter-submit className="flex flex-1 items-center justify-center gap-1.5 md:flex-none">
               {printState === 'printing' ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
-              {printState === 'printing' ? 'Printing…' : 'Print'}
+              {printState === 'printing' ? 'Printing…' : copies > 1 ? `Print ${copies}` : 'Print'}
             </Button>
           </div>
         </div>
