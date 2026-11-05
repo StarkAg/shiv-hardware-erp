@@ -25,8 +25,10 @@ export function FixedCardPrint({ quote }: { quote: Quotation }) {
           <div className="absolute right-[8mm] top-[27mm] flex h-[13mm] w-[82mm] items-center justify-center border border-black bg-[#d9d9d9] px-2 text-center text-[15pt] leading-tight">
             {meta.title}
           </div>
+          {/* Starts 3mm under the card (which ends at 67.9mm) and stops 3mm above
+              the rows: drawn from 64mm it covered the foot of the card. */}
           {meta.image && (
-            <img src={assetPath(meta.image)} alt="" className="absolute left-[16mm] top-[64mm] h-[109mm] w-[146mm] object-cover" />
+            <img src={assetPath(meta.image)} alt="" className="absolute left-[16mm] top-[71mm] h-[103mm] w-[146mm] object-cover" />
           )}
           <div className="absolute left-[15.4mm] top-[177mm] text-[15pt] leading-none">
             {rows.map((r, i) => (
