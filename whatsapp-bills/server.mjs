@@ -224,6 +224,62 @@ let busy = false
 let stopping = false
 let nextAt = 0
 
+/**
+ * The way the shop greets a new number by hand: a smile, folded hands, then the
+ * visiting card. The one place emoji are allowed (AGENTS.md), written as code points.
+ */
+async function greet(jid) {
+  for (const text of ['\u{1F642}', '\u{1F64F}']) {
+    await sock.sendMessage(jid, { text })
+    await new Promise((resolve) => setTimeout(resolve, 1_000 + Math.random() * 1_000))
+  }
+  await sock.sendMessage(jid, { image: await readFile(CARD) })
+}
+
+/**
+ * Shiv Intro's Send button (convex/shivIntro.ts): the greeting and card to a new
+ * customer, one at a time, taking turns with the bills. A person pressed it, so
+ * it does not wait for the bills' gap; outside the hours it waits like they do.
+ */
+async function sendIntro() {
+  if (busy || stopping || !sock || state.status !== 'ready' || !inHours()) return
+  const db = await books().catch(() => null)
+  if (!db) return
+  busy = true
+  let item = null
+  const record = (status, reason) => db.mutation(anyApi.shivIntro.recordSend, { id: item.id, status, ...(reason ? { reason } : {}) })
+  try {
+    const [next] = await db.query(anyApi.shivIntro.toSend, {})
+    if (!next) return
+    if (!(await db.mutation(anyApi.shivIntro.claimSend, { id: next.id }))) return
+    item = next
+    const jid = jidOf(item.phone)
+    if (!jid) { await record('skipped', `not a mobile number: ${item.phone}`); return }
+    try {
+      const [check] = await sock.onWhatsApp(jid)
+      if (check && check.exists === false) { await record('skipped'); return }
+    } catch { /* the check failed: send anyway */ }
+    await greet(jid)
+    await record('sent')
+    log(`[intro] card sent to ${item.name}`)
+  } catch (err) {
+    log('[intro]', item?.name ?? 'check', 'failed:', err?.message ?? err)
+    if (item) await record('failed', String(err?.message ?? err)).catch(() => {})
+  } finally {
+    busy = false
+  }
+  // Anyone else already waiting goes next, not at the next tick.
+  if (item) setTimeout(() => { void sendIntro() }, 2_000)
+}
+
+/** Send goes the moment it is pressed: the books tell this service at once. */
+async function listenForIntros() {
+  const db = await books().catch(() => null)
+  if (!db) return
+  db.onUpdate(anyApi.shivIntro.toSend, {}, (rows) => { if (rows?.length) void sendIntro() },
+    (err) => log('[intro] listening failed:', err?.message ?? err))
+}
+
 async function sendDue() {
   if (busy || stopping || !sock || state.status !== 'ready') return
   // Outside the hours everything waits in the queue, Send now too.
@@ -261,15 +317,9 @@ async function sendDue() {
     if (!media.length && item.bill) media.push({ image: await billPicture(item.bill) })
     if (!media.length) { await record('skipped', { reason: 'nothing to send' }); return }
 
-    // A number this sender has not written to before is greeted the way the
-    // shop does it by hand: a smile, folded hands, then the visiting card.
-    // The one place emoji are allowed (AGENTS.md), written as code points.
+    // A number this sender has not written to before is greeted.
     if (item.newChat) {
-      for (const text of ['\u{1F642}', '\u{1F64F}']) {
-        await sock.sendMessage(jid, { text })
-        await new Promise((resolve) => setTimeout(resolve, 1_000 + Math.random() * 1_000))
-      }
-      await sock.sendMessage(jid, { image: await readFile(CARD) })
+      await greet(jid)
       await new Promise((resolve) => setTimeout(resolve, 2_000 + Math.random() * 2_000))
     }
 
@@ -344,6 +394,8 @@ http.createServer((req, res) => {
 if (!LOGIN_KEY) log('LOGIN_KEY is not set: the login page answers nobody')
 void startWhatsApp().catch((err) => { setStatus('error'); state.lastError = { message: String(err?.message ?? err) }; log('[whatsapp] could not start', err) })
 setInterval(() => { void sendDue() }, 30_000)
+setInterval(() => { void sendIntro() }, 30_000)
+void listenForIntros()
 
 // Watchdog: a link that is neither up nor waiting for a scan for ten minutes
 // is redialled with the saved link, never thrown away.

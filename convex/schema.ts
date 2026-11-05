@@ -967,6 +967,33 @@ export default defineSchema({
   }).index("by_at", ["at"]),
 
   /**
+   * New customers from the Shiv Intro page (convex/shivIntro.ts). Saving to the
+   * owner's Samsung and sending the visiting card are separate jobs on one row.
+   * `phone` is the 10-digit mobile; `savedAs` is the name already on the phone
+   * when the number was there before.
+   */
+  introContacts: defineTable({
+    name: v.string(),
+    place: v.string(),
+    phone: v.string(),
+    saveStatus: v.optional(v.union(v.literal("waiting"), v.literal("saved"), v.literal("already"), v.literal("failed"))),
+    savedAs: v.optional(v.string()),
+    saveError: v.optional(v.string()),
+    askedAt: v.optional(v.number()),
+    savedAt: v.optional(v.number()),
+    sendStatus: v.optional(v.union(v.literal("requested"), v.literal("sending"), v.literal("sent"), v.literal("skipped"), v.literal("failed"))),
+    sendError: v.optional(v.string()),
+    sendAskedAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_updated", ["updatedAt"])
+    .index("by_save", ["saveStatus", "askedAt"])
+    .index("by_send", ["sendStatus", "sendAskedAt"]),
+
+  /**
    * Weekly copies of the owner's phone contacts, sent by the Contact Fixer app
    * (Desktop/Code PlayGround/ContactFixer). The file itself is a gzipped vCard
    * in file storage; see convex/contactBackups.ts.

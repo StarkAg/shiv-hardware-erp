@@ -1,7 +1,7 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  Calculator, CarTaxiFront, ClipboardList, CreditCard, FileText, History, IndianRupee, Inbox, Package, ScrollText, ShieldCheck,
+  Calculator, CarTaxiFront, ClipboardList, CreditCard, FileText, History, IndianRupee, Inbox, Package, ScrollText, ShieldCheck, UserPlus,
 } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
 import { Toaster } from './Toast'
@@ -51,6 +51,7 @@ const NAV = [
       { to: '/rates', label: 'Rates', icon: IndianRupee },
       { to: '/aluminium-rates', label: 'Aluminium rates', icon: Calculator },
       { to: '/transport', label: 'Toto', icon: CarTaxiFront },
+      { to: '/intro', label: 'Shiv Intro', icon: UserPlus },
     ],
   },
 ]

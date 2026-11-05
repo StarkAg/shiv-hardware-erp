@@ -24,6 +24,7 @@ import { Inventory } from './features/inventory/Inventory'
 import { RateManager } from './features/rates/RateManager'
 import { AluminiumCosting } from './features/rates/AluminiumCosting'
 import { SlipMaker } from './features/slip/SlipMaker'
+import ShivIntro from './features/intro/ShivIntro'
 import { Transport } from './features/transport/Transport'
 import { Customers } from './features/customers/Customers'
 import { AppError, HOME, NotFound } from './components/RouteFallbacks'
@@ -122,6 +123,7 @@ const router = createHashRouter([
       { path: 'transport', element: <Transport /> },
       { path: 'transport/:view', element: <Transport /> },
       { path: 'customers', element: <Customers /> },
+      { path: 'intro', element: <ShivIntro /> },
       { path: '*', element: <NotFound /> },
     ],
   },

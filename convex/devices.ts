@@ -14,7 +14,7 @@ import { ConvexError, v } from 'convex/values'
 import { action as openAction, internalAction, internalMutation, internalQuery, query as openQuery } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import { internal } from './_generated/api'
-import { mutation, query, deviceOf } from './lib/guarded'
+import { mutation, query, deviceOf, fullDeviceOf } from './lib/guarded'
 import { record } from './lib/history'
 
 /** Wrong PINs allowed in the window before trusting is paused. */
@@ -156,7 +156,7 @@ export const me = openQuery({
 
 export const isTrusted = internalQuery({
   args: {},
-  handler: async (ctx) => !!(await deviceOf(ctx)),
+  handler: async (ctx) => !!(await fullDeviceOf(ctx)),
 })
 
 /** The list on the Trusted devices page. */

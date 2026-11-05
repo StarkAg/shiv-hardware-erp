@@ -34,11 +34,39 @@ export async function deviceOf(ctx: QueryCtx | MutationCtx) {
   return id ? await ctx.db.get(id) : null
 }
 
-async function requireDevice(ctx: QueryCtx | MutationCtx) {
+/**
+ * The Shiv_Intro app on the owner's Samsung. It runs all day on a phone that
+ * can be lost, so it is trusted for its own functions (the phone builders below)
+ * and nothing else: not the books, not the customers, not the other devices.
+ */
+export const INTRO_APP = 'shiv-intro'
+
+/** A device that may call the ordinary functions, or null. */
+export async function fullDeviceOf(ctx: QueryCtx | MutationCtx) {
   const device = await deviceOf(ctx)
+  return device && device.app !== INTRO_APP ? device : null
+}
+
+async function requireDevice(ctx: QueryCtx | MutationCtx) {
+  const device = await fullDeviceOf(ctx)
   if (!device) throw new ConvexError(UNTRUSTED)
   return device
 }
+
+async function requirePhone(ctx: QueryCtx | MutationCtx) {
+  const device = await deviceOf(ctx)
+  if (device?.app !== INTRO_APP) throw new ConvexError(UNTRUSTED)
+}
+
+export const phoneQuery = customQuery(rawQuery, customCtx(async (ctx) => {
+  await requirePhone(ctx)
+  return {}
+}))
+
+export const phoneMutation = customMutation(rawMutation, customCtx(async (ctx) => {
+  await requirePhone(ctx)
+  return {}
+}))
 
 export const query = customQuery(rawQuery, customCtx(async (ctx) => {
   await requireDevice(ctx)
