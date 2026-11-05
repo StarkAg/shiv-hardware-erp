@@ -5,7 +5,7 @@ For a new customer: type the name, place and mobile number, then use either of t
 - **Save** puts the customer in the contacts on Tony's Samsung, with no Google or Samsung account.
 - **Send** gives them the shop's greeting and visiting card on WhatsApp from Tony's number, 80928 50954: a smile, folded hands, then the card.
 
-Status on 5 Nov 2026: the code is written. **Nothing is deployed, and the Android app has never been compiled or run.**
+Status on 5 Nov 2026: the code is written and the Android app builds on GitHub. **Nothing is deployed, and the app has never run on a phone.**
 
 ## How it fits together
 
@@ -54,18 +54,19 @@ writes into the phone's contacts   sends the greeting and visiting-card.jpg
 
 ## Build the Samsung app
 
-Do this on the PC with the Android tools (JDK 17 and Android SDK 35). The shop PC has no Android tools, by Tony's choice.
+GitHub builds it, so no shop computer needs the Android tools. The workflow `.github/workflows/build-shiv-intro.yml` runs on every push that changes `shiv-intro/`, or by hand. To fetch the file:
 
 ```
-cd shiv-intro
-gradlew assembleDebug
+gh run download <run-id> -n shiv-intro -D shiv-intro-ci
 ```
 
-The file is `app/build/outputs/apk/debug/app-debug.apk`. Install it on the Samsung, enter the shop PIN once, and allow what it asks. Then add Shiv_Intro to Samsung's **Never auto sleeping apps** list.
+The first build passed on 5 Nov 2026 and gave `Shiv_Intro.apk`, about 11 MB, for 64-bit phones only. It has **not been run on a phone yet**.
 
-Expect to fix small compile errors on the first build. The login code was compared with Convex's published source, but nothing has been compiled. Convex's Android client is `dev.convex:android-convexmobile:0.8.0`.
+**Install it only after Convex is deployed.** Until then the live server does not know the phone-only rule, so a phone paired as `shiv-intro` would get the same access as any trusted device.
 
-Updates only install over the top if they are signed with the same key. A debug build uses that PC's own debug key. Before relying on the app, make a proper signing key and back it up outside git.
+Then install it on the Samsung, enter the shop PIN once, and allow what it asks. Add Shiv_Intro to Samsung's **Never auto sleeping apps** list.
+
+Every build is signed with the shop's one Shiv_Intro key, so updates install over the top. The key is stored as the GitHub secrets `SHIV_INTRO_KEYSTORE_B64` and `SHIV_INTRO_KEYSTORE_PASSWORD`, with a copy on the shop PC in `Documents\Shiv_Intro signing key`. Keep a second copy somewhere safe. If the key is lost, the app has to be uninstalled and installed fresh.
 
 ## Test on the real phones
 
