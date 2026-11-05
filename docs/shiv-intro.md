@@ -10,7 +10,7 @@ Status on 5 Nov 2026: the code is written and the Android app builds on GitHub. 
 ## How it fits together
 
 ```
-Counter page (#/intro)
+Shiv Intro web app (intro-web/)
    │  shivIntro:save / shivIntro:send
    ▼
 Convex: introContacts (one row per number, two jobs on it)
@@ -30,7 +30,7 @@ writes into the phone's contacts   sends the greeting and visiting-card.jpg
 |---|---|
 | Server functions | `convex/shivIntro.ts`, table `introContacts` in `convex/schema.ts` |
 | Phone-only rule | `INTRO_APP`, `phoneQuery` and `phoneMutation` in `convex/lib/guarded.ts` |
-| Page | `src/features/intro/ShivIntro.tsx`, on the Counter's Shop menu |
+| Web app | `intro-web/`, its own site at shivhardware-intro.vercel.app, with the shop PIN once per device |
 | Sending the card | `sendIntro` in `whatsapp-bills/server.mjs` |
 | Samsung app | `shiv-intro/` |
 | Tests | `tests/shivIntro.test.ts` |
@@ -47,7 +47,7 @@ writes into the phone's contacts   sends the greeting and visiting-card.jpg
 
 1. Commit the Mac's 4 uncommitted files, or the Convex deploy refuses to run.
 2. Deploy `convex`.
-3. Deploy `counter` and `whatsapp-bills`. **Send** works from here on, before the Samsung app exists.
+3. Deploy `intro` and `whatsapp-bills`. **Send** works from here on, before the Samsung app exists.
 4. Build and install the Samsung app. **Save** works from here on.
 
 `whatsapp-bills` listens to Convex as soon as it starts, so deploy Convex first.

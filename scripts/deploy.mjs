@@ -84,6 +84,7 @@ const TARGETS = [
   site('workshop', 'workshop-web', 'shivhardware-workshop', 'shivhardware-workshop.vercel.app', 'Shiv Workshop (Gopal & Bandhu)'),
   site('workshop-counter', 'workshop-web', 'shivhardware-workshop-counter', 'shivhardware-workshop-counter.vercel.app', 'Shiv Workshop Counter (work orders in photos)'),
   site('billshoot', 'billshoot-web', 'billshoot-web', 'shivhardware-billshoot.vercel.app', 'Bill Shoot'),
+  site('intro', 'intro-web', 'shivhardware-intro', 'shivhardware-intro.vercel.app', 'Shiv Intro (new customer: save to phone, send card)'),
   { id: 'print-server', kind: 'print-server', label: 'Print server (shop PC)', paths: ['print-server'] },
   { id: 'quotation', kind: 'quotation', label: 'Shiv Counter app (shop PC)', paths: [...PANEL_SOURCES, 'electron', 'print-server/template.mjs', 'electron-builder.quotation.cjs'] },
   // Its screens come to it from the panel website (electron/screens.cjs), so

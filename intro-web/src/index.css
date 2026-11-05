@@ -1,0 +1,43 @@
+/* Shiv Intro, in the Signs look (DESIGN.md; the colours, lettering and keys
+ * come from ./signs/signs.css).
+ *
+ * One screen: the new customer's three boxes, the customers already done under
+ * them, and Save (blue, do this) and Send (green, it goes out) at the foot,
+ * under the thumb.
+ */
+@import "./signs/signs.css";
+
+html, body, #root { height: 100%; }
+h1 { margin: 0; }
+.app { display: flex; flex-direction: column; height: 100%; max-width: 520px; margin: 0 auto; background: var(--wall); }
+
+.top { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 14px 10px; border-bottom: 4px solid var(--ink); }
+.top img { width: 40px; height: 40px; border-radius: 9px; }
+.brand { font: 800 27px/1 var(--sign); text-transform: uppercase; letter-spacing: .01em; }
+
+.body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field span { font: 700 15px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; color: var(--dim); }
+.field input { font: 600 22px/1.2 var(--text); color: var(--ink); background: var(--wall); border: 2px solid var(--ink); border-radius: 0; padding: 10px 12px; min-height: 52px; width: 100%; }
+.field input:focus { outline: 3px solid var(--must); outline-offset: 0; border-color: var(--must); }
+
+.note { color: var(--dim); font-size: 15px; }
+.note.quiet { background: var(--wait); color: var(--ink); padding: 6px 10px; }
+.problem { background: var(--stop); color: #fff; padding: 8px 10px; font-weight: 700; }
+.link { text-decoration: underline; font-weight: 700; color: var(--ink); }
+
+.list { list-style: none; margin: 4px 0 0; padding: 0; border-top: 2px solid var(--ink); }
+.list li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.who { font: 800 21px/1.15 var(--sign); }
+.small { color: var(--dim); font-size: 15px; margin-top: 2px; }
+.row-signs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.tag { font: 800 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; padding: 6px 8px; }
+.tag.wait { background: var(--wait); color: var(--ink); }
+.tag.done { background: var(--safe); color: #fff; }
+.tag.stop { background: var(--stop); color: #fff; }
+.mini { font: 800 15px/1 var(--sign); text-transform: uppercase; padding: 8px 12px; background: var(--key); box-shadow: inset 0 -3px 0 var(--line); }
+
+/* Two keys side by side, each half the dock. */
+.dock.two { display: flex; gap: 10px; }
+.dock.two .key { flex: 1; width: auto; }
