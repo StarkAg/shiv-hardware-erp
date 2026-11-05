@@ -9,6 +9,7 @@ import { toast } from '../../../components/Toast'
 import VoucherBillPreview from './VoucherBillPreview'
 import { photoStrip } from './BillViewer'
 import { billFor as findBill } from '../lib/billFor'
+import { recentLines } from '../lib/recent'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { useMutation } from 'convex/react';
@@ -128,6 +129,8 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
   const [deletingParty, setDeletingParty] = useState(false);
   const [purgingParty, setPurgingParty] = useState(null);
   const data = useLive(api.reports.ledger, { ledgerId }, `ledger:${ledgerId}`);
+  // Which account has its older lines open. Another account starts folded again.
+  const [olderOpenFor, setOlderOpenFor] = useState(null);
   /**
    * The statement as a PDF, with a page for every bill photo, sent on
    * WhatsApp from the shop's number (the shop PC sends it) — to the shop's
@@ -299,6 +302,10 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
      * Unpriced bills keep their place after the posted ones.
      */
     .sort((a, b) => a.date - b.date || SAME_DAY[a.kind] - SAME_DAY[b.kind]);
+
+  const folded = recentLines(stream);
+  const showOlder = olderOpenFor === ledgerId;
+  const lines = showOlder ? stream : folded.shown;
 
   /**
    * A row's photos open as part of every photo on this account, oldest to
@@ -621,7 +628,36 @@ export default function LedgerView({ ledgerId, masters, onBack, backLabel, onVie
                 <td className="hide-sm" />
               </tr>
 
-              {stream.map((item) =>
+              {folded.older.length > 0 && (
+                <tr className="opening">
+                  <td className="mono" data-label="Date">
+                    {!showOlder && folded.before ? shortDate(folded.before.date) : ''}
+                  </td>
+                  <td className="hide-sm" />
+                  <td className="hide-sm" />
+                  <td className="hide-sm" />
+                  <td data-label="">
+                    <button type="button" className="btn small" onClick={() => setOlderOpenFor(showOlder ? null : ledgerId)}>
+                      {showOlder ? 'Show only the latest lines' : `Show ${folded.older.length} older lines`}
+                    </button>
+                  </td>
+                  <td className="num hide-sm" />
+                  <td className="num hide-sm" />
+                  <td className="num bal" data-label={!showOlder && folded.before ? 'Balance' : ''}>
+                    {!showOlder && folded.before && (
+                      <>
+                        {rupees(Math.abs(folded.before.balance))}{' '}
+                        <span className="side">{folded.before.balanceSide}</span>
+                      </>
+                    )}
+                  </td>
+                  {showComm && <td className="w-comm" />}
+                  <td className="hide-sm" />
+                  <td className="hide-sm" />
+                </tr>
+              )}
+
+              {lines.map((item) =>
                 item.kind === 'received' ? (
                   <tr
                     className={`received${item.g.open ? ` open ${ageTone(item.g.date)}` : ' billed'}`}
