@@ -472,9 +472,9 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   useEffect(() => { void catchUpGuaranteeSeq() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * A card already saved for the same customer, day and items. Print pressed
-   * again (a failed print, a second copy) reprints that card under its own
-   * number instead of saving it again — GC-2026-95244/45/46 were one card.
+   * A card already saved for the same customer, day and items. The same card
+   * typed and printed again reprints under its own number instead of saving
+   * it again — GC-2026-95244/45/46 were one card.
    */
   function savedTwin(d: GuaranteeDocument): CardRef | null {
     const key = cardKey(d)
@@ -779,12 +779,12 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
       // The shop PC: on its Wi-Fi directly, from anywhere else through the online
       // queue — where the PC also WhatsApps the customer when it prints.
       const sent = await printViaShop(payload, {
-        onDone: (r) => toast(r.ok ? `${label} printed at the shop` : `${label} not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
+        onDone: (r) => toast(r.ok ? `${label} printed at the shop` : `${label} not printed: ${r.error}. Print it again from History.`, r.ok ? 'ok' : 'error'),
       })
       toast(sent.via === 'shop' ? `Sent ${label} to ${sent.printer}` : `${label} sent to the shop PC`, sent.via === 'shop' ? 'ok' : 'info')
       return true
     } catch (err) {
-      toast(`Print failed: ${err instanceof Error ? err.message : String(err)}`, 'error')
+      toast(`${label} not printed: ${err instanceof Error ? err.message : String(err)}. Print it again from History.`, 'error')
       return false
     }
   }
@@ -800,6 +800,10 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
     else persistCards(minted)
 
     const printDocs = [buildGuaranteeDoc(minted), ...(minted.second ? [buildSecondDoc(minted.second)] : [])]
+    // The next card starts here, no New to press (owner's ask, 5 Nov 2026). This
+    // one is already saved, and printing and the WhatsApp below work from what
+    // they were given when Print was pressed.
+    newCard()
     const sent = await sendToPrinter(printDocs, label)
     setGenerating(false)
     // The print server WhatsApps the customer itself; direct printing doesn't.
