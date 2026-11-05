@@ -27,7 +27,7 @@ async function shop() {
 }
 
 describe('dropping the cards of old statement lines', () => {
-  const args = { refPrefix: 'SRT statement ', before: '2026-08-01' }
+  const args = { refPrefix: 'SRT statement ', before: '2026-08-01', party: 'SRT' }
 
   it('only counts until it is told to go ahead', async () => {
     const { t, buy, cards } = await shop()
@@ -44,6 +44,21 @@ describe('dropping the cards of old statement lines', () => {
     expect(await t.mutation(internal.billFlow.dropOldLineCards, { ...args, confirm: true })).toEqual({ found: 1, removed: 1 })
     expect((await cards()).map((c) => c.date).sort()).toEqual(['2025-05-02', '2026-10-29'])
     expect(await t.run((ctx) => ctx.db.query('vouchers').collect())).toHaveLength(3)
+  })
+
+  it('takes a card whose line was deleted and restored, only if it names the party', async () => {
+    const { t, buy, cards } = await shop()
+    const id = await buy('2025-05-01', 'SRT statement 1')
+    const other = await buy('2025-05-02', 'BILL-7')
+    await t.mutation(api.vouchers.remove, { id })
+    await t.mutation(api.vouchers.remove, { id: other })
+    await t.run(async (ctx) => {
+      for (const card of await ctx.db.query('billFlows').collect()) {
+        await ctx.db.patch(card._id, { party: card.date === '2025-05-01' ? 'SRT' : 'Someone else' })
+      }
+    })
+    expect(await t.mutation(internal.billFlow.dropOldLineCards, { ...args, confirm: true })).toEqual({ found: 1, removed: 1 })
+    expect((await cards()).map((c) => c.date)).toEqual(['2025-05-02'])
   })
 
   it('leaves a card that holds a bill or a photo', async () => {

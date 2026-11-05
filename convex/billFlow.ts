@@ -205,20 +205,22 @@ export const linkJob = mutation({
  * long ago and nobody is going to tick anything on them. The ordinary posting
  * gives each a card, which would bury the real ones. This takes those cards
  * off, and only those: the voucher's reference must carry `refPrefix`, it must
- * be dated before `before`, and the card must hold no bill or photo.
+ * be dated before `before`, and the card must hold no bill or photo. A line
+ * deleted and restored comes back as a new voucher and leaves its card pointing
+ * at the old one, so a card whose voucher is gone goes too if it names `party`.
  *
  * Internal, so only `npx convex run` reaches it, and without `confirm: true` it
  * only counts. The vouchers themselves are not touched.
  */
 export const dropOldLineCards = internalMutation({
-  args: { refPrefix: v.string(), before: v.string(), confirm: v.optional(v.boolean()) },
-  handler: async (ctx, { refPrefix, before, confirm }) => {
+  args: { refPrefix: v.string(), before: v.string(), party: v.string(), confirm: v.optional(v.boolean()) },
+  handler: async (ctx, { refPrefix, before, party, confirm }) => {
     if (!refPrefix.trim()) throw new Error('Say which reference to look for.')
     let found = 0
     for (const flow of await ctx.db.query('billFlows').collect()) {
       if (!flow.voucherId || flow.date >= before || flow.billId || flow.photos.length) continue
       const voucher = await ctx.db.get(flow.voucherId)
-      if (!voucher?.refNo?.startsWith(refPrefix)) continue
+      if (voucher ? !voucher.refNo?.startsWith(refPrefix) : flow.party !== party) continue
       found += 1
       if (confirm) await ctx.db.delete(flow._id)
     }
