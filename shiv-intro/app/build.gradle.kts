@@ -18,6 +18,27 @@ android {
         ndk { abiFilters += "arm64-v8a" }
     }
 
+    // One fixed key, so each new build installs over the last. Its file and passwords
+    // are given by the build (GitHub secrets, see .github/workflows/build-shiv-intro.yml)
+    // and kept outside git. Without them the build is signed with a throwaway debug key.
+    val keystore = System.getenv("SHIV_INTRO_KEYSTORE")
+    signingConfigs {
+        if (keystore != null) {
+            create("shop") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("SHIV_INTRO_KEYSTORE_PASSWORD")
+                keyAlias = "shiv-intro"
+                keyPassword = System.getenv("SHIV_INTRO_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = if (keystore != null) signingConfigs.getByName("shop") else signingConfigs.getByName("debug")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

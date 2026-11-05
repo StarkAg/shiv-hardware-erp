@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
 /**
@@ -30,6 +31,10 @@ class IntroService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var started = false
+    /** Answered already, so a list that still names them is not worked again. */
+    private val answered = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    private fun isActiveScope() = scope.coroutineContext[kotlinx.coroutines.Job]?.isActive == true
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -47,7 +52,17 @@ class IntroService : Service() {
             scope.launch {
                 client.loginFromCache()
                 launch { checkIn(client) }
-                listen(client)
+                // A listener that ends for any reason is started again.
+                while (true) {
+                    try {
+                        listen(client)
+                    } catch (err: Exception) {
+                        if (err is kotlinx.coroutines.CancellationException && !isActiveScope()) throw err
+                        logError("listener ended", err)
+                    }
+                    status.value = "Not connected. Trying again."
+                    delay(10_000)
+                }
             }
         }
         return START_STICKY
@@ -60,10 +75,12 @@ class IntroService : Service() {
     }
 
     private suspend fun listen(client: dev.convex.android.ConvexClientWithAuth<String>) {
-        client.subscribe<List<Waiting>>("shivIntro:waiting").collect { result ->
+        // Only the newest list matters: one that arrived while a contact was being
+        // saved may still name it.
+        client.subscribe<List<Waiting>>("shivIntro:waiting").conflate().collect { result ->
             result.onSuccess { list ->
                 status.value = "Connected. Waiting for contacts."
-                list.forEach { save(client, it) }
+                list.filter { it.id !in answered }.forEach { save(client, it) }
             }.onFailure {
                 logError("listening", it)
                 status.value = "Not connected. It will try again by itself."
@@ -89,6 +106,7 @@ class IntroService : Service() {
         repeat(3) { attempt ->
             try {
                 client.mutation("shivIntro:report", args)
+                answered.add(row.id)
                 return
             } catch (err: Exception) {
                 logError("answering ${row.id}", err)

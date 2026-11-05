@@ -1,0 +1,48 @@
+# Builds the Shiv_Intro Android app (shiv-intro/) on GitHub, so no shop computer
+# needs the Android tools. Runs on every push that changes the app, or by hand
+# (Actions > Build Shiv_Intro > Run workflow). The signed file comes back as an
+# artifact:
+#   gh run download <run-id> -n shiv-intro -D shiv-intro-ci
+#
+# It is signed with the shop's one Shiv_Intro key, so each build installs over
+# the last. The key and its password are the SHIV_INTRO_KEYSTORE_B64 and
+# SHIV_INTRO_KEYSTORE_PASSWORD secrets; a copy is kept on the shop PC in
+# Documents\Shiv_Intro signing key. Nothing here can write anywhere.
+name: Build Shiv_Intro
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'shiv-intro/**'
+      - '.github/workflows/build-shiv-intro.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shiv-intro
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: The signing key
+        env:
+          KEY_B64: ${{ secrets.SHIV_INTRO_KEYSTORE_B64 }}
+          KEY_PASSWORD: ${{ secrets.SHIV_INTRO_KEYSTORE_PASSWORD }}
+        run: |
+          printf '%s' "$KEY_B64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/shiv-intro.jks"
+          echo "SHIV_INTRO_KEYSTORE=$RUNNER_TEMP/shiv-intro.jks" >> "$GITHUB_ENV"
+          echo "::add-mask::$(printf '%s' "$KEY_PASSWORD" | tr -d '\r\n')"
+          echo "SHIV_INTRO_KEYSTORE_PASSWORD=$(printf '%s' "$KEY_PASSWORD" | tr -d '\r\n')" >> "$GITHUB_ENV"
+      - run: chmod +x gradlew && ./gradlew --no-daemon assembleRelease
+      - run: cp app/build/outputs/apk/release/app-release.apk Shiv_Intro.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shiv-intro
+          path: shiv-intro/Shiv_Intro.apk
