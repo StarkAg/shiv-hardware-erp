@@ -435,6 +435,8 @@ function Lists({ tab, setTab, onOpen, saving }) {
                 <span className="who">
                   <b>{name}</b>
                   <small>{what}{r.pendingCount ? ` · ${r.pendingCount} bill${r.pendingCount === 1 ? '' : 's'} with no amount` : ''}</small>
+                  {/* A copy saved before this figure came has none: left off, not shown as nothing. */}
+                  {tab === 'suppliers' && r.boughtYear !== undefined && <small>Bought in last 1 year: {rupees(r.boughtYear)}</small>}
                 </span>
                 <span className={`amt ${zero ? '' : toCome ? 'in' : 'out'}`}>{zero ? '—' : rupees(r.closing)}</span>
               </button>

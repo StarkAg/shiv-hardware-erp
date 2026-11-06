@@ -552,11 +552,43 @@ function partyTotals(rows: Awaited<ReturnType<typeof partyRows>>) {
   };
 }
 
+/**
+ * What each supplier sold the shop in the last 365 days: their purchase bills
+ * less what went back to them, by supplier. SRT's older bills, entered off
+ * their own statement, are purchases too and count the same way.
+ */
+async function boughtLastYear(ctx: QueryCtx) {
+  const from = Date.now() - 365 * 24 * 60 * 60 * 1000;
+  const types = await ctx.db.query("voucherTypes").collect();
+  const sign = new Map<string, number>();
+  for (const t of types) {
+    if (t.name === "Purchase") sign.set(t._id as string, 1);
+    if (t.name === "Purchase Return") sign.set(t._id as string, -1);
+  }
+  const bought = new Map<string, number>();
+  for (const [typeId, s] of sign) {
+    const vouchers = await ctx.db
+      .query("vouchers")
+      .withIndex("by_type_fy", (q) => q.eq("typeId", typeId as Id<"voucherTypes">))
+      .collect();
+    for (const vch of vouchers) {
+      if (vch.status !== "final" || !vch.amount || vch.date < from) continue;
+      const key = vch.partyLedgerId as string;
+      bought.set(key, (bought.get(key) ?? 0) + s * vch.amount);
+    }
+  }
+  return bought;
+}
+
 /** What the shop owes — Tally's Outstanding Payables. */
 export const outstanding = query({
   args: {},
   handler: async (ctx) => {
-    const rows = await partyRows(ctx, "Sundry Creditors");
+    const [parties, bought] = await Promise.all([
+      partyRows(ctx, "Sundry Creditors"),
+      boughtLastYear(ctx),
+    ]);
+    const rows = parties.map((r) => ({ ...r, boughtYear: round2(bought.get(r.ledger._id as string) ?? 0) }));
     // Whatever still needs doing comes first; settled accounts fall to the
     // bottom, where they can be scrolled past rather than read.
     rows.sort(
@@ -773,8 +805,16 @@ export const trialBalance = query({
  * a second copy of those.
  */
 export const dashboard = query({
-  args: { from: v.number(), to: v.number(), months: v.optional(v.number()) },
-  handler: async (ctx, { from, to, months }) => {
+  args: {
+    from: v.number(),
+    to: v.number(),
+    months: v.optional(v.number()),
+    // This month so far, and last month up to the same day, for comparing.
+    monthFrom: v.optional(v.number()),
+    lastMonthFrom: v.optional(v.number()),
+    lastMonthTo: v.optional(v.number()),
+  },
+  handler: async (ctx, { from, to, months, monthFrom, lastMonthFrom, lastMonthTo }) => {
     const { ledgers, groupById, typeById } = await context(ctx);
     const [vouchers, lines] = await Promise.all([
       ctx.db.query("vouchers").collect(),
@@ -796,6 +836,30 @@ export const dashboard = query({
         && supplierIds.has(v.partyLedgerId as string) === paid)
         .reduce((t, v) => t + (v.amount ?? 0), 0));
 
+    // ── a span of days: sales, money in, money out ────────────────────────
+    const finals = vouchers.filter((v) => v.status === "final");
+    const spanOf = (start: number, end: number) => {
+      const inSpan = finals.filter((v) => v.date >= start && v.date <= end);
+      const total = (name: string, supplier?: boolean) => round2(inSpan
+        .filter((v) => typeById.get(v.typeId)?.name === name &&
+          (supplier === undefined || supplierIds.has(v.partyLedgerId as string) === supplier))
+        .reduce((t, v) => t + (v.amount ?? 0), 0));
+      return {
+        sales: total("Sale"),
+        received: round2(total("Receipt") + total("Advance", false)),
+        paid: round2(total("Payment") + total("Advance", true)),
+      };
+    };
+
+    /**
+     * When each kind of entry was last written, by the date on it. The books are
+     * typed up after the day, so "today: 0" says nothing; how far behind they are
+     * is what the counter needs to see.
+     */
+    const lastOf = (name: string) => finals
+      .filter((v) => typeById.get(v.typeId)?.name === name && v.date <= to)
+      .reduce<number | null>((at, v) => (at === null || v.date > at ? v.date : at), null);
+
     // ── twelve months of trade, oldest first ─────────────────────────────
     const span = months ?? 12;
     const edge = new Date(to);
@@ -813,8 +877,17 @@ export const dashboard = query({
         purchases: 0,
       });
     }
+    /**
+     * A supplier's old statement copied in goes through its own "... Old History"
+     * account (SRT, Nov 2026). Those lines are a year of someone else's ledger in a
+     * single day's typing, not the shop's trade month by month, so the chart leaves
+     * them out.
+     */
+    const history = new Set(ledgers.filter((l) => /old history$/i.test(l.name)).map((l) => l._id as string));
+    const historical = new Set(lines.filter((l) => history.has(l.ledgerId as string)).map((l) => l.voucherId as string));
     for (const voucher of vouchers) {
       if (voucher.status !== "final" || !voucher.amount) continue;
+      if (historical.has(voucher._id as string)) continue;
       const d = new Date(voucher.date);
       const at = slot.get(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
       if (at === undefined) continue;
@@ -838,11 +911,23 @@ export const dashboard = query({
 
     const debtors = balances.filter((b) => b.group === "Sundry Debtors");
     const creditors = balances.filter((b) => b.group === "Sundry Creditors");
+    // The last money each party paid, or was paid: how long a balance has sat.
+    const lastMoney = new Map<string, number>();
+    for (const voucher of finals) {
+      const name = typeById.get(voucher.typeId)?.name;
+      if (name !== "Receipt" && name !== "Payment" && name !== "Advance") continue;
+      const key = voucher.partyLedgerId as string;
+      if (voucher.date > (lastMoney.get(key) ?? 0)) lastMoney.set(key, voucher.date);
+    }
     const top = (rows: typeof balances, sign: 1 | -1) =>
       rows.filter((r) => r.signed * sign > 0)
         .sort((a, b) => (b.signed - a.signed) * sign)
         .slice(0, 6)
-        .map((r) => ({ ledgerId: r.ledgerId, name: r.name, amount: Math.abs(r.signed) }));
+        .map((r) => ({
+          ledgerId: r.ledgerId, name: r.name, amount: Math.abs(r.signed),
+          lastMoney: lastMoney.get(r.ledgerId as string) ?? null,
+        }));
+    const pending = vouchers.filter((v) => v.status === "pending");
 
     return {
       day: {
@@ -869,7 +954,12 @@ export const dashboard = query({
       months: series,
       topOwing: top(debtors, 1),
       topOwed: top(creditors, -1),
-      unpriced: vouchers.filter((v) => v.status === "pending").length,
+      unpriced: pending.length,
+      // The oldest of them, so a backlog reads as one, not as today's work.
+      unpricedSince: pending.reduce<number | null>((at, v) => (at === null || v.date < at ? v.date : at), null),
+      last: { sale: lastOf("Sale"), receipt: lastOf("Receipt"), payment: lastOf("Payment") },
+      month: monthFrom === undefined ? null : spanOf(monthFrom, to),
+      lastMonth: lastMonthFrom === undefined || lastMonthTo === undefined ? null : spanOf(lastMonthFrom, lastMonthTo),
     };
   },
 });
