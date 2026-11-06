@@ -1082,6 +1082,15 @@ to{opacity: 0}}
   text-transform: uppercase; letter-spacing: 0.04em;}
 .ledger-root .home-tile-value{font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;
   line-height: 1.1;}
+.ledger-root .home-tile-note{font-size: 12.5px; color: var(--muted); font-weight: 600;}
+.ledger-root .home-head{margin: 18px 2px 8px; font-size: 13px; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;}
+.ledger-root .home-head:first-child{margin-top: 0;}
+/* The books are behind: the first thing on the page, until they are not. */
+.ledger-root .home-behind{display: block; margin-bottom: 14px; padding: 14px 18px; border-radius: 16px;
+  border: 1px solid var(--amber-line); background: var(--amber-tint); color: var(--fg); text-decoration: none;}
+.ledger-root .home-behind b{display: block; font-size: 20px; color: var(--amber-text);}
+.ledger-root .home-behind span{font-size: 13px; color: var(--muted); font-weight: 600;}
 .ledger-root .home-tile-owed .home-tile-value{color: var(--green-text);}
 .ledger-root .home-tile-owing .home-tile-value{color: var(--red);}
 /* Something is waiting for a person. Marked, not explained. */
@@ -1134,6 +1143,7 @@ to{opacity: 0}}
 .ledger-root .rank-name{font-size: 13px; font-weight: 600; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;}
 .ledger-root .rank-amt{font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums;}
+.ledger-root .rank-when{grid-column: 1 / -1; font-size: 12px; color: var(--muted);}
 .ledger-root .rank-track{grid-column: 1 / -1; height: 6px; border-radius: 3px;
   background: var(--card2); overflow: hidden;}
 .ledger-root .rank-fill{display: block; height: 100%; border-radius: 3px;}
