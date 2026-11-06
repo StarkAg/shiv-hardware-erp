@@ -5694,11 +5694,30 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vouchers, finished, from, to, bills, onRetry, byDate, masters])
 
+  /**
+   * Looking a voucher up: by name (the party, or its SAL-/BILL- number) and by
+   * amount. The amount matches on its figures, so 975 finds ₹975.00 and also
+   * ₹1,975 — what is half remembered still turns up. Within the period shown;
+   * All searches every voucher.
+   */
+  const [nameQuery, setNameQuery] = useState('')
+  const [amountQuery, setAmountQuery] = useState('')
+  const searched = useMemo(() => {
+    const words = nameQuery.toLowerCase().split(/\s+/).filter(Boolean)
+    const figure = amountQuery.replace(/[₹,\s]/g, '').replace(/\.0*$/, '')
+    if (!words.length && !figure) return allRows
+    return allRows.filter((r) => {
+      const said = `${r.party} ${r.label} ${r.ref}`.toLowerCase()
+      if (words.some((w) => !said.includes(w))) return false
+      return !figure || (r.amount != null && String(r.amount).includes(figure))
+    })
+  }, [allRows, nameQuery, amountQuery])
+
   // One type of voucher at a time when asked — the purchases of a month, the
   // goods received today. The count, the total and each day's line follow it.
   const typed = useMemo(
-    () => (series ? allRows.filter((r) => seriesOf(r.label) === series) : allRows),
-    [allRows, series],
+    () => (series ? searched.filter((r) => seriesOf(r.label) === series) : searched),
+    [searched, series],
   )
   // And by checking mark: the lines not yet looked at, or only the ones marked a colour.
   const markCounts = useMemo(() => {
@@ -5714,7 +5733,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
   // the chosen one stays listed even when the period has none of it.
   const seriesOptions = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const r of allRows) counts.set(seriesOf(r.label), (counts.get(seriesOf(r.label)) ?? 0) + 1)
+    for (const r of searched) counts.set(seriesOf(r.label), (counts.get(seriesOf(r.label)) ?? 0) + 1)
     if (series && !counts.has(series)) counts.set(series, 0)
     const types = (masters?.voucherTypes ?? []) as { abbr: string; name: string }[]
     const rank = (abbr: string) => {
@@ -5724,7 +5743,7 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
     return [...counts.entries()]
       .map(([abbr, count]) => ({ abbr, count, name: types.find((t) => t.abbr === abbr)?.name ?? SERIES_NAME[abbr] ?? abbr }))
       .sort((a, b) => rank(a.abbr) - rank(b.abbr) || a.name.localeCompare(b.name))
-  }, [allRows, series, masters])
+  }, [searched, series, masters])
 
   const total = rows.reduce((s, r) => s + (r.quote ? 0 : r.amount ?? 0), 0)
 
@@ -5793,6 +5812,29 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
             {loading ? 'Loading…' : `${rows.length} vouchers · ${rupees(total)}`}
           </div>
           <div className="actions">
+            <input
+              type="text"
+              value={nameQuery}
+              onChange={(e) => setNameQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setNameQuery('') }}
+              placeholder="Search name or bill no."
+              aria-label="Search by name or bill number"
+            />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amountQuery}
+              onChange={(e) => setAmountQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setAmountQuery('') }}
+              placeholder="Amount ₹"
+              aria-label="Search by amount"
+              style={{ width: '8.5rem' }}
+            />
+            {(nameQuery || amountQuery) && (
+              <button type="button" className="btn ghost small" onClick={() => { setNameQuery(''); setAmountQuery('') }} title="Clear the search" aria-label="Clear the search">
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
             <select value={markFilter} onChange={(e) => setMarkFilter(e.target.value)} aria-label="Checking mark">
               <option value="">All marks</option>
               <option value="none">Not marked · {markCounts.none}</option>
@@ -5959,7 +6001,9 @@ function BillDayBook({ bills, onNew, onDelete, onRetry }: {
                   {!rows.length && (
                     <tr>
                       <td colSpan={8} className="particulars">
-                        {markFilter ? 'No lines with this mark.' : from || to ? 'No vouchers in this period.' : 'No vouchers yet.'}
+                        {nameQuery || amountQuery
+                          ? from || to ? 'Nothing found in this period. Try All.' : 'Nothing found.'
+                          : markFilter ? 'No lines with this mark.' : from || to ? 'No vouchers in this period.' : 'No vouchers yet.'}
                       </td>
                     </tr>
                   )}
