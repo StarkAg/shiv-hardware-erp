@@ -235,8 +235,10 @@ const daysIn = (ym: string) => {
 /**
  * Sales month by month since the books began, and where they are heading.
  *
- * Only finished months make the line and the trend through it. The month in
- * hand is shown twice: what is billed so far, and the pace that sets for the
+ * A bar for each month — a month is a bucket the shop closes, so it is read as
+ * one amount beside the next. Only finished months make the trend line drawn
+ * across them. The month in hand is shown twice: what is billed so far, a solid
+ * bar, inside the outline of the pace that sets for the
  * whole month, worked out over the days the books are written up for
  * (`writtenTo`, the last sale's date) rather than the days gone, because books
  * typed up a week late would otherwise read as a collapse. Months before the
@@ -283,10 +285,20 @@ export function SalesTrajectory({ months, writtenTo }: { months: Month[]; writte
   const top = Math.max(1, ...done.map((m) => m.sales), current.sales, pace ?? 0, fit ? fit.at(now) : 0)
   const ceiling = niceCeiling(top)
   const gridlines = [0, 0.25, 0.5, 0.75, 1].map((f) => f * ceiling)
-  const step = plotW / Math.max(n - 1, 1)
-  const x = (i: number) => padL + i * step
+  const slot = plotW / n
+  // The middle of each month's slot; bars stand on it and the trend runs through it.
+  const x = (i: number) => padL + (i + 0.5) * slot
+  const barW = Math.max(10, Math.min(56, slot * 0.55))
   const y = (v: number) => padT + plotH - (v / ceiling) * plotH
-  const line = done.map((m, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(m.sales).toFixed(1)}`).join(' ')
+  const bar = (i: number, v: number, className: string) => (
+    <rect
+      x={x(i) - barW / 2} y={y(v)} width={barW}
+      height={Math.max(padT + plotH - y(v), 0)}
+      rx={3} className={className}
+    />
+  )
+  // Each bar's amount over it, where the bars are wide enough to hold one.
+  const amounts = barW >= 30
 
   const tip = (i: number): { when: string; rows: [string, number][] } => i < done.length
     ? { when: `${done[i].label} ${done[i].ym.slice(0, 4)}`, rows: [['Sales', done[i].sales]] }
@@ -331,17 +343,8 @@ export function SalesTrajectory({ months, writtenTo }: { months: Month[]; writte
       </div>
 
       <div className="chart-plot" ref={plotRef}>
-        <svg
-          viewBox={`0 0 ${W} ${H}`} width={W} height={H}
-          role="img" aria-labelledby={titleId}
-          onMouseLeave={() => setHover(null)}
-          onMouseMove={(e) => {
-            const box = e.currentTarget.getBoundingClientRect()
-            const at = Math.round((e.clientX - box.left - padL) / step)
-            setHover(at >= 0 && at < n ? at : null)
-          }}
-        >
-          <desc>Sales for each finished month since the books began, this month so far and at its pace, and the trend line.</desc>
+        <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-labelledby={titleId}>
+          <desc>Sales for each finished month since the books began as bars, this month so far and at its pace, and the trend line.</desc>
           {gridlines.map((g) => (
             <g key={g}>
               <line x1={padL} x2={W - padR} y1={y(g)} y2={y(g)} className="grid" />
@@ -349,33 +352,37 @@ export function SalesTrajectory({ months, writtenTo }: { months: Month[]; writte
             </g>
           ))}
 
+          {labels.map((label, i) => {
+            const isNow = i === now
+            const sales = isNow ? current.sales : done[i].sales
+            const topOf = isNow && pace !== null ? Math.max(pace, sales) : sales
+            return (
+              <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+                {/* A hit area the width of the month, so the pointer does not
+                    have to find the bar. */}
+                <rect x={padL + i * slot} y={padT} width={slot} height={plotH} fill="transparent" />
+                {hover === i && <rect x={padL + i * slot} y={padT} width={slot} height={plotH} className="hoverband" />}
+                {/* The month in hand: its pace as an outline, billed so far filled inside it. */}
+                {isNow && pace !== null && bar(i, pace, 'bar bar-pace')}
+                {sales > 0 && bar(i, sales, 'bar bar-sale')}
+                {amounts && topOf > 0 && (
+                  <text x={x(i)} y={y(topOf) - 6} className="bar-amount" textAnchor="middle">{inr(topOf)}</text>
+                )}
+                <text x={x(i)} y={H - 8} className="axis" textAnchor="middle">{label}</text>
+              </g>
+            )
+          })}
+
           {fit && (
             <path
               d={`M${x(0).toFixed(1)} ${y(fit.at(0)).toFixed(1)} L${x(now).toFixed(1)} ${y(fit.at(now)).toFixed(1)}`}
               className="outlook-line is-projected"
             />
           )}
-          <path d={line} className="outlook-line" />
-          {done.map((m, i) => <circle key={m.ym} cx={x(i)} cy={y(m.sales)} r={3.5} className="outlook-dot" />)}
-
-          {/* The month in hand: billed so far, filled; its pace, hollow. */}
-          <circle cx={x(now)} cy={y(current.sales)} r={4.5} className="outlook-dot" />
-          {pace !== null && (
-            <>
-              <line x1={x(now)} x2={x(now)} y1={y(current.sales)} y2={y(pace)} className="grid" />
-              <circle cx={x(now)} cy={y(pace)} r={5} className="outlook-dot is-projected" />
-              <text x={x(now)} y={y(pace) - 10} className="outlook-endlabel" textAnchor="end">{inr(pace)}</text>
-            </>
-          )}
-
-          {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={padT} y2={padT + plotH} className="crosshair" />}
-          {labels.map((label, i) => (
-            <text key={i} x={x(i)} y={H - 8} className="axis" textAnchor="middle">{label}</text>
-          ))}
         </svg>
 
         {hover !== null && (
-          <div className="chart-tip" style={{ left: `${(hover / Math.max(n - 1, 1)) * 100}%` }}>
+          <div className="chart-tip" style={{ left: `${((hover + 0.5) / n) * 100}%` }}>
             <div className="chart-tip-when">{tip(hover).when}</div>
             {tip(hover).rows.map(([label, value]) => (
               <div key={label}><i className="key key-sale" /> {label} <b>{full(value)}</b></div>

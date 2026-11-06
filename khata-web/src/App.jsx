@@ -423,7 +423,9 @@ function Lists({ tab, setTab, onOpen, saving }) {
           const what = zero ? SETTLED
             : tab === 'customers' ? (toCome ? 'To get' : 'Advance, to pay')
             : (toCome ? 'Advance, to get' : 'To pay')
-          const party = { id: r.ledger._id, name, fullName: r.ledger.name, phone: r.ledger.phone ?? '', tab }
+          // A copy saved before this figure came has none: left off, not shown as nothing.
+          const boughtYear = tab === 'suppliers' && r.boughtYear !== undefined ? r.boughtYear : undefined
+          const party = { id: r.ledger._id, name, fullName: r.ledger.name, phone: r.ledger.phone ?? '', tab, boughtYear }
           return (
             <li key={r.ledger._id} className={changed.has(r.ledger._id) ? 'changed' : undefined}>
               {/* The round letter is its own button: the whole name, which the row cuts short. */}
@@ -435,8 +437,6 @@ function Lists({ tab, setTab, onOpen, saving }) {
                 <span className="who">
                   <b>{name}</b>
                   <small>{what}{r.pendingCount ? ` · ${r.pendingCount} bill${r.pendingCount === 1 ? '' : 's'} with no amount` : ''}</small>
-                  {/* A copy saved before this figure came has none: left off, not shown as nothing. */}
-                  {tab === 'suppliers' && r.boughtYear !== undefined && <small>Bought in last 1 year: {rupees(r.boughtYear)}</small>}
                 </span>
                 <span className={`amt ${zero ? '' : toCome ? 'in' : 'out'}`}>{zero ? '—' : rupees(r.closing)}</span>
               </button>
@@ -451,7 +451,7 @@ function Lists({ tab, setTab, onOpen, saving }) {
   )
 }
 
-/** Who this is, in full: the name the list and the chat's header cut short. */
+/** Who this is, in full: the name the list and the chat's header cut short, and for a supplier what the shop bought from them in the last year. */
 function Profile({ party, what, amount, tone, onClose, onOpen }) {
   return (
     <div className="sheetback" onClick={onClose}>
@@ -460,6 +460,7 @@ function Profile({ party, what, amount, tone, onClose, onOpen }) {
         <b className="fullname">{party.name}</b>
         {party.phone && <a className="phone" href={`tel:${party.phone}`}>{party.phone}</a>}
         {what && <div className={`standing ${tone}`}><small>{what}</small>{amount && <b>{amount}</b>}</div>}
+        {party.boughtYear !== undefined && <div className="standing"><small>Bought in last 1 year</small><b>{rupees(party.boughtYear)}</b></div>}
         <div className="sheetbtns">
           <button type="button" className="ghost" onClick={onClose}>Close</button>
           {onOpen && <button type="button" className="solid" onClick={onOpen}>Open account</button>}
