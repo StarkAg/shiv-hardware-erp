@@ -10,7 +10,8 @@ export function FixedCardPrint({ quote }: { quote: Quotation }) {
   const rows = quote.fixedRows ?? []
   if (!meta) return null
   // Door Chaukhat: the Excel sheet's own layout — bigger photo, no header row,
-  // shading that runs on through the guarantee wording.
+  // shading that runs on through the guarantee wording. Every position below is
+  // measured off the shop's printed PDF (Fraem.pdf).
   const sheet = !!meta.showGuarantee
 
   if (sheet) {
@@ -20,33 +21,33 @@ export function FixedCardPrint({ quote }: { quote: Quotation }) {
           <img
             src={assetPath('assets/aluminium/header-door.jpeg')}
             alt=""
-            className="absolute left-[16mm] top-[14.4mm] block h-[53.53mm] w-[88.06mm]"
+            className="absolute left-[19.8mm] top-[11.6mm] block h-[47.7mm] w-[86.5mm]"
           />
-          <div className="absolute right-[8mm] top-[27mm] flex h-[13mm] w-[82mm] items-center justify-center border border-black bg-[#d9d9d9] px-2 text-center text-[15pt] leading-tight">
+          <div className="absolute right-[8mm] top-[24.8mm] flex h-[12.5mm] w-[82.7mm] items-center justify-center border border-black bg-[#d9d9d9] px-2 text-center text-[15pt] leading-tight">
             {meta.title}
           </div>
-          {/* Starts 3mm under the card (which ends at 67.9mm) and stops 3mm above
-              the rows: drawn from 64mm it covered the foot of the card. */}
+          {/* The PDF's photo is stretched wide with the fixing hooks laid on top;
+              the sheet image is cut straight from it, so it is shown whole. */}
           {meta.image && (
-            <img src={assetPath(meta.image)} alt="" className="absolute left-[16mm] top-[71mm] h-[103mm] w-[146mm] object-cover" />
+            <img src={assetPath(meta.image)} alt="" className="absolute left-[19.8mm] top-[61.3mm] h-[109.3mm] w-[147.4mm]" />
           )}
-          <div className="absolute left-[15.4mm] top-[177mm] text-[15pt] leading-none">
+          <div className="absolute left-[18.7mm] top-[175.1mm] text-[15pt] leading-none">
             {rows.map((r, i) => (
               <div
                 key={i}
-                className="flex h-[6.45mm] items-center whitespace-nowrap pl-[1.6mm]"
+                className="flex h-[6.15mm] items-center whitespace-nowrap pl-[0.8mm]"
                 style={{
-                  width: r.guaranteeYears ? '178.6mm' : '122.1mm',
+                  width: r.guaranteeYears ? '179.8mm' : '122.4mm',
                   ...(r.accentColor ? { backgroundColor: r.accentColor } : {}),
                 }}
               >
-                <div className="w-[24mm] shrink-0">{r.label}</div>
-                <div className="w-[80mm] shrink-0">{r.brand}</div>
-                <div className="w-[16.5mm] shrink-0">{r.cost}</div>
+                <div className="w-[25mm] shrink-0">{r.label}</div>
+                <div className="w-[80.7mm] shrink-0">{r.brand}</div>
+                <div className="w-[16.8mm] shrink-0">{r.cost}</div>
                 <div className="shrink-0">{r.guaranteeYears ? `${r.guaranteeYears} Years Guarantee` : ''}</div>
               </div>
             ))}
-            {meta.note && <div className="mt-[7mm]">{meta.note}</div>}
+            {meta.note && <div className="mt-[6.5mm]">{meta.note}</div>}
           </div>
         </div>
       </A4Page>

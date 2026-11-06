@@ -37,7 +37,7 @@ export type FixedCardMeta = {
 
 export const FIXED_CARD_META: Partial<Record<ProductCategory, FixedCardMeta>> = {
   'film-face-ply': { title: 'Film Face Ply Rates', leftHeader: 'Weight', showRate: true, showGuarantee: false },
-  'wpc-door-frame': { title: 'Door Chaukhat', leftHeader: 'Size', showRate: false, showGuarantee: true, note: 'INSTALLATION CHARGES 200 EXTRA', image: 'assets/products/wpc-door-frame.jpg' },
+  'wpc-door-frame': { title: 'Door Chaukhat', leftHeader: 'Size', showRate: false, showGuarantee: true, note: 'INSTALLATION CHARGES 200 EXTRA', image: 'assets/products/wpc-door-frame-sheet.jpg' },
 }
 
 export function isFixedCard(category: ProductCategory): boolean {
