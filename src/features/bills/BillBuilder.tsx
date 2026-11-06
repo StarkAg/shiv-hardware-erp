@@ -63,7 +63,7 @@ import type { Bill, BillItem, ProductCategory } from '../../lib/types'
 import { CATEGORY_META, isRoundupLine, isAmountOnlyLine, isChargeName, BILL_KINDS, isQuotation, isBuyingBill, nextQuoteNumber, DEFAULT_PAYMENT_MODE, SHOP } from '../../lib/types'
 import type { BillKind } from '../../lib/types'
 import { SiteSizesNote } from './WorkOrders'
-import { DEFAULT_GST_RATE, GST_RATES, handLines, withCharges, type BillCharges } from '../../lib/billCharges'
+import { DEFAULT_GST_RATE, GST_RATES, handLines, withBfInside, withCharges, type BillCharges } from '../../lib/billCharges'
 import { MONEY_KINDS, buildBillHtml, formatItemDescription, toProperCase, withoutCourtesy } from '../../lib/billHtml'
 import { deviceId, deviceName } from '../../lib/device'
 import { useAction, useMutation, useQuery } from 'convex/react'
@@ -3621,8 +3621,6 @@ export function BillBuilder() {
   const discount = Math.max(0, Number(draft.discount) || 0)
   // Discount, GST and round-off are written from the goods on every change,
   // so what is previewed, printed and posted is always the same bill.
-  const priced = useMemo(() => (isMoneyVoucher ? draft : withCharges(draft)), [draft, isMoneyVoucher])
-  const total = isMoneyVoucher ? money + discount : calcTotal(priced.items)
   /**
    * Old dues brought forward (B/f), as the paper bills write them above the
    * goods. Ticked, the box starts at what the account owed before this bill —
@@ -3633,6 +3631,12 @@ export function BillBuilder() {
   const bfOffered = (draft.kind ?? 'sale') === 'sale' && !isWithoutBillSale
   const bfOn = bfOffered && draft.bf !== undefined
   const bf = bfOn ? Math.max(0, Number(draft.bf) || 0) : 0
+  // A paper total typed as "Bill" has the B/f inside it already (withBfInside).
+  const priced = useMemo(
+    () => (isMoneyVoucher ? draft : withBfInside(withCharges(draft), bf)),
+    [draft, isMoneyVoucher, bf],
+  )
+  const total = isMoneyVoucher ? money + discount : calcTotal(priced.items)
   const owedBefore = useMemo(() => {
     if (!partyBalance) return 0
     const owed = partyBalance.side === 'Cr' ? -partyBalance.amount : partyBalance.amount
@@ -5074,7 +5078,7 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
           {(draft.kind ?? 'sale') !== 'grn' && (chargesOpen || chargesInUse(draft) ? (
           <ChargesPanel
             bill={draft}
-            charges={priced.items.filter((i) => i.auto)}
+            charges={priced.items.filter((i) => i.auto && i.auto !== 'bf')}
             onChange={setCharges}
           />
           ) : (

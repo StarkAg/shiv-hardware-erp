@@ -32,7 +32,8 @@ export interface BillCharges {
   roundValue?: number
 }
 
-export type AutoKind = 'discount' | 'cgst' | 'sgst' | 'igst' | 'round'
+// 'bf' is the old dues taken back out of a paper total (see withBfInside).
+export type AutoKind = 'discount' | 'cgst' | 'sgst' | 'igst' | 'round' | 'bf'
 
 export const GST_RATES = [5, 12, 18, 28]
 export const DEFAULT_GST_RATE = 18
@@ -92,6 +93,21 @@ export function withCharges<T extends Pick<Bill, 'items'> & BillCharges>(bill: T
   const own = handLines(bill.items)
   if (!hasCharges(bill)) return own.length === bill.items.length ? bill : { ...bill, items: own }
   return { ...bill, items: [...own, ...chargeLines(own, bill)] }
+}
+
+/**
+ * A paper total typed as one "Bill" line already has the old dues in it: the
+ * paper writes B/f at the top and adds it into the foot. Left alone, the sale
+ * carried the B/f once in that figure and the account carried it again, so a
+ * ₹9,255 paper (₹370 of it B/f) took the account from ₹370 to ₹9,625. A line
+ * takes the B/f back out, leaving the sale as the goods alone; the B/f joins
+ * the grand total again on top, which comes back to the paper's figure.
+ * Written like the other worked-out lines, so a reopened bill rewrites it.
+ */
+export function withBfInside<T extends Pick<Bill, 'items'>>(bill: T, bf: number): T {
+  const paperTotal = handLines(bill.items).some((i) => /^bill$/i.test((i.description ?? '').trim()) && Number(i.amount) > 0)
+  if (!(bf > 0) || !paperTotal) return bill
+  return { ...bill, items: [...bill.items, { id: 'auto-bf', description: 'Less B/f', qty: 0, unit: '', amount: -bf, auto: 'bf', amountOnly: true }] }
 }
 
 export const hasCharges = (c: BillCharges) =>

@@ -18,14 +18,20 @@ import { api } from '../../../../convex/_generated/api';
  * on screen.
  */
 export function photoStrip(entries, clicked, title) {
-  const seen = new Set();
+  // Where each photo sits in the set, so a line whose photo is already in it
+  // (the money taken with a sale) opens on that photo, not the next bill's.
+  const seen = new Map();
   const all = [];
   let initialIndex = 0;
   for (const entry of entries) {
-    const shots = (entry.attachmentUrls ?? []).filter((a) => (a.url || a.storageId) && !seen.has(a.storageId ?? a.url));
-    if (entry.key === clicked) initialIndex = all.length;
+    const own = (entry.attachmentUrls ?? []).filter((a) => a.url || a.storageId);
+    const shots = own.filter((a) => !seen.has(a.storageId ?? a.url));
+    if (entry.key === clicked) {
+      const first = own[0];
+      initialIndex = first && seen.has(first.storageId ?? first.url) ? seen.get(first.storageId ?? first.url) : all.length;
+    }
     for (const a of shots) {
-      seen.add(a.storageId ?? a.url);
+      seen.set(a.storageId ?? a.url, all.length);
       const where = [entry.vchLabel, entry.date != null ? shortDate(entry.date) : null, entry.party].filter(Boolean).join(' · ');
       const caption = [
         [entry.vchType, entry.vchLabel].filter(Boolean).join(' '),
