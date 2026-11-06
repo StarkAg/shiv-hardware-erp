@@ -1265,6 +1265,13 @@ to{opacity: 0}}
 .ledger-root .monthrun{max-width: 340px;}
 .ledger-root .monthrun .chip{cursor: default; font-variant-numeric: tabular-nums;}
 .ledger-root .monthrun .chip:hover{border-color: var(--line); color: inherit;}
+/* A landlord's premises, listed under the landlord's own row */
+.ledger-root .ledger tbody tr.sub td{background: var(--card2);}
+.ledger-root .ledger tbody tr.sub td.particulars{padding-left: 34px;}
+.ledger-root .ledger tbody tr.sub .party{font-size: 14.5px;}
+@media (max-width: 760px){
+.ledger-root .ledger tbody tr.sub{margin-left: 18px;}
+.ledger-root .ledger tbody tr.sub td.particulars{padding-left: 0;}}
 
 /* What a bill was for, under its ledger row */
 .ledger-root .billgoods{display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px;
