@@ -790,7 +790,24 @@ export default defineSchema({
     at: v.number(),
     groupId: v.string(),
     queueNo: v.optional(v.number()),
-  }).index("by_at", ["at"]),
+  }).index("by_at", ["at"]).index("by_group", ["groupId"]),
+
+  /**
+   * What the AI read off a bill waiting in the voucher queue: the kind, the
+   * party, the date, the bill number, the amount and what was paid. No item
+   * lines; the shop enters each bill as one amount. One row per bill (a
+   * groupId), read again if a page is added. Never posted from here: the
+   * Counter fills the form with it and the bill is saved by hand.
+   */
+  voucherReads: defineTable({
+    groupId: v.string(),
+    /** How many pages the reading saw, so a page added later is read again. */
+    pages: v.number(),
+    status: v.union(v.literal("reading"), v.literal("ready"), v.literal("failed")),
+    draft: v.optional(v.any()),
+    error: v.optional(v.string()),
+    at: v.number(),
+  }).index("by_group", ["groupId"]),
 
   /**
    * The shop's own settings. One row, keyed "shop".

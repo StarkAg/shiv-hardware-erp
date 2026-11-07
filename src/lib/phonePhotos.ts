@@ -19,6 +19,34 @@ import { useLive } from '../features/ledger/lib/cache'
  */
 
 export type PhoneSource = 'voucher' | 'legacy'
+
+/**
+ * What the AI read off a bill in the voucher queue (convex/voucherInbox.ts
+ * saveRead): one amount, no item lines. Only voucher-queue photos have one.
+ */
+export type VoucherRead = {
+  status: 'reading' | 'ready' | 'failed'
+  pages: number
+  error?: string
+  kind?: 'sale' | 'purchase' | 'receipt' | 'payment' | 'unclear'
+  party?: string
+  /** Set when the party is an account in the books: which side it is on. */
+  account?: 'customer' | 'supplier'
+  date?: string
+  refNo?: string
+  total?: number | null
+  paid?: number | null
+  goodsReturn?: number | null
+  settlement?: 'on_account' | 'settled' | 'unknown'
+  continuation?: boolean
+  notes?: string
+  confidence?: number | null
+}
+
+export const READ_KIND_LABEL: Record<string, string> = {
+  sale: 'Sale', purchase: 'Purchase', receipt: 'Receipt', payment: 'Payment', unclear: 'Not sure',
+}
+
 export type PhonePhoto = {
   _id: string
   storageId: string
@@ -28,6 +56,7 @@ export type PhonePhoto = {
   queueNo?: number
   note?: string
   stack?: unknown
+  read?: VoucherRead
   source: PhoneSource
 }
 /** What a screen holds of a chosen photo: enough to say which queue it is on. */

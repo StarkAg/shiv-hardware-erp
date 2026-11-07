@@ -1,14 +1,31 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useQuery } from 'convex/react';
-import { Check, Paperclip, Ungroup, Unlink, X } from 'lucide-react'
+import { useMutation, useQuery } from 'convex/react';
+import { Check, Paperclip, RotateCw, Ungroup, Unlink, X } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
-import { shortDate } from '../lib/format';
+import { rupees, shortDate } from '../lib/format';
 import Confirm from './Confirm';
 import PhotoHoverZoom, { placeZoomPane, zoomGeometry } from './PhotoHoverZoom';
 import BillViewer from './BillViewer';
 import { AttachmentThumbnail } from '../../../components/AttachmentViewer';
-import { usePhoneQueue, usePhonePhotoActions } from '../../../lib/phonePhotos';
+import { usePhoneQueue, usePhonePhotoActions, READ_KIND_LABEL } from '../../../lib/phonePhotos';
+
+/** What the AI read off a waiting bill (convex/voucherInbox.ts), from whichever page carries it. */
+const readOfUnit = (unit) => unit.pages.find((page) => page.read)?.read;
+/** Which sorting chip a waiting bill falls under. */
+const bucketOf = (unit) => {
+  const read = readOfUnit(unit);
+  if (!read || read.status === 'reading') return 'reading';
+  if (read.status === 'failed') return 'unclear';
+  return READ_KIND_LABEL[read.kind] ? read.kind : 'unclear';
+};
+const BUCKETS = [
+  ['all', 'All'], ['sale', 'Sales'], ['purchase', 'Purchases'], ['receipt', 'Receipts'],
+  ['payment', 'Payments'], ['unclear', 'Not sure'], ['reading', 'Reading'],
+];
+// Kept across bills: the form remounts this for each new voucher, and a run
+// of purchases should stay on purchases.
+let keptBucket = 'all';
 
 const OK = (f) => f.type.startsWith('image/') || f.type === 'application/pdf';
 const key = (f) => `${f.name}:${f.size}:${f.lastModified}`;
@@ -47,7 +64,7 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
    * a stack, not three loose photos scattered down a newest-first list where
    * nothing says they belong together.
    */
-  const units = useMemo(() => {
+  const allUnits = useMemo(() => {
     const out = [];
     const done = new Set();
     for (const row of fromPhone) {
@@ -69,7 +86,26 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
     return out;
   }, [fromPhone]);
 
-  const isPicked = (unit) => unit.pages.every((r) => picked.some((p) => p._id === r._id));
+  /**
+   * The chip chosen above the tiles: only that kind of bill is shown, stepped
+   * through with the arrows, and opened beside the next new voucher — so a run
+   * of purchases can be entered one after another.
+   */
+  const [bucket, setBucketState] = useState(keptBucket);
+  const setBucket = (next) => { keptBucket = next; setBucketState(next); };
+  const bucketCounts = useMemo(() => {
+    const counts = { all: allUnits.length };
+    for (const unit of allUnits) { const b = bucketOf(unit); counts[b] = (counts[b] ?? 0) + 1; }
+    return counts;
+  }, [allUnits]);
+  const units = useMemo(
+    () => (bucket === 'all' ? allUnits : allUnits.filter((unit) => bucketOf(unit) === bucket)),
+    [allUnits, bucket],
+  );
+  const hasReads = allUnits.some((unit) => readOfUnit(unit));
+  const readAgain = useMutation(api.voucherInbox.readAgain);
+
+  const isPicked =(unit) => unit.pages.every((r) => picked.some((p) => p._id === r._id));
 
   /**
    * The arrows on the bill photo beside the form: the picked bill is swapped
@@ -297,10 +333,23 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
       {onPick && (
         <div className="fromphone">
           <div className="fromphone-head">From the phone</div>
+          {hasReads && allUnits.length > 0 && (
+            <div className="read-chips" role="group" aria-label="Show only one kind of bill">
+              {BUCKETS.filter(([b]) => b === 'all' || bucketCounts[b] || bucket === b).map(([b, label]) => (
+                <button key={b} type="button" aria-pressed={bucket === b}
+                  className={`read-chip${bucket === b ? ' on' : ''}`}
+                  onClick={() => setBucket(b)}>
+                  {label} <span className="read-chip-n">{bucketCounts[b] ?? 0}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {queue === undefined
             ? <p className="hint" role="status">Loading phone photos…</p>
             : units.length === 0
-              ? <p className="hint">No bill photos are waiting. Take photos in the voucher shooter, then return here.</p>
+              ? (allUnits.length
+                ? <p className="hint">None of these waiting. <button type="button" className="link plain" onClick={() => setBucket('all')}>Show all {allUnits.length}</button></p>
+                : <p className="hint">No bill photos are waiting. Take photos in the voucher shooter, then return here.</p>)
               : <div className="shots">
             {units.map((unit) => {
               const cover = unit.pages[0];
@@ -342,7 +391,35 @@ export default function BillDrop({ files, onChange, picked = [], onPick, onViewB
                       </button>
                     </div>
                   )}
-                  <span className="shot-when">{shortDate(cover.at)}</span>
+                  {(() => {
+                    const read = readOfUnit(unit);
+                    if (!read) return <span className="shot-when">{shortDate(cover.at)}</span>;
+                    if (read.status === 'reading') {
+                      return <span className="shot-when shot-read">Reading… · {shortDate(cover.at)}</span>;
+                    }
+                    if (read.status === 'failed') {
+                      return (
+                        <span className="shot-when shot-read">
+                          <span>Could not read</span>
+                          <button type="button" className="shot-reread" title={read.error || 'Read this bill again'}
+                            onClick={() => void readAgain({ groupId: cover.groupId })}>
+                            <RotateCw size={11} aria-hidden="true" /> Read again
+                          </button>
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="shot-when shot-read" title={read.notes || undefined}>
+                        <span className="shot-read-top">
+                          <b className={`shot-kind k-${read.kind}`}>{READ_KIND_LABEL[read.kind] ?? 'Not sure'}</b>
+                          {read.total != null && <b className="mono">₹{rupees(read.total)}</b>}
+                        </span>
+                        <span className="shot-read-party">
+                          {read.continuation ? 'Second page of another bill' : (read.party || 'No name')}
+                        </span>
+                      </span>
+                    );
+                  })()}
                   <button type="button" role="checkbox" aria-checked={isPicked(unit)}
                     className={`shot-check${isPicked(unit) ? ' on' : ''}`}
                     aria-label={`Use ${many ? `these ${unit.pages.length} photos` : 'this photo'} on the voucher`}

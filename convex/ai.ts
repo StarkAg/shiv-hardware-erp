@@ -3,6 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { v } from "convex/values";
 import { action } from "./lib/guarded";
+import { internalAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { CASH_PAGE_SYSTEM, CASH_PAGE_TOOL } from "./lib/cashPage";
@@ -387,6 +388,91 @@ async function inLanes(ctx: any, ids: string[]) {
   });
   await Promise.all(lanes);
 }
+
+/* ------------------------------------------------------------------ */
+/* the voucher queue: the whole bill, but one amount, not its lines    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The slip form without its item lines. The Counter enters a bill from the
+ * voucher queue as one amount, so reading every line would cost time and
+ * money for boxes nobody fills.
+ */
+const VOUCHER_TOOL: Anthropic.Tool = (() => {
+  const schema = BILL_TOOL.input_schema as any;
+  const { items: _items, ...properties } = schema.properties;
+  return {
+    name: "file_voucher",
+    description: "Record what this bill says: whose it is, what kind, the date, the bill number and the figures. No item lines.",
+    input_schema: {
+      ...schema,
+      properties,
+      required: (schema.required as string[]).filter((k) => k !== "items"),
+    },
+  };
+})();
+
+/**
+ * Reads one bill waiting in the voucher queue, all its pages, as soon as the
+ * phone has finished sending it (voucherInbox.add schedules this). What it
+ * reads fills the Counter's form when the photo is opened; nothing is saved
+ * to the books from here.
+ */
+export const readVoucher = internalAction({
+  args: { groupId: v.string(), force: v.optional(v.boolean()) },
+  handler: async (ctx, { groupId, force }): Promise<void> => {
+    const started: { pages: string[] } | null = await ctx.runMutation(internal.voucherInbox.startRead, { groupId, force });
+    if (!started) return;
+    try {
+      const pageData = [];
+      for (const url of started.pages) pageData.push(await fetchImage(url));
+      const [ledgers, lessons] = await Promise.all([
+        ctx.runQuery(internal.review.partyNames, {}),
+        ctx.runQuery(internal.review.activeLessons, {}),
+      ]);
+      const apiKey = process.env.MESH_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("No key on the deployment — run: npx convex env set MESH_API_KEY <key>");
+      const client = new Anthropic({ apiKey, baseURL: BASE_URL });
+      const response = await client.messages.create({
+        model: MODEL,
+        max_tokens: 2000,
+        system: SYSTEM,
+        tools: [VOUCHER_TOOL],
+        tool_choice: { type: "tool", name: "file_voucher" },
+        messages: [{
+          role: "user",
+          content: [
+            ...pageData.map((page) => ({
+              type: "image" as const,
+              source: { type: "base64" as const, media_type: page.media_type, data: page.data },
+            })),
+            {
+              type: "text" as const,
+              text: [
+                "Accounts already open in this shop's books. Customers are under Sundry Debtors, suppliers under Sundry Creditors. When the name on the bill is plainly one of these, return that account exactly as listed. A different given name is a different person: return what is written.",
+                ledgers.map((l: string) => `  - ${l}`).join("\n") || "  (none yet)",
+                "",
+                lessons.length ? ["What this shop has corrected before:", ...lessons.map((l: string) => `  - ${l}`)].join("\n") : "",
+                "",
+                "The shop enters this bill as ONE amount, so no item lines are wanted. Read whose bill it is, the kind, the date, the bill number (refNo: the printed or written bill/invoice/slip number, empty if none), the total, any goods return, and what was paid.",
+                pageData.length > 1 ? `This is one bill of ${pageData.length} pages. Read them together.` : "Read this bill.",
+              ].join("\n"),
+            },
+          ],
+        }],
+      });
+      const call = response.content.find((b) => b.type === "tool_use");
+      if (!call) throw new Error("The reader did not fill the form in");
+      await ctx.runMutation(internal.voucherInbox.saveRead, {
+        groupId,
+        pages: started.pages.length,
+        draft: (call as Anthropic.ToolUseBlock).input,
+      });
+    } catch (err: any) {
+      await ctx.runMutation(internal.voucherInbox.failRead, { groupId, error: err?.message ?? String(err) });
+    }
+  },
+});
 
 /* ------------------------------------------------------------------ */
 /* the name, and nothing else                                          */

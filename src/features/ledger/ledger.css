@@ -805,6 +805,25 @@ to{opacity: 0}}
 .ledger-root .shot-tile.stack .shot-check{bottom: 9px;}
 .ledger-root .voucher-shooter-link{margin: 0 0 12px; color: var(--muted); font-size: 12px;}
 .ledger-root .voucher-shooter-link a{color: var(--brass-text); font-weight: 800;}
+/* What the AI read off the bill, along the bottom of its tile: the kind and
+   the amount, then whose it is. Clear of the tick box on the left. */
+.ledger-root .shot-when.shot-read{display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  padding: 18px 7px 5px 44px; font-size: 11px; line-height: 1.25;
+  background: linear-gradient(transparent, rgba(10, 9, 8, 0.86) 45%);}
+.ledger-root .shot-read-top{display: flex; gap: 6px; align-items: baseline;}
+.ledger-root .shot-read-party{max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+.ledger-root .shot-kind{padding: 0 5px; border-radius: 4px; background: #f3f0ea; color: #111;
+  font-size: 10px; letter-spacing: 0.03em;}
+.ledger-root .shot-kind.k-purchase, .ledger-root .shot-kind.k-payment{background: #ffcc00;}
+.ledger-root .shot-kind.k-unclear{background: #e5484d; color: #fff;}
+.ledger-root .shot-reread{pointer-events: auto; display: inline-flex; align-items: center; gap: 3px;
+  margin-top: 2px; padding: 2px 6px; border: none; border-radius: 5px; cursor: pointer;
+  background: #f3f0ea; color: #111; font-size: 10px; font-weight: 800;}
+.ledger-root .read-chips{display: flex; flex-wrap: wrap; gap: 6px;}
+.ledger-root .read-chip{border: 1px solid var(--line); background: var(--card); color: inherit;
+  border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 700; cursor: pointer;}
+.ledger-root .read-chip.on{background: var(--brass); border-color: var(--brass); color: var(--brass-ink);}
+.ledger-root .read-chip-n{opacity: 0.7; font-variant-numeric: tabular-nums; margin-left: 2px;}
 .ledger-root .fromphone .shot-queue{position: absolute; top: 6px; left: 6px; z-index: 3;
   max-width: calc(100% - 58px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 3px 6px; border-radius: 7px; background: var(--brass);
@@ -1268,13 +1287,16 @@ to{opacity: 0}}
 .ledger-root .monthrun{max-width: 340px;}
 .ledger-root .monthrun .chip{cursor: default; font-variant-numeric: tabular-nums;}
 .ledger-root .monthrun .chip:hover{border-color: var(--line); color: inherit;}
-/* A landlord's premises, listed under the landlord's own row */
-.ledger-root .ledger tbody tr.sub td{background: var(--card2);}
-.ledger-root .ledger tbody tr.sub td.particulars{padding-left: 34px;}
-.ledger-root .ledger tbody tr.sub .party{font-size: 14.5px;}
+/* Month by month: each month's rent, and what was paid in it, under it */
+.ledger-root .mcell{white-space: nowrap;}
+.ledger-root .mcell .mdue{display: block; font-weight: 700;}
+.ledger-root .mcell .mpaid{display: block; font-size: 12px; font-weight: 700; color: var(--green-text);}
+.ledger-root .mnone{color: var(--muted);}
+.ledger-root .mhead{display: block; font-size: 10.5px; font-weight: 600; color: var(--muted);
+  text-transform: none; letter-spacing: 0;}
+.ledger-root .ledger th.now, .ledger-root .ledger tbody tr:not(.settled) td.now{background: var(--card2);}
 @media (max-width: 760px){
-.ledger-root .ledger tbody tr.sub{margin-left: 18px;}
-.ledger-root .ledger tbody tr.sub td.particulars{padding-left: 0;}}
+.ledger-root .mcell .mdue, .ledger-root .mcell .mpaid{display: inline; margin-left: 8px;}}
 
 /* What a bill was for, under its ledger row */
 .ledger-root .billgoods{display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px;

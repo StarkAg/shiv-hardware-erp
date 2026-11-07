@@ -52,7 +52,7 @@ const BillViewer = BillViewerUntyped as unknown as (props: {
 }) => JSX.Element
 
 /** A phone photo as the picker hands it over: the queue row, url and all. */
-type PickedPhoto = { _id: string; storageId: string; source?: 'voucher' | 'legacy'; url?: string; at?: number; queueNo?: number }
+type PickedPhoto = { _id: string; storageId: string; source?: 'voucher' | 'legacy'; url?: string; at?: number; queueNo?: number; groupId?: string }
 
 /** The bill drawn from its figures, as the ledger opens it; plain JSX too. */
 const VoucherBillPreview = VoucherBillPreviewUntyped as unknown as (props: {
@@ -100,7 +100,7 @@ import { indiaDate, indiaToday } from '../../lib/businessDate'
 /** How long Save waits for the books before saying there was no answer. */
 const POST_WAIT_MS = 25_000
 import { clearFormDraft, draftKey, loadFormDraft, saveFormDraft } from '../../lib/formDrafts'
-import { usePhonePhotoActions, usePhoneQueue } from '../../lib/phonePhotos'
+import { usePhonePhotoActions, usePhoneQueue, READ_KIND_LABEL, type VoucherRead } from '../../lib/phonePhotos'
 
 /**
  * Square-foot pricing for boards and doors is parked, not removed.
@@ -2305,6 +2305,43 @@ function emptyBill(number: string, kind: BillKind = 'sale'): Bill {
   }
 }
 
+/**
+ * A new voucher filled from what the AI read off its phone photo
+ * (convex/voucherInbox.ts saveRead): the kind, the party, the date, the bill
+ * number, one "Bill" line for the amount (no item lines — the shop enters
+ * these as one figure) and what was paid. A receipt or payment takes the
+ * amount as its money instead. Nothing it could not read is touched.
+ */
+function fillFromRead(d: Bill, read: VoucherRead): Bill {
+  const kind: BillKind = read.kind && read.kind !== 'unclear' ? read.kind : (d.kind ?? 'sale')
+  const crossed = PARTY_SIDE[kind] !== PARTY_SIDE[d.kind ?? 'sale']
+  const next: Bill = { ...d, kind }
+  if (crossed) Object.assign(next, { customerName: '', customerPhone: '', customerPhone2: '', customerUid: '', ledgerId: undefined })
+  if (read.party?.trim()) Object.assign(next, { customerName: toProperCase(withoutCourtesy(read.party.trim())), ledgerId: undefined })
+  if (read.date && /^\d{4}-\d{2}-\d{2}$/.test(read.date) && read.date <= today()) next.date = read.date
+  if (read.refNo?.trim()) next.ref = read.refNo.trim()
+  const total = Number(read.total) > 0 ? Number(read.total) : 0
+  if (MONEY_KINDS.includes(kind)) {
+    const money = total || Number(read.paid) || 0
+    if (money) next.moneyAmount = money
+    next.items = [emptyItem()]
+    return next
+  }
+  if (!total) return next
+  next.items = [{ ...emptyItem(), description: 'Bill', amountOnly: true, qty: 1, amount: total }]
+  next.total = total
+  const paid = Number(read.paid) > 0 ? Number(read.paid) : read.settlement === 'settled' ? total : 0
+  next.paidAmount = paid ? Math.min(paid, total) : undefined
+  next.paid = paid >= total
+  return next
+}
+
+/** The boxes an AI fill writes, to tell whether anyone has typed over them since. */
+const fillShape = (b: Bill) => JSON.stringify([
+  b.kind ?? 'sale', b.customerName, b.date, b.ref, b.moneyAmount, b.paidAmount,
+  b.items.map((i) => [i.description, Number(i.amount) || 0]),
+])
+
 /** Returns true if the bill has at least a customer name or one item description. */
 function hasMeaningfulContent(bill: Bill): boolean {
   return bill.customerName.trim().length > 0 || bill.items.some(i => i.description.trim().length > 0)
@@ -3560,6 +3597,48 @@ export function BillBuilder() {
   // -- Draft auto-save refs (always point to the latest values for the unmount cleanup)
   const draftRef = useRef(draft)
   useEffect(() => { draftRef.current = draft }, [draft])
+
+  /**
+   * The whole bill, read off the phone photo by the AI before it was opened
+   * (convex/ai.ts readVoucher): kind, party, date, bill number, the amount on
+   * one "Bill" line, and what was paid. It fills a new voucher only while
+   * nothing on it has been typed, and moving to the next photo replaces a fill
+   * nobody has touched. Shown in a yellow strip until Save, with Undo.
+   */
+  const shownRead = useMemo(() => {
+    if (!shownPhonePages.length || !phoneQueue) return undefined
+    const ids = new Set(shownPhonePages.map((p) => String(p._id)))
+    const groups = new Set(shownPhonePages.map((p) => p.groupId).filter(Boolean))
+    return phoneQueue.find((row) => row.source === 'voucher' && row.read && (ids.has(String(row._id)) || (row.groupId && groups.has(row.groupId))))?.read
+  }, [shownPhonePages, phoneQueue])
+  const shownKey = shownPhonePages.map((p) => String(p._id)).join(',')
+  const [aiFill, setAiFill] = useState<{ id: string; key: string; read: VoucherRead; before: Bill; shape: string } | null>(null)
+  const aiFillRef = useRef(aiFill)
+  aiFillRef.current = aiFill
+  useEffect(() => {
+    if (readOnly || !shownRead || shownRead.status !== 'ready' || shownRead.continuation) return
+    const d = draftRef.current
+    const key = `${d.id}|${shownKey}`
+    const last = aiFillRef.current
+    if (last?.key === key) return
+    if (voucherId || bills.some((b) => b.id === d.id) || isQuotation(d)) return
+    // An earlier fill on this voucher that nobody typed over gives way to this one.
+    const base = last && last.id === d.id && fillShape(d) === last.shape ? last.before : d
+    const typed = base.items.some((i) => i.description.trim() || Number(i.amount)) || Number(base.moneyAmount) > 0
+    const nameFromPhoto = photoFilled.current.id === base.id && base.customerName === photoFilled.current.name
+    if (typed || (base.customerName.trim() && !nameFromPhoto)) return
+    const filled = fillFromRead(base, shownRead)
+    setAiFill({ id: d.id, key, read: shownRead, before: base, shape: fillShape(filled) })
+    setDraft(filled)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownRead, shownKey, draft.id, readOnly])
+  const aiFillHere = aiFill && aiFill.id === draft.id && aiFill.shape ? aiFill : null
+  const undoAiFill = () => {
+    if (!aiFillHere) return
+    setDraft(aiFillHere.before)
+    // Keyed to this photo still, so it is not filled again by itself.
+    setAiFill({ ...aiFillHere, shape: '' })
+  }
   const viewRef  = useRef(view)
   useEffect(() => { viewRef.current = view }, [view])
   /** Set to true whenever the bill is explicitly committed (save / print / cancel) so the
@@ -4557,6 +4636,38 @@ ${err instanceof Error ? err.message : String(err)}`, 'error')
             </button>
           </div>
         )}
+        {aiFillHere && (() => {
+          const r = aiFillHere.read
+          const doubts = [
+            r.kind === 'unclear' || !r.kind ? 'sale or purchase not clear' : '',
+            !r.party ? 'no name read' : !r.account ? 'name not in your accounts' : '',
+            r.total == null ? 'amount not read' : '',
+            typeof r.confidence === 'number' && r.confidence < 0.6 ? 'hard to read' : '',
+          ].filter(Boolean)
+          return (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-[#ffcc00] px-3 py-2 text-sm text-black">
+              <ScanText size={15} className="shrink-0" />
+              <span className="font-semibold">Filled from the photo. Check, then Save.</span>
+              <span className="tabular-nums">
+                {[
+                  READ_KIND_LABEL[r.kind ?? 'unclear'],
+                  r.party,
+                  r.refNo ? `Bill ${r.refNo}` : '',
+                  r.total != null ? `₹${r.total.toLocaleString('en-IN')}` : '',
+                  r.paid ? `paid ₹${r.paid.toLocaleString('en-IN')}` : r.settlement === 'settled' ? 'paid in full' : r.settlement === 'on_account' ? 'on account' : '',
+                ].filter(Boolean).join(' · ')}
+              </span>
+              {doubts.length > 0 && <span className="font-semibold">Look at: {doubts.join(', ')}</span>}
+              <button
+                type="button"
+                className="ml-auto rounded-md border border-black/40 px-2.5 py-1 text-xs font-semibold hover:bg-black/10"
+                onClick={undoAiFill}
+              >
+                Undo fill
+              </button>
+            </div>
+          )
+        })()}
         {/* Tally's voucher chrome: what screen this is on the left, whose books
             on the right, then the voucher's own type and number under it. The
             colours are the panel's brass and parchment, not Tally's blue. */}
