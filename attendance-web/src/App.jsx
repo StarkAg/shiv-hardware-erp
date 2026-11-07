@@ -408,6 +408,7 @@ export default function App() {
           isSaved={lockedByDate[dateKey(cursor)] === true}
           editable={canEdit(cursor)}
           unlockThen={unlockThen}
+          onLockAgain={() => relock(dateKey(cursor))}
           onMark={(name, status) => setMark(dateKey(cursor), name, status)}
           onAllPresent={() => {
             const marks = {}
@@ -433,6 +434,8 @@ export default function App() {
         <MonthView
           cursor={cursor} setCursor={setCursor} staff={staff} statusFor={statusFor} loading={loading}
           canEdit={canEdit} unlockThen={unlockThen} todayKey={todayKey} dayOff={dayOff}
+          unlockedDays={Object.keys(unlockedDates).filter((k) => k < todayKey && isUnlockedNow(k) && k.slice(0, 7) === dateKey(cursor).slice(0, 7))}
+          onLockAgain={(keys) => setUnlockedDates((prev) => { const n = { ...prev }; for (const k of keys) delete n[k]; return n })}
           onCycle={(d, name) => {
             const cur = marksByDate[dateKey(d)]?.[name] || (dayOff(d) ? 'C' : '')
             const order = ['P', 'N', 'H', 'C', '']
@@ -470,7 +473,7 @@ export default function App() {
   )
 }
 
-function DailyView({ cursor, setCursor, staff, statusFor, loading, todayKey, isSaved, editable, unlockThen, onMark, onAllPresent, onAllClosed, onSave }) {
+function DailyView({ cursor, setCursor, staff, statusFor, loading, todayKey, isSaved, editable, unlockThen, onLockAgain, onMark, onAllPresent, onAllClosed, onSave }) {
   const step = (n) => {
     const d = new Date(cursor)
     d.setDate(d.getDate() + n)
@@ -541,6 +544,10 @@ function DailyView({ cursor, setCursor, staff, statusFor, loading, todayKey, isS
             <button className="allbtn" onClick={onSave}>{isSaved ? words.relock : words.save}</button>
           )}
 
+          {!isToday && editable && (
+            <button className="allbtn" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={onLockAgain}><LockIcon /> {words.lockAgain}</button>
+          )}
+
           <Summary staff={staff} statusFor={statusFor} cursor={cursor} />
         </>
       )}
@@ -569,7 +576,7 @@ const ROW_MIN = 41
 const ROW_MAX = 84
 const CARD_GAP = 12
 
-function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlockThen, onCycle, todayKey, dayOff }) {
+function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlockThen, unlockedDays = [], onLockAgain, onCycle, todayKey, dayOff }) {
   const y = cursor.getFullYear()
   const m0 = cursor.getMonth()
   const dim = daysInMonth(y, m0 + 1)
@@ -615,6 +622,11 @@ function MonthView({ cursor, setCursor, staff, statusFor, loading, canEdit, unlo
         <div className="dbig">{MON[m0]} {y}</div>
         <button onClick={() => stepM(1)} aria-label="Next month">›</button>
       </div>
+      {unlockedDays.length > 0 && (
+        <button className="lockbar" onClick={() => onLockAgain(unlockedDays)}>
+          <LockIcon /> {unlockedDays.length === 1 ? `${Number(unlockedDays[0].slice(8))} ${MON[m0]} is open` : `${unlockedDays.length} days open`} · tap to lock
+        </button>
+      )}
       {loading ? (
         <div className="muted center">Loading…</div>
       ) : (
