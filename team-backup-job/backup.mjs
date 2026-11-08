@@ -1,7 +1,15 @@
 /**
  * Nightly copies of every Convex project on the team, kept on a Railway volume.
  *
- * Runs on Railway as its own service (convex-backups) with a volume at /data.
+ * Runs on Railway as its own service (convex-backups) with a volume at /data,
+ * as a Railway cron job (railway.json: `node backup.mjs run` at 21:30 UTC):
+ * the container runs only for the backup and is gone the rest of the day.
+ * Left running with `serve`, it held ~1 GB of RAM (mostly page cache from the
+ * exports) all day, which cost more than everything else in shiv-hardware.
+ * Because the container is not up between runs, the `railway ssh` commands
+ * below (list, status, send, fetch.sh) need it up: switch startCommand to
+ * `node backup.mjs serve` and drop cronSchedule for that, then switch back.
+ *
  * Every night at 03:00 India time it asks the Convex CLI for an export of each
  * project in PROJECTS, straight onto the volume: nothing passes through
  * anybody's computer. Each copy is opened and checked before anything older
@@ -17,8 +25,9 @@
  * Commands, run from any folder with
  *   railway ssh -p 3204a621-3a84-4ad0-9960-d9195243d081 -e production -s convex-backups node backup.mjs <command>
  *
- *   serve                     what the service runs: wait for 03:00, back up, repeat
- *   run [full] [project ...]  back up now (full: with stored files); no project means all
+ *   serve                     wait for 03:00, back up, repeat (the old always-on mode)
+ *   run [full] [project ...]  back up now (full: with stored files); no project means all.
+ *                             What the nightly cron runs.
  *   start [full] [project ...] the same, left running on the service: a large project
  *                             takes longer than a terminal link stays open. Follow it with `log`.
  *   log [lines]               the end of what `start` has written
