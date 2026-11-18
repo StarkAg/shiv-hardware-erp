@@ -151,16 +151,18 @@ const SECTION_CONFIG = {
 const ROW_H = 6.39
 const BRAND_START = 126.75
 const SECTION_GAP = 3
+const HEAD_TOP = 113.5 // the "Rate  Brand  Cost  Guarantee" line
+// On a sheet with sections the first section title takes that line's place
+// and the line moves down under the title (same as QuotationPrint.tsx).
+const headTop = category => (SECTION_CONFIG[category] ? BRAND_START - ROW_H : HEAD_TOP)
 
 function buildPrintItems(category, rows) {
   const cfg = SECTION_CONFIG[category]
   if (!cfg) return (rows ?? []).map((row, i) => ({ kind: 'brand', row, top: BRAND_START + i * ROW_H }))
 
   const items = []
-  let top = BRAND_START - ROW_H
-
-  items.push({ kind: 'section', label: cfg.first, top })
-  top += ROW_H
+  items.push({ kind: 'section', label: cfg.first, top: HEAD_TOP })
+  let top = BRAND_START
 
   for (const row of (rows ?? [])) {
     const secLabel = cfg.breaks[row.brandName]
@@ -401,11 +403,11 @@ export async function buildQuotationHtml(quote) {
     <div class="legacy-info" style="left:122mm;top:101.3mm">${esc(legacyDimension(width))}</div>
     <div class="legacy-info" style="left:148mm;top:101.3mm;width:30mm;text-align:center">${esc(quote.qty ?? 1)}</div>
     <div class="legacy-line" style="right:${twoCol ? '2mm' : '34mm'}"></div>
-    <div class="legacy-info" style="left:29mm;top:113.5mm">Rate</div>
-    <div class="legacy-info" style="left:56.4mm;top:113.5mm">Brand</div>
-    <div class="legacy-info" style="left:127mm;top:113.5mm">Cost</div>
-    <div class="legacy-info" style="left:148mm;top:113.5mm;width:30mm;text-align:center">Guarantee</div>
-    ${twoCol ? '<div class="legacy-info" style="left:178mm;top:113.5mm;width:30mm;text-align:center">Warranty</div>' : ''}
+    <div class="legacy-info" style="left:29mm;top:${headTop(category)}mm">Rate</div>
+    <div class="legacy-info" style="left:56.4mm;top:${headTop(category)}mm">Brand</div>
+    <div class="legacy-info" style="left:127mm;top:${headTop(category)}mm">Cost</div>
+    <div class="legacy-info" style="left:148mm;top:${headTop(category)}mm;width:30mm;text-align:center">Guarantee</div>
+    ${twoCol ? `<div class="legacy-info" style="left:178mm;top:${headTop(category)}mm;width:30mm;text-align:center">Warranty</div>` : ''}
     ${rowsHtml}
     ${fittingHtml}
     </div>`)

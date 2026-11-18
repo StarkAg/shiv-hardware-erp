@@ -97,6 +97,12 @@ export const yearsColor = (years: number) => (years === 7 ? '#000000' : '#dc2626
 const ROW_H = 6.39
 const BRAND_START = 126.75
 const SECTION_GAP = 3 // mm gap before 2nd/3rd section headers
+const HEAD_TOP = 113.5 // the "Rate  Brand  Cost  Guarantee" line
+/**
+ * Where the "Rate  Brand ..." line prints. On a sheet with sections the first
+ * section title takes its place and the line moves down under the title.
+ */
+const headTop = (category: ProductCategory) => (SECTION_CONFIG[category] ? BRAND_START - ROW_H : HEAD_TOP)
 
 type PrintItem =
   | { kind: 'section'; label: string; top: number }
@@ -109,10 +115,10 @@ function buildPrintItems(category: ProductCategory, rows: BrandQuoteRow[]): Prin
   }
 
   const items: PrintItem[] = []
-  let top = BRAND_START - ROW_H // first section header sits one row above brand start
-
-  items.push({ kind: 'section', label: cfg.first, top })
-  top += ROW_H
+  // The first section title sits where the "Rate  Brand ..." line usually is;
+  // that line goes under it, one row above the first brand.
+  items.push({ kind: 'section', label: cfg.first, top: HEAD_TOP })
+  let top = BRAND_START
 
   for (const row of rows) {
     const secLabel = cfg.breaks[row.brandName]
@@ -217,12 +223,12 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
         <div className="absolute left-[122mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyDimension(quote.width)}</div>
         <div className="absolute left-[148mm] top-[101.3mm] w-[30mm] text-center text-[15pt] leading-[1.1]">{quote.qty ?? 1}</div>
         <div className="absolute left-[29mm] top-[107mm] border-t-[1.5px] border-black" style={{ right: twoCol ? '2mm' : '34mm' }} />
-        <div className="absolute left-[29mm] top-[113.5mm] w-[22mm] text-right text-[15pt] leading-[1.1]">Rate</div>
-        <div className="absolute left-[56.4mm] top-[113.5mm] text-[15pt] leading-[1.1]">Brand</div>
-        <div className="absolute left-[127mm] top-[113.5mm] text-[15pt] leading-[1.1]">Cost</div>
-        <div className="absolute left-[148mm] w-[30mm] text-center top-[113.5mm] text-[15pt] leading-[1.1]">Guarantee</div>
+        <div className="absolute left-[29mm] w-[22mm] text-right text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Rate</div>
+        <div className="absolute left-[56.4mm] text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Brand</div>
+        <div className="absolute left-[127mm] text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Cost</div>
+        <div className="absolute left-[148mm] w-[30mm] text-center text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Guarantee</div>
         {twoCol && (
-          <div className="absolute left-[178mm] w-[30mm] text-center top-[113.5mm] text-[15pt] leading-[1.1]">Warranty</div>
+          <div className="absolute left-[178mm] w-[30mm] text-center text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Warranty</div>
         )}
 
         <div className="absolute inset-0 text-[15pt] leading-[1.05]">
