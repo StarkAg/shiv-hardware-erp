@@ -154,7 +154,10 @@ const SECTION_GAP = 3
 const HEAD_TOP = 113.5 // the "Rate  Brand  Cost  Guarantee" line
 // On a sheet with sections the first section title takes that line's place
 // and the line moves down under the title (same as QuotationPrint.tsx).
-const headTop = category => (SECTION_CONFIG[category] ? BRAND_START - ROW_H : HEAD_TOP)
+const HEAD_GAP = 1.5 // mm of air after the first section title and after the "Rate  Brand ..." line
+const SECTION_HEAD_TOP = HEAD_TOP + ROW_H + HEAD_GAP
+const SECTION_BRAND_START = SECTION_HEAD_TOP + ROW_H + HEAD_GAP
+const headTop = category => (SECTION_CONFIG[category] ? SECTION_HEAD_TOP : HEAD_TOP)
 
 function buildPrintItems(category, rows) {
   const cfg = SECTION_CONFIG[category]
@@ -162,7 +165,7 @@ function buildPrintItems(category, rows) {
 
   const items = []
   items.push({ kind: 'section', label: cfg.first, top: HEAD_TOP })
-  let top = BRAND_START
+  let top = SECTION_BRAND_START
 
   for (const row of (rows ?? [])) {
     const secLabel = cfg.breaks[row.brandName]
