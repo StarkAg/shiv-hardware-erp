@@ -15,6 +15,12 @@ object Shop {
     private const val APP = "shiv-intro"
     private const val PREFS = "shop"
     private const val TOKEN = "token"
+    private const val PAGE_TOKEN = "pageToken"
+    private const val SLEEP_STEP = "sleepStepDone"
+
+    /** The Shiv Intro page (intro-web/), opened inside this app once it is set up. */
+    const val PAGE = "https://shivhardware-intro.vercel.app/"
+    const val PAGE_HOST = "shivhardware-intro.vercel.app"
 
     fun token(context: Context): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(TOKEN, null)
@@ -32,8 +38,37 @@ object Shop {
         val token = answer.token
         if (!answer.ok || token == null) return answer.error ?: "That PIN was not accepted."
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(TOKEN, token).apply()
+        // The same PIN also connects the Shiv Intro page shown in this app, as its own
+        // ordinary device (it needs Save and Send, which the phone token cannot call).
+        // Handed to the page once (MainActivity.handOver) and then dropped. If this
+        // fails the page simply asks for the PIN itself.
+        try {
+            val page = ConvexClient(URL).action<TrustAnswer>(
+                "devices:trust",
+                mapOf("pin" to pin, "name" to "Shiv_Intro app on Samsung (${Build.MODEL}) · Shiv Intro", "app" to "Shiv Intro"),
+            )
+            if (page.ok && page.token != null) {
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(PAGE_TOKEN, page.token).apply()
+            }
+        } catch (err: Exception) {
+            logError("pairing the page", err)
+        }
         return null
     }
+
+    /** The page's token, waiting to be handed to the page, or null. */
+    fun pageToken(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PAGE_TOKEN, null)
+
+    fun pageTokenHandedOver(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(PAGE_TOKEN).apply()
+
+    /** Whether the "Never auto sleeping apps" step has been read and ticked off. */
+    fun sleepStepDone(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(SLEEP_STEP, false)
+
+    fun markSleepStepDone(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(SLEEP_STEP, true).apply()
 
     /** A client that sends this device's token with every call. */
     fun client(token: String): ConvexClientWithAuth<String> =
