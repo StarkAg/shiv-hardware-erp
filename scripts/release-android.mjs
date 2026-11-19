@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 /**
- * Publishes the Shiv Counter Android app so the phones offer it as an update.
+ * Publishes one of the shop's Android apps so the phones offer it as an update.
  *
- *   npm run release:counter-android -- --notes "What changed, in one line"
+ *   npm run release:android -- --app counter --notes "What changed, in one line"
+ *   npm run release:android -- --app order   --notes "..."
+ *   (npm run release:counter-android -- --notes "..." is the counter's)
  *
- * 1. Reads versionCode / versionName from shiv-counter/app/build.gradle.kts
+ * 1. Reads versionCode / versionName from <app folder>/app/build.gradle.kts
  *    (raise both, commit and push first: GitHub builds the APK on that push).
- * 2. Finds the successful "Build Shiv Counter" run of a commit with that
- *    versionCode (waits for one still running) and downloads its APK.
- * 3. Makes the release `counter-v<versionCode>` on the public repo
- *    StarkAg/shiv-counter-releases with the APK attached. The app checks that
- *    repo's latest release when it opens (shiv-counter/.../Updater.kt).
+ * 2. Finds the successful GitHub build of a commit with that versionCode
+ *    (waits for one still running) and downloads its APK.
+ * 3. Makes the release `<tag prefix><versionCode>` on the app's public releases
+ *    repo with the APK attached. The app checks that repo's latest release when
+ *    it opens (Updater.kt in each app).
  *
- * The phones' screens never need this: they come from the Counter website.
- * Only a change inside shiv-counter/ does. See docs/shiv-counter-android.md.
+ * See docs/shiv-counter-android.md and docs/shiv-order-android.md.
  */
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs'
@@ -22,13 +23,27 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const RELEASES = 'StarkAg/shiv-counter-releases'
-const WORKFLOW = 'build-shiv-counter.yml'
-const GRADLE = 'shiv-counter/app/build.gradle.kts'
+const SOURCE = 'StarkAg/shiv-hardware-erp'
+const APPS = {
+  counter: {
+    title: 'Shiv Counter', dir: 'shiv-counter', apk: 'Shiv_Counter.apk', artifact: 'shiv-counter',
+    workflow: 'build-shiv-counter.yml', releases: 'StarkAg/shiv-counter-releases', prefix: 'counter-v',
+  },
+  order: {
+    title: 'Shiv Order', dir: 'shiv-order', apk: 'Shiv_Order.apk', artifact: 'shiv-order',
+    workflow: 'build-shiv-order.yml', releases: 'StarkAg/shiv-order-releases', prefix: 'order-v',
+  },
+}
 
 const args = process.argv.slice(2)
 const notesAt = args.indexOf('--notes')
 const notes = notesAt >= 0 ? args[notesAt + 1] ?? '' : ''
+const appAt = args.indexOf('--app')
+const app = APPS[appAt >= 0 ? args[appAt + 1] : '']
+if (!app) throw new Error(`Say which app: --app ${Object.keys(APPS).join(' | --app ')}`)
+const RELEASES = app.releases
+const WORKFLOW = app.workflow
+const GRADLE = `${app.dir}/app/build.gradle.kts`
 
 function run(cmd, cmdArgs, { quiet = false, allowFail = false } = {}) {
   const r = spawnSync(cmd, cmdArgs, { cwd: ROOT, encoding: 'utf8', shell: false })
@@ -47,14 +62,14 @@ function versionOf(text) {
 
 const here = versionOf(readFileSync(join(ROOT, GRADLE), 'utf8'))
 if (!here) throw new Error(`No versionCode in ${GRADLE}`)
-const tag = `counter-v${here.code}`
-console.log(`Shiv Counter ${here.name} (versionCode ${here.code})`)
+const tag = `${app.prefix}${here.code}`
+console.log(`${app.title} ${here.name} (versionCode ${here.code})`)
 
 // The releases repo: public, so a phone can download without a login.
 if (run('gh', ['repo', 'view', RELEASES, '--json', 'name'], { quiet: true, allowFail: true }).status !== 0) {
   console.log(`Making ${RELEASES} (public, releases only)…`)
   run('gh', ['repo', 'create', RELEASES, '--public', '--add-readme',
-    '--description', 'Shiv Counter Android app: each release is one APK. The app updates itself from here.'])
+    '--description', `${app.title} Android app: each release is one APK. The app updates itself from here.`])
 }
 
 if (run('gh', ['release', 'view', tag, '--repo', RELEASES, '--json', 'tagName'], { quiet: true, allowFail: true }).status === 0) {
@@ -67,7 +82,7 @@ function builtHere(sha) {
   const r = run('git', ['show', `${sha}:${GRADLE}`], { quiet: true, allowFail: true })
   return r.status === 0 && versionOf(r.stdout)?.code === here.code
 }
-const runs = JSON.parse(run('gh', ['run', 'list', '--workflow', WORKFLOW, '--limit', '15',
+const runs = JSON.parse(run('gh', ['run', 'list', '--repo', SOURCE, '--workflow', WORKFLOW, '--limit', '15',
   '--json', 'databaseId,headSha,status,conclusion'], { quiet: true }).stdout)
 run('git', ['fetch', '-q', 'origin', 'main'], { quiet: true, allowFail: true })
 let build = runs.find((r) => r.conclusion === 'success' && builtHere(r.headSha))
@@ -77,19 +92,19 @@ if (!build) {
     throw new Error(`No GitHub build of versionCode ${here.code} yet. Commit and push ${GRADLE} (the push starts the build), then run this again.`)
   }
   console.log(`Waiting for build ${going.databaseId}…`)
-  run('gh', ['run', 'watch', String(going.databaseId), '--exit-status', '--interval', '20'], { quiet: true })
+  run('gh', ['run', 'watch', String(going.databaseId), '--repo', SOURCE, '--exit-status', '--interval', '20'], { quiet: true })
   build = going
 }
 
-const dir = mkdtempSync(join(tmpdir(), 'shiv-counter-release-'))
+const dir = mkdtempSync(join(tmpdir(), `${app.dir}-release-`))
 try {
-  run('gh', ['run', 'download', String(build.databaseId), '-n', 'shiv-counter', '-D', dir], { quiet: true })
-  const apk = join(dir, 'Shiv_Counter.apk')
-  if (!existsSync(apk)) throw new Error('The build has no Shiv_Counter.apk')
-  run('gh', ['release', 'create', tag, `${apk}#Shiv_Counter.apk`, '--repo', RELEASES,
-    '--title', `Shiv Counter ${here.name}`,
-    '--notes', notes || `Shiv Counter ${here.name}.`], { quiet: true })
-  console.log(`Released ${tag}: the phones offer it the next time the app opens (checked at most every 5 minutes; 1.1 waits up to an hour).`)
+  run('gh', ['run', 'download', String(build.databaseId), '--repo', SOURCE, '-n', app.artifact, '-D', dir], { quiet: true })
+  const apk = join(dir, app.apk)
+  if (!existsSync(apk)) throw new Error(`The build has no ${app.apk}`)
+  run('gh', ['release', 'create', tag, `${apk}#${app.apk}`, '--repo', RELEASES,
+    '--title', `${app.title} ${here.name}`,
+    '--notes', notes || `${app.title} ${here.name}.`], { quiet: true })
+  console.log(`Released ${tag}: the phones offer it the next time the app opens (checked at most every 5 minutes).`)
 } finally {
   rmSync(dir, { recursive: true, force: true })
 }

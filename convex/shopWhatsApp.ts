@@ -50,6 +50,15 @@ export const sendDocument = action({
   },
 })
 
+/** A typed message into a customer's chat, or the shop's group (`mobile: 'group'`). */
+export const sendText = action({
+  args: { mobile: v.string(), text: v.string() },
+  handler: async (_ctx, args) => {
+    const r = await call('/send-text', args)
+    return { jid: String(r.jid) }
+  },
+})
+
 /** "Your guarantee card is ready", once per card. */
 export const notifyGuarantee = action({
   args: { mobile: v.string(), name: v.optional(v.string()), number: v.optional(v.string()) },

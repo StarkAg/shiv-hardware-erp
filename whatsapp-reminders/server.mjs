@@ -5,6 +5,8 @@
  *
  *   POST /send-document     a file or photo into a customer's chat, or the
  *                           shop's group (Share to WhatsApp in the panel)
+ *   POST /send-text         a typed message into a customer's chat or the
+ *                           shop's group (the Shiv Group phone app)
  *   POST /notify-guarantee  "your guarantee card is ready", once per card
  *   GET  /status            the link, with the QR while it needs a scan
  *   the auto-reply          a direct message gets the enquiry number, once an hour
@@ -145,6 +147,26 @@ async function sendDocument({ mobile, data, fileName = 'file.pdf', mimetype = 'a
     : { document: buffer, mimetype, fileName }
   await sock.sendMessage(jid, { ...content, ...(caption ? { caption } : {}) })
   log(`[send] ${fileName} (${buffer.length} bytes) to ${jid}`)
+  return { jid }
+}
+
+/** A typed message into a chat, or the shop's group (`mobile: 'group'`). */
+async function sendText({ mobile, text }) {
+  const body = String(text ?? '').trim()
+  if (!body) throw new Error('Nothing to send.')
+  if (body.length > 4000) throw new Error('The message is too long.')
+  await linked()
+  let jid
+  if (mobile === 'group') {
+    if (!SHOP_GROUP_ID) throw new Error('No shop group is set (SHOP_GROUP_ID).')
+    jid = SHOP_GROUP_ID
+  } else {
+    jid = chatOf(mobile)
+    if (!jid) throw new Error(`Enter a valid mobile number (got "${mobile ?? ''}").`)
+    await onWhatsApp(jid, mobile)
+  }
+  await sock.sendMessage(jid, { text: body })
+  log(`[send] text (${body.length} chars) to ${jid}`)
   return { jid }
 }
 
@@ -307,6 +329,7 @@ const json = (res, code, body) => {
 }
 const ROUTES = {
   'POST /send-document': async (req) => ({ ok: true, ...(await sendDocument(await bodyOf(req))) }),
+  'POST /send-text': async (req) => ({ ok: true, ...(await sendText(await bodyOf(req))) }),
   'POST /notify-guarantee': async (req) => notifyGuarantee(await bodyOf(req)),
   'GET /status': async () => ({
     ok: true, status: state.status, me: state.me, readyAt: state.readyAt,
