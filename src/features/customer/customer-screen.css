@@ -1,0 +1,143 @@
+/* The customer's screen (CustomerScreen.tsx), in Signs (DESIGN.md).
+ * Everything sits under .cd: this file is also fetched into the panel's own
+ * window (preloadPages), and must not touch it. The lettering is the shared
+ * Signs copy in design/signs/fonts. */
+@font-face { font-family: "Barlow Condensed"; font-weight: 700; font-display: swap; src: url("../../../design/signs/fonts/barlow-condensed-700.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 800; font-display: swap; src: url("../../../design/signs/fonts/barlow-condensed-800.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 500; font-display: swap; src: url("../../../design/signs/fonts/barlow-semi-condensed-500.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 600; font-display: swap; src: url("../../../design/signs/fonts/barlow-semi-condensed-600.woff2") format("woff2"); }
+
+html.cd-page, html.cd-page body { background: #ffffff; color-scheme: light; cursor: none; overflow: hidden; }
+
+.cd {
+  --wall: #ffffff;
+  --ink: #0e1318;
+  --dim: #4c5660;
+  --line: #c9cfd5;
+  --key: #edf0f3;
+  --must: #0054b4;
+  --safe: #007a3d;
+  --wait: #ffcc00;
+  --sign: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --text: "Barlow Semi Condensed", system-ui, sans-serif;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--wall);
+  color: var(--ink);
+  font: 500 2.4vh/1.25 var(--text);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+.cd * { box-sizing: border-box; }
+.cd p, .cd h1 { margin: 0; }
+
+/* ── Header: the shop, and which bill ─────────────────────────────── */
+.cd-head {
+  display: flex;
+  align-items: center;
+  gap: 1.6vh;
+  padding: 1.6vh 3vw;
+  border-bottom: 4px solid var(--ink);
+}
+.cd-head img { height: 6vh; width: auto; }
+.cd-head-name { display: flex; flex-direction: column; line-height: 1; }
+.cd-head-name strong { font: 800 4.2vh/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.cd-head-name span { font: 700 2vh/1.2 var(--sign); text-transform: uppercase; color: var(--dim); letter-spacing: .08em; }
+.cd-head-right {
+  margin-left: auto;
+  font: 800 3.4vh/1 var(--sign);
+  text-transform: uppercase;
+  padding: 1vh 1.6vh;
+  background: var(--ink);
+  color: #ffffff;
+}
+
+/* ── The bill ─────────────────────────────────────────────────────── */
+.cd-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr minmax(30vw, 36vw); }
+.cd-lines { display: flex; flex-direction: column; min-height: 0; padding: 2vh 3vw 0; border-right: 2px solid var(--ink); }
+.cd-for { font: 700 3vh/1.2 var(--sign); text-transform: uppercase; margin-bottom: 1.2vh; }
+.cd-row {
+  display: grid;
+  grid-template-columns: 1fr 12% 16% 18%;
+  gap: 1.2vw;
+  align-items: baseline;
+  padding: 1.3vh 0;
+  border-bottom: 1px solid var(--line);
+  transition: background-color .6s;
+}
+.cd-row-head {
+  font: 700 1.9vh/1 var(--sign);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--dim);
+  border-bottom: 2px solid var(--ink);
+  padding-top: 0;
+}
+.cd-scroll { flex: 1; min-height: 0; overflow: hidden; }
+.cd-item { font-weight: 600; font-size: 2.8vh; overflow-wrap: anywhere; }
+.cd-item em { font: 700 2vh/1 var(--sign); font-style: normal; color: var(--dim); display: inline-block; min-width: 3.4vh; }
+.cd-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cd-amt { font-weight: 600; font-size: 2.8vh; }
+.cd-fresh { background: var(--wait); transition: none; }
+
+/* ── The money, at the side ───────────────────────────────────────── */
+.cd-side { display: flex; flex-direction: column; min-height: 0; padding: 2vh 2.4vw; gap: 2vh; }
+.cd-sums { display: flex; flex-direction: column; }
+.cd-sum {
+  display: flex;
+  justify-content: space-between;
+  gap: 1vw;
+  padding: .8vh 0;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.cd-total {
+  display: flex;
+  flex-direction: column;
+  padding: 1.6vh 0 1.2vh;
+  border-bottom: 4px solid var(--ink);
+}
+.cd-total span { font: 700 2.4vh/1 var(--sign); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+.cd-total strong { font: 800 9vh/1 var(--sign); font-variant-numeric: tabular-nums; margin-top: .6vh; overflow-wrap: anywhere; }
+.cd-total small { font-size: 2vh; color: var(--dim); margin-top: .6vh; }
+.cd-paid span:last-child { color: var(--safe); font-weight: 600; }
+.cd-due { font-weight: 600; }
+
+.cd-upi { margin-top: auto; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.cd-upi img { width: min(26vh, 100%); height: auto; image-rendering: pixelated; border: 2px solid var(--ink); }
+.cd-upi-label { font: 800 2.6vh/1.1 var(--sign); text-transform: uppercase; margin-top: 1vh; padding: .6vh 1.2vh; background: var(--must); color: #ffffff; }
+.cd-upi-id { font-size: 1.9vh; color: var(--dim); margin-top: .6vh; }
+
+/* ── Waiting for a bill ───────────────────────────────────────────── */
+.cd-idle main, .cd-thanks main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4vh 6vw;
+}
+.cd-idle-logo { height: 24vh; width: auto; }
+.cd-idle h1 { font: 800 12vh/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; margin-top: 3vh; }
+.cd-idle-place { font: 700 4vh/1 var(--sign); text-transform: uppercase; letter-spacing: .2em; color: var(--dim); margin-top: 1.4vh; }
+.cd-idle-rule { width: 16vw; height: 4px; background: var(--ink); margin: 4vh 0 3vh; }
+.cd-welcome { font: 800 4.4vh/1 var(--sign); text-transform: uppercase; letter-spacing: .1em; }
+
+/* ── Saved: thanks ────────────────────────────────────────────────── */
+.cd-done-mark { width: 16vh; height: 16vh; display: grid; place-items: center; background: var(--safe); color: #ffffff; }
+.cd-done-mark svg { width: 60%; height: 60%; }
+.cd-thanks h1 { font: 800 9vh/1.05 var(--sign); text-transform: uppercase; margin-top: 4vh; }
+.cd-thanks-total { font: 800 7vh/1 var(--sign); font-variant-numeric: tabular-nums; margin-top: 2vh; color: var(--safe); }
+.cd-thanks-line { font: 700 3.4vh/1 var(--sign); text-transform: uppercase; letter-spacing: .1em; color: var(--dim); margin-top: 3vh; }
+
+/* A tall customer screen (turned on its side): the money goes under the bill. */
+@media (max-aspect-ratio: 1/1) {
+  .cd-body { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .cd-lines { border-right: 0; border-bottom: 2px solid var(--ink); }
+  .cd-side { flex-direction: row; align-items: flex-end; }
+  .cd-sums { flex: 1; }
+  .cd-upi { margin-top: 0; }
+}

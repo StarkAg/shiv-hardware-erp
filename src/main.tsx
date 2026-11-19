@@ -69,6 +69,8 @@ function preloadPages() {
   })
 }
 const PrintDemo = page(() => import('./features/print/PrintDemo'), 'PrintDemo')
+// The POS's second display, facing the customer (src/lib/customerDisplay.ts).
+const CustomerScreen = page(() => import('./features/customer/CustomerScreen'), 'CustomerScreen')
 const GuaranteeClaims = page(() => import('./features/guarantee/GuaranteeClaims'), 'GuaranteeClaims')
 const Ledger = page(() => import('./features/ledger/Ledger'), 'Ledger')
 const Profit = page(() => import('./features/profit/Profit'), 'Profit')
@@ -181,6 +183,7 @@ const router = createHashRouter([
   { path: '/quick', element: <QuickEntry />, errorElement: <AppError /> },
   // Staff at the door, on a phone: a delivery in, with the challan photo.
   { path: '/receive', element: <Receive />, errorElement: <AppError /> },
+  { path: '/customer', element: <CustomerScreen />, errorElement: <AppError /> },
   {
     path: '/',
     element: <PhoneGate />,

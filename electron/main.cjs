@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, net } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, shell, net, screen } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -106,6 +106,12 @@ function createWindow() {
   // counter.html's <title> is the counter website's name; keep the app's own.
   if (IS_QUOTATION_APP) mainWindow.on('page-title-updated', (e) => e.preventDefault())
 
+  // The customer's screen follows the panel: opened once it has loaded,
+  // closed with it.
+  // Loaded again with newer screens, it takes the customer's screen along.
+  mainWindow.webContents.on('did-finish-load', () => watchCustomerScreen())
+  mainWindow.on('closed', () => closeCustomerScreen())
+
   if (process.env.VITE_DEV_SERVER_URL) {
     const devUrl = process.env.VITE_DEV_SERVER_URL.replace(/\/+$/, '')
     mainWindow.loadURL(IS_QUOTATION_APP ? `${devUrl}/${ENTRY_HTML}` : devUrl)
@@ -122,6 +128,96 @@ function createWindow() {
     mainWindow.on('closed', () => { stop(); stopSite() })
   }
 }
+
+// ── The customer's screen ────────────────────────────────────────────────────
+// A counter POS with two displays (the Posiflex at the till) shows Windows a
+// second monitor facing the customer. The panel opens #/customer on it, full
+// screen and out of reach of the keyboard, and passes it the bill as the
+// counter types it (src/lib/customerDisplay.ts). One monitor: nothing opens.
+// SHIV_CUSTOMER_SCREEN=window opens it as an ordinary window beside the panel,
+// to try it on a PC with one screen; =off never opens it.
+let customerWindow = null
+let customerState = null
+const CUSTOMER_MODE = (process.env.SHIV_CUSTOMER_SCREEN || 'auto').toLowerCase()
+
+/** The monitor the panel is not on, if there is one. */
+function customerDisplay() {
+  const displays = screen.getAllDisplays()
+  if (displays.length < 2 || !mainWindow || mainWindow.isDestroyed()) return null
+  const mine = screen.getDisplayMatching(mainWindow.getBounds())
+  return displays.find((d) => d.id !== mine.id) || null
+}
+
+function closeCustomerScreen() {
+  if (customerWindow && !customerWindow.isDestroyed()) customerWindow.destroy()
+  customerWindow = null
+}
+
+function openCustomerScreen() {
+  if (IS_QUOTATION_APP || CUSTOMER_MODE === 'off' || !mainWindow || mainWindow.isDestroyed()) return
+  const asWindow = CUSTOMER_MODE === 'window'
+  const display = asWindow ? null : customerDisplay()
+  if (!asWindow && !display) { closeCustomerScreen(); return }
+
+  // The same page the panel is showing, at the customer's own address.
+  const url = `${mainWindow.webContents.getURL().replace(/#.*$/, '')}#/customer`
+  if (customerWindow && !customerWindow.isDestroyed()) {
+    if (display) {
+      customerWindow.setBounds(display.bounds)
+      customerWindow.setFullScreen(true)
+    }
+    if (customerWindow.webContents.getURL() !== url) customerWindow.loadURL(url)
+    return
+  }
+  const bounds = display ? display.bounds : { x: undefined, y: undefined, width: 1024, height: 768 }
+  customerWindow = new BrowserWindow({
+    ...bounds,
+    show: false,
+    frame: asWindow,
+    fullscreen: !asWindow,
+    // A customer's finger on it never takes the keys from the counter.
+    focusable: asWindow,
+    skipTaskbar: !asWindow,
+    autoHideMenuBar: true,
+    title: 'Shiv Hardware | Customer screen',
+    backgroundColor: '#ffffff',
+    icon: appIconPath(),
+    webPreferences: {
+      preload: appPath('electron', 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  customerWindow.on('page-title-updated', (e) => e.preventDefault())
+  customerWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  customerWindow.once('ready-to-show', () => customerWindow && customerWindow.showInactive())
+  customerWindow.webContents.on('did-finish-load', () => {
+    if (customerState && customerWindow && !customerWindow.isDestroyed()) {
+      customerWindow.webContents.send('customer-screen:state', customerState)
+    }
+  })
+  customerWindow.on('closed', () => { customerWindow = null })
+  customerWindow.loadURL(url)
+}
+
+let watchingDisplays = false
+function watchCustomerScreen() {
+  openCustomerScreen()
+  if (watchingDisplays) return
+  watchingDisplays = true
+  // A monitor plugged in, taken away or turned on late: look again.
+  const again = () => setTimeout(openCustomerScreen, 800)
+  screen.on('display-added', again)
+  screen.on('display-removed', again)
+}
+
+ipcMain.on('customer-screen:state', (_event, state) => {
+  customerState = state
+  if (customerWindow && !customerWindow.isDestroyed()) {
+    customerWindow.webContents.send('customer-screen:state', state)
+  }
+})
 
 // ── Screens (electron/screens.cjs) ───────────────────────────────────────────
 // The copy of the screens in the window, and any that failed to load this run.

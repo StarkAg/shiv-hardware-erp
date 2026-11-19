@@ -37,6 +37,11 @@ declare global {
       }) => Promise<{ ok: true; printer: string }>
       /** Card backs into tray slot 1 / slot 2 (file names from cardBacks.json; null = leave empty). */
       printCardBacksDirect?: (payload: { files: (string | null)[] }) => Promise<{ ok: true; printer: string }>
+      /** The customer's screen on the second monitor (src/lib/customerDisplay.ts). */
+      customerScreen?: {
+        send: (state: unknown) => void
+        onState: (cb: (state: unknown) => void) => () => void
+      }
       getUpdateState?: () => Promise<DesktopUpdateState>
       checkForUpdates?: () => Promise<DesktopUpdateState>
       installUpdate?: () => Promise<void>

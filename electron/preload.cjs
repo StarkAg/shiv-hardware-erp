@@ -13,6 +13,17 @@ contextBridge.exposeInMainWorld('shivDesktop', {
   printCardBacksDirect: process.platform === 'win32'
     ? (payload) => ipcRenderer.invoke('card:print-backs', payload)
     : undefined,
+  // The customer's screen on the second monitor (src/lib/customerDisplay.ts):
+  // the bill form sends, the customer window receives, the main process
+  // carries it across.
+  customerScreen: {
+    send: (state) => ipcRenderer.send('customer-screen:state', state),
+    onState: (callback) => {
+      const handler = (_event, state) => callback(state)
+      ipcRenderer.on('customer-screen:state', handler)
+      return () => ipcRenderer.removeListener('customer-screen:state', handler)
+    },
+  },
   // Auto-update bridge
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),

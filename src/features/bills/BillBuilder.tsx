@@ -96,6 +96,7 @@ import { BillDock, readDockSize, type DockSize } from '../../components/BillDock
 import { postingTrouble } from '../../lib/postOutbox'
 import Confirm from '../ledger/components/Confirm'
 import { indiaDate, indiaToday } from '../../lib/businessDate'
+import { customerLines, showOnCustomerScreen } from '../../lib/customerDisplay'
 
 /** How long Save waits for the books before saying there was no answer. */
 const POST_WAIT_MS = 25_000
@@ -3743,6 +3744,26 @@ export function BillBuilder() {
    * the rest of the voucher, as is a voucher with files dropped on it.
    */
   const filling = hasMeaningfulContent(draft) || total > 0
+  /**
+   * The customer's screen (src/lib/customerDisplay.ts) follows a sale or a
+   * quotation as it is typed. Every other voucher, and the list, leave it on
+   * the shop's name: a purchase is not the customer's to read.
+   */
+  const forCustomer = view === 'form' && (draft.kind === 'sale' || draft.kind === 'quotation' || !draft.kind)
+  const customerName = isWithoutBillParty(draft.customerName) ? '' : draft.customerName.trim()
+  useEffect(() => {
+    if (!forCustomer) { showOnCustomerScreen({ mode: 'idle' }); return }
+    showOnCustomerScreen({
+      mode: 'bill',
+      number: draft.number,
+      customerName,
+      lines: customerLines(priced.items),
+      total,
+      paid: Math.min(total, Number(draft.paidAmount ?? (draft.paid ? total : 0)) || 0),
+      quotation: draft.kind === 'quotation',
+    })
+  }, [forCustomer, priced, total, draft.number, draft.kind, draft.paidAmount, draft.paid, customerName])
+  useEffect(() => () => showOnCustomerScreen({ mode: 'idle' }), [])
   const autoPicked = useRef<{ id: string; ids: string; hand: boolean }>({ id: '', ids: '', hand: false })
   if (autoPicked.current.id !== draft.id) autoPicked.current = { id: draft.id, ids: '', hand: false }
   const handPicked = (next: PickedPhoto[]) => { autoPicked.current.hand = true; pickPhotos(next) }
@@ -4210,6 +4231,7 @@ function updateItem(itemId: string, patch: Partial<BillItem>) {
     try {
       const saved = await postDraft()
       if (!saved) return
+      if (forCustomer) showOnCustomerScreen({ mode: 'thanks', total, customerName })
       finishDraft()
       if (draft.kind === 'purchase' && saved.bill.kind === 'grn') {
         toast('Filed as Goods Received. Enter the supplier bill amount when it arrives.', 'ok')
