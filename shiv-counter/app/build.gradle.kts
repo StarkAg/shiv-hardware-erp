@@ -13,8 +13,8 @@ android {
         targetSdk = 35
         // Raise both with every build given to the phones, or Android will not
         // install it over the last one.
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
 
     // One fixed key, so each new build installs over the last. Its file and password

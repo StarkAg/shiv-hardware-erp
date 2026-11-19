@@ -89,7 +89,7 @@ try {
   run('gh', ['release', 'create', tag, `${apk}#Shiv_Counter.apk`, '--repo', RELEASES,
     '--title', `Shiv Counter ${here.name}`,
     '--notes', notes || `Shiv Counter ${here.name}.`], { quiet: true })
-  console.log(`Released ${tag}: the phones offer it the next time the app opens (checked at most once an hour).`)
+  console.log(`Released ${tag}: the phones offer it the next time the app opens (checked at most every 5 minutes; 1.1 waits up to an hour).`)
 } finally {
   rmSync(dir, { recursive: true, force: true })
 }

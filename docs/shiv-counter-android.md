@@ -69,7 +69,7 @@ only for changes inside `shiv-counter/`.
    public repo **StarkAg/shiv-counter-releases** (only APKs live there; it is
    kept apart from shiv-panel-releases because the deploy script and the
    Windows panel's updater read that repo's newest release as the panel's).
-3. On each phone, the next time the app opens (checked at most once an hour):
+3. On each phone, the next time the app opens (checked at most every 5 minutes; 1.1 waited an hour):
    "Update ready" with **Update now / Later** (Later waits 3 hours). Update now
    downloads it, checks it is Shiv Counter and newer, and opens Android's
    installer: one **Install** tap. Android never lets an app from outside the

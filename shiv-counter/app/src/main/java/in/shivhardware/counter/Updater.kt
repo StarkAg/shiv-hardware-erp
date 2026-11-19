@@ -20,7 +20,7 @@ import kotlin.concurrent.thread
  *
  * A new APK is published as a release of the public repo
  * StarkAg/shiv-counter-releases, tagged `counter-v<versionCode>`
- * (`npm run release:counter-android`). On open, at most once an hour, the app
+ * (`npm run release:counter-android`). On open, at most every 5 minutes, the app
  * asks GitHub for the latest release; if it is newer it offers Update now /
  * Later. Update downloads the APK, checks it is this app and newer, and hands
  * it to Android's installer, which asks for one Install tap: Android never lets
@@ -200,7 +200,10 @@ class Updater(private val activity: Activity) {
 
     companion object {
         private const val LATEST_API = "https://api.github.com/repos/StarkAg/shiv-counter-releases/releases/latest"
-        private const val CHECK_EVERY_MS = 60 * 60 * 1000L
+        // Every open, but not more than every 5 minutes (GitHub allows each
+        // network 60 checks an hour). 1.1 waited an hour, which made a new
+        // update slow to show (19 Nov 2026).
+        private const val CHECK_EVERY_MS = 5 * 60 * 1000L
         private const val SNOOZE_MS = 3 * 60 * 60 * 1000L
     }
 }
