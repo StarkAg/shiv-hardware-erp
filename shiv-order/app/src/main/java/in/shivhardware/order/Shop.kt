@@ -45,6 +45,18 @@ object Shop {
         return null
     }
 
+    /** What the AI read off a bill: the party, and lines {kind: door|other, ...}. */
+    class Bill(val party: String, val lines: List<JSONObject>)
+
+    /** A bill photo (JPEG, base64) to ai:readDoorOrder on the shop's Convex; the AI key stays there. */
+    fun readBill(token: String, jpeg: String): Bill {
+        val answer = action(token, "ai:readDoorOrder", JSONObject().put("jpeg", jpeg)) as? JSONObject
+            ?: throw Exception("The shop's server gave no answer.")
+        if (!answer.optBoolean("ok")) throw Exception(answer.optString("error").ifBlank { "The reader failed." })
+        val arr = answer.optJSONArray("lines") ?: org.json.JSONArray()
+        return Bill(answer.optString("party"), List(arr.length()) { arr.getJSONObject(it) })
+    }
+
     fun sendText(token: String, text: String) {
         action(token, "shopWhatsApp:sendText", JSONObject().put("mobile", "group").put("text", text))
     }

@@ -3,6 +3,14 @@ package `in`.shivhardware.order
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import android.util.Base64
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
@@ -23,12 +31,15 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.File
 import kotlin.concurrent.thread
 
 /**
@@ -50,17 +61,19 @@ class MainActivity : Activity() {
     private data class Line(
         val model: String = "", val h: Int = 0, val h8: Int = 0, val w: Int = 0, val w8: Int = 0,
         val qty: Int = 1, val text: String = "",
+        /** Read off a photo with a figure the reader was not sure of: check it against the bill. */
+        val unsure: Boolean = false,
     ) {
         val isDoor get() = text.isEmpty()
         fun say(): String =
             if (isDoor) "$model ${inches(h, h8)}x${inches(w, w8)} - $qty pc" else text
 
         fun toJson(): JSONObject = JSONObject().put("model", model).put("h", h).put("h8", h8).put("w", w).put("w8", w8)
-            .put("qty", qty).put("text", text)
+            .put("qty", qty).put("text", text).put("unsure", unsure)
 
         companion object {
             fun of(o: JSONObject) = Line(o.optString("model"), o.optInt("h"), o.optInt("h8"), o.optInt("w"), o.optInt("w8"),
-                o.optInt("qty", 1), o.optString("text"))
+                o.optInt("qty", 1), o.optString("text"), o.optBoolean("unsure"))
         }
     }
 
@@ -70,6 +83,10 @@ class MainActivity : Activity() {
     private var w8 = 0
     private var qty = 1
     private var sending = false
+    private var reading = false
+    private var cameraFile: File? = null
+    /** Lines on the bill that are not doors: offered, not added. */
+    private val extras = mutableListOf<String>()
 
     private lateinit var root: FrameLayout
     private lateinit var prefs: android.content.SharedPreferences
@@ -83,6 +100,8 @@ class MainActivity : Activity() {
     private var otherBox: EditText? = null
     private var party: EditText? = null
     private var list: LinearLayout? = null
+    private var extrasBox: LinearLayout? = null
+    private var readButton: Button? = null
     private var preview: TextView? = null
     private var status: TextView? = null
     private var sendButton: Button? = null
@@ -93,6 +112,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences("order", Context.MODE_PRIVATE)
         load()
+        savedInstanceState?.getString("camera")?.let { cameraFile = File(it) }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         root = FrameLayout(this).apply { setBackgroundColor(WHITE) }
         WindowInsetsControllerCompat(window, root).apply {
@@ -107,6 +127,11 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         if (Shop.token(this) == null) showPin() else showOrder()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        cameraFile?.let { outState.putString("camera", it.path) }
     }
 
     override fun onResume() {
@@ -192,6 +217,15 @@ class MainActivity : Activity() {
         col.addView(title("Door order"))
         col.addView(small("Goes to the Shiv Hardware group from the Shop WhatsApp. No rates."), gap(2))
 
+        // The quick way: a photo of the bill, read by the shop's AI.
+        val reads = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        readButton = button("Photo of bill", BLUE, WHITE).apply { setOnClickListener { openCamera() } }
+        reads.addView(readButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f).apply { marginEnd = dp(10) })
+        reads.addView(button("Gallery", KEY_GREY, INK).apply { setOnClickListener { openGallery() } },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        col.addView(reads, gap(16))
+        col.addView(small("Or make it by hand:"), gap(14))
+
         // Model
         col.addView(label("Model"), gap(18))
         modelChips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -244,6 +278,8 @@ class MainActivity : Activity() {
         col.addView(label("The order"), gap(26))
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(list, gap(6))
+        extrasBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(extrasBox, gap(10))
 
         party = field("Party name on top (optional)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS).apply {
             setText(prefs.getString("party", ""))
@@ -333,6 +369,134 @@ class MainActivity : Activity() {
         save()
     }
 
+    /* ── a photo of the bill ──────────────────────────────────────────────── */
+
+    private fun openCamera() {
+        if (reading) return
+        val file = File(File(cacheDir, "camera").apply { mkdirs() }, "bill-${System.currentTimeMillis()}.jpg")
+        cameraFile = file
+        val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            .putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try { startActivityForResult(intent, CAMERA) } catch (e: Exception) { openGallery() }
+    }
+
+    private fun openGallery() {
+        if (reading) return
+        val intent = Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE)
+        try { startActivityForResult(Intent.createChooser(intent, "Photo of the bill"), PICK) } catch (e: Exception) { say("No app to pick a photo from.", RED) }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        when (requestCode) {
+            CAMERA -> cameraFile?.takeIf { it.length() > 0 }?.let { readBill(Uri.fromFile(it)) }
+            PICK -> data?.data?.let { readBill(it) }
+        }
+    }
+
+    /** The photo goes to the shop's Convex, which asks the AI; the doors come back onto the order. */
+    private fun readBill(uri: Uri) {
+        val token = Shop.token(this) ?: return showPin()
+        reading = true
+        readButton?.isEnabled = false
+        readButton?.text = "Reading the bill…"
+        say("Reading the bill. This takes about 15 seconds.", GREY)
+        thread(name = "read-bill") {
+            val result: Result<Shop.Bill> = try {
+                val photo = decode(uri)
+                val out = ByteArrayOutputStream()
+                photo.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                photo.recycle()
+                Result.success(Shop.readBill(token, Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)))
+            } catch (e: Exception) { Result.failure(e) }
+            runOnUiThread {
+                reading = false
+                readButton?.isEnabled = true
+                readButton?.text = "Photo of bill"
+                cameraFile?.delete()
+                result.onSuccess { bill ->
+                    var doors = 0
+                    var unsure = 0
+                    for (o in bill.lines) {
+                        if (o.optString("kind") == "door") {
+                            val line = Line(o.optString("model"), o.optInt("h"), o.optInt("h8"), o.optInt("w"), o.optInt("w8"),
+                                o.optInt("qty", 1).coerceAtLeast(1), "", o.optBoolean("unsure"))
+                            lines += line
+                            remember(line.model)
+                            doors++
+                            if (line.unsure) unsure++
+                        } else {
+                            val text = o.optString("text").trim()
+                            if (text.isNotEmpty()) extras += if (o.optBoolean("unsure")) "$text (check)" else text
+                        }
+                    }
+                    drawModelChips(); drawList(); save()
+                    val s = if (doors == 1) "" else "s"
+                    when {
+                        doors == 0 && extras.isEmpty() -> say("No order lines found on that photo. Try again closer, flat and in good light.", RED)
+                        doors == 0 -> say("No doors on that bill. The other lines are below: tap one to add it.", GREY)
+                        unsure > 0 -> say("Read $doors door$s. Check the yellow ones against the bill.", RED)
+                        else -> say("Read $doors door$s. Check them against the bill, then Send.", GREEN)
+                    }
+                }.onFailure { e ->
+                    if (e is Shop.Untrusted) { Shop.forget(this); showPin() }
+                    else say("Could not read it: ${e.message ?: "no internet"}", RED)
+                }
+            }
+        }
+    }
+
+    /** A photo no longer than 2000 on its long side, the right way up. */
+    private fun decode(uri: Uri): Bitmap {
+        val long = 2000
+        if (Build.VERSION.SDK_INT >= 28) {
+            return ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, uri)) { decoder, info, _ ->
+                val w = info.size.width
+                val h = info.size.height
+                val scale = long.toFloat() / maxOf(w, h)
+                if (scale < 1f) decoder.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= long) sample *= 2
+        return contentResolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
+            ?: throw IllegalStateException("that is not a photo")
+    }
+
+    /** The bill's other lines (fittings and such): tap to put one on the order. */
+    private fun drawExtras() {
+        val box = extrasBox ?: return
+        box.removeAllViews()
+        if (extras.isEmpty()) return
+        box.addView(small("Also on the bill (not added). Tap to add:"))
+        extras.toList().forEach { text ->
+            box.addView(TextView(this).apply {
+                this.text = "+  $text"
+                textSize = 17f
+                setTextColor(BLUE)
+                setPadding(dp(4), dp(10), dp(4), dp(10))
+                setOnClickListener {
+                    extras.remove(text)
+                    lines += Line(text = text.removeSuffix(" (check)"))
+                    drawList(); save()
+                }
+            })
+        }
+        box.addView(TextView(this).apply {
+            this.text = "Hide these"
+            textSize = 15f
+            setTextColor(GREY)
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+            setOnClickListener { extras.clear(); drawExtras() }
+        })
+    }
+
     /* ── drawing ─────────────────────────────────────────────────────────── */
 
     private fun drawModelChips() {
@@ -366,11 +530,11 @@ class MainActivity : Activity() {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                background = box(WHITE, HAIRLINE)
+                background = if (line.unsure) box(YELLOW, YELLOW) else box(WHITE, HAIRLINE)
                 setPadding(dp(12), dp(4), dp(4), dp(4))
             }
             row.addView(TextView(this).apply {
-                text = line.say()
+                text = if (line.unsure) "${line.say()}\n(check against the bill: tap to put right)" else line.say()
                 textSize = 18f
                 setTextColor(INK)
                 setOnClickListener { if (!sending) edit(i) }
@@ -386,6 +550,7 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(52), dp(52)))
             box.addView(row, gap(if (i == 0) 0 else 8))
         }
+        drawExtras()
         drawPreview()
     }
 
@@ -429,6 +594,7 @@ class MainActivity : Activity() {
                     null -> {
                         prefs.edit().putString("lastSent", text).apply()
                         lines.clear()
+                        extras.clear()
                         party?.setText("")
                         drawList()
                         save()
@@ -458,7 +624,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Clear this order?")
             .setMessage("${lines.size} line${if (lines.size == 1) "" else "s"} will be taken off.")
-            .setPositiveButton("Clear") { _, _ -> lines.clear(); party?.setText(""); drawList(); save(); say("", GREY) }
+            .setPositiveButton("Clear") { _, _ -> lines.clear(); extras.clear(); party?.setText(""); drawList(); save(); say("", GREY) }
             .setNegativeButton("No", null)
             .show()
     }
@@ -616,5 +782,8 @@ class MainActivity : Activity() {
         private const val BLUE = 0xFF0054B4.toInt()
         private const val GREEN = 0xFF007A3D.toInt()
         private const val RED = 0xFFB3202A.toInt()
+        private const val YELLOW = 0xFFFFE680.toInt()
+        private const val CAMERA = 1
+        private const val PICK = 2
     }
 }
