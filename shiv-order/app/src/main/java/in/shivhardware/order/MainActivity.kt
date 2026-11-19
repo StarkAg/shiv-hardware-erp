@@ -110,6 +110,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        catchCrashes()
         prefs = getSharedPreferences("order", Context.MODE_PRIVATE)
         load()
         savedInstanceState?.getString("camera")?.let { cameraFile = File(it) }
@@ -127,6 +128,38 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         if (Shop.token(this) == null) showPin() else showOrder()
+        showLastCrash()
+    }
+
+    /**
+     * If the app ever closes by itself, what went wrong is kept and shown on the
+     * next open, to be photographed and sent: there is no other way to see it
+     * from a phone.
+     */
+    private fun catchCrashes() {
+        val before = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            try {
+                getSharedPreferences("crash", Context.MODE_PRIVATE).edit()
+                    .putString("last", "Shiv Order ${BuildConfig.VERSION_NAME}
+" + android.util.Log.getStackTraceString(e).take(4000))
+                    .commit()
+            } catch (_: Throwable) { }
+            before?.uncaughtException(t, e)
+        }
+    }
+
+    private fun showLastCrash() {
+        val crashes = getSharedPreferences("crash", Context.MODE_PRIVATE)
+        val last = crashes.getString("last", null) ?: return
+        crashes.edit().remove("last").apply()
+        AlertDialog.Builder(this)
+            .setTitle("The app closed last time")
+            .setMessage("Take a screenshot of this and send it to Tony's computer.
+
+$last")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
