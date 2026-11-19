@@ -1,5 +1,10 @@
 # Handoff: Shiv Order app (19 Nov 2026, from the shop PC)
 
+> **Update, 19 Nov 2026 18:35: finished on the shop PC.** Convex deployed (sendText +
+> readDoorOrder), the Photo of bill button is built (commit 0520638), and
+> **Shiv Order 1.0 is released** (order-v1 on StarkAg/shiv-order-releases;
+> APK in Tony's Downloads). Only the phone test is left: steps 1 to 3 below are done.
+
 Pick this up on another computer: `git pull`, then read this and
 `docs/shiv-order-android.md`.
 
