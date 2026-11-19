@@ -49,6 +49,7 @@ import java.io.File
 class MainActivity : Activity() {
 
     private lateinit var web: WebView
+    private val updater by lazy { Updater(this) }
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var cameraUri: Uri? = null
 
@@ -115,7 +116,12 @@ class MainActivity : Activity() {
         else moveTaskToBack(true)
     }
 
-    override fun onResume() { super.onResume(); web.onResume() }
+    override fun onResume() {
+        super.onResume()
+        web.onResume()
+        // A newer app on GitHub: offer it (Updater.kt). At most once an hour.
+        updater.check()
+    }
     override fun onPause() { web.onPause(); super.onPause() }
     override fun onDestroy() { web.destroy(); super.onDestroy() }
 

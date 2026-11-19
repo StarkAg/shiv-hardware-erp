@@ -56,6 +56,28 @@ the last box it lands on the screen's Print button. **Done** puts it away.
 The point key is off for counts and phone numbers. A box can opt out with
 `data-pos-pad="off"`.
 
+## The app updates itself
+
+Since version 1.1 (versionCode 2) the app keeps itself up to date
+(`shiv-counter/.../Updater.kt`). The Counter's screens never need this; it is
+only for changes inside `shiv-counter/`.
+
+1. Raise `versionCode` (and `versionName`) in `shiv-counter/app/build.gradle.kts`,
+   commit and push. GitHub builds the APK.
+2. `npm run release:counter-android -- --notes "What changed"` waits for that
+   build if needed and publishes it as release `counter-v<versionCode>` on the
+   public repo **StarkAg/shiv-counter-releases** (only APKs live there; it is
+   kept apart from shiv-panel-releases because the deploy script and the
+   Windows panel's updater read that repo's newest release as the panel's).
+3. On each phone, the next time the app opens (checked at most once an hour):
+   "Update ready" with **Update now / Later** (Later waits 3 hours). Update now
+   downloads it, checks it is Shiv Counter and newer, and opens Android's
+   installer: one **Install** tap. Android never lets an app from outside the
+   Play Store replace itself without that tap. The first time only, Android
+   also asks to allow Shiv Counter to install apps.
+
+Version 1.0 (the first APK, 19 Nov 2026) has no updater: install 1.1 by hand once.
+
 ## Build and install
 
 GitHub builds it (`.github/workflows/build-shiv-counter.yml`), so no shop

@@ -4,6 +4,8 @@
     <!-- Only the internet. The camera is opened through the phone's own camera
          app, which needs no permission here (declaring CAMERA would make it need one). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- To hand its own newer version to Android's installer (Updater.kt). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- The apps the Counter hands things to: the camera, and any app that opens a link. -->
     <queries>
