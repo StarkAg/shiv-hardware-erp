@@ -713,3 +713,136 @@ export const readContact = action({
     }
   },
 });
+
+/* ── Shiv Order: the doors on a counter bill, for the group ─────────────── */
+
+const DOOR_ORDER_SYSTEM = `You read a handwritten counter bill from Shiv Hardware Store (India) and copy out the order lines, for the shop's WhatsApp group. Rates and amounts are never copied.
+
+The bills are mostly doors. A door line looks like:
+  x DDLNT 3DMT158  78 3/8 x 37 2/8  1pc   4489
+  x AC 1.2mm  77 4/8 x 36 2/8  1pc  3167
+The leading x or tick is the clerk's mark: ignore it. The last number on the line is the rate or amount: ignore it, and ignore the total at the foot.
+
+For a door give:
+- model: as the shop writes it in the group. "3DMT158" or "DDLNT 3DMT158" is "3D MT158"; "3D 138", "3D 110" stay; "AC 1.2mm", "AD 1.2mm" stay. Drop a finish or type code such as DDLNT, DDLN, DDLM in front of a 3D model. Keep the model's letters and figures exactly as written otherwise.
+- height and width: the first size is the height (usually 66 to 84 inches), the second the width. Each is whole inches plus eighths of an inch. Fractions are written in eighths ("3/8", "2/8", "4/8", often small and raised beside the inches, like 78³/8). Keep eighths as eighths: 2/8 is 2, 4/8 is 4. Turn 1/4 into 2, 1/2 into 4, 3/4 into 6. No fraction is 0.
+- pieces: the count, "1pc", "2 pc", "1 Pc". 1 when none is written.
+
+Anything else on the bill (fittings, aldrops, handles, hinges, bolts, magnets, "fitting 7 item 2 set") is an "other" line: its words and its count with the unit as written ("10\\" Aldrop Acoslide - 4 set", "Door magnet - 4 pc"), never its rate.
+
+party: who the bill is made out to, after "M/s" at the top, with the place ("M/S Rahul Bediya Ji, Kachudag"). Empty when none.
+
+Copy what is written. Where a figure is hard to read, give your best reading and set unsure to true for that line; never leave a line out because it is hard. Lines crossed out or cancelled are left out. Keep the bill's order.`;
+
+const DOOR_ORDER_TOOL = {
+  name: "door_order",
+  description: "The order lines read from the bill, without rates.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      party: { type: "string" },
+      lines: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            kind: { type: "string", enum: ["door", "other"] },
+            model: { type: "string", description: "door: the model, e.g. 3D MT158" },
+            height_inches: { type: "integer" },
+            height_eighths: { type: "integer", minimum: 0, maximum: 7 },
+            width_inches: { type: "integer" },
+            width_eighths: { type: "integer", minimum: 0, maximum: 7 },
+            pieces: { type: "integer", minimum: 1 },
+            text: { type: "string", description: "other: the line as it should go, e.g. Door magnet - 4 pc" },
+            unsure: { type: "boolean" },
+          },
+          required: ["kind", "unsure"],
+        },
+      },
+    },
+    required: ["party", "lines"],
+  },
+};
+
+/**
+ * MeshAPI sometimes hands the tool's answer back as JSON inside a string, even
+ * as {"lines": "<the whole answer>"} (seen 19 Nov 2026). Take it out of however
+ * many wrappers it came in.
+ */
+function unwrapDoorOrder(raw: unknown): { party?: unknown; lines?: unknown } {
+  let x: any = raw;
+  for (let i = 0; i < 4; i++) {
+    if (typeof x === "string") {
+      try { x = JSON.parse(x); continue; } catch { return {}; }
+    }
+    if (x && typeof x.lines === "string") {
+      try {
+        const inner = JSON.parse(x.lines);
+        x = Array.isArray(inner) ? { ...x, lines: inner } : { ...x, ...inner };
+        continue;
+      } catch { return { party: x.party }; }
+    }
+    break;
+  }
+  return x && typeof x === "object" ? x : {};
+}
+
+/** Only well-formed lines go back to the phone. */
+function cleanDoorLines(lines: unknown): unknown[] {
+  if (!Array.isArray(lines)) return [];
+  const int = (n: unknown, lo: number, hi: number, dflt: number) => {
+    const v = Math.round(Number(n));
+    return Number.isFinite(v) && v >= lo && v <= hi ? v : dflt;
+  };
+  const out: unknown[] = [];
+  for (const l of lines as any[]) {
+    if (!l || typeof l !== "object") continue;
+    const unsure = Boolean(l.unsure);
+    const model = typeof l.model === "string" ? l.model.trim().replace(/\s+/g, " ") : "";
+    const h = int(l.height_inches, 1, 200, 0);
+    const w = int(l.width_inches, 1, 200, 0);
+    if (l.kind === "door" && model && h && w) {
+      out.push({ kind: "door", model, h, h8: int(l.height_eighths, 0, 7, 0), w, w8: int(l.width_eighths, 0, 7, 0), qty: int(l.pieces, 1, 999, 1), unsure });
+    } else {
+      const text = typeof l.text === "string" && l.text.trim() ? l.text.trim() : model;
+      if (text) out.push({ kind: "other", text, unsure });
+    }
+  }
+  return out;
+}
+
+/** Reads a bill photo (a JPEG, base64) into door lines for Shiv Order. Nothing is kept. */
+export const readDoorOrder = action({
+  args: { jpeg: v.string() },
+  handler: async (_ctx, { jpeg }): Promise<{ ok: true; party: string; lines: unknown[] } | { ok: false; error: string }> => {
+    try {
+      const apiKey = process.env.MESH_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("no api key");
+      const client = new Anthropic({ apiKey, baseURL: BASE_URL });
+      const response = await client.messages.create({
+        model: MODEL,
+        max_tokens: 3000,
+        system: DOOR_ORDER_SYSTEM,
+        tools: [DOOR_ORDER_TOOL as Anthropic.Tool],
+        tool_choice: { type: "tool", name: DOOR_ORDER_TOOL.name },
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: imageType(Buffer.from(jpeg.slice(0, 32), "base64")), data: jpeg } },
+            { type: "text", text: "Copy the order lines from this bill." },
+          ],
+        }],
+      });
+      const call = response.content.find((b) => b.type === "tool_use");
+      if (!call) throw new Error("The reader did not answer");
+      const input = unwrapDoorOrder((call as Anthropic.ToolUseBlock).input);
+      return { ok: true, party: typeof input.party === "string" ? input.party : "", lines: cleanDoorLines(input.lines) };
+    } catch (err: any) {
+      const message =
+        err?.status === 401 || /no api key|api[_ ]?key|authentication/i.test(err?.message ?? "")
+          ? "No key on the deployment — run: npx convex env set MESH_API_KEY <key>"
+          : err?.message ?? String(err);
+      return { ok: false, error: message };
+    }
+  },
+});
