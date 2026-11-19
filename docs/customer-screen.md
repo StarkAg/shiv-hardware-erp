@@ -33,7 +33,7 @@ Purchases, payments and the other vouchers never reach it.
 ## Showing it without the POS
 
 In a browser: `npm run dev`, then two windows side by side,
-`http://localhost:5173/#/bills` and `http://localhost:5173/#/customer`.
+`http://localhost:5180/#/bills` and `http://localhost:5180/#/customer`.
 Start a sale in the first; the second follows.
 
 In the desktop app on one screen:
