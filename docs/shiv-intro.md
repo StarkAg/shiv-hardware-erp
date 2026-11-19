@@ -33,6 +33,7 @@ writes into the phone's contacts   sends the greeting and visiting-card.jpg
 | Web app | `intro-web/`, its own site at shivhardware-intro.vercel.app, with the shop PIN once per device |
 | Sending the card | `sendIntro` in `whatsapp-bills/server.mjs` |
 | Samsung app | `shiv-intro/` |
+| Staff phones' app | `shiv-intro-counter/` |
 | Tests | `tests/shivIntro.test.ts` |
 
 ## Rules that must stay true
@@ -69,6 +70,15 @@ Then install it on the Samsung, enter the shop PIN once, and allow what it asks.
 **From 1.1 (19 Nov 2026) the app is also the Shiv Intro page.** Once set up, opening Shiv_Intro opens shivhardware-intro.vercel.app inside the app, so a new customer can be typed straight on the Samsung; no browser or Counter app needed. A thin line at the top says whether this phone is connected for saving. The one PIN typed in the app connects both: the listener as a phone-only `shiv-intro` device, and the page as an ordinary `Shiv Intro` device (it needs Save and Send). The page's token is handed to it once through `localStorage['shiv-device-token']` and not kept by the app. So the Trusted devices page shows two rows for this phone: "Samsung (model)" and "Shiv_Intro app on Samsung (model) · Shiv Intro". A phone that paired on 1.0 asks for the PIN once more inside the page. Page changes go out with `npm run deploy -- --only intro` and need no new app; only changes in `shiv-intro/` need a new APK (raise `versionCode`).
 
 Every build is signed with the shop's one Shiv_Intro key, so updates install over the top. The key is stored as the GitHub secrets `SHIV_INTRO_KEYSTORE_B64` and `SHIV_INTRO_KEYSTORE_PASSWORD`, with a copy on the shop PC in `Documents\Shiv_Intro signing key`. Keep a second copy somewhere safe. If the key is lost, the app has to be uninstalled and installed fresh.
+
+## Shiv Intro Counter: the staff's app
+
+`shiv-intro-counter/` (19 Nov 2026) is a second, smaller app for the staff's phones: **Shiv Intro Counter**. It opens only the Shiv Intro page, so staff can type a new customer and press Save or Send. It saves nothing on the staff phone; Save still lands on the owner's Samsung through Shiv_Intro. **Never install Shiv_Intro itself on a staff phone**: that phone would start taking the saves meant for the Samsung.
+
+- Staff only: the links the PIN screen gives to the shop's other apps (Panel, Cashier, Accounts and the rest) are not followed inside it. Only WhatsApp and phone-call links leave the app.
+- The shop PIN is typed once on each staff phone, in the page (the owner types it). Removing the phone on the Trusted devices page shuts it out.
+- Built by `.github/workflows/build-shiv-intro-counter.yml`, signed with the same Shiv_Intro key, so no new secrets. The file is `Shiv_Intro_Counter.apk`.
+- Page changes need no new app; only changes in `shiv-intro-counter/` do (raise `versionCode`).
 
 ## Test on the real phones
 
