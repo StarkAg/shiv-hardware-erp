@@ -13,16 +13,19 @@ import { enterFlowAdvance } from '../lib/enterFlow'
  *     last box it lands on the screen's Print button.
  *   - Done puts the pad away.
  *
- * A box opts out with data-pos-pad="off". The phone's keyboard is kept away by
- * inputmode="none", set as the box is touched (before it takes focus).
+ * A box opts out with data-pos-pad="off". The phone's keyboard is kept away
+ * from every number box as soon as it is on the screen (silence()).
  */
 
 type NumberBox = HTMLInputElement
 
+/** The box's own type, from before silence() made it a text box. */
+const typeOf = (el: HTMLInputElement) => (el.dataset.posType ?? el.type ?? 'text').toLowerCase()
+
 function isNumberBox(el: EventTarget | null): el is NumberBox {
   if (!(el instanceof HTMLInputElement) || el.readOnly || el.disabled) return false
   if (el.closest('[data-pos-pad="off"]')) return false
-  const type = (el.type || 'text').toLowerCase()
+  const type = typeOf(el)
   const mode = (el.dataset.posMode ?? el.getAttribute('inputmode') ?? '').toLowerCase()
   return type === 'number' || type === 'tel' || mode === 'numeric' || mode === 'decimal' || mode === 'tel'
 }
@@ -30,16 +33,32 @@ function isNumberBox(el: EventTarget | null): el is NumberBox {
 /** Whether a decimal point belongs in this box: a rate or a thickness, not a count or a phone number. */
 function takesDot(el: NumberBox) {
   const mode = (el.dataset.posMode ?? '').toLowerCase()
+  const type = typeOf(el)
   if (mode === 'numeric' || mode === 'tel') return false
-  if (el.type === 'tel') return false
-  if (el.type === 'number') return !/^\d+$/.test(el.step || '') || el.step === 'any'
+  if (type === 'tel') return false
+  if (type === 'number') return !/^\d+$/.test(el.step || '') || el.step === 'any'
   return mode === 'decimal'
 }
 
-/** Keeps the phone's keyboard shut for the box, remembering what it asked for. */
+/**
+ * Keeps the phone's keyboard shut for the box, remembering what it asked for.
+ * inputmode="none" alone is not enough: Android's web view ignores it on a
+ * number box and opened its own number keyboard over the pad (Tony, 19 Nov
+ * 2026). So a number or phone box becomes a plain text box, which honours it.
+ * React leaves the type alone after that (it only writes it when the screen
+ * asks for a different one), and nothing in the Counter reads a box's number
+ * value, only its text.
+ */
 function silence(el: NumberBox) {
   if (el.dataset.posMode === undefined) el.dataset.posMode = el.getAttribute('inputmode') ?? ''
-  el.setAttribute('inputmode', 'none')
+  if (el.dataset.posType === undefined) el.dataset.posType = el.type
+  if (el.type === 'number' || el.type === 'tel') el.type = 'text'
+  if (el.getAttribute('inputmode') !== 'none') el.setAttribute('inputmode', 'none')
+}
+
+/** Every number box on the screen, silenced before it can be touched. */
+function silenceAll() {
+  document.querySelectorAll<HTMLInputElement>('input').forEach((el) => { if (isNumberBox(el)) silence(el) })
 }
 
 /** Writes past React's value tracker, so the form's onChange sees it as typed. */
@@ -86,11 +105,20 @@ export function PosNumberPad() {
     }
     // A new page takes the box away without always saying so.
     const away = () => setBox(null)
+    // Each box as it appears, so the keyboard never gets the first touch.
+    let queued = 0
+    const watch = new MutationObserver(() => {
+      if (!queued) queued = window.requestAnimationFrame(() => { queued = 0; silenceAll() })
+    })
+    silenceAll()
+    watch.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['type', 'inputmode'] })
     document.addEventListener('pointerdown', touch, true)
     document.addEventListener('focusin', enter)
     document.addEventListener('focusout', leave)
     window.addEventListener('hashchange', away)
     return () => {
+      watch.disconnect()
+      if (queued) window.cancelAnimationFrame(queued)
       document.removeEventListener('pointerdown', touch, true)
       document.removeEventListener('focusin', enter)
       document.removeEventListener('focusout', leave)
