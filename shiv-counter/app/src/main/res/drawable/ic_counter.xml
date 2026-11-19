@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A white bill on the Signs blue: the Counter. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#0054B4"
+        android:pathData="M0,0h48v48h-48z" />
+    <!-- The bill, with a torn foot. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M13,8h22v32l-3.67,-2.5 -3.67,2.5 -3.66,-2.5 -3.67,2.5 -3.66,-2.5 -3.67,2.5z" />
+    <!-- Three lines of print. -->
+    <path
+        android:fillColor="#0E1318"
+        android:pathData="M17,14h14v2.5h-14zM17,20h14v2.5h-14zM17,26h9v2.5h-9z" />
+</vector>

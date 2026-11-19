@@ -9,6 +9,9 @@ import './index.css'
 // The Signs look over the shared screens (DESIGN.md); the panel keeps its own.
 import './counter-signs.css'
 import { CounterLayout } from './components/CounterLayout'
+import { PosNumberPad } from './components/PosNumberPad'
+import { PosHome } from './features/pos/PosHome'
+import { inPosApp, startPosApp } from './lib/posApp'
 import { ConvexSync } from './components/ConvexSync'
 import { PhoneQuotePrinter } from './components/PhoneQuotePrinter'
 import { QuotationBuilder } from './features/quotation/QuotationBuilder'
@@ -40,9 +43,15 @@ watchForNewBuild()
 // A sign is white: no dark mode on the counter, whatever the panel was set to.
 document.documentElement.classList.remove('dark')
 
-// The counter opens on the quotation chooser; the recovery screens' Home
-// button goes there, not to the panel's /home.
-HOME.path = '/quote-options'
+// Inside the Shiv Counter Android app: the touch look, and the phone's own
+// sharing and printing (lib/posApp). Nothing changes anywhere else.
+startPosApp()
+
+// The counter opens on the quotation chooser (in the Android app, on its home
+// screen of tiles); the recovery screens' Home button goes there, not to the
+// panel's /home.
+const START = inPosApp ? '/pos' : '/quote-options'
+HOME.path = START
 
 /**
  * The counter, as its own site.
@@ -93,7 +102,8 @@ const router = createHashRouter([
     element: <CounterLayout />,
     errorElement: <AppError />,
     children: [
-      { index: true, element: <Navigate to="/quote-options" replace /> },
+      { index: true, element: <Navigate to={START} replace /> },
+      { path: 'pos', element: <PosHome /> },
       { path: 'quote-options', element: <QuotationOptions /> },
       { path: 'quote', element: <QuotationBuilder /> },
       { path: 'quote/:id', element: <QuotationBuilder /> },
@@ -143,10 +153,16 @@ const app = convex
         <ConvexSync />
         <PhoneQuotePrinter />
         <RouterProvider router={router} future={{ v7_startTransition: true }} />
+        {inPosApp && <PosNumberPad />}
       </PinGate>
     </ConvexProvider>
   )
-  : <RouterProvider router={router} future={{ v7_startTransition: true }} />
+  : (
+    <>
+      <RouterProvider router={router} future={{ v7_startTransition: true }} />
+      {inPosApp && <PosNumberPad />}
+    </>
+  )
 
 // Drawn once this device's copy is read from IndexedDB, so nothing on screen
 // (or synced) starts from the empty defaults. A failed read draws anyway.

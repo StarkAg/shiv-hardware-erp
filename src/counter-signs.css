@@ -112,6 +112,22 @@ h2, h3 { font-weight: 700; }
 :where([class~="text-sky-300"], [class~="text-sky-800"]):not(:is(.a4-page, .print-root, .print-doc) *) { color: var(--must) !important; }
 :where([class~="bg-sky-100"], [class~="bg-sky-500/15"]):not(:is(.a4-page, .print-root, .print-doc) *) { background-color: #e0eaf6 !important; }
 
+/* ── The Android app's touch look ("POS", src/lib/posApp.ts) ───────────────
+ * Only inside the Shiv Counter Android app (html.pos-app); the PC app and the
+ * website never get it. Everything a step bigger, and every button and box at
+ * least a thumb high (56px). Never inside what prints.
+ */
+html.pos-app { font-size: 110%; --control-height: 56px; }
+.pos-app body { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+.pos-app :is(input, textarea, [contenteditable="true"]) { -webkit-user-select: text; user-select: text; }
+.pos-app :is(button, [role="button"], select, .panel-button, input:not([type=checkbox], [type=radio], [type=range], [type=file], [type=hidden])):not(:is(.a4-page, .print-root, .print-doc) *) {
+  min-height: 3.5rem;
+}
+.pos-app :is(input, select, textarea):not(:is(.a4-page, .print-root, .print-doc) *) { font-size: 1.15rem; }
+.pos-app :is(input[type=checkbox], input[type=radio]):not(:is(.a4-page, .print-root, .print-doc) *) { width: 1.6rem; height: 1.6rem; }
+/* Room under the page for the number pad (PosNumberPad), so the last box can come up above it. */
+.pos-pad-open main { padding-bottom: var(--pos-pad-h, 0px); }
+
 /* ── What prints keeps its own look ─────────────────────────────────────── */
 .a4-page, .print-root, .print-doc {
   --stone-50: 250 250 249;

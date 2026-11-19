@@ -1,0 +1,52 @@
+# Builds the Shiv Counter Android app (shiv-counter/) on GitHub, so no shop computer
+# needs the Android tools. Runs on every push that changes the app, or by hand
+# (Actions > Build Shiv Counter > Run workflow). The signed file comes back as an
+# artifact:
+#   gh run download <run-id> -n shiv-counter -D shiv-counter-ci
+#
+# The app is a frame round shivhardware-counter.vercel.app, so a change to the
+# Counter's screens needs no new build: only a change to shiv-counter/ does.
+#
+# It is signed with the shop's one Shiv Counter key, so each build installs over
+# the last. The key and its password are the SHIV_COUNTER_KEYSTORE_B64 and
+# SHIV_COUNTER_KEYSTORE_PASSWORD secrets; a copy is kept on the shop PC in
+# Documents\Shiv Counter signing key. Nothing here can write anywhere.
+name: Build Shiv Counter
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'shiv-counter/**'
+      - '.github/workflows/build-shiv-counter.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shiv-counter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: The signing key
+        env:
+          KEY_B64: ${{ secrets.SHIV_COUNTER_KEYSTORE_B64 }}
+          KEY_PASSWORD: ${{ secrets.SHIV_COUNTER_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEY_B64" ]; then echo "::warning::No signing key secret: this build is signed with a throwaway key and will not install over the shop's app."; exit 0; fi
+          printf '%s' "$KEY_B64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/shiv-counter.jks"
+          echo "SHIV_COUNTER_KEYSTORE=$RUNNER_TEMP/shiv-counter.jks" >> "$GITHUB_ENV"
+          echo "::add-mask::$(printf '%s' "$KEY_PASSWORD" | tr -d '\r\n')"
+          echo "SHIV_COUNTER_KEYSTORE_PASSWORD=$(printf '%s' "$KEY_PASSWORD" | tr -d '\r\n')" >> "$GITHUB_ENV"
+      - run: chmod +x gradlew && ./gradlew --no-daemon assembleRelease
+      - run: cp app/build/outputs/apk/release/app-release.apk Shiv_Counter.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shiv-counter
+          path: shiv-counter/Shiv_Counter.apk

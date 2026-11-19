@@ -1,9 +1,9 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import {
-  Calculator, CarTaxiFront, ClipboardList, CreditCard, FileText, History, IndianRupee, Inbox, Package, ScrollText, ShieldCheck,
-} from 'lucide-react'
+import { House } from 'lucide-react'
 import { ClaimsBadge } from '../features/guarantee/GuaranteeClaims'
+import { inPosApp } from '../lib/posApp'
+import { ALL_ROWS, NAV, owns } from './counterNav'
 import { Toaster } from './Toast'
 
 /**
@@ -24,55 +24,16 @@ import { Toaster } from './Toast'
  * ruled off in black, the page you are on in black, no dark mode.
  */
 
-const NAV = [
-  {
-    label: 'Quotations',
-    items: [
-      { to: '/quote-options', label: 'Quote', icon: FileText },
-      { to: '/history', label: 'Quote history', icon: History },
-      // The handwritten slip, for the customer: nothing goes in the books.
-      { to: '/slip', label: 'Slip', icon: ScrollText },
-    ],
-  },
-  {
-    label: 'Guarantee',
-    items: [
-      { to: '/guarantee/card', label: 'Card', icon: ShieldCheck },
-      { to: '/guarantee/backs', label: 'Card backs', icon: CreditCard },
-      { to: '/guarantee/list', label: 'To make', icon: ClipboardList },
-      { to: '/guarantee/history', label: 'Card history', icon: History },
-      { to: '/guarantee/claims', label: 'Claims', icon: Inbox, badge: true },
-    ],
-  },
-  {
-    label: 'Shop',
-    items: [
-      { to: '/inventory', label: 'Inventory', icon: Package },
-      { to: '/rates', label: 'Rates', icon: IndianRupee },
-      { to: '/aluminium-rates', label: 'Aluminium rates', icon: Calculator },
-      { to: '/transport', label: 'Toto', icon: CarTaxiFront },
-    ],
-  },
-]
-
 // The phone's bottom bar shows four rows before a swipe: Quote, its history,
 // Card, and the card history moved up beside it. Slip follows them.
 const CARD = '/guarantee/card'
 const CARD_HISTORY = '/guarantee/history'
 const SLIP = '/slip'
-const ALL_ROWS = NAV.flatMap((area) => area.items)
 const PHONE_FIRST = ['/quote-options', '/history', CARD, CARD_HISTORY, SLIP]
 const PHONE_ROWS = [
   ...PHONE_FIRST.flatMap((to) => ALL_ROWS.filter((item) => item.to === to)),
   ...ALL_ROWS.filter((item) => !PHONE_FIRST.includes(item.to)),
 ]
-
-/** Which entry the address belongs to, so a deep link still lights its row. */
-const owns = (to: string, pathname: string) => {
-  if (to === '/quote-options') return /^\/(quote|product)/.test(pathname)
-  if (to === '/history') return pathname.startsWith('/history')
-  return pathname.startsWith(to)
-}
 
 // Claims (and their badge) read the cloud, so they only mount when it is configured.
 const convexReady = Boolean(import.meta.env.VITE_CONVEX_URL)
@@ -163,6 +124,22 @@ export function CounterLayout() {
           the foot of the screen, over the iPhone's home bar strip, with only
           part of that strip kept clear under their labels: the bar used to sit
           on an empty white band. */}
+      {inPosApp ? (
+        // The Android app's foot: one big Home button back to the tiles
+        // (PosHome), in place of the swipe bar. Not on the tiles themselves.
+        pathname === '/pos' ? null : (
+          <nav className="no-print flex flex-none border-t-4 border-stone-900 bg-white">
+            <NavLink
+              to="/pos"
+              style={{ touchAction: 'manipulation' }}
+              className="flex min-h-[4.5rem] flex-1 items-center justify-center gap-3 font-[family-name:var(--sign)] text-2xl font-extrabold uppercase tracking-wide text-stone-900 active:bg-stone-100"
+            >
+              <House size={30} strokeWidth={2.6} />
+              Home
+            </NavLink>
+          </nav>
+        )
+      ) : (
       <nav
         ref={bar}
         className="no-print flex flex-none snap-x snap-mandatory overflow-x-auto overscroll-x-contain border-t-4 border-stone-900 bg-white [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
@@ -185,6 +162,7 @@ export function CounterLayout() {
           </NavLink>
         ))}
       </nav>
+      )}
       </div>
 
       <Toaster />

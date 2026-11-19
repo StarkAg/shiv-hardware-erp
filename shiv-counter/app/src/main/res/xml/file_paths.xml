@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The two folders MainActivity shares files from: camera photos and pictures to send. -->
+<paths>
+    <cache-path name="camera" path="camera/" />
+    <cache-path name="share" path="share/" />
+</paths>
