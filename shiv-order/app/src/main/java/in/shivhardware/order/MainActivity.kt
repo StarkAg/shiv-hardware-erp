@@ -116,10 +116,6 @@ class MainActivity : Activity() {
         savedInstanceState?.getString("camera")?.let { cameraFile = File(it) }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         root = FrameLayout(this).apply { setBackgroundColor(WHITE) }
-        WindowInsetsControllerCompat(window, root).apply {
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
-        }
         // Clear of the bars and of the keyboard.
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
@@ -127,6 +123,12 @@ class MainActivity : Activity() {
             WindowInsetsCompat.CONSUMED
         }
         setContentView(root)
+        // Only once the screen is set: before it, the window has no view to ask,
+        // and 1.0 closed on every open (19 Nov 2026).
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
         if (Shop.token(this) == null) showPin() else showOrder()
         showLastCrash()
     }
