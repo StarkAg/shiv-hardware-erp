@@ -495,3 +495,56 @@ kbd { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid
   .matbig b { font-size: 60px; }
 }
 @media (prefers-reduced-motion: reduce) { .themebtn:active, .primbtn:active:not(:disabled), .ghostbtn:active:not(:disabled), .padkey:active { transform: none; } }
+
+/* ── The three copies of the work order (WorkOrder.jsx COPIES, Sheet) ──────
+   The printed pad at its true size, 230.8 x 270.8 mm, every line where the
+   pad has it (positions in WorkOrder.jsx), on the pad's own colour: pink for
+   the customer, white for the shop, yellow for the workshop. What the pad has
+   printed is black; what is filled in is blue, in a plain computer face. The
+   screen shows the customer's copy, zoomed to fit; print gives one A4 per
+   copy at --print-zoom. */
+.padfit { margin-top: 14px; overflow: hidden; }
+.pad { --pad: #fff; --print: #1c1c1c; --pen: #1b3fae;
+  position: relative; box-sizing: border-box; overflow: hidden; zoom: var(--zoom, 1);
+  background: var(--pad); color: var(--print); border: 1px solid var(--line);
+  font-family: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif; }
+.copy-customer { --pad: #f7a9d1; }
+.copy-shop { --pad: #ffffff; }
+.pad .plogo { position: absolute; object-fit: contain; }
+.copy-workshop { --pad: #f8f27c; }
+
+.padt { position: absolute; line-height: 1; white-space: nowrap; }
+.padl { position: absolute; background: var(--print); }
+.padl.dbl { background: none; border-top: 0.35mm solid var(--pen); border-bottom: 0.35mm solid var(--pen); }
+.pad .ink { color: var(--pen); font-family: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif; font-weight: 600; }
+.pi { font-weight: 700; font-style: italic; }
+.pb { font-weight: 700; }
+.pb i { font-style: italic; }
+.pphone { font-weight: 700; letter-spacing: 2.25mm; }
+.pshop { font-weight: 900; font-style: italic; letter-spacing: .2mm; }
+
+.pstrong { font-weight: 800; }
+.pcopy { color: rgba(28, 28, 28, .55); font-weight: 700; text-transform: uppercase; letter-spacing: .3mm; }
+.plogo { position: absolute; }
+/* Under an amount, the pen's rule: blue, not the pad's black. */
+.pad .padl.pen:not(.dbl) { background: var(--pen); }
+
+.padsketch { position: absolute; display: flex; align-items: flex-start; justify-content: center; }
+/* The doors as large as the pad's hand drawings. */
+.padsketch .sketchgrid { zoom: 2.35; flex-wrap: nowrap; gap: 0 60px; margin-top: 0; align-items: flex-start; }
+.pad .padsketch .opnote { font-size: 7px; max-width: 120px; }
+.pad .padsketch .opframe, .pad .padsketch .ophinge, .pad .padsketch .ophandle { stroke: var(--pen); }
+.pad .padsketch .ophinge, .pad .padsketch .ophandle, .pad .padsketch .oplabel { fill: var(--pen); }
+.pad .padsketch .opsub, .pad .padsketch .opnum { fill: var(--pen); }
+.pad .padsketch .opw, .pad .padsketch .oph, .pad .padsketch .opnote { color: var(--pen); font-family: Arial, sans-serif; font-weight: 600; }
+
+.copyextra { display: none; }
+.copiesnote { margin-top: 8px; }
+
+@media print {
+  .copiesnote { display: none !important; }
+  .copyextra { display: block; }
+  .padfit { margin: 0 auto !important; overflow: visible; }
+  .pad { zoom: var(--print-zoom) !important; border: none !important; margin: 0 auto; background: var(--pad) !important; }
+  .padfit:has(.copy-customer), .padfit:has(.copy-shop) { break-after: page; page-break-after: always; }
+}
