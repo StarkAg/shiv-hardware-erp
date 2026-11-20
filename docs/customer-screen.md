@@ -38,3 +38,23 @@ Start a sale in the first; the second follows.
 
 In the desktop app on one screen:
 `SHIV_CUSTOMER_SCREEN=window npm run desktop:dev`.
+
+## Bills typed on the phone POS
+
+The Shiv Counter Android app has a BILL tile on its home screen (since
+2026-11-20). It opens the panel's own bill form and day book
+(`BillBuilder`, routes `/bills`, `/day` in `src/counter.tsx`, only inside the
+app), saving to the same books through Convex, with the post and photo queues
+running as on the PC. Ledger links from the form come back to the day book.
+
+The phone has no customer-facing screen of its own, so its bill form also
+sends what it shows to Convex (`convex/customerScreen.ts`, one row, newest
+wins, one call at a time). The counter's customer screen listens to that row
+as well as to its own PC:
+
+- whichever device sent the last bill or thanks is on screen;
+- an "idle" (a form closed) only clears the screen if it came from the device
+  on screen, so the phone leaving its form never blanks a PC bill, or back;
+- a phone bill older than 10 minutes is not shown when the screen opens;
+- a cloud fault switches off only the phone feed (`QuietFail`), never the
+  screen.

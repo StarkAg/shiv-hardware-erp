@@ -17,6 +17,8 @@
  * form tells it.
  */
 import type { BillItem } from './types'
+import { anyApi } from 'convex/server'
+import { inPosApp } from './posApp'
 
 export type CustomerLine = {
   id: string
@@ -55,6 +57,42 @@ export function showOnCustomerScreen(state: CustomerScreenState) {
   try { localStorage.setItem(KEPT, json) } catch { /* private window */ }
   try { open()?.postMessage(state) } catch { /* closed */ }
   try { window.shivDesktop?.customerScreen?.send(state) } catch { /* old shell */ }
+  // The phone POS has no screen of its own facing the customer: it sends the
+  // bill through the cloud to the counter's (convex/customerScreen.ts).
+  if (inPosApp) toCloud(state)
+}
+
+/** How long a bill put in the cloud by the phone is still worth showing. */
+export const PHONE_FRESH_MS = 10 * 60_000
+
+let cloudNext: CustomerScreenState | null = null
+let cloudBusy = false
+
+/**
+ * One call at a time, always the newest state: a fast typist's keystrokes
+ * collapse into whatever is on the form when the last call answers, and an
+ * older line can never land after a newer one.
+ */
+function toCloud(state: CustomerScreenState) {
+  cloudNext = state
+  if (cloudBusy) return
+  cloudBusy = true
+  void (async () => {
+    try {
+      const { convexHttp, withTimeout } = await import('./convexSync')
+      while (cloudNext) {
+        const sending = cloudNext
+        cloudNext = null
+        const client = convexHttp()
+        if (!client) break
+        try {
+          await withTimeout(client.mutation(anyApi.customerScreen.show, { state: sending, from: 'phone' }), 8000)
+        } catch { /* no signal: the next change tries again */ }
+      }
+    } finally {
+      cloudBusy = false
+    }
+  })()
 }
 
 /** What the customer screen should show right now, from wherever it comes. */

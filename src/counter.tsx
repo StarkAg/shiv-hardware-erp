@@ -96,6 +96,27 @@ document.addEventListener(
   { passive: true, capture: true },
 )
 
+/**
+ * The sale bill, on the phone POS only.
+ *
+ * The panel's own bill form and day book (features/bills/BillBuilder), saving
+ * to the same books through the same cloud as the PC. Loaded on first use, and
+ * only inside the Android app: the PC Counter and the website never fetch it.
+ * Its links to an account's ledger come back to the day book, the ledger pages
+ * being the panel's.
+ */
+const BillBuilder = React.lazy(() => import('./features/bills/BillBuilder').then((m) => ({ default: m.BillBuilder })))
+const bill = <React.Suspense fallback={null}><BillBuilder /></React.Suspense>
+const billRoutes = inPosApp
+  ? [
+      { path: 'day', element: bill },
+      { path: 'bills', element: bill },
+      { path: 'bills/voucher/:voucherId', element: bill },
+      { path: 'bills/:id', element: bill },
+      { path: 'ledger/*', element: <Navigate to="/day" replace /> },
+    ]
+  : []
+
 const router = createHashRouter([
   {
     path: '/',
@@ -104,6 +125,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <Navigate to={START} replace /> },
       { path: 'pos', element: <PosHome /> },
+      ...billRoutes,
       { path: 'quote-options', element: <QuotationOptions /> },
       { path: 'quote', element: <QuotationBuilder /> },
       { path: 'quote/:id', element: <QuotationBuilder /> },
@@ -168,6 +190,12 @@ const app = convex
 // (or synced) starts from the empty defaults. A failed read draws anyway.
 void hydrateStore().catch(() => undefined).then(() => {
   useStore.getState().normalizeCustomerNames()
+  // A bill saved on the phone goes to the books, and its photos with it, in
+  // the background, as on the PC (main.tsx).
+  if (inPosApp) {
+    void import('./lib/postOutbox').then((m) => m.startPostOutbox())
+    void import('./lib/billPhotoOutbox').then((m) => m.startBillPhotoOutbox())
+  }
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>{app}</React.StrictMode>,
   )

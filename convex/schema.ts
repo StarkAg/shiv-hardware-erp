@@ -138,6 +138,15 @@ export default defineSchema({
     heldAt: v.number(),      // refreshed while the editor is open; stale = free
   }).index('by_bill', ['billId']),
 
+  // ── The customer's screen, fed from the phone POS (customerScreen.ts) ────
+  // One row: what the phone's bill form shows, for the counter's second display.
+  customerScreen: defineTable({
+    key: v.string(),
+    state: v.any(),
+    from: v.string(),
+    at: v.number(),
+  }).index('by_key', ['key']),
+
   // ── Toto driver contacts (single-row snapshot) ────────────────────────────
   totoStore: defineTable({
     drivers: v.array(v.any()),

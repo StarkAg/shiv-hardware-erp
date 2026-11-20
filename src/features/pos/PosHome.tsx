@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { ReceiptIndianRupee } from 'lucide-react'
 import { ClaimsBadge } from '../guarantee/GuaranteeClaims'
 import { ALL_ROWS, NAV, type NavItem } from '../../components/counterNav'
 
@@ -35,6 +36,15 @@ export function PosHome() {
       </header>
 
       <div className="grid grid-cols-3 gap-2 p-3">
+        {/* The sale bill: the PC's own bill form, saving to the same books (counter.tsx). */}
+        <Link
+          to="/bills?new=sale"
+          style={{ touchAction: 'manipulation' }}
+          className="col-span-3 flex min-h-[7rem] items-center justify-center gap-4 bg-shiv-green text-white active:translate-y-0.5"
+        >
+          <ReceiptIndianRupee size={48} strokeWidth={2.4} />
+          <span className="font-[family-name:var(--sign)] text-4xl font-extrabold uppercase leading-none tracking-wide">Bill</span>
+        </Link>
         {makeTiles.map((item) => (
           <Link
             key={item.to}

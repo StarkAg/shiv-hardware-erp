@@ -10,9 +10,11 @@
  * stylesheet, fetched into the panel's own window too by preloadPages, leaves
  * the panel alone.
  */
-import { useEffect, useRef, useState } from 'react'
+import { Component, useEffect, useRef, useState, type ReactNode } from 'react'
 import QRCode from 'qrcode'
-import { onCustomerScreen, type CustomerScreenState } from '../../lib/customerDisplay'
+import { useQuery } from 'convex/react'
+import { anyApi } from 'convex/server'
+import { onCustomerScreen, PHONE_FRESH_MS, type CustomerScreenState } from '../../lib/customerDisplay'
 import { assetPath } from '../../lib/assets'
 import './customer-screen.css'
 
@@ -29,10 +31,52 @@ const money = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximum
 const whole = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 })
 const rs = (n: number) => `₹${money.format(n)}`
 
+/** Where a state came from: this PC's bill form, or the phone POS through the cloud. */
+type Source = 'here' | 'phone'
+type Take = (next: CustomerScreenState, source: Source) => void
+
+// The cloud feed (the phone POS's bills) needs Convex, which main.tsx only
+// provides when the deployment's address is set.
+const cloudReady = Boolean((import.meta.env.VITE_CONVEX_URL as string | undefined)?.trim())
+
+/**
+ * What the phone POS put in the cloud (convex/customerScreen.ts). A stale
+ * row, from a bill typed long ago, is not shown when the screen opens.
+ */
+function PhoneFeed({ take }: { take: Take }) {
+  const row = useQuery(anyApi.customerScreen.current, {}) as
+    | { state: CustomerScreenState; at: number }
+    | null
+    | undefined
+  const seen = useRef(0)
+  useEffect(() => {
+    if (!row || row.at === seen.current) return
+    seen.current = row.at
+    if (Date.now() - row.at > PHONE_FRESH_MS) return
+    take(row.state, 'phone')
+  }, [row, take])
+  return null
+}
+
+/**
+ * A cloud fault (no signal, or the functions not deployed yet) stops only the
+ * phone's feed. This PC's own bills keep showing.
+ */
+class QuietFail extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch() { /* the screen goes on without the phone */ }
+  render() { return this.state.failed ? null : this.props.children }
+}
+
 function useScreenState() {
   const [state, setState] = useState<CustomerScreenState>({ mode: 'idle' })
   const thanksUntil = useRef(0)
-  useEffect(() => onCustomerScreen((next) => {
+  const shownFrom = useRef<Source>('here')
+  const take = useRef<Take>((next, source) => {
+    // A form closing on one device says "idle"; that must not blank a bill
+    // the other device is typing. Only the device on screen can clear it.
+    if (next.mode === 'idle' && source !== shownFrom.current) return
     if (next.mode === 'thanks') thanksUntil.current = Date.now() + THANKS_MS
     // The bill form goes back to its list as it saves, which says "idle" a
     // moment after "thanks"; thanks stays. A new bill with a line ends it.
@@ -41,8 +85,10 @@ function useScreenState() {
       if (!started) return
       thanksUntil.current = 0
     }
+    shownFrom.current = source
     setState(next)
-  }), [])
+  }).current
+  useEffect(() => onCustomerScreen((next) => take(next, 'here')), [take])
   // Back to the shop's name once thanks has been read.
   useEffect(() => {
     if (state.mode !== 'thanks') return
@@ -52,7 +98,7 @@ function useScreenState() {
     }, THANKS_MS)
     return () => clearTimeout(t)
   }, [state])
-  return state
+  return { state, take }
 }
 
 function UpiCode({ total }: { total: number }) {
@@ -90,7 +136,16 @@ function Header({ right }: { right?: string }) {
 }
 
 export function CustomerScreen() {
-  const state = useScreenState()
+  const { state, take } = useScreenState()
+  return (
+    <>
+      {cloudReady && <QuietFail><PhoneFeed take={take} /></QuietFail>}
+      <Screen state={state} />
+    </>
+  )
+}
+
+function Screen({ state }: { state: CustomerScreenState }) {
 
   // Hide the pointer: nobody works this screen.
   useEffect(() => {

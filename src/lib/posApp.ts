@@ -20,7 +20,12 @@ declare global {
   interface Window { ShivCounterAndroid?: AndroidBridge }
 }
 
-export const inPosApp = typeof navigator !== 'undefined' && /ShivCounterApp\//.test(navigator.userAgent)
+export const inPosApp = typeof navigator !== 'undefined' && (
+  /ShivCounterApp\//.test(navigator.userAgent) ||
+  // Trying the POS look in a phone's browser against `npm run dev`:
+  // http://<pc>:5180/counter.html?pos#/pos. Never in a build.
+  (import.meta.env.DEV && /[?&]pos\b/.test(location.search))
+)
 
 const bridge = () => (typeof window !== 'undefined' ? window.ShivCounterAndroid : undefined)
 
