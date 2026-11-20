@@ -87,7 +87,7 @@ export default function WorkOrder({ job, onChange, onPrint, onAdvance, onDeliver
         />
       ))}
       <div className="note copiesnote">
-        Prints {COPIES.length} pages: {COPIES.map((c) => `${c.label} (${c.colour})`).join(', ')}.
+        Prints {COPIES.length} pages, no colour: load {COPIES.map((c) => c.colour).join(', ')} paper, in that order.
       </div>
 
       <div className="actions stack">
@@ -138,6 +138,10 @@ const FIELDS = [
   { label: 'Delivery Date', y: 113.9, from: 44.5, key: 'deliveryDate' },
 ]
 const FIELD_END = 116
+/** The logo stands beside the shop's name, from the name's cap line to the address's baseline. */
+const LOGO_TOP = 45.4
+const LOGO_H = 61.6 - LOGO_TOP
+const LOGO_X = 31 - 2.6 - LOGO_H * 154 / 174
 
 /** Amounts as the pad writes them: whole rupees, no sign, no commas. */
 const plain = (n) => String(Math.round(Number(n) || 0))
@@ -213,6 +217,52 @@ export function printPads(print) {
   print()
 }
 
+/** The drawings at their largest, up to the pad's hand-drawn size. */
+const SKETCH_ZOOM_MAX = 2.35
+
+/**
+ * The bottom half: every opening drawn, all of it on the pad. The drawings
+ * are as large as the pad's hand drawings when there is room, and come down
+ * together until the widest row and the tallest box both fit, never cut off
+ * at an edge. Many openings go onto two rows rather than becoming specks.
+ */
+function PadSketch({ openings, style }) {
+  const box = useRef(null)
+  // `row`: in two rows, how wide a row may run, in px at zoom 1.
+  const [fit, setFit] = useState({ zoom: 1, wrap: false, row: 0, ready: false })
+  const key = openings.map((o) => `${o.id}:${o.form}:${o.fill}:${o.qty}:${o.w?.inches}/${o.w?.soot}x${o.h?.inches}/${o.h?.soot}`).join('|')
+  useLayoutEffect(() => {
+    setFit({ zoom: 1, wrap: false, row: 0, ready: false })
+  }, [key])
+  useLayoutEffect(() => {
+    if (fit.ready) return
+    const el = box.current
+    const grid = el?.querySelector('.sketchgrid')
+    if (!el || !grid) return
+    // Layout sizes, all at zoom 1 inside the same pad, so the pad's own zoom cancels out.
+    const w = grid.offsetWidth
+    const h = grid.offsetHeight
+    if (!w || !h) return
+    const zoom = Math.min(SKETCH_ZOOM_MAX, el.clientWidth / w, el.clientHeight / h) * 0.98
+    // One row too small to read: two rows, each a little over half as long, measured again.
+    if (!fit.wrap && zoom < 1.5 && openings.length > 2) {
+      setFit({ zoom: 1, wrap: true, row: Math.ceil(w * 0.56), ready: false })
+      return
+    }
+    setFit({ ...fit, zoom, ready: true })
+  }, [fit, openings.length])
+  return (
+    <div ref={box} className="padsketch ink" style={style}>
+      <div
+        className={`padsketchin${fit.wrap ? ' rows2' : ''}`}
+        style={{ zoom: fit.zoom, visibility: fit.ready ? 'visible' : 'hidden', width: fit.wrap ? fit.row : undefined }}
+      >
+        <SketchGrid openings={openings} />
+      </div>
+    </div>
+  )
+}
+
 export function Sheet({ copy, extra, job, order, lines, fare, total, adv, balance }) {
   // On the screen the true-size sheet is zoomed to the width it has.
   const box = useRef(null)
@@ -265,8 +315,9 @@ export function Sheet({ copy, extra, job, order, lines, fare, total, adv, balanc
         <At x={24.5} base={25.6} size={8.6} className="pphone">8092850954</At>
         <At x={97.5} base={26.4} size={4.7} className="pi">Tony</At>
         <At right={107.5} base={33.2} size={4.2} className="pb">8092850956 <i>Vijay</i></At>
-        {/* The shop's own logo (the letterhead's), 154 x 174 as drawn. */}
-        <img className="plogo" src="/shiv-logo.png" alt="" style={{ left: mm(15), top: mm(36), width: mm(12.4), height: mm(12.4 * 174 / 154) }} />
+        {/* The shop's own logo (the letterhead's), 154 x 174 as drawn: as tall
+            as the name and its two address lines beside it, as the letterhead sets it. */}
+        <img className="plogo" src="/shiv-logo.png" alt="" style={{ left: mm(LOGO_X), top: mm(LOGO_TOP), width: mm(LOGO_H * 154 / 174), height: mm(LOGO_H) }} />
         <At x={31} base={50.6} size={6.3} className="pshop">Shiv Hardware Store</At>
         <At x={31} base={56.2} size={4.15} className="pi">Shivaji Road, Near Gandhi High School</At>
         <At x={31} base={61.6} size={4.15} className="pi">Ramgarh Cantt- 829122 Jharkhand</At>
@@ -304,9 +355,7 @@ export function Sheet({ copy, extra, job, order, lines, fare, total, adv, balanc
         })}
 
         {/* The sketches: the bottom half. */}
-        <div className="padsketch ink" style={{ left: mm(8), top: mm(SPLIT_Y + 5), width: mm(PAD_W - 16), height: mm(PAD_H - SPLIT_Y - 12) }}>
-          <SketchGrid openings={job.openings || []} />
-        </div>
+        <PadSketch openings={job.openings || []} style={{ left: mm(13), top: mm(SPLIT_Y + 6), width: mm(PAD_W - 26), height: mm(PAD_H - SPLIT_Y - 14) }} />
         <At right={223} base={267.5} size={2.6} className="pcopy">{copy.label}</At>
       </div>
     </div>

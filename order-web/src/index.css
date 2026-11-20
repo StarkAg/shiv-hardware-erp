@@ -501,8 +501,9 @@ kbd { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid
    pad has it (positions in WorkOrder.jsx), on the pad's own colour: pink for
    the customer, white for the shop, yellow for the workshop. What the pad has
    printed is black; what is filled in is blue, in a plain computer face. The
-   screen shows the customer's copy, zoomed to fit; print gives one A4 per
-   copy at --print-zoom. */
+   screen shows the customer's copy in its full pad colour, zoomed to fit.
+   Print gives one A4 per copy at --print-zoom with no colour of its own: it
+   goes onto the shop's pink, white and yellow paper, loaded in that order. */
 .padfit { margin-top: 14px; overflow: hidden; }
 .pad { --pad: #fff; --print: #1c1c1c; --pen: #1b3fae;
   position: relative; box-sizing: border-box; overflow: hidden; zoom: var(--zoom, 1);
@@ -530,8 +531,13 @@ kbd { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid
 .pad .padl.pen:not(.dbl) { background: var(--pen); }
 
 .padsketch { position: absolute; display: flex; align-items: flex-start; justify-content: center; }
-/* The doors as large as the pad's hand drawings. */
-.padsketch .sketchgrid { zoom: 2.35; flex-wrap: nowrap; gap: 0 60px; margin-top: 0; align-items: flex-start; }
+/* The doors as large as the pad's hand drawings; PadSketch (WorkOrder.jsx)
+   brings them down together until all of them fit. */
+.padsketch .sketchgrid { flex-wrap: nowrap; gap: 0 26px; margin-top: 0; align-items: flex-start; justify-content: center; }
+.padsketchin.rows2 .sketchgrid { flex-wrap: wrap; gap: 14px 26px; }
+.padsketchin { flex: none; display: flex; justify-content: center; }
+.padsketchin .sketchgrid { flex: none; }
+.padsketchin.rows2 .sketchgrid { flex: 1 1 auto; }
 .pad .padsketch .opnote { font-size: 7px; max-width: 120px; }
 .pad .padsketch .opframe, .pad .padsketch .ophinge, .pad .padsketch .ophandle { stroke: var(--pen); }
 .pad .padsketch .ophinge, .pad .padsketch .ophandle, .pad .padsketch .oplabel { fill: var(--pen); }
@@ -545,6 +551,6 @@ kbd { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid
   .copiesnote { display: none !important; }
   .copyextra { display: block; }
   .padfit { margin: 0 auto !important; overflow: visible; }
-  .pad { zoom: var(--print-zoom) !important; border: none !important; margin: 0 auto; background: var(--pad) !important; }
+  .pad { zoom: var(--print-zoom) !important; border: none !important; margin: 0 auto; background: none !important; }
   .padfit:has(.copy-customer), .padfit:has(.copy-shop) { break-after: page; page-break-after: always; }
 }
