@@ -141,8 +141,7 @@ class MainActivity : Activity() {
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             try {
                 getSharedPreferences("crash", Context.MODE_PRIVATE).edit()
-                    .putString("last", "Shiv Order ${BuildConfig.VERSION_NAME}
-" + android.util.Log.getStackTraceString(e).take(4000))
+                    .putString("last", "Shiv Order ${BuildConfig.VERSION_NAME}\n" + android.util.Log.getStackTraceString(e).take(4000))
                     .commit()
             } catch (_: Throwable) { }
             before?.uncaughtException(t, e)
@@ -155,9 +154,7 @@ class MainActivity : Activity() {
         crashes.edit().remove("last").apply()
         AlertDialog.Builder(this)
             .setTitle("The app closed last time")
-            .setMessage("Take a screenshot of this and send it to Tony's computer.
-
-$last")
+            .setMessage("Take a screenshot of this and send it to Tony's computer.\n\n$last")
             .setPositiveButton("OK", null)
             .show()
     }
