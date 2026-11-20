@@ -6,7 +6,9 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { fyOf, round2, signed } from "./lib/money";
 import { record, money } from "./lib/history";
 import { nextVoucherNo } from "./lib/numbering";
-import { writeLines } from "./lib/entries";
+import { clearLines, writeLines } from "./lib/entries";
+import { trashVoucher } from "./vouchers";
+import { readBills, writeBills } from "./lib/billRows";
 import { properText } from "./lib/text";
 
 /**
@@ -215,6 +217,16 @@ export const board = query({
           const paidInMonth = lines
             .filter((l) => l.side === "Dr" && l.date >= from && l.date < until)
             .reduce((t, l) => t + l.amount, 0);
+          // Month by month: what fell due in it and what was handed over in it.
+          const byMonth = new Map<string, { key: string; charged: number; paid: number }>();
+          for (const l of lines) {
+            const d = new Date(l.date);
+            const mk = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+            const at = byMonth.get(mk) ?? { key: mk, charged: 0, paid: 0 };
+            if (l.side === "Cr") at.charged = round2(at.charged + l.amount);
+            else at.paid = round2(at.paid + l.amount);
+            byMonth.set(mk, at);
+          }
           const net =
             signed(account.openingSide, account.openingBalance) +
             lines.reduce((t, l) => t + signed(l.side, l.amount), 0);
@@ -234,6 +246,7 @@ export const board = query({
             // Positive: the shop owes. Negative: paid ahead.
             due: round2(-net) + 0,
             months,
+            byMonth: [...byMonth.values()].sort((a, b) => a.key.localeCompare(b.key)),
           };
         })
       );
@@ -588,5 +601,186 @@ export const staffPaidDaily = internalMutation({
       entity: "monthly",
     });
     return { changed: true };
+  },
+});
+
+/**
+ * One landlord's premises made one account, the way the shop thinks of it:
+ * what is owed to the person, at one rent a month. Every voucher and line on
+ * the other accounts moves onto the one kept, their opening balances are
+ * added to its own, and months that fell due on more than one premises
+ * become one month at the sum (Oct 25,000 + 15,000 → Oct 40,000). The old
+ * accounts are closed, not deleted, so nothing that named them breaks.
+ *
+ * Look first, then do it:
+ *
+ *   npx convex run --prod monthly:mergeLandlord '{"into":"Advo Pramod Singh — Dues","from":["Shop","Back Down Godown"],"name":"Advo Pramod Singh","monthly":40000,"dryRun":true}'
+ */
+export const mergeLandlord = internalMutation({
+  args: {
+    into: v.string(),
+    from: v.array(v.string()),
+    name: v.string(),
+    monthly: v.number(),
+    dryRun: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const setup = await ensure(ctx);
+    const find = async (name: string) => {
+      const found = await ledgerNamed(ctx, name);
+      if (!found) throw new Error(`No ledger named ${name}`);
+      if (found.groupId !== setup.groups.rent) throw new Error(`${name} is not a rent account`);
+      return found;
+    };
+    const keep = await find(args.into);
+    const others = await Promise.all(args.from.map(find));
+    if (others.some((o) => o._id === keep._id)) throw new Error("An account cannot be merged into itself");
+    const name = properText(args.name);
+    const clash = await ledgerNamed(ctx, name);
+    if (clash && clash._id !== keep._id) throw new Error(`"${name}" already exists`);
+    const ids = new Set(others.map((o) => o._id as string));
+
+    // What else in the books names the old accounts, so nothing is left pointing at a closed one.
+    const bills = (await readBills(ctx)).filter((b: any) => b?.ledgerId && ids.has(String(b.ledgerId)));
+    const cash = (await ctx.db.query("cashEntries").collect()).filter((c) => c.ledgerId && ids.has(c.ledgerId));
+    if (cash.length) {
+      throw new Error(`Cash entries name these accounts — move those first: ${cash.map((c) => c._id).join(", ")}`);
+    }
+
+    const opening = round2(
+      [keep, ...others].reduce((t, l) => t + signed(l.openingSide, l.openingBalance), 0)
+    );
+    const moves: string[] = [];
+    const vouchers: Doc<"vouchers">[] = [];
+    for (const other of others) {
+      const list = await ctx.db
+        .query("vouchers")
+        .withIndex("by_party", (q) => q.eq("partyLedgerId", other._id))
+        .collect();
+      for (const vch of list) {
+        vouchers.push(vch);
+        moves.push(`${vch.voucherNo} ${vch.refNo ?? ""} ${money(vch.amount ?? 0)}: ${other.name} → ${name}`);
+      }
+      const lines = await ctx.db
+        .query("voucherEntries")
+        .withIndex("by_ledger", (q) => q.eq("ledgerId", other._id))
+        .collect();
+      // A line on the old account under a voucher that names another party.
+      for (const line of lines) {
+        if (!list.some((vch) => vch._id === line.voucherId)) {
+          throw new Error(`${other.name} has a line on a voucher that names someone else (${line.voucherId})`);
+        }
+      }
+    }
+
+    // The months, once each, at the sum of what fell due on every premises.
+    const kept = await ctx.db
+      .query("vouchers")
+      .withIndex("by_party", (q) => q.eq("partyLedgerId", keep._id))
+      .collect();
+    const months = new Map<string, Doc<"vouchers">[]>();
+    for (const vch of [...kept, ...vouchers]) {
+      if (vch.typeId !== setup.type._id || !vch.refNo) continue;
+      months.set(vch.refNo, [...(months.get(vch.refNo) ?? []), vch]);
+    }
+    const joined: string[] = [];
+    for (const [label, list] of months) {
+      if (list.length < 2) continue;
+      const total = round2(list.reduce((t, vch) => t + (vch.amount ?? 0), 0));
+      joined.push(`${label}: ${list.map((vch) => `${vch.voucherNo} ${money(vch.amount ?? 0)}`).join(" + ")} → ${money(total)}`);
+    }
+
+    const plan = {
+      account: `${keep.name} → ${name}, ${money(args.monthly)} a month`,
+      opening: `${money(Math.abs(opening))} ${opening < 0 ? "owed" : "ahead"} before`,
+      moves,
+      joined,
+      bills: bills.map((b: any) => `Bill ${b.number} (${b.kind ?? "bill"}, ${b.customerName ?? ""}) → ${name}`),
+      closed: others.map((o) => o.name),
+    };
+    if (args.dryRun) return plan;
+
+    const now = Date.now();
+    const payee = keep.payee ?? others.find((o) => o.payee)?.payee;
+    await ctx.db.patch(keep._id, {
+      name,
+      monthly: round2(args.monthly),
+      payee,
+      phone: keep.phone ?? others.find((o) => o.phone)?.phone,
+      openingBalance: Math.abs(opening),
+      openingSide: opening < 0 ? "Cr" : "Dr",
+      openingAsOf: Math.min(keep.openingAsOf, ...others.map((o) => o.openingAsOf)),
+      updatedAt: now,
+    });
+
+    // A bill saved at the counter carries its voucher's rev, and a save whose
+    // rev no longer matches is refused as changed elsewhere. Both move up
+    // together, so a copy opened before the move is refused and one opened
+    // after it saves.
+    const revs = new Map<string, number>();
+    for (const vch of vouchers) {
+      const rev = (vch.rev ?? 0) + 1;
+      revs.set(vch._id as string, rev);
+      await ctx.db.patch(vch._id, { partyLedgerId: keep._id, rev, updatedAt: now });
+      const lines = await ctx.db
+        .query("voucherEntries")
+        .withIndex("by_voucher", (q) => q.eq("voucherId", vch._id))
+        .collect();
+      for (const line of lines) {
+        if (ids.has(line.ledgerId)) await ctx.db.patch(line._id, { ledgerId: keep._id });
+      }
+      await record(ctx, "voucher.update", `${vch.voucherNo} moved to ${name}`, {
+        entity: "voucher",
+        entityId: vch._id,
+      });
+    }
+
+    // A payment made from the counter is a bill too; it follows its voucher.
+    if (bills.length) {
+      const oldNames = new Set(others.map((o) => o.name));
+      await writeBills(ctx, bills.map((b: any) => ({
+        ...b,
+        ledgerId: keep._id,
+        customerName: oldNames.has(b.customerName) ? name : b.customerName,
+        rev: revs.get(String(b.voucherId)) ?? b.rev,
+        updatedAt: now,
+      })));
+    }
+
+    for (const [label, list] of months) {
+      if (list.length < 2) continue;
+      const [first, ...rest] = list.sort((a, b) => a._creationTime - b._creationTime);
+      const total = round2(list.reduce((t, vch) => t + (vch.amount ?? 0), 0));
+      for (const vch of rest) await trashVoucher(ctx, vch._id);
+      await ctx.db.patch(first._id, { amount: total, updatedAt: now });
+      await clearLines(ctx, first._id);
+      await writeLines(ctx, first._id, first.date, [
+        { ledgerId: setup.expense.rent, side: "Dr", amount: total },
+        { ledgerId: keep._id, side: "Cr", amount: total },
+      ]);
+      await record(ctx, "voucher.update", `${first.voucherNo} ${label} rent for ${name} is ${money(total)}`, {
+        entity: "voucher",
+        entityId: first._id,
+      });
+    }
+
+    for (const other of others) {
+      await ctx.db.patch(other._id, {
+        active: false,
+        monthly: 0,
+        openingBalance: 0,
+        notes: `Merged into ${name} on ${new Date(now).toISOString().slice(0, 10)}.`,
+        updatedAt: now,
+      });
+    }
+
+    await record(
+      ctx,
+      "monthly.merge",
+      `Made ${[keep.name, ...others.map((o) => o.name)].join(", ")} one rent account, ${name}, ` +
+        `${money(args.monthly)} a month`,
+      { entity: "ledger", entityId: keep._id, detail: plan }
+    );
+    return plan;
   },
 });

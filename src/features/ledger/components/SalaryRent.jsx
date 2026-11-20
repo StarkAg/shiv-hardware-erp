@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useMutation } from 'convex/react';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { rupees, phoneDisplay, phoneHref, inputDate, today, fromInputDate } from '../lib/format';
@@ -18,6 +18,20 @@ const shortOf = (key) => {
   const [y, m] = key.split('-').map(Number);
   return `${MONTHS[m - 1].slice(0, 3)} ${y}`;
 };
+
+/** "Oct '26": a month as a column heads it. */
+const colOf = (key) => shortOf(key).replace(/ 20(\d\d)$/, " '$1");
+
+/** The four months up to the one picked, oldest first — the columns. */
+function monthsUpTo(key, count = 4) {
+  const [y, m] = key.split('-').map(Number);
+  const out = [];
+  for (let back = count - 1; back >= 0; back--) {
+    const d = new Date(y, m - 1 - back, 1);
+    out.push(keyOf(d.getFullYear(), d.getMonth()));
+  }
+  return out;
+}
 
 /** This month, the eleven before it and the next — what anyone would charge. */
 function monthChoices() {
@@ -50,8 +64,10 @@ const SECTIONS = [
 
 /**
  * Salaries and rents — what falls due every month, what has been handed over,
- * and what is still owed on each. A month is charged to everyone at once;
- * paying is an ordinary payment against the one account.
+ * and what is still owed on each, laid out month by month: a rent shows each
+ * month's rent and what was paid in it, a salary what was paid in it. A month
+ * is charged to everyone at once; paying is an ordinary payment against the
+ * one account. A landlord letting the shop several premises is one account.
  */
 export default function SalaryRent({ onOpen, onPay }) {
   const choices = monthChoices();
@@ -61,8 +77,6 @@ export default function SalaryRent({ onOpen, onPay }) {
   const [editing, setEditing] = useState(null);
   const [flash, setFlash] = useState('');
   const [busy, setBusy] = useState('');
-  // Landlords whose premises are shown one by one under their row.
-  const [open, setOpen] = useState({});
   const chargeMonth = useMutation(api.monthly.chargeMonth);
 
   useEffect(() => {
@@ -100,79 +114,100 @@ export default function SalaryRent({ onOpen, onPay }) {
     }
   };
 
-  const rowFor = (section, r, extra = '') => (
-    <tr
-      key={r.ledgerId}
-      // Paid up — but only once something has fallen due;
-      // an account never charged is not settled, just new.
-      className={`clickable${extra}${
-        section.kind === 'rent' && Math.abs(r.due) < 0.005 && (r.charged > 0 || r.opening > 0) ? ' settled' : ''
-      }`}
-      onClick={() => onOpen(r.ledgerId)}
-    >
-      <td className="particulars" data-label={section.nameLabel}>
-        <div className="party">
-          {r.name}
-          <TagDots tags={r.tags} />
-        </div>
-        {(r.payee || r.phone) && (
-          <div className="ref">
-            {r.payee}
-            {r.payee && r.phone && ' · '}
-            {r.phone && (
-              <a
-                className="phone"
-                href={phoneHref(r.phone)}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {phoneDisplay(r.phone)}
-              </a>
-            )}
+  // Month by month, oldest first, ending at the month picked.
+  const cols = monthsUpTo(month);
+  const cellOf = (r, key) => (r.byMonth ?? []).find((m) => m.key === key) ?? { charged: 0, paid: 0 };
+  // Owed as the first month shown began: from before, and every month before it.
+  const carried = (r) => r.opening + (r.byMonth ?? [])
+    .filter((m) => m.key < cols[0])
+    .reduce((t, m) => t + m.charged - m.paid, 0);
+  const before = `Before ${colOf(cols[0])}`;
+
+  const rowFor = (section, r) => {
+    const rent = section.kind === 'rent';
+    const brought = carried(r);
+    const payee = r.payee && r.payee !== r.name ? r.payee : null;
+    return (
+      <tr
+        key={r.ledgerId}
+        // Paid up — but only once something has fallen due;
+        // an account never charged is not settled, just new.
+        className={`clickable${
+          rent && Math.abs(r.due) < 0.005 && (r.charged > 0 || r.opening > 0) ? ' settled' : ''
+        }`}
+        onClick={() => onOpen(r.ledgerId)}
+      >
+        <td className="particulars" data-label={section.nameLabel}>
+          <div className="party">
+            {r.name}
+            <TagDots tags={r.tags} />
           </div>
-        )}
-      </td>
-      <td className="num" data-label="Monthly">
-        <button
-          className="link"
-          title="Change the monthly figure"
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditing({ section, row: r });
-          }}
-        >
-          {rupees(r.monthly)}
-        </button>
-      </td>
-      {section.kind === 'staff' ? (
-        <>
-          <td className="num bal" data-label={`Paid · ${label}`}>{rupees(r.paidInMonth)}</td>
-          <td className="num" data-label="Paid in all">{rupees(r.paid)}</td>
-        </>
-      ) : (
-        <>
-          <td data-label="Charged">
-            <MonthRun row={r} />
+          {(payee || r.phone) && (
+            <div className="ref">
+              {payee}
+              {payee && r.phone && ' · '}
+              {r.phone && (
+                <a className="phone" href={phoneHref(r.phone)} onClick={(e) => e.stopPropagation()}>
+                  {phoneDisplay(r.phone)}
+                </a>
+              )}
+            </div>
+          )}
+        </td>
+        <td className="num" data-label="Monthly">
+          <button
+            className="link"
+            title="Change the monthly figure"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditing({ section, row: r });
+            }}
+          >
+            {rupees(r.monthly)}
+          </button>
+        </td>
+        {rent && (
+          <td className="num" data-label={before}>
+            {Math.abs(brought) < 0.005 ? <span className="mnone">—</span> : rupees(brought)}
           </td>
-          <td className="num" data-label="Paid">{rupees(r.paid)}</td>
+        )}
+        {cols.map((key) => {
+          const cell = cellOf(r, key);
+          return (
+            <td key={key} className={`num mcell${key === month ? ' now' : ''}`} data-label={colOf(key)}>
+              {rent ? (
+                <>
+                  {cell.charged > 0 ? <span className="mdue">{rupees(cell.charged)}</span> : <span className="mnone">—</span>}
+                  {cell.paid > 0 && <span className="mpaid">paid {rupees(cell.paid)}</span>}
+                </>
+              ) : cell.paid > 0 ? (
+                rupees(cell.paid)
+              ) : (
+                <span className="mnone">—</span>
+              )}
+            </td>
+          );
+        })}
+        {rent && (
           <td className="num bal" data-label="Owed">
             {rupees(Math.abs(r.due))}{' '}
             <span className="side">{r.due < 0 ? 'ahead' : ''}</span>
           </td>
-        </>
-      )}
-      <td className="rowacts" data-label="">
-        <button
-          className="btn small ghost"
-          onClick={(e) => {
-            e.stopPropagation();
-            onPay(r.ledgerId, section.kind === 'rent' && r.due > 0 ? r.due : undefined);
-          }}
-        >
-          Pay
-        </button>
-      </td>
-    </tr>
-  );
+        )}
+        <td className="rowacts" data-label="">
+          <button
+            className="btn small ghost"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPay(r.ledgerId, rent && r.due > 0 ? r.due : undefined);
+            }}
+          >
+            Pay
+          </button>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <>
@@ -246,51 +281,42 @@ export default function SalaryRent({ onOpen, onPay }) {
                       <tr>
                         <th>{section.nameLabel}</th>
                         <th className="num">Monthly</th>
-                        {section.kind === 'staff' ? (
-                          <>
-                            <th className="num">Paid · {label}</th>
-                            <th className="num">Paid in all</th>
-                          </>
-                        ) : (
-                          <>
-                            <th>Charged</th>
-                            <th className="num">Paid</th>
-                            <th className="num">Owed</th>
-                          </>
-                        )}
+                        {section.kind === 'rent' && <th className="num">{before}</th>}
+                        {cols.map((key) => (
+                          <th key={key} className={`num${key === month ? ' now' : ''}`}>
+                            {colOf(key)}
+                            {section.kind === 'staff' && <small className="mhead">paid</small>}
+                          </th>
+                        ))}
+                        {section.kind === 'rent' && <th className="num">Owed</th>}
                         <th />
                       </tr>
                     </thead>
                     <tbody>
-                      {(section.kind === 'rent' ? byLandlord(rows) : rows.map((r) => ({ row: r }))).map((item) =>
-                        item.row ? (
-                          rowFor(section, item.row)
-                        ) : (
-                          <React.Fragment key={item.key}>
-                            <LandlordRow
-                              group={item}
-                              open={!!open[item.key]}
-                              onToggle={() => setOpen((o) => ({ ...o, [item.key]: !o[item.key] }))}
-                            />
-                            {open[item.key] && item.rows.map((r) => rowFor(section, r, ' sub'))}
-                          </React.Fragment>
-                        )
-                      )}
+                      {rows.map((r) => rowFor(section, r))}
                       <tr className="opening">
                         <td data-label="">Total</td>
                         <td className="num" data-label="Monthly">{rupees(totals.monthly)}</td>
-                        {section.kind === 'staff' ? (
-                          <>
-                            <td className="num bal" data-label={`Paid · ${label}`}>{rupees(totals.paidInMonth ?? 0)}</td>
-                            <td className="num" data-label="Paid in all">{rupees(totals.paid)}</td>
-                          </>
-                        ) : (
-                          <>
-                            <td data-label="" />
-                            <td className="num" data-label="Paid">{rupees(totals.paid)}</td>
-                            <td className="num bal" data-label="Owed">{rupees(totals.due)}</td>
-                          </>
+                        {section.kind === 'rent' && (
+                          <td className="num" data-label={before}>{rupees(rows.reduce((t, r) => t + carried(r), 0))}</td>
                         )}
+                        {cols.map((key) => {
+                          const charged = rows.reduce((t, r) => t + cellOf(r, key).charged, 0);
+                          const paid = rows.reduce((t, r) => t + cellOf(r, key).paid, 0);
+                          return (
+                            <td key={key} className={`num mcell${key === month ? ' now' : ''}`} data-label={colOf(key)}>
+                              {section.kind === 'rent' ? (
+                                <>
+                                  {charged > 0 ? <span className="mdue">{rupees(charged)}</span> : <span className="mnone">—</span>}
+                                  {paid > 0 && <span className="mpaid">paid {rupees(paid)}</span>}
+                                </>
+                              ) : (
+                                rupees(paid)
+                              )}
+                            </td>
+                          );
+                        })}
+                        {section.kind === 'rent' && <td className="num bal" data-label="Owed">{rupees(totals.due)}</td>}
                         <td data-label="" />
                       </tr>
                     </tbody>
@@ -311,109 +337,6 @@ export default function SalaryRent({ onOpen, onPay }) {
         />
       )}
     </>
-  );
-}
-
-/**
- * Rent accounts with one landlord between them read as one line under the
- * landlord's name — what is owed to the person, old dues and all. A landlord
- * with only the one account keeps its plain row.
- */
-function byLandlord(rows) {
-  const groups = new Map();
-  for (const r of rows) {
-    const key = r.payee?.trim().toLowerCase();
-    if (!key) continue;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(r);
-  }
-  const out = [];
-  const placed = new Set();
-  for (const r of rows) {
-    const key = r.payee?.trim().toLowerCase();
-    const group = key ? groups.get(key) : null;
-    if (!group || group.length < 2) {
-      out.push({ row: r });
-      continue;
-    }
-    if (placed.has(key)) continue;
-    placed.add(key);
-    const sum = (field) => group.reduce((t, g) => t + g[field], 0);
-    // Each month once, in order, however many premises it fell due on.
-    const months = [];
-    for (const m of group.flatMap((g) => g.months).sort((x, y) => x.date - y.date)) {
-      if (!months.some((seen) => seen.label === m.label)) months.push(m);
-    }
-    out.push({
-      key: `landlord:${key}`,
-      payee: group[0].payee.trim(),
-      phone: group.find((g) => g.phone)?.phone ?? null,
-      rows: group,
-      monthly: sum('monthly'),
-      opening: sum('opening'),
-      charged: sum('charged'),
-      paid: sum('paid'),
-      due: Math.round(sum('due') * 100) / 100,
-      months,
-    });
-  }
-  return out;
-}
-
-/** One landlord, all their premises together; tapping it lists them. */
-function LandlordRow({ group, open, onToggle }) {
-  const Chevron = open ? ChevronDown : ChevronRight;
-  const settled = Math.abs(group.due) < 0.005 && (group.charged > 0 || group.opening > 0);
-  return (
-    <tr className={`clickable landlord${settled ? ' settled' : ''}`} onClick={onToggle} aria-expanded={open}>
-      <td className="particulars" data-label="Landlord">
-        <div className="party">
-          <Chevron size={16} aria-hidden="true" style={{ verticalAlign: '-3px', marginRight: 4 }} />
-          {group.payee}
-        </div>
-        <div className="ref">
-          {group.rows.filter((g) => g.monthly > 0).map((g) => g.name).join(' + ')}
-          {group.phone && (
-            <>
-              {' · '}
-              <a className="phone" href={phoneHref(group.phone)} onClick={(e) => e.stopPropagation()}>
-                {phoneDisplay(group.phone)}
-              </a>
-            </>
-          )}
-        </div>
-      </td>
-      <td className="num" data-label="Monthly">{rupees(group.monthly)}</td>
-      <td data-label="Charged">
-        <MonthRun row={group} />
-      </td>
-      <td className="num" data-label="Paid">{rupees(group.paid)}</td>
-      <td className="num bal" data-label="Owed">
-        {rupees(Math.abs(group.due))}{' '}
-        <span className="side">{group.due < 0 ? 'ahead' : ''}</span>
-      </td>
-      <td className="rowacts" data-label="">
-        <span className="ref">{open ? 'Hide' : `${group.rows.length} accounts`}</span>
-      </td>
-    </tr>
-  );
-}
-
-/** The months on the account, with arrears carried in shown first. */
-function MonthRun({ row }) {
-  const chips = row.months.map((m) => m.label.replace(/ (\d{2})(\d{2})$/, ' $2'));
-  return (
-    <div className="chips tiny monthrun">
-      {row.opening > 0 && (
-        <span className="chip" title="Owed from before">
-          before · {rupees(row.opening)}
-        </span>
-      )}
-      {chips.length === 0 && row.opening <= 0 && <span className="ref">—</span>}
-      {chips.map((c) => (
-        <span className="chip" key={c}>{c}</span>
-      ))}
-    </div>
   );
 }
 
