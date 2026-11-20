@@ -11,8 +11,8 @@ series, on a COM port) is a different thing and is not covered here.
 - A sale or quotation being typed: every line (item, qty, rate, amount), the
   newest lit yellow for a moment, then discount/GST/round-off and the total
   in big figures. With money taken: Paid and Balance.
-- A UPI code for the amount due, when `VITE_SHOP_UPI_ID` (and optionally
-  `VITE_SHOP_UPI_NAME`) is set at build time. Without it, no code is shown.
+- A UPI code for the amount due, to the shop's UPI ID 8709964141@ptyes
+  (`VITE_SHOP_UPI_ID` overrides it; `VITE_SHOP_UPI_NAME` the payee name).
 - The sale saved: "Thank you", the total, for 8 seconds, then back to the name.
 
 Purchases, payments and the other vouchers never reach it.

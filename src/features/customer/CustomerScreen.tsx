@@ -18,8 +18,8 @@ import './customer-screen.css'
 
 const SHOP = 'Shiv Hardware'
 const PLACE = 'Ramgarh'
-/** The shop's UPI ID (VITE_SHOP_UPI_ID). Without one, the screen shows the total alone. */
-const UPI_ID = (import.meta.env.VITE_SHOP_UPI_ID as string | undefined)?.trim() || ''
+/** The shop's UPI ID (Paytm), given by the owner on 2026-11-20. VITE_SHOP_UPI_ID overrides it. */
+const UPI_ID = (import.meta.env.VITE_SHOP_UPI_ID as string | undefined)?.trim() || '8709964141@ptyes'
 const UPI_NAME = (import.meta.env.VITE_SHOP_UPI_NAME as string | undefined)?.trim() || 'SHIV HARDWARE'
 
 /** Thanks stays up this long, unless the next bill starts first. */
