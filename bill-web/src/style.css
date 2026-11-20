@@ -1,0 +1,93 @@
+/* Shiv Bill, in the Signs look (DESIGN.md; colours, lettering and keys come
+ * from ./signs/signs.css). One column, thumb-sized boxes, the one action
+ * (Save) at the foot of the screen.
+ */
+@import "./signs/signs.css";
+
+html { min-width: 320px; }
+h1, h2 { margin: 0; }
+
+.site { display: flex; flex-direction: column; width: 100%; max-width: 620px; min-height: 100dvh; margin: 0 auto; background: var(--wall); }
+
+.top { position: sticky; top: 0; z-index: 5; flex: none; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; background: var(--wall); border-bottom: 4px solid var(--ink); }
+.mark { flex: none; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: var(--ink); color: #fff; font: 800 22px/1 var(--sign); }
+.top h1 { font: 800 26px/1 var(--sign); text-transform: uppercase; }
+.top small { display: block; margin-top: 3px; font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+
+.form { flex: 1 1 auto; padding-bottom: 24px; }
+.form section { padding: 16px 12px 0; }
+.form h2 { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--ink); font: 800 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .03em; }
+
+/* A box to type in: tall enough for a thumb, 18px so iPhone does not zoom. */
+.field { display: block; width: 100%; min-height: 52px; padding: 10px 12px; border: 2px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); font: 600 18px/1.2 var(--text); outline: none; appearance: none; }
+.field:focus { border-color: var(--must); box-shadow: inset 0 0 0 2px var(--must); }
+.field::placeholder { color: #8a939c; }
+.field.num { text-align: right; font-variant-numeric: tabular-nums; }
+select.field { padding-right: 6px; background: #fff; }
+.form section > .field { margin-top: 8px; }
+
+.key.small { min-height: 48px; font-size: 18px; padding: 0 14px; }
+.key.wide { width: 100%; margin-top: 10px; }
+
+/* Who the bill is for. */
+.who { display: flex; align-items: center; gap: 10px; padding: 10px 12px; box-shadow: inset 0 0 0 2px var(--ink); }
+.who-name { flex: 1 1 auto; min-width: 0; }
+.who-name strong { display: block; font: 800 22px/1.1 var(--sign); text-transform: uppercase; overflow-wrap: anywhere; }
+.who-name small { display: block; margin-top: 3px; color: var(--dim); font-size: 15px; }
+.pick-list { margin-top: 6px; }
+.pick-list button { display: block; width: 100%; min-height: 52px; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+.pick-list button:active { background: var(--key); }
+.pick-list strong { display: block; font: 700 19px/1.15 var(--sign); text-transform: uppercase; }
+.pick-list small { display: block; color: var(--dim); font-size: 14px; }
+.pick-new { background: #f4f7fb; }
+.pick-keys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+
+/* One goods line: the item across, its figures under it. */
+.line { padding: 8px 0 12px; border-bottom: 2px solid var(--line); }
+.line-head { display: flex; align-items: center; gap: 8px; }
+.line-no { flex: none; width: 28px; font: 800 20px/1 var(--sign); text-align: center; font-variant-numeric: tabular-nums; }
+.line-head .field { flex: 1 1 auto; min-width: 0; }
+/* Red is delete and nothing else. */
+.line-drop { flex: none; width: 44px; height: 52px; display: flex; align-items: center; justify-content: center; color: var(--stop); }
+.line-figs { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 8px; margin: 8px 0 0 36px; }
+.line-figs label, .line-amt, .part { display: block; }
+.line-figs span, .line-amt span, .part span { display: block; margin-bottom: 3px; font: 700 13px/1 var(--sign); text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.line-amt { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; }
+.line-amt span { margin: 0; }
+.line-amt strong { font: 800 22px/1 var(--sign); font-variant-numeric: tabular-nums; }
+
+.total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px; background: var(--ink); color: #fff; }
+.total span { font: 800 22px/1 var(--sign); text-transform: uppercase; }
+.total strong { font: 800 36px/1 var(--sign); font-variant-numeric: tabular-nums; }
+
+/* A row of keys of which one is chosen: chosen is blue. */
+.choice { display: grid; gap: 6px; margin-top: 10px; }
+.choice.three { grid-template-columns: repeat(3, 1fr); }
+.choice.two { grid-template-columns: repeat(2, 1fr); }
+.choice button { min-height: 52px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 19px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.choice button.on { background: var(--must); color: #fff; box-shadow: none; }
+.part { margin-top: 10px; }
+.hint { margin-top: 8px; color: var(--dim); font-size: 15px; }
+
+.today-row { display: flex; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.today-no { flex: none; min-width: 48px; font: 800 18px/1 var(--sign); }
+.today-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-amt { flex: none; font-weight: 700; }
+
+.dock { position: sticky; bottom: 0; z-index: 5; }
+.dock .key { white-space: normal; text-align: center; line-height: 1.05; }
+.error { margin-bottom: 8px; padding: 10px 12px; background: var(--stop); color: #fff; font-weight: 600; }
+
+/* Saved: green is done. */
+.done { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; padding: 36px 16px; text-align: center; }
+.done-mark { display: flex; align-items: center; justify-content: center; width: 112px; height: 112px; background: var(--safe); color: #fff; }
+.done h1 { margin-top: 18px; font: 800 34px/1 var(--sign); text-transform: uppercase; }
+.done-who { margin-top: 8px; font: 700 22px/1.1 var(--sign); text-transform: uppercase; overflow-wrap: anywhere; }
+.done-total { margin-top: 14px; font: 800 48px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.done-paid { margin-top: 8px; color: var(--dim); font-size: 17px; }
+.done .key.wide { margin-top: 28px; }
+
+@media (max-width: 359px) {
+  .line-figs { grid-template-columns: 1fr 1fr; margin-left: 0; }
+  .line-figs label:last-of-type { grid-column: 1 / -1; }
+}

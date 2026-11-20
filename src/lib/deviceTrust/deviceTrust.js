@@ -27,6 +27,7 @@ const forgotten = new Set()
 export const SHOP_APPS = [
   { app: 'Panel', name: 'Panel', url: 'https://shiv-panel.vercel.app/' },
   { app: 'Counter', name: 'Counter', url: 'https://shivhardware-counter.vercel.app/' },
+  { app: 'Bill', name: 'Shiv Bill', url: 'https://shivhardware-bill.vercel.app/' },
   { app: 'Cash', name: 'Cashier', url: 'https://shivhardware-cash.vercel.app/' },
   { app: 'Accounts', name: 'Shiv Accounts', url: 'https://shivhardware-khata.vercel.app/' },
   { app: 'Workshop', name: 'Workshop', url: 'https://shivhardware-workshop.vercel.app/' },

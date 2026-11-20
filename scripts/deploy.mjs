@@ -75,6 +75,7 @@ const TARGETS = [
   site('print', 'print-web', 'print-web', 'shivhardware-print.vercel.app', 'Shiv Print'),
   site('stock', 'stock-web', 'stock-web', 'shivhardware-stock.vercel.app', 'Stock'),
   site('voucher', 'voucher-web', 'shivhardware-voucher', 'shivhardware-voucher.vercel.app', 'Voucher'),
+  site('bill', 'bill-web', 'shivhardware-bill', 'shivhardware-bill.vercel.app', 'Shiv Bill (sale bill from a phone)'),
   site('qr', 'qr-redirect', 'gcvf', 'gcvf.vercel.app', 'Guarantee QR link'),
   site('khata', 'khata-web', 'shivhardware-khata', 'shivhardware-khata.vercel.app', 'Shiv Accounts (accounts to read)'),
   site('mechanic', 'mechanic-web', 'shivhardware-mechanic', 'shivhardware-mechanic.vercel.app', 'Shiv Mechanic (site sizes)'),

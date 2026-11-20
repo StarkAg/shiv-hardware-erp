@@ -1,0 +1,15 @@
+{
+  "name": "Shiv Bill — Shiv Hardware",
+  "short_name": "Shiv Bill",
+  "description": "A sale bill from the phone, saved to the shop's books.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
