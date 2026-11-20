@@ -25,6 +25,7 @@ import type * as chain from "../chain.js";
 import type * as clearPile from "../clearPile.js";
 import type * as contactBackups from "../contactBackups.js";
 import type * as crons from "../crons.js";
+import type * as customerScreen from "../customerScreen.js";
 import type * as customers from "../customers.js";
 import type * as dayBookMarks from "../dayBookMarks.js";
 import type * as deviceKeys from "../deviceKeys.js";
@@ -121,6 +122,7 @@ declare const fullApi: ApiFromModules<{
   clearPile: typeof clearPile;
   contactBackups: typeof contactBackups;
   crons: typeof crons;
+  customerScreen: typeof customerScreen;
   customers: typeof customers;
   dayBookMarks: typeof dayBookMarks;
   deviceKeys: typeof deviceKeys;
