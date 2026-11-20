@@ -544,11 +544,16 @@ kbd { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid
 .pad .padsketch .opsub, .pad .padsketch .opnum { fill: var(--pen); }
 .pad .padsketch .opw, .pad .padsketch .oph, .pad .padsketch .opnote { color: var(--pen); font-family: Arial, sans-serif; font-weight: 600; }
 
+/* A line tapped on the pad: drawn below. Shown on the screen, never printed. */
+.padpick { position: absolute; z-index: 1; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.padpick.on { background: #ffcc00; mix-blend-mode: multiply; }
+.padpick:focus-visible { outline: 0.6mm solid #0054b4; }
 .copyextra { display: none; }
 .copiesnote { margin-top: 8px; }
 
 @media print {
   .copiesnote { display: none !important; }
+  .padpick { display: none !important; }
   .copyextra { display: block; }
   .padfit { margin: 0 auto !important; overflow: visible; }
   .pad { zoom: var(--print-zoom) !important; border: none !important; margin: 0 auto; background: none !important; }

@@ -27,6 +27,15 @@ export default function WorkOrder({ job, onChange, onPrint, onAdvance, onDeliver
 
   const setOrder = (patch) => onChange({ ...job, order: { ...order, ...patch } })
 
+  // The lines tapped on the pad are the ones drawn under it.
+  const drawn = new Set(order.drawn || [])
+  const pick = (id) => {
+    const next = new Set(drawn)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setOrder({ drawn: lines.filter((l) => next.has(l.id)).map((l) => l.id) })
+  }
+
   const saveAdvance = async () => {
     setOrder({ advance: adv, total, balance })
     setPosting('busy')
@@ -84,6 +93,7 @@ export default function WorkOrder({ job, onChange, onPrint, onAdvance, onDeliver
         <Sheet
           key={copy.key} copy={copy} extra={i > 0}
           job={job} order={order} lines={lines} fare={fare} total={total} adv={adv} balance={balance}
+          drawn={drawn} onPick={i === 0 ? pick : undefined}
         />
       ))}
       <div className="note copiesnote">
@@ -263,7 +273,27 @@ function PadSketch({ openings, style }) {
   )
 }
 
-export function Sheet({ copy, extra, job, order, lines, fare, total, adv, balance }) {
+/**
+ * The openings to draw for the lines picked: the measured ones of that
+ * product, or, before measuring, the size it was quoted at, once per piece.
+ */
+export function drawnOpenings(job, lines, drawn) {
+  const measured = job.openings || []
+  const quoted = job.estimate?.lines || []
+  return lines
+    .filter((l) => l.kind === 'product' && drawn.has(l.id))
+    .flatMap((l) => {
+      const own = measured.filter((o) => o.form === l.form && o.fill === l.fill)
+      if (own.length) return own
+      const size = l.nominal || quoted.find((q) => q.kind === 'product' && q.form === l.form && q.fill === l.fill)?.nominal
+      if (!size?.w || !size?.h) return []
+      return Array.from({ length: Number(l.qty) || 1 }, (_, i) => ({
+        id: `${l.id}-${i}`, form: l.form, fill: l.fill, leaves: l.leaves, w: size.w, h: size.h,
+      }))
+    })
+}
+
+export function Sheet({ copy, extra, job, order, lines, fare, total, adv, balance, drawn = new Set(), onPick }) {
   // On the screen the true-size sheet is zoomed to the width it has.
   const box = useRef(null)
   const [zoom, setZoom] = useState(1)
@@ -281,7 +311,7 @@ export function Sheet({ copy, extra, job, order, lines, fare, total, adv, balanc
   }, [])
 
   const rows = [
-    ...lines.map((l) => ({ key: l.id, label: `× ${l.label}`, qty: `${l.qty} Pc`, amt: l.unpriced ? '' : plain(l.amount) })),
+    ...lines.map((l) => ({ key: l.id, pick: l.kind === 'product' ? l.id : null, label: `× ${l.label}`, qty: `${l.qty} Pc`, amt: l.unpriced ? '' : plain(l.amount) })),
     { key: 'fare', word: 'Fare', amt: plain(fare), under: 'single' },
     { key: 'total', amt: plain(total), strong: true },
     ...(adv > 0
@@ -345,6 +375,16 @@ export function Sheet({ copy, extra, job, order, lines, fare, total, adv, balanc
           const base = RULE_FIRST + i * step - 1.3
           return (
             <div key={r.key}>
+              {onPick && r.pick && (
+                <button
+                  type="button"
+                  className={`padpick${drawn.has(r.pick) ? ' on' : ''}`}
+                  style={{ left: mm(EST_X0), top: mm(RULE_FIRST + (i - 1) * step), width: mm(EST_X1 - EST_X0), height: mm(step) }}
+                  onClick={() => onPick(r.pick)}
+                  aria-pressed={drawn.has(r.pick)}
+                  aria-label={`Draw ${r.label}`}
+                />
+              )}
               {r.label && <At x={120.5} base={base} size={size} fit={69} className="ink">{r.label}</At>}
               {r.qty && <At right={202} base={base} size={size} className="ink">{r.qty}</At>}
               {r.word && <At right={201} base={base} size={size} className="ink">{r.word}</At>}
@@ -355,7 +395,7 @@ export function Sheet({ copy, extra, job, order, lines, fare, total, adv, balanc
         })}
 
         {/* The sketches: the bottom half. */}
-        <PadSketch openings={job.openings || []} style={{ left: mm(13), top: mm(SPLIT_Y + 6), width: mm(PAD_W - 26), height: mm(PAD_H - SPLIT_Y - 14) }} />
+        <PadSketch openings={drawnOpenings(job, lines, drawn)} style={{ left: mm(13), top: mm(SPLIT_Y + 6), width: mm(PAD_W - 26), height: mm(PAD_H - SPLIT_Y - 14) }} />
         <At right={223} base={267.5} size={2.6} className="pcopy">{copy.label}</At>
       </div>
     </div>
