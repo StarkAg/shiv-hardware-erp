@@ -152,9 +152,17 @@ function PadSketch({ openings, style }) {
   }, [fit, openings.length])
   return (
     <div ref={box} className="padsketch ink" style={style}>
+      {/* Scaled as one picture from the top centre, not with `zoom`: inside a
+          sheet that is itself zoomed to fit the screen, a second zoom measured
+          against the first and drew the pieces as specks. */}
       <div
         className={`padsketchin${fit.wrap ? ' rows2' : ''}`}
-        style={{ zoom: fit.zoom, visibility: fit.ready ? 'visible' : 'hidden', width: fit.wrap ? fit.row : undefined }}
+        style={{
+          position: 'absolute', left: '50%', top: 0,
+          width: fit.wrap ? fit.row : 'max-content',
+          transform: `translateX(-50%) scale(${fit.zoom})`, transformOrigin: 'top center',
+          visibility: fit.ready ? 'visible' : 'hidden',
+        }}
       >
         <SketchGrid openings={openings} />
       </div>
