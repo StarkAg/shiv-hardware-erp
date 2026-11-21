@@ -126,30 +126,43 @@ const SKETCH_ZOOM_MAX = 2.35
  */
 function PadSketch({ openings, style }) {
   const box = useRef(null)
-  const [fit, setFit] = useState({ zoom: 1, wrap: false, row: 0, ready: false })
+  const [fit, setFit] = useState({ wrap: false, row: 0, ready: false })
   const key = openings.map((o) => `${o.id}:${o.form}:${o.fill}:${o.qty}:${o.w?.inches}/${o.w?.soot}x${o.h?.inches}/${o.h?.soot}`).join('|')
-  useLayoutEffect(() => { setFit({ zoom: 1, wrap: false, row: 0, ready: false }) }, [key])
-  // Measured twice where there are three or more: all on one row, then on two;
-  // whichever lets the drawings be bigger is kept.
+  useLayoutEffect(() => { setFit({ wrap: false, row: 0, ready: false }) }, [key])
+  // The room there is, followed as it changes: the sheet settles its own size
+  // after the drawings are first laid out, and a scale taken from that first
+  // instant drew them as specks.
+  const [room, setRoom] = useState({ w: 0, h: 0 })
   useLayoutEffect(() => {
-    if (fit.ready) return
     const el = box.current
-    const grid = el?.querySelector('.sketchgrid')
-    if (!el || !grid) return
+    if (!el) return undefined
+    const look = () => setRoom((r) => (r.w === el.clientWidth && r.h === el.clientHeight ? r : { w: el.clientWidth, h: el.clientHeight }))
+    look()
+    const ro = new ResizeObserver(look)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const scaleFor = (w, h) => (w && h && room.w && room.h ? Math.min(SKETCH_ZOOM_MAX, room.w / w, room.h / h) * 0.98 : 0)
+  // The drawings' own size, measured once a layout: all on one row and, where
+  // there are three or more, on two; whichever lets them be bigger is kept.
+  useLayoutEffect(() => {
+    if (fit.ready || !room.w || !room.h) return
+    const grid = box.current?.querySelector('.sketchgrid')
+    if (!grid) return
     const w = grid.offsetWidth
     const h = grid.offsetHeight
     if (!w || !h) return
-    const zoom = Math.min(SKETCH_ZOOM_MAX, el.clientWidth / w, el.clientHeight / h) * 0.98
     if (!fit.wrap && openings.length > 2) {
-      setFit({ zoom: 1, wrap: true, row: Math.ceil(w * 0.56), ready: false, one: zoom })
+      setFit({ wrap: true, row: Math.ceil(w * 0.56), ready: false, one: { w, h } })
       return
     }
-    if (fit.wrap && fit.one != null && fit.one >= zoom) {
-      setFit({ zoom: fit.one, wrap: false, row: 0, ready: true })
+    if (fit.wrap && fit.one && scaleFor(fit.one.w, fit.one.h) >= scaleFor(w, h)) {
+      setFit({ wrap: false, row: 0, ready: true, w: fit.one.w, h: fit.one.h })
       return
     }
-    setFit({ ...fit, zoom, ready: true })
-  }, [fit, openings.length])
+    setFit({ ...fit, w, h, ready: true })
+  }, [fit, openings.length, room])
+  const zoom = fit.ready ? scaleFor(fit.w, fit.h) : 1
   return (
     <div ref={box} className="padsketch ink" style={style}>
       {/* Scaled as one picture from the top centre, not with `zoom`: inside a
@@ -160,7 +173,7 @@ function PadSketch({ openings, style }) {
         style={{
           position: 'absolute', left: '50%', top: 0,
           width: fit.wrap ? fit.row : 'max-content',
-          transform: `translateX(-50%) scale(${fit.zoom})`, transformOrigin: 'top center',
+          transform: `translateX(-50%) scale(${zoom})`, transformOrigin: 'top center',
           visibility: fit.ready ? 'visible' : 'hidden',
         }}
       >
