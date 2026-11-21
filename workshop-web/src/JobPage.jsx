@@ -456,13 +456,14 @@ export default function JobPage({ job, onBack }) {
         <StepTracker job={job} />
         {job.priority && !over && <p className="prio big"><FlagIcon size={20} strokeWidth="3" /> Priority</p>}
 
-        {/* The visit order first: what the customer asked for, before anything else is done. */}
-        {sections.filter((s) => s.tag === 'visit').map(sectionOf)}
 
         <section className={`nowpanel ${over ? 'over' : mine ? 'mine' : 'wait'}`} aria-label="What to do now">
           {now}
           {error && <p className="error" role="alert">{error}</p>}
         </section>
+
+        {/* Under what to do now, the visit order: what the customer asked for. */}
+        {sections.filter((s) => s.tag === 'visit').map(sectionOf)}
 
         {/* Who it is for, a line each: every number to ring, the site on the map
             once a job carries one and, at the counter, where the customer is set. */}
