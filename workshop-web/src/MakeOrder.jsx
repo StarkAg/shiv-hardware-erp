@@ -4,7 +4,7 @@ import { post } from './outbox.js'
 import { BackIcon, CloseIcon, SendIcon, Sheet, SheetIcon } from './ui.jsx'
 import { NumberPad } from './NewOrder.jsx'
 import { DatePick } from './DatePick.jsx'
-import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
+import { FORMATS, PadSheet, PrintPads, copyOf, padFormat, setPadFormat } from './pad/PadSheet.jsx'
 import {
   EXTRAS, FARE, FILLS, FILLS_FOR, FORMS, FORM_IDS, amountOf, inr, learnRate, productLabel, rateFor, todayKey, totalOf,
 } from './pad/forms.js'
@@ -200,6 +200,7 @@ export default function MakeOrder({ job, onClose }) {
   const [money, setMoney] = useState(null) // 'fare' | 'advance', open on the number pad
   const [printing, setPrinting] = useState(false)
   const [sending, setSending] = useState(false)
+  const [format, setFormat] = useState(padFormat)
 
   const pad = useMemo(() => padOf(draft), [draft])
   const who = whoOf(job)
@@ -266,6 +267,14 @@ export default function MakeOrder({ job, onClose }) {
               <span>Advance</span><b>{pad.advance ? inr(pad.advance) : 'None'}</b>
             </button>
           </div>
+          {/* Which look it prints in: the shop's pink pad, or Format 1 (the visit order's). Kept on this device. */}
+          <span className="ask sheetask">Print as</span>
+          <div className="needs modes" role="group" aria-label="Print as">
+            {FORMATS.map((f) => (
+              <button key={f.key} type="button" className={format === f.key ? 'on' : ''} aria-pressed={format === f.key}
+                onClick={() => { setPadFormat(f.key); setFormat(f.key) }}>{f.label}</button>
+            ))}
+          </div>
           <div className="padsums">
             <p><span>Total</span><b>{inr(total)}</b></p>
             {pad.advance > 0 && <p><span>Balance</span><b>{inr(total - pad.advance)}</b></p>}
@@ -312,7 +321,7 @@ export default function MakeOrder({ job, onClose }) {
         </section>
 
         <section className="nwslip" aria-label="The pad">
-          <PadSheet copy={copyOf('customer')} number={job.number} who={who} pad={pad} fitHeight />
+          <PadSheet key={format} copy={copyOf('customer')} number={job.number} who={who} pad={pad} format={format} fitHeight />
           <button type="button" className="pick" disabled={!ready} onClick={() => setPrinting(true)}><SheetIcon /> Print 3 pages</button>
         </section>
       </main>
