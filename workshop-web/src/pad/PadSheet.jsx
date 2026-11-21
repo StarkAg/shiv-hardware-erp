@@ -37,7 +37,7 @@ const PAD_W = 230.8
 const PAD_H = 270.8
 const PRINT_SCALE = 204 / PAD_W
 // The same margin, 13mm, on both sides (21 Nov 2026); the divider half way between.
-const MARGIN = 13
+const MARGIN = 9 // equal both sides; 13mm left the estimate short of the edge (21 Nov 2026)
 const DIVIDER_X = 115.4
 // The top half closed up (21 Nov 2026): it ended at 130mm, with loose gaps.
 const SPLIT_Y = 106
@@ -309,6 +309,9 @@ function PinkPad({ copy, number, who, pad }) {
   const step = rows.length > RULES ? (RULE_STEP * RULES) / rows.length : RULE_STEP
   const ruleCount = Math.max(RULES, rows.length)
   const size = Math.min(4.6, step * 0.5)
+  // Every item line at one size, the longest's fitting before the Qty column, so they all match.
+  const labelRoom = EST_X1 - 21.5 - 117.4 - 12
+  const labelSize = Math.max(2.4, Math.min(size, ...rows.filter((r) => r.label).map((r) => (size * labelRoom) / textMm(r.label, size, 700))))
   const values = {
     name: who.name || '',
     address: who.address || '',
@@ -354,7 +357,7 @@ function PinkPad({ copy, number, who, pad }) {
         const base = RULE_FIRST + i * step - 1.3
         return (
           <div key={r.key}>
-            {r.label && <At x={117.4} base={base} size={size} fit={EST_X1 - 21.5 - 117.4 - 15} className="ink">{r.label}</At>}
+            {r.label && <At x={117.4} base={base} size={labelSize} className="ink">{r.label}</At>}
             {r.qty && <At right={EST_X1 - 21.5} base={base} size={size} className="ink">{r.qty}</At>}
             {r.word && <At right={EST_X1 - 22.5} base={base} size={size} className="ink">{r.word}</At>}
             <At right={EST_X1 - 1} base={base} size={r.strong ? size * 1.1 : size} className={`ink${r.strong ? ' pstrong' : ''}`}>{r.amt}</At>
