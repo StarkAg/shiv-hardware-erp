@@ -218,3 +218,4 @@
 .pad:not(.worksheet) .padsketch .ophandle { fill: #111; }
 .pad:not(.worksheet) .padsketch .opcap small { color: #333; opacity: 1; }
 .pad:not(.worksheet) .padsketch .opext line { stroke: #555; }
+.opglint line { stroke: #9a9a9a; stroke-width: .7; stroke-linecap: round; }

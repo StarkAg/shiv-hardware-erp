@@ -11,6 +11,7 @@
 // door at true scale leaves the ventilator a speck, and what the workshop
 // needs is which piece is which, with its figures.
 
+import { useId } from 'react'
 import { fmtDim, inchesOf } from './dims.js'
 import { FORMS, FILLS } from './forms.js'
 
@@ -71,18 +72,57 @@ const Handle = ({ x, y, h, side }) => (
  * the handle side's corners to the middle of the hinge side), its hinges and
  * handle. `hinge` is the side it hangs on.
  */
-function Leaf({ x, y, w, h, hinge }) {
+function Leaf({ x, y, w, h, hinge, paint, glass }) {
   const hx = hinge === 'left' ? x : x + w
   const ox = hinge === 'left' ? x + w : x
   return (
     <>
-      <rect x={x} y={y} width={w} height={h} className="opsash" />
+      <rect x={x} y={y} width={w} height={h} className="opsash" style={{ fill: paint }} />
+      {glass && <Glint x={x} y={y} w={w} h={h} />}
       <polyline points={`${ox},${y} ${hx},${y + h / 2} ${ox},${y + h}`} className="opswing" />
       <Hinges x={hx} y={y} h={h} />
       <Handle x={ox} y={y} h={h} side={hinge === 'left' ? 'right' : 'left'} />
     </>
   )
 }
+
+/**
+ * What goes in it, shown as its own texture inside the frame (Tony, 21 Nov
+ * 2026): a fine mesh for SS net, clear with a glint for glass, a flat grey
+ * sheet for ACP and a wood grain for ACP with film. Kept to greys, so the
+ * pad prints clean in black.
+ */
+function Paint({ id, fill }) {
+  if (fill === 'net') return (
+    <pattern id={id} width="3" height="3" patternUnits="userSpaceOnUse">
+      <rect width="3" height="3" fill="#fbfbfb" />
+      <path d="M0 0H3M0 0V3" stroke="#555" strokeWidth=".3" />
+    </pattern>
+  )
+  if (fill === 'acp') return (
+    <pattern id={id} width="8" height="5" patternUnits="userSpaceOnUse">
+      <rect width="8" height="5" fill="#d9d9d9" />
+      <path d="M0 4.6H8" stroke="#c4c4c4" strokeWidth=".4" />
+    </pattern>
+  )
+  if (fill === 'acp-film') return (
+    <pattern id={id} width="24" height="7" patternUnits="userSpaceOnUse">
+      <rect width="24" height="7" fill="#e2dbd2" />
+      <path d="M0 3.5Q6 1.2 12 3.5T24 3.5" fill="none" stroke="#a99a88" strokeWidth=".45" />
+      <path d="M0 6.4Q6 5 12 6.4T24 6.4" fill="none" stroke="#c2b6a8" strokeWidth=".35" />
+    </pattern>
+  )
+  return null
+}
+const paintOf = (fill, id) => (fill === 'glass' ? '#f4f7f8' : ['net', 'acp', 'acp-film'].includes(fill) ? `url(#${id})` : '#fff')
+
+/** The glint on a pane of glass: two short strokes across its upper corner. */
+const Glint = ({ x, y, w, h }) => (
+  <g className="opglint">
+    <line x1={x + w * 0.18} y1={y + h * 0.3} x2={x + w * 0.42} y2={y + h * 0.1} />
+    <line x1={x + w * 0.24} y1={y + h * 0.38} x2={x + w * 0.52} y2={y + h * 0.14} />
+  </g>
+)
 
 /** What goes in it, on a white label so no line runs through the words. */
 function FillLabel({ cx, cy, text, room }) {
@@ -104,6 +144,9 @@ export function Opening({ o, n, longest }) {
   const draw = form?.draw || 'plain'
   const leaves = o.leaves ?? form?.leaves ?? 1
   const words = fill?.short || o.fill || ''
+  const uid = `fill${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  const paint = paintOf(o.fill, uid)
+  const glass = o.fill === 'glass'
 
   // The box sits below and right of its dimension lines.
   const X = DIM
@@ -120,6 +163,7 @@ export function Opening({ o, n, longest }) {
     <figure className="opening">
       <svg className="opbox" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img"
         aria-label={`${fmtDim(o.w)} by ${fmtDim(o.h)} inch ${form?.label || ''} with ${words}`}>
+        <defs><Paint id={uid} fill={o.fill} /></defs>
         {/* Extension lines from the corners, and the dimension lines on them. */}
         <g className="opext">
           <line x1={X} y1={Y - 2} x2={X} y2={Y - DIM + 6} />
@@ -130,37 +174,40 @@ export function Opening({ o, n, longest }) {
         <Dim x1={X} y1={Y - DIM + 10} x2={X + width} y2={Y - DIM + 10} text={fmtDim(o.w)} />
         <Dim x1={X - DIM + 10} y1={Y} x2={X - DIM + 10} y2={Y + height} text={fmtDim(o.h)} vertical />
 
-        {/* The frame: its outer and inner edge. A wall panel is one flat sheet, hatched. */}
+        {/* The frame: its outer and inner edge. A wall panel is one flat sheet in its own texture. */}
         <rect x={X} y={Y} width={width} height={height} className="opframe" />
         {draw !== 'panel' && <rect x={ix} y={iy} width={iw} height={ih} className="opinner" />}
 
         {draw === 'openable' && leaves >= 2 && (
           <>
-            <Leaf x={ix + 2} y={iy + 2} w={half - 3} h={ih - 4} hinge="left" />
-            <Leaf x={ix + half + 1} y={iy + 2} w={half - 3} h={ih - 4} hinge="right" />
+            <Leaf x={ix + 2} y={iy + 2} w={half - 3} h={ih - 4} hinge="left" paint={paint} glass={glass} />
+            <Leaf x={ix + half + 1} y={iy + 2} w={half - 3} h={ih - 4} hinge="right" paint={paint} glass={glass} />
             <FillLabel cx={ix + half / 2 + 2} cy={iy + ih / 2} text={words} room={half - 12} />
             <FillLabel cx={ix + half * 1.5} cy={iy + ih / 2} text={words} room={half - 12} />
           </>
         )}
         {draw === 'openable' && leaves < 2 && (
           <>
-            <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" />
+            <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" paint={paint} glass={glass} />
             <FillLabel cx={ix + iw / 2 + 4} cy={iy + ih / 2} text={words} room={iw - 14} />
           </>
         )}
         {draw === 'door' && (
           <>
-            <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" />
+            <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" paint={paint} glass={glass} />
             <FillLabel cx={ix + iw / 2 + 4} cy={iy + ih * 0.32} text={words} room={iw - 14} />
           </>
         )}
-        {draw === 'plain' && <FillLabel cx={ix + iw / 2} cy={iy + ih / 2} text={words} room={iw - 6} />}
+        {draw === 'plain' && (
+          <>
+            <rect x={ix + 1} y={iy + 1} width={iw - 2} height={ih - 2} className="opsash" style={{ fill: paint }} />
+            {glass && <Glint x={ix} y={iy} w={iw} h={ih} />}
+            <FillLabel cx={ix + iw / 2} cy={iy + ih / 2} text={words} room={iw - 6} />
+          </>
+        )}
         {draw === 'panel' && (
           <>
-            {Array.from({ length: Math.ceil((width + height) / 14) }, (_, i) => {
-              const d = (i + 1) * 14
-              return <line key={i} x1={X + Math.max(0, d - height)} y1={Y + Math.min(height, d)} x2={X + Math.min(width, d)} y2={Y + Math.max(0, d - width)} className="ophatch" />
-            })}
+            <rect x={X + 1} y={Y + 1} width={width - 2} height={height - 2} style={{ fill: paint }} />
             <FillLabel cx={X + width / 2} cy={Y + height / 2} text={words} room={width - 8} />
           </>
         )}
