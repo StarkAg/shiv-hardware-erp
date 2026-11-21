@@ -3,6 +3,7 @@ import { contactsOf, addressOf, nameOf } from './flow.js'
 import { post } from './outbox.js'
 import { BackIcon, CloseIcon, SendIcon, Sheet, SheetIcon } from './ui.jsx'
 import { NumberPad } from './NewOrder.jsx'
+import { DatePick } from './DatePick.jsx'
 import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
 import {
   EXTRAS, FARE, FILLS, FILLS_FOR, FORMS, FORM_IDS, amountOf, inr, learnRate, productLabel, rateFor, todayKey, totalOf,
@@ -256,12 +257,8 @@ export default function MakeOrder({ job, onClose }) {
       <main className="scroll nwgrid">
         <section className="nwform" aria-label="Dates and money">
           <div className="slipform">
-            <label className="sliprow">Order date
-              <input className="field" type="date" value={draft.orderDate} onChange={(e) => set({ orderDate: e.target.value })} />
-            </label>
-            <label className="sliprow">Delivery
-              <input className="field" type="date" value={draft.deliveryDate} onChange={(e) => set({ deliveryDate: e.target.value })} />
-            </label>
+            <DatePick label="Order date" value={draft.orderDate} onChange={(k) => set({ orderDate: k || todayKey() })} />
+            <DatePick label="Delivery" value={draft.deliveryDate} noneLabel="Not set" onChange={(k) => set({ deliveryDate: k })} />
             <button type="button" className="advkey" onClick={() => setMoney('fare')}>
               <span>Fare</span><b>{pad.fare ? inr(pad.fare) : 'None'}</b>
             </button>

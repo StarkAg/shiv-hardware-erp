@@ -8,6 +8,7 @@ import { VISIT_ITEMS, lineText, recentDesigns, rememberDesign, shown, startPicks
 import { SlipSheet } from './pad/VisitSlip.jsx'
 import { PrintSlipButton } from './pad/PrintSlipButton.jsx'
 import Camera from './Camera.jsx'
+import { DatePick } from './DatePick.jsx'
 
 /**
  * A name as it is typed, the shop's rule (mirrored from convex/lib/text.ts
@@ -377,9 +378,7 @@ export default function NewOrder({ onClose }) {
           </>
         ) : (
           <div className="slipform">
-            <label className="sliprow">Date
-              <input className="field" type="date" value={slip.date} onChange={(e) => setSlip({ ...slip, date: e.target.value })} />
-            </label>
+            <DatePick label="Date" value={slip.date} onChange={(k) => setSlip({ ...slip, date: k || todayKey() })} />
             <button type="button" className="advkey" onClick={() => setPad({ advance: true })}>
               <span>Advance</span><b>{slipOut.advance ? `₹${slipOut.advance.toLocaleString('en-IN')}` : 'None'}</b>
             </button>
