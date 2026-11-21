@@ -407,7 +407,8 @@ export default function JobPage({ job, onBack }) {
                   )}
                 </>
               )}
-              {m.complete && <p className="mark ok"><TickIcon size={18} /> {DONE[tag] ?? 'Complete'} <time>{stampOf(m.at)}</time></p>}
+              {/* Measured once: the photos are the measurement, so no "Measuring done" under them. */}
+              {m.complete && tag !== 'measurement' && <p className="mark ok"><TickIcon size={18} /> {DONE[tag] ?? 'Complete'} <time>{stampOf(m.at)}</time></p>}
               {m.ordered && <p className="mark ok"><TickIcon size={18} /> Ordered <time>{stampOf(m.at)}</time></p>}
               {tag === 'quotation' && (m.assemble != null || m.order != null) && (
                 <p className="mark">{[m.assemble && 'Assemble', m.order && 'Order in'].filter(Boolean).join(' + ')}</p>

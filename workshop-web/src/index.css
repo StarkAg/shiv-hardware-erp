@@ -536,3 +536,8 @@ html, body, #root { height: 100%; }
 .sendout.onsheet .sendproblem { color: var(--stop, #b3261e); }
 
 .vwait { flex: 1; display: flex; align-items: center; justify-content: center; font: 700 18px/1.2 var(--sign); text-transform: uppercase; }
+
+/* A photo in a job shows whole, in its own shape: nothing cut off the edges (Tony, 21 Nov 2026). */
+.shots { align-items: start; }
+.shots button, .shots span { aspect-ratio: auto; }
+.shots img { height: auto; object-fit: contain; }
