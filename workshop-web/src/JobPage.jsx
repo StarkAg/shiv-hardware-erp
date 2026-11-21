@@ -13,11 +13,11 @@ import {
 } from './ui.jsx'
 import { CustomerPicker, customerArgs } from './NewOrder.jsx'
 import Camera from './Camera.jsx'
-import Viewer from './Viewer.jsx'
+import Viewer, { SheetViewer } from './Viewer.jsx'
 import MakeOrder, { whoOf } from './MakeOrder.jsx'
 import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
 import { SlipSheet, qtyOf } from './pad/VisitSlip.jsx'
-import { SendOut, sheetBlob } from './sendOut.jsx'
+import { sheetBlob } from './sendOut.jsx'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
 const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation', 'measurement', 'visit']
@@ -528,28 +528,16 @@ export default function JobPage({ job, onBack }) {
           onFallback={() => file.current?.click()}
           onGallery={SIDE === 'shop' ? () => file.current?.click() : undefined} />
       )}
+      {/* A sheet made on the app opens as a picture, in the same viewer as a photo:
+          the same Share, Send to group and Print for everything opened. */}
       {padOpen && (
-        <div className="padview" role="dialog" aria-modal="true" aria-label="Work order">
-          <header>
-            <b>Work order {job.number}</b>
-            <button type="button" className="round" onClick={() => window.history.back()} aria-label="Close"><CloseIcon /></button>
-          </header>
-          <div className="padviewin">
-            {padOpen.slip
-              ? <SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={0.8} />
-              : <PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={0.8} />}
-          </div>
-          {/* The sheet as a picture: to the shop's group, or straight to the printer. */}
-          <SendOut
-            className="onsheet"
-            mode="bw"
-            name={`${padOpen.slip ? 'Visit order' : 'Work order'} ${job.number} ${titleOf(job)}`}
-            caption={`${padOpen.slip ? 'Visit order' : 'Work order'} ${job.number} · ${[nameOf(job), addressOf(job)].filter(Boolean).join(', ')}`}
-            getBlob={() => (padOpen.slip
-              ? sheetBlob(<SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={1} />, '.slip')
-              : sheetBlob(<PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={1} />, '.pad'))}
-          />
-        </div>
+        <SheetViewer
+          title={`${padOpen.slip ? 'Visit order' : 'Work order'} ${job.number} · ${[nameOf(job), addressOf(job)].filter(Boolean).join(', ')}`}
+          onClose={() => window.history.back()}
+          make={() => (padOpen.slip
+            ? sheetBlob(<SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={1} />, '.slip')
+            : sheetBlob(<PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={1} />, '.pad'))}
+        />
       )}
       {printPad && <PrintPads number={job.number} who={whoOf(job)} pad={printPad} onDone={() => setPrintPad(null)} />}
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}

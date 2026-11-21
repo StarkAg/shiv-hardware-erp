@@ -2,6 +2,35 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CloseIcon, ShareIcon } from './ui.jsx'
 import { SendOut, photoBlob } from './sendOut.jsx'
 
+/**
+ * A sheet the app drew (the visit slip, a work order copy), shown as a
+ * picture in the same viewer as a photo, so everything opened has the same
+ * Share, Send to group and Print. `make` draws it.
+ */
+export function SheetViewer({ title, make, onClose }) {
+  const [pic, setPic] = useState(null) // null | { url } | { error }
+  const run = useRef(make)
+  useEffect(() => {
+    let url = ''
+    let gone = false
+    run.current().then((blob) => {
+      url = URL.createObjectURL(blob)
+      if (gone) URL.revokeObjectURL(url)
+      else setPic({ url })
+    }, () => { if (!gone) setPic({ error: true }) })
+    return () => { gone = true; if (url) URL.revokeObjectURL(url) }
+  }, [])
+  if (pic?.url) return <Viewer photos={[{ storageId: 'sheet', url: pic.url }]} start={0} title={title} onClose={onClose} />
+  return (
+    <div className="viewer" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="vbar">
+        <button type="button" onClick={onClose} aria-label="Close"><CloseIcon /></button>
+      </div>
+      <div className="vwait">{pic?.error ? 'Could not open it. Try again.' : <span className="spin" />}</div>
+    </div>
+  )
+}
+
 /** A job's photos, full screen: swipe (or the arrow keys) from one to the next. */
 export default function Viewer({ photos, start, title, onClose }) {
   const strip = useRef(null)

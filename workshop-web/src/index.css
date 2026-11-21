@@ -534,3 +534,5 @@ html, body, #root { height: 100%; }
 .sendout.onsheet .sendkeys button { background: var(--key); color: var(--ink); }
 .sendout.onsheet .sendkeys button.done { background: var(--safe); color: #fff; }
 .sendout.onsheet .sendproblem { color: var(--stop, #b3261e); }
+
+.vwait { flex: 1; display: flex; align-items: center; justify-content: center; font: 700 18px/1.2 var(--sign); text-transform: uppercase; }
