@@ -640,3 +640,8 @@ html, body, #root { height: 100%; }
 .proceedsteps b { font: 700 18px/1.1 var(--sign); text-transform: uppercase; }
 .proceedsteps small { font-size: 15px; color: var(--stop); }
 .stepwait { width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--line); }
+
+/* The viewer's arrows, when there is more than one to see (a work order's copies). */
+.vturn { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 56px; height: 72px; background: rgba(255, 255, 255, .18); color: #fff; font: 800 44px/1 var(--sign); display: flex; align-items: center; justify-content: center; }
+.vturn.prev { left: 12px; }
+.vturn.next { right: 12px; }

@@ -22,7 +22,8 @@ import { inr, totalOf } from './pad/forms.js'
 import { fmtSize } from './pad/dims.js'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
-const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation', 'measurement', 'visit']
+// The steps in the order they happen, down the page (Tony, 21 Nov 2026): visit, measurement, work order, and on.
+const DOWN = ['visit', 'measurement', 'quotation', 'assemble', 'ordered', 'arrived', 'goahead', 'fitting']
 /** Something sent before everything was tagged: read by who sent it. */
 const whenDay = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 const tagOf = (m) => m.step ?? (m.from === 'workshop' ? 'measurement' : 'visit')
@@ -550,11 +551,15 @@ export default function JobPage({ job, onBack }) {
         <SheetViewer
           title={`${padOpen.slip ? 'Visit order' : 'Work order'} ${job.number} · ${[nameOf(job), addressOf(job)].filter(Boolean).join(', ')}`}
           onClose={() => window.history.back()}
+          // A work order at the counter: all three copies, banded as they print, to swipe
+          // through and print any one in colour. The workshop sees its own copy only.
           make={() => (padOpen.slip
             ? sheetBlob(<SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={1} />, '.slip')
-            : sheetBlob(<PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={1} />, '.pad'))}
-          // A work order's Print: its three copies, banded, in colour.
-          printWith={padOpen.slip ? null : { blobs: () => padPictures(job.number, whoOf(job), padOpen), mode: 'color' }}
+            : SIDE === 'shop'
+              ? padPictures(job.number, whoOf(job), padOpen)
+              : sheetBlob(<PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={1} banded />, '.pad'))}
+          mode={padOpen.slip ? 'bw' : 'color'}
+          start={0}
         />
       )}
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}

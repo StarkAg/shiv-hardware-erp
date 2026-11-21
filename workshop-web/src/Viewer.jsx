@@ -5,34 +5,36 @@ import { SendOut, photoBlob } from './sendOut.jsx'
 /**
  * A sheet the app drew (the visit slip, a work order copy), shown as a
  * picture in the same viewer as a photo, so everything opened has the same
- * Share, Send to group and Print. `make` draws it.
+ * Share, Send to group and Print. `make` draws it: one picture, or several
+ * (a work order's three copies) to swipe between, each printed on its own.
+ * `mode` is how Print sends it to the printer.
  */
-export function SheetViewer({ title, make, onClose, printWith = null }) {
-  const [pic, setPic] = useState(null) // null | { url } | { error }
+export function SheetViewer({ title, make, onClose, mode = 'auto', start = 0 }) {
+  const [pics, setPics] = useState(null) // null | { urls } | { error }
   const run = useRef(make)
   useEffect(() => {
-    let url = ''
+    let urls = []
     let gone = false
-    run.current().then((blob) => {
-      url = URL.createObjectURL(blob)
-      if (gone) URL.revokeObjectURL(url)
-      else setPic({ url })
-    }, () => { if (!gone) setPic({ error: true }) })
-    return () => { gone = true; if (url) URL.revokeObjectURL(url) }
+    run.current().then((made) => {
+      urls = (Array.isArray(made) ? made : [made]).map((b) => URL.createObjectURL(b))
+      if (gone) urls.forEach((u) => URL.revokeObjectURL(u))
+      else setPics({ urls })
+    }, () => { if (!gone) setPics({ error: true }) })
+    return () => { gone = true; urls.forEach((u) => URL.revokeObjectURL(u)) }
   }, [])
-  if (pic?.url) return <Viewer photos={[{ storageId: 'sheet', url: pic.url }]} start={0} title={title} onClose={onClose} printWith={printWith} />
+  if (pics?.urls) return <Viewer photos={pics.urls.map((url, i) => ({ storageId: `sheet${i}`, url }))} start={Math.min(start, pics.urls.length - 1)} title={title} onClose={onClose} mode={mode} />
   return (
     <div className="viewer" role="dialog" aria-modal="true" aria-label={title}>
       <div className="vbar">
         <button type="button" onClick={onClose} aria-label="Close"><CloseIcon /></button>
       </div>
-      <div className="vwait">{pic?.error ? 'Could not open it. Try again.' : <span className="spin" />}</div>
+      <div className="vwait">{pics?.error ? 'Could not open it. Try again.' : <span className="spin" />}</div>
     </div>
   )
 }
 
 /** A job's photos, full screen: swipe (or the arrow keys) from one to the next. */
-export default function Viewer({ photos, start, title, onClose, printWith = null }) {
+export default function Viewer({ photos, start, title, onClose, mode = 'auto' }) {
   const strip = useRef(null)
   const [at, setAt] = useState(start)
   const [note, setNote] = useState('')
@@ -96,14 +98,17 @@ export default function Viewer({ photos, start, title, onClose, printWith = null
           </div>
         ))}
       </div>
+      {/* More than one: arrows as well as the swipe, for a mouse at the counter. */}
+      {photos.length > 1 && at > 0 && <button type="button" className="vturn prev" onClick={() => turn(-1)} aria-label="The one before">&lsaquo;</button>}
+      {photos.length > 1 && at < photos.length - 1 && <button type="button" className="vturn next" onClick={() => turn(1)} aria-label="The next one">&rsaquo;</button>}
       {photos.length > 1 && (
         <div className="vdots" aria-hidden="true">{photos.map((p, i) => <i key={p.storageId} className={i === at ? 'on' : ''} />)}</div>
       )}
       {note && <div className="vnote" role="status">{note}</div>}
       {/* The photo on screen: to the shop's group, or straight to the printer. */}
       {photos[at] && (
-        <SendOut key={photos[at].storageId} className="onphoto" mode="auto"
-          name={`${title} ${at + 1}`} caption={title} getBlob={() => photoBlob(photos[at].url)} printWith={printWith} />
+        <SendOut key={photos[at].storageId} className="onphoto" mode={mode}
+          name={`${title} ${at + 1}`} caption={title} getBlob={() => photoBlob(photos[at].url)} />
       )}
     </div>
   )

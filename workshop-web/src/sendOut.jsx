@@ -47,6 +47,8 @@ export async function sheetBlob(element, selector) {
   document.body.appendChild(host)
   const root = createRoot(host)
   try {
+    // Out of whatever is being drawn when this is called (an opening screen), then drawn at once.
+    await new Promise((r) => setTimeout(r, 0))
     flushSync(() => root.render(element))
     await document.fonts?.ready
     const imgs = [...host.querySelectorAll('img')]
