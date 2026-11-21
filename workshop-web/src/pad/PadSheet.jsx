@@ -35,7 +35,10 @@ export const copyOf = (key) => COPIES.find((c) => c.key === key) ?? COPIES[0]
 const SHEET_W = 210 // mm, A4
 const SHEET_H = 296 // a hair under A4, so it never spills a blank second page
 const PAD_W = 230.8
-const PAD_H = 270.8
+// A4 in shape (Tony, 21 Nov 2026): the pad's own width, as tall as A4 is for it, so a
+// printed copy fills the page; the extra height goes to the drawings. (The
+// carbon pad itself is 270.8mm tall.)
+const PAD_H = (PAD_W * 297) / 210
 const PRINT_SCALE = 204 / PAD_W
 // The same margin, 13mm, on both sides (21 Nov 2026); the divider half way between.
 const MARGIN = 9 // equal both sides; 13mm left the estimate short of the edge (21 Nov 2026)
