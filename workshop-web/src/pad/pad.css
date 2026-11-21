@@ -180,3 +180,5 @@
 .opcap i { font-style: normal; font-weight: 700; white-space: nowrap; }
 .opcap small { font-size: 9px; color: #444; white-space: nowrap; }
 .padsketch .sketchgrid { gap: 10px 14px; }
+/* The totals end where the Amount column's figures end (the table's cells keep 2mm inside their edge). */
+.slip dl.worksums { margin: 3mm 2mm 0 0; }
