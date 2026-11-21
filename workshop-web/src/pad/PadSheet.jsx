@@ -242,7 +242,12 @@ export const openingsOf = (pad) => pad.lines
  */
 export const FORMATS = [{ key: 'pad', label: 'Pad' }, { key: 'format1', label: 'Format 1' }]
 const FORMAT_KEY = 'workshop:work-order-format'
-export const padFormat = () => { try { return localStorage.getItem(FORMAT_KEY) === 'format1' ? 'format1' : 'pad' } catch { return 'pad' } }
+// Format 1 is kept here but not offered (Tony, 21 Nov 2026): the pad is the
+// only look, whatever a device chose before. Return the stored choice again
+// to bring the choice back.
+export const padFormat = () => 'pad'
+// eslint-disable-next-line no-unused-vars
+const storedFormat = () => { try { return localStorage.getItem(FORMAT_KEY) === 'format1' ? 'format1' : 'pad' } catch { return 'pad' } }
 export const setPadFormat = (f) => { try { localStorage.setItem(FORMAT_KEY, f) } catch { /* this visit only */ } }
 const sizeOf = (format) => (format === 'format1' ? { w: SHEET_W, h: SHEET_H, print: 1, margin: 0 } : { w: PAD_W, h: PAD_H, print: PRINT_SCALE, margin: 3 })
 

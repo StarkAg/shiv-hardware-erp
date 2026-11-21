@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { contactsOf, addressOf, nameOf } from './flow.js'
+import { useConvex } from 'convex/react'
+import { contactsOf, addressOf, nameOf, said } from './flow.js'
 import { post } from './outbox.js'
-import { BackIcon, CloseIcon, SendIcon, Sheet, SheetIcon } from './ui.jsx'
+import { BackIcon, CloseIcon, SendIcon, Sheet, SheetIcon, TickIcon } from './ui.jsx'
 import { NumberPad } from './NewOrder.jsx'
 import { DatePick } from './DatePick.jsx'
-import { FORMATS, PadSheet, copyOf, padFormat, padPictures, setPadFormat } from './pad/PadSheet.jsx'
-import { QueuePrint } from './sendOut.jsx'
+import { PadSheet, copyOf, padFormat, padPictures } from './pad/PadSheet.jsx'
+import { QueuePrint, printOnQueue } from './sendOut.jsx'
 import {
   EXTRAS, FARE, FILLS, FILLS_FOR, FORMS, FORM_IDS, amountOf, inr, learnRate, productLabel, rateFor, todayKey, totalOf,
 } from './pad/forms.js'
@@ -195,13 +196,98 @@ function PieceSheet({ start, onClose, onSave }) {
   )
 }
 
+/* ── Proceed: check, choose what goes with it, send ────────────────────────
+   (Tony, 21 Nov 2026.) One screen: what the order comes to and anything
+   missing; whether the three copies print; then Send, each step ticked as it
+   is done. It goes to the workshop in the app only, not to WhatsApp (Tony,
+   21 Nov 2026). */
+const PROCEED_KEY = 'workshop:proceed'
+const readProceed = () => { try { return { print: JSON.parse(localStorage.getItem(PROCEED_KEY) || '{}').print ?? true } } catch { return { print: true } } }
+
+function ProceedSheet({ job, who, pad, draft, pieces, unsized, total, onSend, onBack, onDone }) {
+  const convex = useConvex()
+  const [opts, setOpts] = useState(readProceed)
+  const [steps, setSteps] = useState(null) // null while choosing; then { send, print } each 'wait' | 'doing' | 'done' | { error }
+  const pick = (k) => setOpts((o) => {
+    const next = { ...o, [k]: !o[k] }
+    try { localStorage.setItem(PROCEED_KEY, JSON.stringify(next)) } catch { /* this visit only */ }
+    return next
+  })
+  const loose = pad.lines.filter((l) => l.extra && l.qty > 0).length
+  const adv = pad.advance || 0
+  const name = `Work order ${job.number}`
+
+  const go = async () => {
+    const mark = (k, v) => setSteps((s) => ({ ...s, [k]: v }))
+    setSteps({ send: 'doing', ...(opts.print ? { print: 'wait' } : {}) })
+    const out = onSend()
+    mark('send', 'done')
+    if (opts.print) {
+      mark('print', 'doing')
+      try { await printOnQueue(convex, await padPictures(job.number, who, out), name, 'color'); mark('print', 'done') } catch (err) { mark('print', { error: said(err) }) }
+    }
+  }
+  const busy = steps && Object.values(steps).some((v) => v === 'doing' || v === 'wait')
+  const STEP_WORDS = { send: 'Sent to the workshop', print: 'Three copies to the printer' }
+  const state = (v) => (v === 'done' ? <TickIcon size={22} /> : v === 'doing' ? <span className="spin" /> : v === 'wait' ? <span className="stepwait" /> : <CloseIcon size={20} />)
+
+  return (
+    <Sheet label="Send the work order" wide onClose={busy ? () => {} : steps ? onDone : onBack}>
+      <b className="sheettitle">{steps ? (busy ? `Sending ${name}` : `${name} sent`) : `Send ${name}?`}</b>
+      {!steps ? (
+        <div className="proceed">
+          <dl className="proceedsum">
+            <div><dt>For</dt><dd>{[who.name, who.address].filter(Boolean).join(', ') || 'No name'}</dd></div>
+            <div><dt>Pieces to make</dt><dd>{pieces}</dd></div>
+            {loose > 0 && <div><dt>Loose items</dt><dd>{loose}</dd></div>}
+            <div><dt>Total</dt><dd>{inr(total)}</dd></div>
+            {adv > 0 && <div><dt>Advance</dt><dd>{inr(adv)}</dd></div>}
+            {adv > 0 && <div><dt>Balance</dt><dd>{inr(total - adv)}</dd></div>}
+          </dl>
+          {(unsized > 0 || !draft.deliveryDate) && (
+            <ul className="proceedwarn">
+              {unsized > 0 && <li>{unsized} {unsized === 1 ? 'piece has' : 'pieces have'} no size and will not be drawn.</li>}
+              {!draft.deliveryDate && <li>No delivery date set.</li>}
+            </ul>
+          )}
+          <span className="ask">With it</span>
+          <div className="proceedopts">
+            <button type="button" className={opts.print ? 'on' : ''} aria-pressed={opts.print} onClick={() => pick('print')}>
+              {opts.print ? <TickIcon size={22} /> : <span className="box" />} <span><b>Print 3 pages</b><small>Customer, shop and workshop copies, in colour</small></span>
+            </button>
+          </div>
+          <p className="proceednote">The job moves on to Assemble, and the workshop sees the yellow copy. This cannot be gone back to.</p>
+          <div className="sheetbtns">
+            <button type="button" className="ghost" onClick={onBack}>Not yet</button>
+            <button type="button" className="solid safe" onClick={go}><SendIcon size={20} /> Send</button>
+          </div>
+        </div>
+      ) : (
+        <div className="proceed">
+          <ul className="proceedsteps">
+            {Object.entries(steps).map(([k, v]) => (
+              <li key={k} className={typeof v === 'object' ? 'bad' : v}>
+                {state(v)} <span><b>{STEP_WORDS[k]}</b>{typeof v === 'object' && <small>{v.error}</small>}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="sheetbtns">
+            <button type="button" className="solid safe" disabled={busy} onClick={onDone}>Done</button>
+          </div>
+        </div>
+      )}
+    </Sheet>
+  )
+}
+
 export default function MakeOrder({ job, onClose }) {
   const [draft, setDraft] = useState(() => readDraft(job) ?? { orderDate: todayKey(), deliveryDate: '', fare: String(FARE), advance: '', lines: [] })
   useEffect(() => { try { localStorage.setItem(draftKey(job), JSON.stringify(draft)) } catch { /* kept in memory only */ } }, [draft, job])
   const [editing, setEditing] = useState(null) // a line, open in PieceSheet
   const [money, setMoney] = useState(null) // 'fare' | 'advance', open on the number pad
   const [sending, setSending] = useState(false)
-  const [format, setFormat] = useState(padFormat)
+  // The look it prints in: the pad, the only one offered (Format 1 is kept in PadSheet.jsx, hidden).
+  const [format] = useState(padFormat)
 
   const pad = useMemo(() => padOf(draft), [draft])
   const who = whoOf(job)
@@ -228,12 +314,13 @@ export default function MakeOrder({ job, onClose }) {
   // A tile's count: every line made from it.
   const countOf = (id) => draft.lines.filter((l) => l.form === id).reduce((t, l) => t + (Number(l.qty) || 0), 0)
 
+  // The order to the workshop: into the outbox at once (it goes up behind), the draft cleared.
   const send = () => {
-    for (const l of pad.lines) learnRate(l)
-    post({ jobId: job.id, step: 'quotation', pad: { ...pad, lines: pad.lines.filter((l) => l.qty > 0) } })
+    const out = { ...pad, lines: pad.lines.filter((l) => l.qty > 0) }
+    for (const l of out.lines) learnRate(l)
+    post({ jobId: job.id, step: 'quotation', pad: out })
     try { localStorage.removeItem(draftKey(job)) } catch { /* nothing kept */ }
-    setSending(false)
-    onClose()
+    return out
   }
 
   const tiles = [
@@ -252,7 +339,7 @@ export default function MakeOrder({ job, onClose }) {
         {/* Cancel and Send up here, in sight beside the title. */}
         <div className="nwkeys">
           <button type="button" className="key ghost" onClick={onClose}>Cancel</button>
-          <button type="button" className="key safe" disabled={!ready} onClick={() => setSending(true)}><SendIcon size={18} strokeWidth="2.6" /> Send to workshop</button>
+          <button type="button" className="key safe" disabled={!ready} onClick={() => setSending(true)}><SendIcon size={18} strokeWidth="2.6" /> Proceed</button>
         </div>
       </header>
 
@@ -267,14 +354,6 @@ export default function MakeOrder({ job, onClose }) {
             <button type="button" className="advkey" onClick={() => setMoney('advance')}>
               <span>Advance</span><b>{pad.advance ? inr(pad.advance) : 'None'}</b>
             </button>
-          </div>
-          {/* Which look it prints in: the shop's pink pad, or Format 1 (the visit order's). Kept on this device. */}
-          <span className="ask sheetask">Print as</span>
-          <div className="needs modes" role="group" aria-label="Print as">
-            {FORMATS.map((f) => (
-              <button key={f.key} type="button" className={format === f.key ? 'on' : ''} aria-pressed={format === f.key}
-                onClick={() => { setPadFormat(f.key); setFormat(f.key) }}>{f.label}</button>
-            ))}
           </div>
           <div className="padsums">
             <p><span>Total</span><b>{inr(total)}</b></p>
@@ -339,18 +418,8 @@ export default function MakeOrder({ job, onClose }) {
         />
       )}
       {sending && (
-        <Sheet label="Send to workshop" onClose={() => setSending(false)}>
-          <b className="sheettitle">Send the work order?</b>
-          <p>
-            {pieces > 0 ? `${pieces} ${pieces === 1 ? 'piece' : 'pieces'} to make. ` : ''}
-            The workshop gets the yellow copy and the job moves on to Assemble. This cannot be gone back to.
-            {unsized > 0 ? ` ${unsized} ${unsized === 1 ? 'piece has' : 'pieces have'} no size and will not be drawn.` : ''}
-          </p>
-          <div className="sheetbtns">
-            <button type="button" className="ghost" onClick={() => setSending(false)}>Not yet</button>
-            <button type="button" className="solid safe" onClick={send}>Send</button>
-          </div>
-        </Sheet>
+        <ProceedSheet job={job} who={who} pad={pad} draft={draft} pieces={pieces} unsized={unsized} total={total}
+          onSend={send} onBack={() => setSending(false)} onDone={onClose} />
       )}
     </div>
   )

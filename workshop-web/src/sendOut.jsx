@@ -64,7 +64,7 @@ export async function sheetBlob(element, selector) {
 
 const tidy = (name) => name.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Work order'
 
-async function toBase64(blob) {
+export async function toBase64(blob) {
   return new Promise((done, fail) => {
     const reader = new FileReader()
     reader.onload = () => done(String(reader.result).replace(/^data:[^,]*,/, ''))
