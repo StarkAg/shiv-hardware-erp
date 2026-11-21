@@ -43,7 +43,8 @@ export function SlipSheet({ number, who, slip, fixedZoom, fitHeight = false, thu
     const fit = () => {
       if (!el.clientWidth) return
       const byWidth = el.clientWidth / ((SHEET_W / 25.4) * 96)
-      const byHeight = fitHeight && el.clientHeight ? el.clientHeight / ((SHEET_H / 25.4) * 96 + 2) : Infinity
+      // Only where the screen gives it a fixed height (the counter, 900px and up); on a phone its height is its own.
+      const byHeight = fitHeight && el.clientHeight && window.matchMedia('(min-width: 900px)').matches ? el.clientHeight / ((SHEET_H / 25.4) * 96 + 2) : Infinity
       setZoom(Math.min(1.2, byWidth, byHeight))
     }
     fit()

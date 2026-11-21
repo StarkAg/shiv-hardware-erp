@@ -169,7 +169,7 @@ const todayKey = () => { const d = new Date(); return new Date(d.getTime() - d.g
  * A number by touch, as a till takes it: the keys, a back key, and for
  * money a row of the usual amounts. `decimal` allows a point (12.5 ft).
  */
-function NumberPad({ title, start, quick, decimal, onClose, onDone }) {
+export function NumberPad({ title, start, quick, decimal, onClose, onDone }) {
   const [v, setV] = useState(String(start ?? '') === '0' ? '' : String(start ?? ''))
   const press = (k) => setV((x) => {
     if (k === 'back') return x.slice(0, -1)

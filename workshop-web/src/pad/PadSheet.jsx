@@ -157,22 +157,25 @@ export const openingsOf = (pad) => pad.lines
  * One copy of the pad. `who` is the customer as the pad writes them: name,
  * address, mobile; `number` the work order's.
  */
-export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false }) {
+export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fitHeight = false }) {
   const box = useRef(null)
   const [zoom, setZoom] = useState(fixedZoom ?? 1)
   useLayoutEffect(() => {
     if (fixedZoom) return undefined
     const el = box.current
     if (!el) return undefined
+    // To the width it has; with `fitHeight`, the whole pad within the height too, nothing to scroll.
     const fitTo = () => {
       const padPx = (PAD_W / 25.4) * 96
-      if (el.clientWidth) setZoom(Math.min(1.2, el.clientWidth / padPx))
+      // Only where the screen gives it a fixed height (the counter, 900px and up); on a phone its height is its own.
+      const byHeight = fitHeight && el.clientHeight && window.matchMedia('(min-width: 900px)').matches ? el.clientHeight / ((PAD_H / 25.4) * 96 + 2) : Infinity
+      if (el.clientWidth) setZoom(Math.min(1.2, el.clientWidth / padPx, byHeight))
     }
     fitTo()
     const ro = new ResizeObserver(fitTo)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [fixedZoom])
+  }, [fixedZoom, fitHeight])
 
   const total = totalOf(pad)
   const adv = Math.round(Number(pad.advance) || 0)
@@ -200,7 +203,7 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false }) {
   }
 
   return (
-    <div ref={box} className="padfit" style={thumb ? { height: mm(PAD_H * zoom) } : undefined}>
+    <div ref={box} className={`padfit${fitHeight ? ' tall' : ''}`} style={thumb ? { height: mm(PAD_H * zoom) } : undefined}>
       {/* A thumbnail is shrunk as one picture: a phone will not draw letters that small. */}
       <div
         className={`pad copy-${copy.key}`}

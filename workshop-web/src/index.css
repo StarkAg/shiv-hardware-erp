@@ -544,3 +544,27 @@ html, body, #root { height: 100%; }
 /* The visit order's slip as wide as a photo in a job (one of the four in a row), so they read as one size. */
 .slipcard { grid-template-columns: calc((100% - 18px) / 4) 1fr; }
 .slipcard .padthumb { padding: 2px; border: none; box-shadow: inset 0 0 0 2px var(--ink); background: var(--key); }
+
+/* ── The work order made on the app, laid out as the New visit order ──────── */
+.neworder .padfit.tall { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; }
+.neworder .nwslip .padfit:not(.tall) { width: 100%; }
+.padsums { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; padding-top: 10px; border-top: 3px solid var(--ink); }
+.padsums p { margin: 0; display: flex; justify-content: space-between; align-items: baseline; }
+.padsums span { font: 700 17px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+.padsums b { font: 800 30px/1.1 var(--sign); font-variant-numeric: tabular-nums; }
+.neworder .padhint { margin: 8px 2px 0; font-size: 15px; color: var(--dim); }
+.chosenline.padline2 .what { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 4px 2px; }
+.chosenline.padline2 .what small { font: 600 15px/1.2 var(--text); text-transform: none; color: var(--dim); }
+.chosenline.padline2 .what small.wait { color: var(--stop); }
+.figrows { display: flex; flex-direction: column; gap: 6px; }
+.figrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 58px; padding: 0 14px; background: #fff; box-shadow: inset 0 0 0 2px var(--line); color: var(--ink); }
+.figrow span { font: 700 17px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.figrow b { font: 800 30px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.figrow b.hint { color: var(--dim); font-weight: 600; }
+.figrow.on { box-shadow: inset 0 0 0 3px var(--must); }
+.figrow.on span { color: var(--must); }
+.sizekeys { display: flex; flex-direction: column; gap: 6px; }
+.eighths { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.eighths button { min-height: 50px; background: #fff; box-shadow: inset 0 0 0 2px var(--ink); font: 700 20px/1 var(--sign); }
+.eighths button.on { background: var(--ink); color: #fff; }
+.optpanel .numpad button { min-height: 56px; }
