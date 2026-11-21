@@ -157,7 +157,7 @@ export const openingsOf = (pad) => pad.lines
  * One copy of the pad. `who` is the customer as the pad writes them: name,
  * address, mobile; `number` the work order's.
  */
-export function PadSheet({ copy, number, who, pad, fixedZoom }) {
+export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false }) {
   const box = useRef(null)
   const [zoom, setZoom] = useState(fixedZoom ?? 1)
   useLayoutEffect(() => {
@@ -200,10 +200,14 @@ export function PadSheet({ copy, number, who, pad, fixedZoom }) {
   }
 
   return (
-    <div ref={box} className="padfit">
+    <div ref={box} className="padfit" style={thumb ? { height: mm(PAD_H * zoom) } : undefined}>
+      {/* A thumbnail is shrunk as one picture: a phone will not draw letters that small. */}
       <div
         className={`pad copy-${copy.key}`}
-        style={{ width: mm(PAD_W), height: mm(PAD_H), '--zoom': zoom, '--print-zoom': PRINT_SCALE }}
+        style={{
+          width: mm(PAD_W), height: mm(PAD_H), '--print-zoom': PRINT_SCALE,
+          ...(thumb ? { '--zoom': 1, transform: `scale(${zoom})`, transformOrigin: 'top left' } : { '--zoom': zoom }),
+        }}
       >
         <At x={15.5} base={7} size={4.1} className="pi">Order No. -</At>
         <At x={42} base={13.2} size={5.2} className="ink">{number}</At>

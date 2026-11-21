@@ -18,6 +18,8 @@ import MakeOrder, { whoOf } from './MakeOrder.jsx'
 import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
 import { SlipSheet, qtyOf } from './pad/VisitSlip.jsx'
 import { sheetBlob } from './sendOut.jsx'
+import { inr, totalOf } from './pad/forms.js'
+import { fmtSize } from './pad/dims.js'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
 const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation', 'measurement', 'visit']
@@ -399,9 +401,24 @@ export default function JobPage({ job, onBack }) {
               {/* A work order made on the app: its yellow copy, the workshop's; tapped, it opens large. */}
               {m.pad && (
                 <>
-                  <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen(m.pad))} aria-label="Open the work order">
-                    <PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={m.pad} />
-                  </button>
+                  {/* Laid out as the visit order: the yellow copy small (tapped, it opens
+                      large) beside what it says, in words. */}
+                  <div className="slipcard">
+                    <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen(m.pad))} aria-label="Open the work order">
+                      <PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={m.pad} thumb />
+                    </button>
+                    <div className="slipsays">
+                      <ol>
+                        {m.pad.lines.map((l) => (
+                          <li key={l.id}>
+                            <span>{l.label}{l.w && l.h ? ` ${fmtSize(l.w, l.h)}` : ''}</span>
+                            <b>{l.qty} {l.extra ? l.unit : 'Pc'}</b>
+                          </li>
+                        ))}
+                      </ol>
+                      <p className="adv">Total <b>{inr(totalOf(m.pad))}</b>{m.pad.advance > 0 && <> · Advance <b>{inr(m.pad.advance)}</b></>}</p>
+                    </div>
+                  </div>
                   {SIDE === 'shop' && (
                     <button type="button" className="key ghost" onClick={() => setPrintPad(m.pad)}><SheetIcon /> Print 3 pages</button>
                   )}
