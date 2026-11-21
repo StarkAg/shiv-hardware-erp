@@ -377,7 +377,7 @@ export default function JobPage({ job, onBack }) {
                       picture (tapped, it opens large) beside what it asks for, in words. */}
                   <div className="slipcard">
                     <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen({ slip: m.slip }))} aria-label="Open the visit order">
-                      <SlipSheet number={job.number} who={whoOf(job)} slip={m.slip} />
+                      <SlipSheet number={job.number} who={whoOf(job)} slip={m.slip} thumb />
                     </button>
                     <div className="slipsays">
                       {m.slip.lines.length ? (

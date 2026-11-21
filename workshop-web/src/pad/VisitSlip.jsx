@@ -32,7 +32,7 @@ export const qtyOf = (l) => `${Math.round((Number(l.qty) || 0) * 100) / 100} ${l
  * The slip. `who` is { name, address, mobile }; `number` the job's, once it
  * has one (Ref. No.); `fixedZoom` for print, else it fits the width it has.
  */
-export function SlipSheet({ number, who, slip, fixedZoom, fitHeight = false }) {
+export function SlipSheet({ number, who, slip, fixedZoom, fitHeight = false, thumb = false }) {
   const box = useRef(null)
   const [zoom, setZoom] = useState(fixedZoom ?? 1)
   useLayoutEffect(() => {
@@ -53,8 +53,13 @@ export function SlipSheet({ number, who, slip, fixedZoom, fitHeight = false }) {
   }, [fixedZoom, fitHeight])
 
   return (
-    <div ref={box} className={`slipfit${fitHeight ? " tall" : ""}`}>
-      <div className="slip" style={{ width: `${SHEET_W}mm`, height: `${SHEET_H}mm`, '--zoom': zoom }}>
+    <div ref={box} className={`slipfit${fitHeight ? " tall" : ""}`} style={thumb ? { height: `${SHEET_H * zoom}mm` } : undefined}>
+      {/* A thumbnail is shrunk as one picture: a phone will not draw letters that
+          small, and the page would run into a narrow column instead. */}
+      <div className="slip" style={{
+        width: `${SHEET_W}mm`, height: `${SHEET_H}mm`,
+        ...(thumb ? { '--zoom': 1, transform: `scale(${zoom})`, transformOrigin: 'top left' } : { '--zoom': zoom }),
+      }}>
         <header className="sliphead">
           <img className="sliplogo" src="/shiv-logo.png" alt="" />
           <div className="slipshop">
