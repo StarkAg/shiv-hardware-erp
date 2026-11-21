@@ -16,7 +16,7 @@ import Camera from './Camera.jsx'
 import Viewer from './Viewer.jsx'
 import MakeOrder, { whoOf } from './MakeOrder.jsx'
 import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
-import { SlipSheet } from './pad/VisitSlip.jsx'
+import { SlipSheet, qtyOf } from './pad/VisitSlip.jsx'
 import { PrintSlipButton } from './pad/PrintSlipButton.jsx'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
@@ -373,9 +373,19 @@ export default function JobPage({ job, onBack }) {
               {/* A visit order made on the app: the letterhead slip; tapped, it opens large. */}
               {m.slip && (
                 <>
-                  <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen({ slip: m.slip }))} aria-label="Open the visit order">
-                    <SlipSheet number={job.number} who={whoOf(job)} slip={m.slip} />
-                  </button>
+                  {/* Small, so the step and what to do stay on the screen: the slip as a
+                      picture (tapped, it opens large) beside what it asks for, in words. */}
+                  <div className="slipcard">
+                    <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen({ slip: m.slip }))} aria-label="Open the visit order">
+                      <SlipSheet number={job.number} who={whoOf(job)} slip={m.slip} />
+                    </button>
+                    <div className="slipsays">
+                      {m.slip.lines.length ? (
+                        <ol>{m.slip.lines.map((l) => <li key={l.id}><span>{l.text}</span><b>{qtyOf(l)}</b></li>)}</ol>
+                      ) : <p>Visit only, no items written</p>}
+                      {m.slip.advance > 0 && <p className="adv">Advance <b>Rs. {Math.round(m.slip.advance).toLocaleString('en-IN')}</b></p>}
+                    </div>
+                  </div>
                   {SIDE === 'shop' && (
                     <PrintSlipButton number={job.number} who={whoOf(job)} slip={m.slip} />
                   )}

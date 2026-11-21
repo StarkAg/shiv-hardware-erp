@@ -26,7 +26,7 @@ const addressed = (name) => {
   const bare = String(name ?? '').trim().replace(/^m\s*\/?\s*s\.?\s*/i, '')
   return bare ? `M/s ${bare}` : ''
 }
-const qtyOf = (l) => `${Math.round((Number(l.qty) || 0) * 100) / 100} ${l.unit || 'Pc'}`
+export const qtyOf = (l) => `${Math.round((Number(l.qty) || 0) * 100) / 100} ${l.unit || 'Pc'}`
 
 /**
  * The slip. `who` is { name, address, mobile }; `number` the job's, once it

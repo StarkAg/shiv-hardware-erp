@@ -90,7 +90,9 @@
 .slipcontact dt { color: var(--mid); text-transform: uppercase; letter-spacing: .3mm; font-size: 3mm; font-weight: 600; align-self: center; }
 .slipcontact dd { font-weight: 700; font-variant-numeric: tabular-nums; }
 .slipdeals { display: grid; gap: 1.6mm; padding: 3mm 0; border-bottom: .3mm solid var(--rule); font-size: 3.05mm; line-height: 1.35; color: #444; }
-.slipdeals p { display: grid; grid-template-columns: 26mm 1fr; }
+.slipdeals { grid-template-columns: max-content 1fr; column-gap: 4mm; }
+/* Each label as wide as the longest ("Installation"), so neither runs into its words. */
+.slipdeals p { display: contents; }
 .slipdeals b { padding-top: .2mm; color: var(--ink); font-weight: 700; text-transform: uppercase; letter-spacing: .3mm; font-size: 2.8mm; }
 .sliptitle { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 7mm; }
 .sliptitle h1 { font: 800 8mm/1 "Barlow Condensed", "Barlow Condensed Fallback", "Arial Narrow", sans-serif; text-transform: uppercase; letter-spacing: .4mm; }
