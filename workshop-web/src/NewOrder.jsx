@@ -5,7 +5,8 @@ import { useKept } from './offline.js'
 import { post } from './outbox.js'
 import { BackIcon, CameraIcon, CloseIcon, FlagIcon, PersonIcon, PhoneIcon, PhotosIcon, Picked, PlusIcon, SendIcon, Sheet, SheetIcon, TickIcon, usePicked } from './ui.jsx'
 import { VISIT_ITEMS, lineText, recentDesigns, rememberDesign, shown, startPicks, stepOf } from './pad/visitItems.js'
-import { PrintSlip, SlipSheet } from './pad/VisitSlip.jsx'
+import { SlipSheet } from './pad/VisitSlip.jsx'
+import { PrintSlipButton } from './pad/PrintSlipButton.jsx'
 import Camera from './Camera.jsx'
 
 /**
@@ -250,7 +251,6 @@ export default function NewOrder({ onClose }) {
   const [mode, setModeNow] = useState(readMode)
   const setMode = (m) => { setModeNow(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* kept for this visit only */ } }
   const [slip, setSlip] = useState(() => ({ id: `slip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, date: todayKey(), lines: [], advance: '' }))
-  const [printing, setPrinting] = useState(false)
   const slipOut = {
     id: slip.id,
     date: slip.date || todayKey(),
@@ -429,8 +429,7 @@ export default function NewOrder({ onClose }) {
       {mode === 'make' && (
         <section className="nwslip" aria-label="The slip">
           <SlipSheet who={who} slip={slipOut} fitHeight />
-          <button type="button" className="pick" disabled={!slipOut.lines.length} onClick={() => setPrinting(true)}><SheetIcon /> Print on A4</button>
-          {printing && <PrintSlip who={who} slip={slipOut} onDone={() => setPrinting(false)} />}
+          <PrintSlipButton className="pick" who={who} slip={slipOut} disabled={!slipOut.lines.length} />
         </section>
       )}
       </main>

@@ -69,6 +69,7 @@ import type * as lib_spelling from "../lib/spelling.js";
 import type * as lib_staffPay from "../lib/staffPay.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_trashLinks from "../lib/trashLinks.js";
+import type * as lib_workPad from "../lib/workPad.js";
 import type * as lib_workPieces from "../lib/workPieces.js";
 import type * as masters from "../masters.js";
 import type * as merge from "../merge.js";
@@ -166,6 +167,7 @@ declare const fullApi: ApiFromModules<{
   "lib/staffPay": typeof lib_staffPay;
   "lib/text": typeof lib_text;
   "lib/trashLinks": typeof lib_trashLinks;
+  "lib/workPad": typeof lib_workPad;
   "lib/workPieces": typeof lib_workPieces;
   masters: typeof masters;
   merge: typeof merge;

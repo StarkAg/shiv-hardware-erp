@@ -16,7 +16,8 @@ import Camera from './Camera.jsx'
 import Viewer from './Viewer.jsx'
 import MakeOrder, { whoOf } from './MakeOrder.jsx'
 import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
-import { PrintSlip, SlipSheet } from './pad/VisitSlip.jsx'
+import { SlipSheet } from './pad/VisitSlip.jsx'
+import { PrintSlipButton } from './pad/PrintSlipButton.jsx'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
 const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation', 'measurement', 'visit']
@@ -79,7 +80,6 @@ export default function JobPage({ job, onBack }) {
   const [makingPad, setMakingPad] = useState(false)
   const [padOpen, setPadOpen] = useState(null)
   const [printPad, setPrintPad] = useState(null)
-  const [printSlip, setPrintSlip] = useState(null)
   const openOver = (what, set) => { window.history.pushState({ job: job.id, [what]: true }, ''); set() }
   useEffect(() => {
     const onPop = (e) => {
@@ -345,6 +345,90 @@ export default function JobPage({ job, onBack }) {
   const customerNow = job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: contacts.filter((n) => !phones.includes(n)).join(', '), phones }
     : job.title || phones.length ? { name: job.title, phones } : null
 
+  /** One step's section: what was sent under its tag, and what is still on its way. */
+  const sectionOf = ({ tag, items, pending }) => {
+    const latest = items[items.length - 1]
+      const visits = visitsOf(job, tag)
+      return (
+        <section key={tag} className="stepsec" aria-label={TAGS[tag]}>
+          <header>
+            <b>{TAGS[tag]}</b>
+            <small>{SIDE_NAME[TAG_FROM[tag]]}{latest ? ` · ${stampOf(latest.at)}` : ''}</small>
+          </header>
+          {items.map((m, i) => (
+            <div key={m.id} className="entry holdable" {...holdToDelete(m)}>
+              {/* Where a step took more than one visit, each visit's photos under its number. */}
+              {visits.count > 1 && visits.of[m.id] && visits.of[m.id] !== visits.of[items[i - 1]?.id] && (
+                <p className="mark visitno">Visit {visits.of[m.id]} <time>{whenDay(m.at)}</time></p>
+              )}
+              {m.photos.length > 0 && (
+                <div className="shots">
+                  {m.photos.map((p) => (
+                    <button key={p.storageId} type="button" onClick={() => openPhoto(p.storageId)} {...holdPhoto(m, p.storageId)}>
+                      <Shot url={p.url} width={BUBBLE} alt={TAGS[tag]} loading="lazy" decoding="async" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* A visit order made on the app: the letterhead slip; tapped, it opens large. */}
+              {m.slip && (
+                <>
+                  <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen({ slip: m.slip }))} aria-label="Open the visit order">
+                    <SlipSheet number={job.number} who={whoOf(job)} slip={m.slip} />
+                  </button>
+                  {SIDE === 'shop' && (
+                    <PrintSlipButton number={job.number} who={whoOf(job)} slip={m.slip} />
+                  )}
+                </>
+              )}
+              {/* A work order made on the app: its yellow copy, the workshop's; tapped, it opens large. */}
+              {m.pad && (
+                <>
+                  <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen(m.pad))} aria-label="Open the work order">
+                    <PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={m.pad} />
+                  </button>
+                  {SIDE === 'shop' && (
+                    <button type="button" className="key ghost" onClick={() => setPrintPad(m.pad)}><SheetIcon /> Print 3 pages</button>
+                  )}
+                </>
+              )}
+              {m.complete && <p className="mark ok"><TickIcon size={18} /> {DONE[tag] ?? 'Complete'} <time>{stampOf(m.at)}</time></p>}
+              {m.ordered && <p className="mark ok"><TickIcon size={18} /> Ordered <time>{stampOf(m.at)}</time></p>}
+              {tag === 'quotation' && (m.assemble != null || m.order != null) && (
+                <p className="mark">{[m.assemble && 'Assemble', m.order && 'Order in'].filter(Boolean).join(' + ')}</p>
+              )}
+              {m.boards != null && tag === 'quotation' && <p className="mark"><b>{m.boards}</b> {m.boards === 1 ? 'piece' : 'pieces'} to make</p>}
+              {m.arrived && <p className="mark ok"><TickIcon size={18} /> Ordered items arrived <time>{stampOf(m.at)}</time></p>}
+              {m.boards != null && tag !== 'quotation' && <p className="mark"><b>{m.boards}</b>{job.boardsTotal ? ` of ${job.boardsTotal}` : ''} {m.boards === 1 && !job.boardsTotal ? 'piece' : 'pieces'} made <time>{stampOf(m.at)}</time></p>}
+              {m.visitAt && (
+                <p className="mark">Visit <b>{visitLine(m.visitAt)}</b>{m.callPhone && <a href={`tel:${m.callPhone}`}><PhoneIcon size={15} /> {m.callPhone}</a>}</p>
+              )}
+              {/* A line typed before jobs became tags only. */}
+              {m.text && <p className="mark">{m.text}</p>}
+            </div>
+          ))}
+          {pending.map((item) => (
+            <div key={item.id} className={`entry pending ${item.state}`}>
+              {item.previews.length > 0 && (
+                <div className="shots">{item.previews.map((url) => <span key={url}><img src={url} alt="" /></span>)}</div>
+              )}
+              {!item.previews.length && <p className="mark">{lineOf(item, job)}</p>}
+              {item.state === 'failed' ? (
+                <p className="state bad">
+                  {item.refused
+                    ? <span>Not sent. {item.error}</span>
+                    : <button type="button" onClick={() => void deliver(item)}>Not sent. Tap to try again</button>}
+                  <button type="button" className="x" onClick={() => discard(item)} aria-label="Do not send this"><CloseIcon size={14} /></button>
+                </p>
+              ) : (
+                <p className="state">Sending <span className="spin tiny" /></p>
+              )}
+            </div>
+          ))}
+        </section>
+      )
+  }
+
   if (makingPad && SIDE === 'shop' && at === 'quotation' && !over) return <MakeOrder job={job} onClose={() => window.history.back()} />
 
   return (
@@ -361,6 +445,9 @@ export default function JobPage({ job, onBack }) {
       <main className="scroll">
         <StepTracker job={job} />
         {job.priority && !over && <p className="prio big"><FlagIcon size={20} strokeWidth="3" /> Priority</p>}
+
+        {/* The visit order first: what the customer asked for, before anything else is done. */}
+        {sections.filter((s) => s.tag === 'visit').map(sectionOf)}
 
         <section className={`nowpanel ${over ? 'over' : mine ? 'mine' : 'wait'}`} aria-label="What to do now">
           {now}
@@ -403,88 +490,7 @@ export default function JobPage({ job, onBack }) {
           </section>
         )}
 
-        {sections.map(({ tag, items, pending }) => {
-          const latest = items[items.length - 1]
-          const visits = visitsOf(job, tag)
-          return (
-            <section key={tag} className="stepsec" aria-label={TAGS[tag]}>
-              <header>
-                <b>{TAGS[tag]}</b>
-                <small>{SIDE_NAME[TAG_FROM[tag]]}{latest ? ` · ${stampOf(latest.at)}` : ''}</small>
-              </header>
-              {items.map((m, i) => (
-                <div key={m.id} className="entry holdable" {...holdToDelete(m)}>
-                  {/* Where a step took more than one visit, each visit's photos under its number. */}
-                  {visits.count > 1 && visits.of[m.id] && visits.of[m.id] !== visits.of[items[i - 1]?.id] && (
-                    <p className="mark visitno">Visit {visits.of[m.id]} <time>{whenDay(m.at)}</time></p>
-                  )}
-                  {m.photos.length > 0 && (
-                    <div className="shots">
-                      {m.photos.map((p) => (
-                        <button key={p.storageId} type="button" onClick={() => openPhoto(p.storageId)} {...holdPhoto(m, p.storageId)}>
-                          <Shot url={p.url} width={BUBBLE} alt={TAGS[tag]} loading="lazy" decoding="async" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {/* A visit order made on the app: the letterhead slip; tapped, it opens large. */}
-                  {m.slip && (
-                    <>
-                      <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen({ slip: m.slip }))} aria-label="Open the visit order">
-                        <SlipSheet number={job.number} who={whoOf(job)} slip={m.slip} />
-                      </button>
-                      {SIDE === 'shop' && (
-                        <button type="button" className="key ghost" onClick={() => setPrintSlip(m.slip)}><SheetIcon /> Print on A4</button>
-                      )}
-                    </>
-                  )}
-                  {/* A work order made on the app: its yellow copy, the workshop's; tapped, it opens large. */}
-                  {m.pad && (
-                    <>
-                      <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen(m.pad))} aria-label="Open the work order">
-                        <PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={m.pad} />
-                      </button>
-                      {SIDE === 'shop' && (
-                        <button type="button" className="key ghost" onClick={() => setPrintPad(m.pad)}><SheetIcon /> Print 3 pages</button>
-                      )}
-                    </>
-                  )}
-                  {m.complete && <p className="mark ok"><TickIcon size={18} /> {DONE[tag] ?? 'Complete'} <time>{stampOf(m.at)}</time></p>}
-                  {m.ordered && <p className="mark ok"><TickIcon size={18} /> Ordered <time>{stampOf(m.at)}</time></p>}
-                  {tag === 'quotation' && (m.assemble != null || m.order != null) && (
-                    <p className="mark">{[m.assemble && 'Assemble', m.order && 'Order in'].filter(Boolean).join(' + ')}</p>
-                  )}
-                  {m.boards != null && tag === 'quotation' && <p className="mark"><b>{m.boards}</b> {m.boards === 1 ? 'piece' : 'pieces'} to make</p>}
-                  {m.arrived && <p className="mark ok"><TickIcon size={18} /> Ordered items arrived <time>{stampOf(m.at)}</time></p>}
-                  {m.boards != null && tag !== 'quotation' && <p className="mark"><b>{m.boards}</b>{job.boardsTotal ? ` of ${job.boardsTotal}` : ''} {m.boards === 1 && !job.boardsTotal ? 'piece' : 'pieces'} made <time>{stampOf(m.at)}</time></p>}
-                  {m.visitAt && (
-                    <p className="mark">Visit <b>{visitLine(m.visitAt)}</b>{m.callPhone && <a href={`tel:${m.callPhone}`}><PhoneIcon size={15} /> {m.callPhone}</a>}</p>
-                  )}
-                  {/* A line typed before jobs became tags only. */}
-                  {m.text && <p className="mark">{m.text}</p>}
-                </div>
-              ))}
-              {pending.map((item) => (
-                <div key={item.id} className={`entry pending ${item.state}`}>
-                  {item.previews.length > 0 && (
-                    <div className="shots">{item.previews.map((url) => <span key={url}><img src={url} alt="" /></span>)}</div>
-                  )}
-                  {!item.previews.length && <p className="mark">{lineOf(item, job)}</p>}
-                  {item.state === 'failed' ? (
-                    <p className="state bad">
-                      {item.refused
-                        ? <span>Not sent. {item.error}</span>
-                        : <button type="button" onClick={() => void deliver(item)}>Not sent. Tap to try again</button>}
-                      <button type="button" className="x" onClick={() => discard(item)} aria-label="Do not send this"><CloseIcon size={14} /></button>
-                    </p>
-                  ) : (
-                    <p className="state">Sending <span className="spin tiny" /></p>
-                  )}
-                </div>
-              ))}
-            </section>
-          )
-        })}
+        {sections.filter((s) => s.tag !== 'visit').map(sectionOf)}
       </main>
 
       {dock && (
@@ -514,7 +520,6 @@ export default function JobPage({ job, onBack }) {
         </div>
       )}
       {printPad && <PrintPads number={job.number} who={whoOf(job)} pad={printPad} onDone={() => setPrintPad(null)} />}
-      {printSlip && <PrintSlip number={job.number} who={whoOf(job)} slip={printSlip} onDone={() => setPrintSlip(null)} />}
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
       {completing && (
         <Sheet label="Complete" onClose={() => setCompleting(false)}>
