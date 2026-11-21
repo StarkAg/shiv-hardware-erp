@@ -14,6 +14,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { SketchGrid } from './sketch.jsx'
 import { totalOf } from './forms.js'
+import { fmtDim } from './dims.js'
+import { Letterhead, addressed, sheetDate } from './Letterhead.jsx'
 import './pad.css'
 
 export const COPIES = [
@@ -29,6 +31,8 @@ export const copyOf = (key) => COPIES.find((c) => c.key === key) ?? COPIES[0]
  * corner. The Epson takes paper 216 mm wide at most, so the sheet goes on A4
  * at PRINT_SCALE, every proportion kept.
  */
+const SHEET_W = 210 // mm, A4
+const SHEET_H = 296 // a hair under A4, so it never spills a blank second page
 const PAD_W = 230.8
 const PAD_H = 270.8
 const PRINT_SCALE = 204 / PAD_W
@@ -51,7 +55,11 @@ const LOGO_TOP = 45.4
 const LOGO_H = 61.6 - LOGO_TOP
 const LOGO_X = 31 - 2.6 - LOGO_H * 154 / 174
 
-/** Amounts as the pad writes them: whole rupees, no sign, no commas. */
+/** A rate keeps its paise: Rs. 9.5 a foot. */
+const rateOf = (n) => `Rs. ${(Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+/** Amounts as the work order writes them: Rs. 1,250. */
+const rupees = (n) => `Rs. ${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
+/** Amounts as the old pad wrote them: whole rupees, no sign, no commas. */
 const plain = (n) => String(Math.round(Number(n) || 0))
 /** Pieces as the pad writes them: 3 Pc, 12.5 ft. */
 const qtyOf = (l) => `${Math.round((Number(l.qty) || 0) * 100) / 100} ${l.unit && l.unit !== 'pc' ? l.unit : 'Pc'}`
@@ -154,7 +162,9 @@ export const openingsOf = (pad) => pad.lines
   .map((l) => ({ id: l.id, form: l.form, fill: l.fill, w: l.w, h: l.h, qty: l.qty }))
 
 /**
- * One copy of the pad. `who` is the customer as the pad writes them: name,
+ * One copy of the work order, on A4 in the visit order's look (Tony, 21 Nov
+ * 2026): the letterhead, who it is for, the estimate as a table, every piece
+ * drawn below it, and which copy it is. `who` is the customer: name,
  * address, mobile; `number` the work order's.
  */
 export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fitHeight = false }) {
@@ -164,11 +174,11 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fit
     if (fixedZoom) return undefined
     const el = box.current
     if (!el) return undefined
-    // To the width it has; with `fitHeight`, the whole pad within the height too, nothing to scroll.
+    // To the width it has; with `fitHeight`, the whole sheet within the height too, nothing to scroll.
     const fitTo = () => {
-      const padPx = (PAD_W / 25.4) * 96
+      const padPx = (SHEET_W / 25.4) * 96
       // Only where the screen gives it a fixed height (the counter, 900px and up); on a phone its height is its own.
-      const byHeight = fitHeight && el.clientHeight && window.matchMedia('(min-width: 900px)').matches ? el.clientHeight / ((PAD_H / 25.4) * 96 + 2) : Infinity
+      const byHeight = fitHeight && el.clientHeight && window.matchMedia('(min-width: 900px)').matches ? el.clientHeight / ((SHEET_H / 25.4) * 96 + 2) : Infinity
       if (el.clientWidth) setZoom(Math.min(1.2, el.clientWidth / padPx, byHeight))
     }
     fitTo()
@@ -179,82 +189,69 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fit
 
   const total = totalOf(pad)
   const adv = Math.round(Number(pad.advance) || 0)
-  const rows = [
-    ...pad.lines.map((l) => ({ key: l.id, label: `× ${l.label}`, qty: qtyOf(l), amt: l.amount ? plain(l.amount) : '' })),
-    ...(pad.fare ? [{ key: 'fare', word: 'Fare', amt: plain(pad.fare), under: 'single' }] : []),
-    { key: 'total', amt: plain(total), strong: true },
-    ...(adv > 0
-      ? [
-          { key: 'adv', word: 'Advance', amt: plain(adv), under: 'single' },
-          { key: 'bal', amt: plain(total - adv), strong: true, under: 'double' },
-        ]
-      : []),
-  ]
-  // The pad has ten ruled lines; a longer order closes them up to fit.
-  const step = rows.length > RULES ? (RULE_STEP * RULES) / rows.length : RULE_STEP
-  const ruleCount = Math.max(RULES, rows.length)
-  const size = Math.min(4.6, step * 0.5)
-  const values = {
-    name: who.name || '',
-    address: who.address || '',
-    mobile: who.mobile || '',
-    orderDate: padDate(pad.orderDate),
-    deliveryDate: padDate(pad.deliveryDate),
-  }
+  const openings = openingsOf(pad)
 
   return (
-    <div ref={box} className={`padfit${fitHeight ? ' tall' : ''}`} style={thumb ? { height: mm(PAD_H * zoom) } : undefined}>
+    <div ref={box} className={`padfit${fitHeight ? ' tall' : ''}`} style={thumb ? { height: mm(SHEET_H * zoom) } : undefined}>
       {/* A thumbnail is shrunk as one picture: a phone will not draw letters that small. */}
       <div
-        className={`pad copy-${copy.key}`}
+        className={`pad worksheet copy-${copy.key}`}
         style={{
-          width: mm(PAD_W), height: mm(PAD_H), '--print-zoom': PRINT_SCALE,
+          width: mm(SHEET_W), height: mm(SHEET_H), '--print-zoom': 1,
           ...(thumb ? { '--zoom': 1, transform: `scale(${zoom})`, transformOrigin: 'top left' } : { '--zoom': zoom }),
         }}
       >
-        <At x={15.5} base={7} size={4.1} className="pi">Order No. -</At>
-        <At x={42} base={13.2} size={5.2} className="ink">{number}</At>
-        <At x={24.5} base={25.6} size={8.6} className="pphone">8092850954</At>
-        <At x={97.5} base={26.4} size={4.7} className="pi">Tony</At>
-        <At right={107.5} base={33.2} size={4.2} className="pb">8092850956 <i>Vijay</i></At>
-        <img className="plogo" src="/shiv-logo.png" alt="" style={{ left: mm(LOGO_X), top: mm(LOGO_TOP), width: mm(LOGO_H * 154 / 174), height: mm(LOGO_H) }} />
-        <At x={31} base={50.6} size={6.3} className="pshop">Shiv Hardware Store</At>
-        <At x={31} base={56.2} size={4.15} className="pi">Shivaji Road, Near Gandhi High School</At>
-        <At x={31} base={61.6} size={4.15} className="pi">Ramgarh Cantt- 829122 Jharkhand</At>
+        <div className="slip" style={{ '--zoom': 1 }}>
+          <Letterhead />
 
-        {FIELDS.map((f) => (
-          <div key={f.key}>
-            {f.label && <At x={15} base={f.y - 0.6} size={4.0} className="pi">{f.label}</At>}
-            <HLine y={f.y} x0={f.from} x1={FIELD_END} />
-            <At centre={(f.from + FIELD_END) / 2} base={f.y - 1.3} size={5} fit={FIELD_END - f.from - 1} className="ink">{values[f.key]}</At>
+          <div className="sliptitle">
+            <h1>Work order</h1>
+            <dl>
+              <div><dt>Order No.</dt><dd>{number ?? ''}</dd></div>
+              <div><dt>Date</dt><dd>{sheetDate(pad.orderDate)}</dd></div>
+              <div><dt>Delivery</dt><dd>{sheetDate(pad.deliveryDate)}</dd></div>
+            </dl>
           </div>
-        ))}
-        <At x={15} base={124.6} size={4.0} className="pi">Customer Satisfaction Sig.</At>
 
-        <div className="padl" style={{ left: mm(DIVIDER_X - 0.2), top: 0, width: mm(0.4), height: mm(SPLIT_Y) }} />
-        <HLine y={SPLIT_Y} x0={13} x1={EST_X1} w={0.4} />
+          <div className="slipwho">
+            <small>For</small>
+            <b>{[addressed(who.name), who.address].filter(Boolean).join(', ') || ' '}</b>
+            {who.mobile && <span>Mobile {who.mobile}</span>}
+          </div>
 
-        <At centre={170} base={9} size={4.2} className="pi">Estimate</At>
-        <HLine y={26.2} x0={EST_X0} x1={EST_X1} />
-        <HLine y={28.8} x0={EST_X0} x1={EST_X1} />
-        {Array.from({ length: ruleCount }, (_, i) => (
-          <HLine key={i} y={RULE_FIRST + i * step} x0={EST_X0} x1={EST_X1} />
-        ))}
-        {rows.map((r, i) => {
-          const base = RULE_FIRST + i * step - 1.3
-          return (
-            <div key={r.key}>
-              {r.label && <At x={120.5} base={base} size={size} fit={69} className="ink">{r.label}</At>}
-              {r.qty && <At right={202} base={base} size={size} className="ink">{r.qty}</At>}
-              {r.word && <At right={201} base={base} size={size} className="ink">{r.word}</At>}
-              <At right={222.5} base={base} size={r.strong ? size * 1.1 : size} className={`ink${r.strong ? ' pstrong' : ''}`}>{r.amt}</At>
-              {r.under && <HLine y={base + 1.1} x0={204} x1={222.8} w={0.35} pen double={r.under === 'double'} />}
-            </div>
-          )
-        })}
+          <table className="sliptable worktable">
+            <thead><tr><th className="n">No.</th><th>Item</th><th className="s">Size</th><th className="q">Qty</th><th className="r">Rate</th><th className="r">Amount</th></tr></thead>
+            <tbody>
+              {pad.lines.map((l, i) => (
+                <tr key={l.id}>
+                  <td className="n">{i + 1}</td>
+                  <td>{l.label}</td>
+                  <td className="s">{l.w && l.h && (l.w.inches || l.w.soot) ? `${fmtDim(l.w)}″ × ${fmtDim(l.h)}″` : ''}</td>
+                  <td className="q">{qtyOf(l)}</td>
+                  <td className="r">{l.rate ? rateOf(l.rate) : ''}</td>
+                  <td className="r">{l.amount ? rupees(l.amount) : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <dl className="worksums">
+            {pad.fare > 0 && <div><dt>Fare</dt><dd>{rupees(pad.fare)}</dd></div>}
+            <div className="strong"><dt>Total</dt><dd>{rupees(total)}</dd></div>
+            {adv > 0 && <div><dt>Advance</dt><dd>{rupees(adv)}</dd></div>}
+            {adv > 0 && <div className="strong"><dt>Balance</dt><dd>{rupees(total - adv)}</dd></div>}
+          </dl>
 
-        <PadSketch openings={openingsOf(pad)} style={{ left: mm(13), top: mm(SPLIT_Y + 6), width: mm(PAD_W - 26), height: mm(PAD_H - SPLIT_Y - 14) }} />
-        <At right={223} base={267.5} size={2.6} className="pcopy">{copy.label}</At>
+          {/* Every piece with a size, drawn, in the room that is left. */}
+          <div className="workdraw">
+            {openings.length > 0 && <PadSketch openings={openings} style={{ left: 0, top: 0, width: '100%', height: '100%' }} />}
+          </div>
+
+          <footer className="slipfoot">
+            <div className="slipsign"><span />Customer signature</div>
+            <b className="workcopy">{copy.label}</b>
+            <div className="slipsign"><span />For Shiv Hardware Store</div>
+          </footer>
+        </div>
       </div>
     </div>
   )
@@ -304,7 +301,7 @@ export function Printing({ margin = 3, onDone, children }) {
 /** All three copies of the pad, printed: load pink, white, yellow paper, in that order. */
 export function PrintPads({ number, who, pad, onDone }) {
   return (
-    <Printing onDone={onDone}>
+    <Printing margin={0} onDone={onDone}>
       {COPIES.map((copy) => <PadSheet key={copy.key} copy={copy} number={number} who={who} pad={pad} fixedZoom={1} />)}
     </Printing>
   )

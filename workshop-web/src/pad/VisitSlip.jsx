@@ -9,23 +9,13 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Printing } from './PadSheet.jsx'
+import { Letterhead, addressed, sheetDate } from './Letterhead.jsx'
 
 const SHEET_W = 210 // mm, A4
 const SHEET_H = 296 // a hair under A4, so it never spills a blank second page
 
-const DEALS = 'Plywood, Flush Door, Laminates, PVC & Acrylic Hi-Gloss Laminates, Adhesive, Hardware, Aluminium & Stainless Steel Architectural Section, Wooden & WPC Chowket, Gypsum False Ceiling, WPC Grill, Modular Kitchen Accessories, All types of Wooden Bit, Decorative wall Panel & General Order Suppliers.'
-const INSTALLS = 'Aluminium Door & Window, UPVC Door & Window, Stainless Steel Railing, Wooden & Readymade Door, PVC / FRP / Rajshree Bathroom Door, Mosquito Solution in Door & Window, PVC & Wooden Flooring, Only 2\' x 2\' Gypsum False Ceiling, Wall Paper, ACP & Glass work in Exterior Wall.'
-
-/** dd-mm-yy, as the slip is dated. */
-const slipDate = (key) => {
-  const [y, m, d] = String(key ?? '').split('-')
-  return d && m && y ? `${d}-${m}-${y.slice(-2)}` : ''
-}
-/** "M/s" once, however the name was typed. */
-const addressed = (name) => {
-  const bare = String(name ?? '').trim().replace(/^m\s*\/?\s*s\.?\s*/i, '')
-  return bare ? `M/s ${bare}` : ''
-}
+// The letterhead, the date as it is written and "M/s": shared with the work order (Letterhead.jsx).
+const slipDate = sheetDate
 export const qtyOf = (l) => `${Math.round((Number(l.qty) || 0) * 100) / 100} ${l.unit || 'Pc'}`
 
 /**
@@ -61,22 +51,7 @@ export function SlipSheet({ number, who, slip, fixedZoom, fitHeight = false, thu
         width: `${SHEET_W}mm`, height: `${SHEET_H}mm`,
         ...(thumb ? { '--zoom': 1, transform: `scale(${zoom})`, transformOrigin: 'top left' } : { '--zoom': zoom }),
       }}>
-        <header className="sliphead">
-          <img className="sliplogo" src="/shiv-logo.png" alt="" />
-          <div className="slipshop">
-            <b>Shiv Hardware Store</b>
-            <span>Shivaji Road, Near Gandhi High School, Ramgarh Cantt. 829122</span>
-          </div>
-          <dl className="slipcontact">
-            <div><dt>GSTIN</dt><dd>20AGEPG3564B1Z6</dd></div>
-            <div><dt>Tony</dt><dd>8092850954</dd></div>
-            <div><dt>Shop</dt><dd>9835350954</dd></div>
-          </dl>
-        </header>
-        <div className="slipdeals">
-          <p><b>Deals in</b>{DEALS}</p>
-          <p><b>Installation</b>{INSTALLS}</p>
-        </div>
+        <Letterhead />
 
         <div className="sliptitle">
           <h1>Visit order</h1>

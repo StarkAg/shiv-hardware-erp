@@ -118,3 +118,32 @@
   .padprint .slipfit { overflow: visible; }
   .padprint .slip { zoom: 1 !important; border: none !important; }
 }
+
+/* ── the work order, in the visit order's look (PadSheet.jsx) ────────────────
+   A4, the letterhead whole, black and greys; the copy's colour is only a
+   light wash on the screen, to tell the three apart. Printed, it goes onto the
+   shop's pink, white and yellow paper with no colour of its own. */
+.pad.worksheet { font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; }
+.pad.worksheet.copy-customer { --pad: #fdeef5; }
+.pad.worksheet.copy-shop { --pad: #ffffff; }
+.pad.worksheet.copy-workshop { --pad: #fffbe0; }
+.pad.worksheet > .slip { width: 100%; height: 100%; background: none; border: none; }
+.worktable { font-size: 4mm; }
+.worktable td { padding: 2mm 2mm; }
+.worktable .s { width: 30mm; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.worktable .q { width: 18mm; }
+.worktable .r { width: 24mm; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.worktable th.r, .worktable th.q { text-align: right; }
+.worksums { display: grid; justify-content: end; gap: 1mm; margin: 3mm 2mm 0 0; }
+.worksums div { display: grid; grid-template-columns: 30mm 30mm; align-items: baseline; }
+.worksums dt { color: var(--mid); text-transform: uppercase; letter-spacing: .4mm; font-size: 2.8mm; font-weight: 600; }
+.worksums dd { margin: 0; text-align: right; font-size: 4.4mm; font-weight: 600; font-variant-numeric: tabular-nums; }
+.worksums .strong dd { font-size: 5.2mm; font-weight: 800; }
+.worksums .strong { padding-top: 1mm; border-top: .3mm solid var(--ink); }
+.workdraw { position: relative; flex: 1; min-height: 0; margin-top: 4mm; }
+.pad.worksheet .padsketch .opframe, .pad.worksheet .padsketch .opswing, .pad.worksheet .padsketch .ophinge, .pad.worksheet .padsketch .ophandle { stroke: #111; }
+.pad.worksheet .padsketch .ophinge, .pad.worksheet .padsketch .ophandle, .pad.worksheet .padsketch .oplabel, .pad.worksheet .padsketch .opnum { fill: #111; }
+.pad.worksheet .padsketch .opw, .pad.worksheet .padsketch .oph, .pad.worksheet .padsketch .opnote, .pad.worksheet .padsketch .opqty { color: #111; font-family: inherit; }
+.pad.worksheet .slipfoot { align-items: flex-end; padding-top: 6mm; }
+.pad.worksheet .slipsign { min-width: 55mm; }
+.workcopy { padding: 1.5mm 4mm; border: .4mm solid var(--ink); font-size: 3.2mm; font-weight: 700; text-transform: uppercase; letter-spacing: .5mm; }
