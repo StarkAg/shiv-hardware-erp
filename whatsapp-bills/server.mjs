@@ -308,6 +308,8 @@ async function onMessage(msg) {
   if (!keys.length) return
   await loadKnown
   if (msg.key.fromMe) { remember(msg.key); return }
+  // Paused by the owner: HI_REPLY=off on Railway. Delete the variable to turn it back on.
+  if (process.env.HI_REPLY === 'off') return
   if (!msg.message || !sock || state.status !== 'ready' || stopping) return
   if (keys.some((id) => known.has(id))) return
   // A hi from hours ago, delivered when the link came back, is left to the owner.
