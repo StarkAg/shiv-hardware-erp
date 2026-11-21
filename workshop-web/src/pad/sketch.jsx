@@ -189,13 +189,13 @@ export function Opening({ o, n, longest }) {
         {draw === 'openable' && leaves < 2 && (
           <>
             <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" paint={paint} glass={glass} />
-            <FillLabel cx={ix + iw / 2 + 4} cy={iy + ih / 2} text={words} room={iw - 14} />
+            <FillLabel cx={ix + iw / 2} cy={iy + ih / 2} text={words} room={iw - 14} />
           </>
         )}
         {draw === 'door' && (
           <>
             <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" paint={paint} glass={glass} />
-            <FillLabel cx={ix + iw / 2 + 4} cy={iy + ih * 0.32} text={words} room={iw - 14} />
+            <FillLabel cx={ix + iw / 2} cy={iy + ih / 2} text={words} room={iw - 14} />
           </>
         )}
         {draw === 'plain' && (
