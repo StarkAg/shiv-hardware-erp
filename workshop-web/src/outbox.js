@@ -103,9 +103,12 @@ const landed = (jobs, item) => {
   const job = item.jobId ? jobs.find((j) => j.id === item.jobId) : null
   const first = item.photoIds?.[0]
   if (first) return jobs.some((j) => (!item.jobId || j.id === item.jobId) && j.messages.some((m) => m.photos.some((p) => p.storageId === first)))
+  // A visit order made on the app has no photo to find: its slip is found instead.
+  if (!item.jobId && item.slip) return jobs.some((j) => j.messages[0]?.slip?.id === item.slip.id)
   if (!item.jobId) return false
   if (!job) return true // the job is gone: nothing to send it to
   if (item.complete) return item.step === 'assemble' ? job.assembled : stageNo(stageId(job)) > stageNo(item.step) || finished(job)
+  if (item.pad) return stageNo(stageId(job)) > stageNo('quotation') || finished(job)
   if (item.ordered) return job.ordered
   if (item.arrived) return job.arrived
   if (item.visitAt) return job.visitAt === item.visitAt
@@ -139,13 +142,14 @@ async function run(item) {
         jobId: item.jobId, from: SIDE, photos: item.photoIds,
         ...(item.step ? { step: item.step } : {}),
         ...(item.boards != null ? { boards: item.boards } : {}),
+        ...(item.pad ? { pad: item.pad } : {}),
         ...(item.complete ? { complete: true } : {}),
         ...(item.ordered ? { ordered: true } : {}),
         ...(item.arrived ? { arrived: true } : {}),
         ...(item.visitAt ? { visitAt: item.visitAt, callPhone: item.callPhone } : {}),
       })
     }
-    else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds, ...(item.priority ? { priority: true } : {}), ...(item.needs ? { assemble: item.needs.assemble, order: item.needs.order } : {}) })
+    else await outbox.convex.mutation(api.workshop.create, { ...item.customer, photos: item.photoIds, ...(item.slip ? { slip: item.slip } : {}), ...(item.priority ? { priority: true } : {}), ...(item.needs ? { assemble: item.needs.assemble, order: item.needs.order } : {}) })
     // The live list has it by now, so its stand-in goes.
     discard(item)
   } catch (err) {
@@ -210,14 +214,20 @@ function putIn(job, item) {
     else if (item.ordered) facts.ordered = true
     else if (item.arrived) facts.arrived = true
     else if (item.visitAt) { facts.visitAt = item.visitAt; facts.callPhone = item.callPhone; moves = true }
-    else if (item.step === 'quotation') { if (item.boards != null) facts.boardsTotal = item.boards; moves = true }
+    else if (item.step === 'quotation') {
+      // A work order made on the app counts its own pieces, as the books will (convex/lib/workPad.ts).
+      const pieces = item.pad && needsOf(job).assemble ? Math.round(item.pad.lines.filter((l) => !l.extra).reduce((t, l) => t + l.qty, 0)) : null
+      if (pieces != null) facts.boardsTotal = pieces
+      else if (item.boards != null) facts.boardsTotal = item.boards
+      moves = true
+    }
     if ((facts.assembled || facts.arrived) && at === 'assemble') {
       const n = needsOf({ ...job, ...facts })
       moves = !n.assembling && !n.ordering
     }
   }
   const message = {
-    id: item.id, from: SIDE, step: item.step ?? (SIDE === 'shop' ? 'visit' : at), boards: item.boards ?? null, assemble: null, order: null,
+    id: item.id, from: SIDE, step: item.step ?? (SIDE === 'shop' ? 'visit' : at), boards: item.boards ?? null, pad: item.pad ?? null, assemble: null, order: null,
     complete: !!item.complete, ordered: !!item.ordered, arrived: !!item.arrived, visitAt: item.visitAt ?? null, callPhone: item.callPhone ?? '',
     text: '', by: '', at: item.at, pending: true,
     photos: item.previews.map((url, i) => ({ storageId: `${item.id}-${i}`, url })),
@@ -272,7 +282,7 @@ export const atOnce = {
     const left = j.messages.flatMap((m) => {
       if (m.id !== messageId) return [m]
       const photos = m.photos.filter((p) => p.storageId !== photo)
-      const marks = m.text || m.boards != null || m.assemble != null || m.order != null || m.complete || m.ordered || m.arrived || m.visitAt != null
+      const marks = m.text || m.boards != null || m.pad || m.slip || m.assemble != null || m.order != null || m.complete || m.ordered || m.arrived || m.visitAt != null
       return photos.length || marks ? [{ ...m, photos }] : []
     })
     return left.length ? { ...j, messages: left } : null

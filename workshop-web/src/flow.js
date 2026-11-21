@@ -139,6 +139,8 @@ export const lineOf = (m, job) => {
   if (m.ordered) return 'Ordered'
   if (m.arrived) return 'Ordered items arrived'
   if (m.visitAt) return `Go-ahead: ${visitLine(m.visitAt)}`
+  if (m.slip) return m.slip.lines.length ? `Visit order · ${m.slip.lines.length} ${m.slip.lines.length === 1 ? 'item' : 'items'}` : 'Visit order'
+  if (m.pad) return `Work order made on the app · ${m.pad.lines.length} ${m.pad.lines.length === 1 ? 'item' : 'items'}`
   if (m.boards != null && m.step !== 'quotation') return `Work status: ${piecesLine(m.boards, job?.boardsTotal)}`
   if (n) return `${TAGS[m.step] ?? (m.from === 'workshop' ? 'Measurement' : 'Photo')}${n > 1 ? ` · ${n} photos` : ''}`
   return m.text || ''

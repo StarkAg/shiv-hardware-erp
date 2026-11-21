@@ -1,0 +1,118 @@
+/* The pink pad (PadSheet.jsx), at its true size, 230.8 x 270.8 mm, on the
+   pad's own colour: pink for the customer, white for the shop, yellow for the
+   workshop. What the pad has printed is black; what is filled in is blue, in
+   a plain computer face. Printed, each copy is one A4 at --print-zoom with no
+   colour of its own: it goes onto the shop's pink, white and yellow paper. */
+
+/* ── the drawings ──────────────────────────────────────────────────────── */
+.sketchgrid { display: flex; flex-wrap: wrap; gap: 16px 14px; align-items: flex-end; margin-top: 12px; }
+.opening { display: flex; flex-direction: column; align-items: flex-start; }
+.oprow { display: flex; align-items: flex-end; gap: 5px; }
+.opstack { display: flex; flex-direction: column; }
+.opw { text-align: center; margin-bottom: 3px; font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oph { display: flex; align-items: center; justify-content: flex-end; min-width: 46px; padding-right: 1px; font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.opbox { display: block; overflow: visible; }
+.opframe { fill: none; stroke-width: 1.4; }
+.opframe.thin { stroke-width: 0.8; opacity: 0.5; }
+.opswing { fill: none; stroke-width: 1; opacity: 0.6; }
+.ophandle { opacity: 0.7; }
+.ophatch { stroke: #c9c9c9; stroke-width: 1; }
+.oplabel { font-size: 9.5px; font-weight: 700; }
+.opnum { font-size: 8.5px; font-weight: 800; }
+.opnote { font-size: 7px; margin: 2px 0 0 51px; max-width: 120px; }
+.opqty { align-self: flex-end; margin-left: 5px; padding-bottom: 2px; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* ── the pad ───────────────────────────────────────────────────────────── */
+.padfit { overflow: hidden; }
+.pad { --pad: #fff; --print: #1c1c1c; --pen: #1b3fae;
+  position: relative; box-sizing: border-box; overflow: hidden; zoom: var(--zoom, 1);
+  background: var(--pad); color: var(--print); border: 1px solid #c9c9c9;
+  font-family: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif; text-transform: none; letter-spacing: 0; }
+.copy-customer { --pad: #f7a9d1; }
+.copy-shop { --pad: #ffffff; }
+.copy-workshop { --pad: #f8f27c; }
+.pad .plogo { position: absolute; object-fit: contain; }
+.padt { position: absolute; line-height: 1; white-space: nowrap; }
+.padl { position: absolute; background: var(--print); }
+.padl.dbl { background: none; border-top: 0.35mm solid var(--pen); border-bottom: 0.35mm solid var(--pen); }
+.pad .padl.pen:not(.dbl) { background: var(--pen); }
+.pad .ink { color: var(--pen); font-family: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif; font-weight: 600; }
+.pad .pi { font-weight: 700; font-style: italic; }
+.pad .pb { font-weight: 700; }
+.pad .pb i { font-style: italic; }
+.pad .pphone { font-weight: 700; letter-spacing: 2.25mm; }
+.pad .pshop { font-weight: 900; font-style: italic; letter-spacing: .2mm; }
+.pad .pstrong { font-weight: 800; }
+.pad .pcopy { color: rgba(28, 28, 28, .55); font-weight: 700; text-transform: uppercase; letter-spacing: .3mm; }
+
+.padsketch { position: absolute; display: flex; align-items: flex-start; justify-content: center; }
+.padsketch .sketchgrid { flex-wrap: nowrap; gap: 0 26px; margin-top: 0; align-items: flex-start; justify-content: center; }
+.padsketchin { flex: none; display: flex; justify-content: center; }
+.padsketchin .sketchgrid { flex: none; }
+.padsketchin.rows2 .sketchgrid { flex: 1 1 auto; flex-wrap: wrap; gap: 14px 26px; }
+.pad .padsketch .opframe, .pad .padsketch .opswing, .pad .padsketch .ophinge, .pad .padsketch .ophandle { stroke: var(--pen); }
+.pad .padsketch .ophinge, .pad .padsketch .ophandle, .pad .padsketch .oplabel, .pad .padsketch .opnum { fill: var(--pen); }
+.pad .padsketch .opw, .pad .padsketch .oph, .pad .padsketch .opnote, .pad .padsketch .opqty { color: var(--pen); font-family: Arial, sans-serif; font-weight: 600; }
+
+/* ── printing: the three copies and nothing else ───────────────────────── */
+/* Laid out off the screen so the drawings can measure themselves. */
+.padprint { position: fixed; left: -10000px; top: 0; width: 900px; }
+@media print {
+  body.printingpads > *:not(.padprint) { display: none !important; }
+  body.printingpads { background: #fff !important; height: auto !important; }
+  body.printingpads .padprint { position: static; width: auto; }
+  .padprint .padfit { margin: 0 auto; overflow: visible; }
+  .padprint .pad { zoom: var(--print-zoom) !important; border: none !important; margin: 0 auto; background: none !important; }
+  .padprint .padfit:not(:last-child) { break-after: page; page-break-after: always; }
+}
+
+/* ── the visit order slip (VisitSlip.jsx): A4, the letterhead printed whole ──
+   One face (Barlow, the apps' own), black and greys only, so it prints clean
+   on the HP: the shop's name large, a heavy rule, the trade lines small and
+   grey, then the order as a document: title, who it is for, a table of items,
+   the advance and a line to sign. */
+.slipfit { overflow: hidden; }
+.slip, .slip * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.slip { --ink: #111; --mid: #555; --rule: #cfcfcf;
+  position: relative; box-sizing: border-box; overflow: hidden; zoom: var(--zoom, 1);
+  display: flex; flex-direction: column; padding: 14mm 16mm 16mm;
+  background: #fff; color: var(--ink); border: 1px solid #c9c9c9;
+  font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; font-weight: 500;
+  text-transform: none; letter-spacing: 0; }
+.slip dl, .slip dd, .slip h1, .slip p { margin: 0; }
+.sliphead { display: flex; align-items: center; gap: 4mm; padding-bottom: 4mm; border-bottom: 1mm solid var(--ink); }
+.sliplogo { width: 15mm; height: 17mm; object-fit: contain; }
+.slipshop { flex: 1; display: flex; flex-direction: column; gap: 1mm; }
+.slipshop b { font: 800 10.5mm/0.95 "Barlow Condensed", "Barlow Condensed Fallback", "Arial Narrow", sans-serif; text-transform: uppercase; letter-spacing: .2mm; }
+.slipshop span { font-size: 3.7mm; color: var(--mid); }
+.slipcontact { display: grid; gap: .8mm; font-size: 3.5mm; }
+.slipcontact div { display: flex; justify-content: flex-end; gap: 2mm; }
+.slipcontact dt { color: var(--mid); text-transform: uppercase; letter-spacing: .3mm; font-size: 3mm; font-weight: 600; align-self: center; }
+.slipcontact dd { font-weight: 700; font-variant-numeric: tabular-nums; }
+.slipdeals { display: grid; gap: 1.6mm; padding: 3mm 0; border-bottom: .3mm solid var(--rule); font-size: 3.05mm; line-height: 1.35; color: #444; }
+.slipdeals p { display: grid; grid-template-columns: 26mm 1fr; }
+.slipdeals b { padding-top: .2mm; color: var(--ink); font-weight: 700; text-transform: uppercase; letter-spacing: .3mm; font-size: 2.8mm; }
+.sliptitle { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 7mm; }
+.sliptitle h1 { font: 800 8mm/1 "Barlow Condensed", "Barlow Condensed Fallback", "Arial Narrow", sans-serif; text-transform: uppercase; letter-spacing: .4mm; }
+.sliptitle dl { display: flex; gap: 7mm; }
+.sliptitle div { display: flex; flex-direction: column; gap: .8mm; min-width: 30mm; }
+.sliptitle dt, .slipwho small, .slipadv small { color: var(--mid); text-transform: uppercase; letter-spacing: .4mm; font-size: 2.8mm; font-weight: 600; }
+.sliptitle dd { padding-bottom: .8mm; border-bottom: .3mm solid var(--ink); font-size: 4.6mm; font-weight: 700; font-variant-numeric: tabular-nums; min-height: 5.5mm; }
+.slipwho { display: flex; flex-direction: column; gap: 1mm; margin-top: 7mm; padding: 4mm 5mm; background: #f4f4f4; border-left: 1mm solid var(--ink); }
+.slipwho b { font-size: 6mm; font-weight: 700; line-height: 1.15; }
+.slipwho span { font-size: 4.2mm; color: #333; }
+.sliptable { width: 100%; margin-top: 7mm; border-collapse: collapse; font-size: 4.6mm; }
+.sliptable th { padding: 0 2mm 2mm; border-bottom: .5mm solid var(--ink); color: var(--mid); text-align: left; text-transform: uppercase; letter-spacing: .4mm; font-size: 2.8mm; font-weight: 600; }
+.sliptable td { padding: 2.6mm 2mm; border-bottom: .3mm solid var(--rule); vertical-align: top; }
+.sliptable .n { width: 10mm; text-align: right; color: var(--mid); font-variant-numeric: tabular-nums; }
+.sliptable .q { width: 28mm; text-align: right; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.slipfoot { display: flex; align-items: flex-end; justify-content: space-between; gap: 10mm; margin-top: auto; padding-top: 8mm; }
+.slipadv { display: flex; flex-direction: column; gap: 1mm; padding: 3.5mm 5mm; border: .5mm solid var(--ink); }
+.slipadv b { font-size: 7mm; font-weight: 700; font-variant-numeric: tabular-nums; }
+.slipadv span { font-size: 3.4mm; color: var(--mid); }
+.slipsign { display: flex; flex-direction: column; align-items: center; gap: 2mm; min-width: 60mm; font-size: 3.4mm; color: var(--mid); }
+.slipsign span { width: 100%; border-top: .3mm solid var(--ink); }
+@media print {
+  .padprint .slipfit { overflow: visible; }
+  .padprint .slip { zoom: 1 !important; border: none !important; }
+}

@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import { visitSlip, workPad } from './lib/workPad'
 
 const printJobStatus = v.union(
   v.literal('pending'),
@@ -1375,6 +1376,12 @@ export default defineSchema({
       //   fitting      the workshop's fitted piece (photographs)
       step: v.optional(v.union(v.literal('visit'), v.literal('measurement'), v.literal('quotation'), v.literal('assemble'), v.literal('ordered'), v.literal('arrived'), v.literal('goahead'), v.literal('fitting'))),
       boards: v.optional(v.number()),
+      // A work order made on the app instead of photographed: its lines,
+      // sizes and money, which draw the pad's three copies (convex/lib/workPad.ts).
+      pad: v.optional(workPad),
+      // A visit order made on the app instead of photographed: the
+      // letterhead slip's date, items and advance (convex/lib/workPad.ts).
+      slip: v.optional(visitSlip),
       // On a work order: what it asks for (see needsAssemble, needsOrder).
       assemble: v.optional(v.boolean()),
       order: v.optional(v.boolean()),

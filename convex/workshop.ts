@@ -2,6 +2,9 @@ import { ConvexError, v } from 'convex/values'
 import { mutation, query, deviceOf } from './lib/guarded'
 import type { MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
+import { cleanPad, cleanSlip, piecesOf, visitSlip, workPad } from './lib/workPad'
+// A name typed for someone not in the accounts is saved to the shop's rule: "harsh" is "Harsh".
+import { properText } from './lib/text'
 
 /**
  * Workshop: a work order as a conversation, in pictures (workshop-web).
@@ -181,6 +184,8 @@ export const list = query({
             from: m.from,
             step: m.step ?? null,
             boards: m.boards ?? null,
+            pad: m.pad ?? null,
+            slip: m.slip ?? null,
             assemble: m.assemble ?? null,
             order: m.order ?? null,
             complete: m.complete === true,
@@ -217,14 +222,23 @@ export const create = mutation({
     // Sent by apps from before the steps were fixed; not used. A job starts at measurement.
     stage: v.optional(stage),
     photos: v.array(v.id('_storage')),
+    // Or, instead of a photo, the visit order made on the app.
+    slip: v.optional(visitSlip),
     text: v.optional(v.string()),
     priority: v.optional(v.boolean()),
     // Absent from an app from before the choice: the job is to be assembled.
     assemble: v.optional(v.boolean()),
     order: v.optional(v.boolean()),
   },
-  handler: async (ctx, { ledgerId, title, phones, photos, priority, assemble, order }) => {
-    if (!photos.length) throw new ConvexError('Add a photo of the work order.')
+  handler: async (ctx, { ledgerId, title, phones, photos, slip: typed, priority, assemble, order }) => {
+    if (!photos.length && !typed) throw new ConvexError('Add a photo of the work order.')
+    const slip = typed ? cleanSlip(typed) : null
+    // A slip sent again over a bad line, after the first went in: the job it made, not a second one.
+    if (slip?.id) {
+      const recent = await ctx.db.query('workshopJobs').withIndex('by_status_updated', (q) => q.eq('status', 'open')).order('desc').take(100)
+      const made = recent.find((j) => j.messages[0]?.slip?.id === slip.id)
+      if (made) return made._id
+    }
     const needs = assemble === undefined && order === undefined ? null : { assemble: assemble === true, order: order === true }
     if (needs) checkNeeds(needs.assemble, needs.order)
     await checkPhotos(ctx, photos)
@@ -240,12 +254,12 @@ export const create = mutation({
       number,
       ...(account ? { ledgerId: account._id } : {}),
       // Kept beside the account too, so the job still has a name if the account is ever removed.
-      title: clean(account ? bare(account.name) : title, 80),
+      title: clean(account ? bare(account.name) : properText(title), 80),
       ...(phones && phonesOf(phones).length ? { phones: phonesOf(phones) } : {}),
       status: 'open',
       ...(priority ? { priority: true } : {}),
       ...(needs ? { needsAssemble: needs.assemble, needsOrder: needs.order } : {}),
-      messages: [{ id: `${now}-0`, from: 'shop', photos, step: 'visit', by: device?.name, at: now }],
+      messages: [{ id: `${now}-0`, from: 'shop', photos, step: 'visit', ...(slip ? { slip } : {}), by: device?.name, at: now }],
       shopSeenAt: now,
       workshopSeenAt: 0,
       createdAt: now,
@@ -266,7 +280,8 @@ export const create = mutation({
  *     Measuring and fitting need a photograph first.
  * From the shop:
  *   - photographs of the visit order (any time) or of the work order, with
- *     the `boards` it asks for;
+ *     the `boards` it asks for; or the work order made on the app (`pad`),
+ *     with no photograph, the pieces counted off its lines;
  *   - `ordered`: the order is sent to the supplier, with the screenshot of
  *     it when there is one;
  *   - `arrived`: what was ordered has come in, with photographs of the
@@ -288,6 +303,7 @@ export const send = mutation({
     photos: v.array(v.id('_storage')),
     step: v.optional(tag),
     boards: v.optional(v.number()),
+    pad: v.optional(workPad),
     // Sent with a work order by an app of 14 Oct 2026; no longer used.
     assemble: v.optional(v.boolean()),
     order: v.optional(v.boolean()),
@@ -299,7 +315,7 @@ export const send = mutation({
     // Sent by apps from before threads were tags only; no longer kept.
     text: v.optional(v.string()),
   },
-  handler: async (ctx, { jobId, from, photos, step: named, boards, complete, ordered, arrived, visitAt, callPhone }) => {
+  handler: async (ctx, { jobId, from, photos, step: named, boards, pad: typed, complete, ordered, arrived, visitAt, callPhone }) => {
     const job = await ctx.db.get(jobId)
     if (!job) throw new ConvexError('That work order is gone.')
     await checkPhotos(ctx, photos)
@@ -310,7 +326,7 @@ export const send = mutation({
 
     let step: Tag
     let moves = false
-    const marks: { boards?: number; assemble?: boolean; order?: boolean; complete?: boolean; ordered?: boolean; arrived?: boolean; visitAt?: number; callPhone?: string } = {}
+    const marks: { boards?: number; pad?: typeof workPad.type; assemble?: boolean; order?: boolean; complete?: boolean; ordered?: boolean; arrived?: boolean; visitAt?: number; callPhone?: string } = {}
     const facts: Needs & { boardsTotal?: number; boardsMade?: number; visitAt?: number; callPhone?: string } = {}
     const needs = needsOf(job)
 
@@ -365,6 +381,15 @@ export const send = mutation({
       step = 'goahead'
       marks.visitAt = facts.visitAt = visitAt
       marks.callPhone = facts.callPhone = phone
+      moves = true
+    } else if (typed) {
+      // The work order made on the app: the pad itself, no photograph needed.
+      if (from !== 'shop') throw new ConvexError('The work order is the shop\'s to make.')
+      if (!open) throw new ConvexError('This job is finished.')
+      step = 'quotation'
+      onlyNow(step, at)
+      marks.pad = cleanPad(typed)
+      if (needs.assemble) marks.boards = facts.boardsTotal = boardCount(piecesOf(marks.pad))
       moves = true
     } else {
       if (!photos.length) throw new ConvexError('Add a photo.')
@@ -447,7 +472,7 @@ export const setCustomer = mutation({
     if (ledgerId && !account) throw new ConvexError('That customer is no longer in the books. Pick again.')
     await ctx.db.patch(jobId, {
       ledgerId: account?._id,
-      title: clean(account ? bare(account.name) : title, 80),
+      title: clean(account ? bare(account.name) : properText(title), 80),
       // Left as they are by an app from before numbers could be added.
       ...(phones ? { phones: phonesOf(phones).length ? phonesOf(phones) : undefined } : {}),
       updatedAt: Date.now(),
@@ -501,7 +526,7 @@ export const removePhoto = mutation({
     if (!job || !from?.photos.includes(photo)) return
     try { await ctx.storage.delete(photo) } catch { /* already gone */ }
     const photos = from.photos.filter((id) => id !== photo)
-    const marks = from.text || from.boards != null || from.assemble != null || from.order != null
+    const marks = from.text || from.boards != null || from.pad || from.slip || from.assemble != null || from.order != null
       || from.complete || from.ordered || from.arrived || from.visitAt != null
     const left = photos.length || marks
       ? job.messages.map((m) => (m.id === messageId ? { ...m, photos } : m))

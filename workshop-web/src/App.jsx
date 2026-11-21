@@ -83,10 +83,7 @@ export default function App() {
   useEffect(() => { document.title = `${fresh ? `(${fresh}) ` : ''}Shiv ${APP_NAME}` }, [fresh])
 
   if (open) return <JobPage key={open.id} job={open} onBack={() => window.history.back()} />
-  return (
-    <>
-      <JobList jobs={jobs} onOpen={openJob} onNew={() => setMaking(true)} saving={saving} />
-      {making && <NewOrder onClose={() => setMaking(false)} />}
-    </>
-  )
+  // A new visit order takes the whole screen.
+  if (making) return <NewOrder onClose={() => setMaking(false)} />
+  return <JobList jobs={jobs} onOpen={openJob} onNew={() => setMaking(true)} saving={saving} />
 }

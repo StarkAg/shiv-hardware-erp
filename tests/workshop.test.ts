@@ -135,7 +135,8 @@ describe('workshop: a work order as a chat in photos', () => {
 
     // Moved to a typed name, then back to the account.
     await t.mutation(api.workshop.setCustomer, { jobId: id, title: 'Walk-in, Ghutwa' })
-    expect(await job()).toMatchObject({ title: 'Walk-in, Ghutwa', phone: '', ledgerId: null })
+    // A typed name is saved to the shop's name rule, as the panel writes names.
+    expect(await job()).toMatchObject({ title: 'Walk-In, Ghutwa', phone: '', ledgerId: null })
     await t.mutation(api.workshop.setCustomer, { jobId: id, ledgerId: sanjay })
     expect(await job()).toMatchObject({ title: 'Sanjay Mahto Ji, Korambe', ledgerId: sanjay })
 
@@ -325,5 +326,78 @@ describe('workshop: a work order as a chat in photos', () => {
     const real = await t.run((ctx) => ctx.storage.store(new Blob(['x'], { type: 'image/jpeg' })))
     await t.run((ctx) => ctx.storage.delete(real))
     await expect(t.mutation(api.workshop.create, { photos: [real] })).rejects.toThrow('did not upload')
+  })
+})
+
+describe('workshop: a work order made on the app', () => {
+  it('keeps the pad on the work order, counts its pieces, and needs no photo', async () => {
+    const t = convexTest(schema, modules)
+    const photo = () => t.run((ctx) => ctx.storage.store(new Blob(['photo'], { type: 'image/jpeg' })))
+    const id = await t.mutation(api.workshop.create, { title: 'Sanjay Mahto, Korambe', photos: [await photo()] })
+    const job = async () => (await t.query(api.workshop.list, {})).find((j) => j.id === id)!
+    const send = (args: Record<string, unknown>) => t.mutation(api.workshop.send, { jobId: id, photos: [], ...args } as never)
+    const size = (inches: number, soot = 0) => ({ inches, soot })
+    const pad = {
+      orderDate: '2026-11-21', deliveryDate: '2026-11-28', fare: 100, advance: 2000,
+      lines: [
+        { id: 'a', form: 'ventilator', fill: 'net', label: '  Alu. Ventilator   with Net SS ', qty: 3, rate: 857, amount: 2571, w: size(20), h: size(12, 9) },
+        { id: 'b', form: 'window-2', fill: 'net', label: 'Alu. 2 door window with Net SS', qty: 2, rate: 1648, amount: 3296, w: size(26), h: size(40, 6) },
+        { id: 'c', form: 'liping', extra: true, label: 'Liping teak 35x10', unit: 'ft', qty: 12.5, rate: 9.5, amount: 118.75, w: size(5), h: size(5) },
+        { id: 'd', form: 'ventilator', fill: 'net', label: '', qty: 1, rate: 0, amount: 0 },
+      ],
+    }
+
+    // Not before the measurements are done: no step is skipped.
+    await expect(send({ from: 'shop', pad })).rejects.toThrow('comes later')
+    await send({ from: 'workshop', photos: [await photo()], step: 'measurement' })
+    await send({ from: 'workshop', complete: true })
+    // The workshop does not make the work order.
+    await expect(send({ from: 'workshop', pad })).rejects.toThrow()
+    await expect(send({ from: 'shop', pad: { ...pad, lines: [] } })).rejects.toThrow('at least one item')
+    await expect(send({ from: 'shop', pad: { ...pad, orderDate: 'today' } })).rejects.toThrow('order date')
+
+    await send({ from: 'shop', pad })
+    const now = await job()
+    // The pieces are the built lines' counts; liping is not a piece.
+    expect(now).toMatchObject({ stage: 'assemble', boardsTotal: 5 })
+    const order = now.messages.at(-1)!
+    expect(order).toMatchObject({ from: 'shop', step: 'quotation', boards: 5, photos: [] })
+    expect(order.pad!.lines.map((l) => [l.label, l.qty, l.amount, !!l.w])).toEqual([
+      ['Alu. Ventilator with Net SS', 3, 2571, true],
+      ['Alu. 2 door window with Net SS', 2, 3296, true],
+      ['Liping teak 35x10', 12.5, 119, false],
+    ])
+    // Soot is eighths: never more than seven.
+    expect(order.pad!.lines[0].h).toEqual({ inches: 12, soot: 7 })
+    expect(order.pad).toMatchObject({ orderDate: '2026-11-21', deliveryDate: '2026-11-28', fare: 100, advance: 2000 })
+    // Made once: the step is closed after it.
+    await expect(send({ from: 'shop', pad })).rejects.toThrow('already done')
+  })
+})
+
+describe('workshop: a visit order made on the app', () => {
+  it('starts a job from the slip with no photo, once however often it is sent', async () => {
+    const t = convexTest(schema, modules)
+    const slip = {
+      id: 'slip-1', date: '2026-11-16', advance: 500,
+      lines: [
+        { id: 'a', text: '  flush door ', qty: 3, unit: 'Pc' },
+        { id: 'b', text: '1" wpc door', qty: 1 },
+        { id: 'c', text: '   ', qty: 1 },
+      ],
+    }
+    // No items is a slip too: a visit to measure, with the advance taken.
+    const visitOnly = await t.mutation(api.workshop.create, { title: 'Amarjeet Kumar Jee, Nehru Road', photos: [], slip: { ...slip, id: 'slip-0', lines: [] } })
+    const id = await t.mutation(api.workshop.create, { title: 'deepak saha jee, bangali tola', photos: [], slip })
+    // The same slip again (a send retried after it went in) is the same job.
+    expect(await t.mutation(api.workshop.create, { title: 'deepak saha jee, bangali tola', photos: [], slip })).toBe(id)
+    const jobs = await t.query(api.workshop.list, {})
+    expect(jobs).toHaveLength(2)
+    expect(jobs.find((j) => j.id === visitOnly)!.messages[0].slip).toMatchObject({ lines: [], advance: 500 })
+    const job = jobs.find((j) => j.id === id)!
+    expect(job).toMatchObject({ title: 'Deepak Saha Jee, Bangali Tola', stage: 'measurement' })
+    expect(job.messages[0]).toMatchObject({ from: 'shop', step: 'visit', photos: [] })
+    expect(job.messages[0].slip).toMatchObject({ date: '2026-11-16', advance: 500 })
+    expect(job.messages[0].slip!.lines.map((l) => [l.text, l.qty])).toEqual([['Flush Door', 3], ['1" WPC Door', 1]])
   })
 })

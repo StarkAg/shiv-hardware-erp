@@ -72,10 +72,11 @@ export default function JobList({ jobs, onOpen, onNew, saving }) {
               <span className="body">
                 <span className="head"><b>{item.title || 'New work order'}</b></span>
                 <small className={item.state === 'failed' ? 'bad' : 'addr'}>
-                  {item.state === 'failed' ? `Not sent. Tap to try again. ${item.error}` : `Sending ${item.files.length > 1 ? `${item.files.length} photos` : 'the photo'}`}
+                  {item.state === 'failed' ? `Not sent. Tap to try again. ${item.error}`
+                    : item.slip ? 'Sending the visit order' : `Sending ${item.files.length > 1 ? `${item.files.length} photos` : 'the photo'}`}
                 </small>
               </span>
-              <span className="thumb"><img src={item.previews[0]} alt="" /></span>
+              {item.previews[0] && <span className="thumb"><img src={item.previews[0]} alt="" /></span>}
             </button>
             {item.state === 'failed' && <button type="button" className="drop" onClick={() => discard(item)} aria-label="Do not send this order"><CloseIcon size={16} /></button>}
           </li>

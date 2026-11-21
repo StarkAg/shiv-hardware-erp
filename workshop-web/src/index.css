@@ -314,3 +314,198 @@ html, body, #root { height: 100%; }
 .addnumber { display: flex; gap: 6px; }
 .sheet .addnumber .field { margin-top: 0; flex: 1; min-width: 0; }
 .addnumber .key { flex: none; width: 56px; min-height: 52px; padding: 0; display: flex; align-items: center; justify-content: center; }
+
+/* ── the work order made on the app (MakeOrder.jsx, pad/) ─────────────────── */
+.padblock { flex: none; display: flex; flex-direction: column; gap: 10px; padding-top: 12px; }
+.padhead { font: 800 22px/1.1 var(--sign); text-transform: uppercase; }
+.padhint { font-size: 15px; line-height: 1.35; color: var(--dim); }
+.padpair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.padpair input, .padgrid input { min-width: 0; }
+.padline { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 2px solid var(--ink); }
+.padlinetop { display: flex; align-items: center; gap: 8px; }
+.padlinetop b { flex: 1; min-width: 0; font: 800 21px/1.1 var(--sign); text-transform: uppercase; }
+.padx { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: var(--key); }
+.padchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.padchips button { min-height: 44px; padding: 0 12px; background: var(--key); color: var(--ink); font: 700 18px/1 var(--sign); text-transform: uppercase; }
+.padchips button.on { background: var(--ink); color: #fff; }
+.padgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.padgrid.extra { grid-template-columns: 1fr 1fr; }
+.padgrid .ask { font-size: 14px; }
+.padgrid .ask input { padding: 8px; text-align: center; font: 700 21px/1 var(--sign); font-variant-numeric: tabular-nums; }
+@media (max-width: 400px) { .padgrid { grid-template-columns: 1fr 1fr; } }
+.padsum { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 16px; font-variant-numeric: tabular-nums; }
+.padsum b { margin-left: auto; font: 800 22px/1 var(--sign); }
+.padsum .wait { padding: 3px 6px; background: var(--wait); font-weight: 600; }
+.padadd { width: 100%; }
+.padtotals { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 700 18px/1.1 var(--sign); text-transform: uppercase; }
+.padtotals b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.padpick { display: flex; flex-direction: column; gap: 6px; }
+.padpick .key { justify-content: flex-start; font-size: 19px; }
+.makeorder .dock .key:disabled { opacity: .45; }
+
+/* A pad sent: its copy in the history, and large over the page. */
+.padthumb { display: block; width: 100%; padding: 0; text-align: left; }
+.padview { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; background: var(--wall); }
+.padview header { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 8px) 12px 10px; border-bottom: 4px solid var(--ink); }
+.padview header b { flex: 1; font: 800 24px/1 var(--sign); text-transform: uppercase; }
+.padviewin { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+.padviewin .padfit { width: max-content; }
+
+/* ── the visit order made on the app (NewOrder.jsx, pad/VisitSlip.jsx) ───── */
+.needs.modes { margin-top: 0; }
+.needs.modes button { font-size: 18px; }
+.slipform { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.sheet .slipform .field { margin-top: 0; }
+.sliprow { display: flex; align-items: center; gap: 10px; font: 700 16px/1.1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.sliprow .field { flex: 1; min-width: 0; }
+.sliplist { display: flex; flex-direction: column; gap: 6px; }
+.slipline { display: grid; grid-template-columns: minmax(0, 1fr) 64px 76px 44px; gap: 4px; align-items: stretch; }
+.slipline .field { min-height: 52px; padding: 8px; font-size: 18px; }
+.slipline .qty { text-align: center; font: 800 21px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.slipline .unit { padding: 0 4px; font: 700 17px/1 var(--sign); }
+.slipline .x { display: flex; align-items: center; justify-content: center; background: var(--key); }
+.slipline .x:disabled { opacity: .3; }
+.slipform .pick { flex-direction: row; justify-content: center; min-height: 52px; padding: 10px 8px; }
+.slipform .slipfit { margin-top: 4px; }
+.padviewin .slipfit { width: max-content; }
+
+/* ── a new visit order, the whole screen (NewOrder.jsx) ──────────────────────
+   On the counter's computer the form takes the left and, while the slip is
+   made on the app, the slip itself the right, full height; on a phone they stack. */
+.app.neworder { max-width: none; }
+.neworder .nwgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; padding-top: 12px; }
+.neworder .nwform { display: flex; flex-direction: column; min-width: 0; }
+.neworder .nwform > .needs:first-of-type, .neworder .picker { margin-top: 0; }
+.neworder .addnumber .field { margin-top: 0; flex: 1; min-width: 0; }
+.neworder p.pickhint { margin: 6px 2px 0; font-size: 15px; color: var(--dim); }
+.neworder .nwslip { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.neworder .nwslip .pick { flex: none; flex-direction: row; justify-content: center; min-height: 56px; }
+.neworder .nwslip .pick:disabled { opacity: .4; }
+/* Cancel and Send in the header, beside the title. On a narrow phone they take a row of their own under it. */
+/* The header as thin as it goes: one line, the title and the two keys. */
+.neworder .pagehead { flex-wrap: wrap; row-gap: 6px; padding: calc(env(safe-area-inset-top) + 4px) 10px 4px 0; border-bottom-width: 3px; }
+.neworder .pagehead .back { width: 40px; height: 40px; }
+.neworder .pagehead .who b { font-size: 20px; }
+.nwkeys { display: flex; gap: 6px; margin-left: auto; }
+.nwkeys .key { min-height: 40px; padding: 0 12px; font-size: 16px; gap: 6px; }
+.nwkeys .key:disabled { opacity: .45; }
+@media (max-width: 639px) {
+  .nwkeys { flex: 1 0 100%; padding-left: 10px; }
+  .nwkeys .key.ghost { flex: 0 0 34%; }
+  .nwkeys .key.safe { flex: 1; }
+}
+@media (min-width: 900px) {
+  .neworder .nwform { max-width: 640px; width: 100%; justify-self: center; }
+  .neworder.making .nwgrid { grid-template-columns: minmax(380px, 1fr) minmax(0, 1.15fr); padding-inline: 20px; }
+  .neworder.making .nwform { justify-self: stretch; max-width: none; }
+  .neworder.making .nwslip { position: sticky; top: 0; align-self: start; }
+  .nwkeys .key.ghost { min-width: 110px; }
+  .nwkeys .key.safe { min-width: 220px; }
+}
+
+/* ── no scrolling on the counter's screen ─────────────────────────────────────
+   The whole visit order in one screen: the form tighter, the slip shrunk to
+   the height there is. A long list of items scrolls inside its own box, the
+   page itself never. */
+.neworder .slipfit.tall { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; }
+@media (min-width: 900px) {
+  .neworder .nwgrid { height: 100%; overflow: hidden; grid-template-rows: minmax(0, 1fr); gap: 20px; padding: 10px 20px 12px; }
+  .neworder .nwform { min-height: 0; overflow-y: auto; }
+  .neworder .nwslip { height: 100%; min-height: 0; position: static; }
+  .neworder .field, .neworder .picker .field { min-height: 44px; padding: 6px 10px; font-size: 17px; }
+  .neworder .needs { margin-top: 8px; }
+  .neworder .needs button, .neworder .priority { min-height: 42px; font-size: 17px; }
+  .neworder .priority { margin-top: 8px; }
+  .neworder .sheetask { margin: 10px 0 6px; }
+  .neworder .numbers { margin-top: 6px; gap: 4px; }
+  .neworder .addnumber .key { min-height: 44px; }
+  .neworder .pickrow { margin-top: 6px; }
+  .neworder .pick { min-height: 60px; padding: 8px; }
+  .neworder .slipform { gap: 6px; margin-top: 8px; min-height: 0; }
+  .neworder .sliplist { max-height: 40vh; overflow-y: auto; }
+  .neworder .slipline .field { min-height: 44px; font-size: 17px; }
+  .neworder .slipform .pick, .neworder .nwslip .pick { min-height: 44px; }
+}
+
+/* ── items by touch (NewOrder.jsx): tiles, the chosen list, the number pad ───
+   Sized for a finger on the counter's touch screen: nothing smaller than
+   52px to tap, nothing typed. Three columns on the counter: the order, the
+   tiles with what is chosen under them, and the slip. */
+.placebox { margin-top: 6px; }
+.advkey { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 56px; padding: 0 14px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); color: var(--ink); }
+.advkey span { font: 700 17px/1 var(--sign); text-transform: uppercase; letter-spacing: .04em; }
+.advkey b { font: 800 26px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.nwitems { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
+.tiles { display: flex; flex-direction: column; gap: 8px; }
+.tilegroup h3 { margin: 0 0 4px; font: 700 14px/1 var(--sign); text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+.tilegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 6px; }
+/* The words on the left, the count on the right, never one over the other. */
+.tile { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 58px; padding: 6px 8px 6px 10px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); color: var(--ink); text-align: left; font: 700 17px/1.05 var(--sign); text-transform: uppercase; }
+.tile span { min-width: 0; }
+.tile:active { transform: translateY(2px); }
+.tile.on { background: var(--ink); color: #fff; box-shadow: none; }
+.tile b { flex: none; padding: 4px 6px; background: var(--must); color: #fff; font: 800 15px/1 var(--sign); white-space: nowrap; }
+.tile.other { justify-content: flex-start; gap: 6px; background: #fff; box-shadow: inset 0 0 0 2px var(--ink); }
+.chosenlist { flex: 1; min-height: 0; overflow-y: auto; border-top: 3px solid var(--ink); }
+.chosenempty { padding: 14px 2px; color: var(--dim); font-size: 16px; }
+.chosenline { display: grid; grid-template-columns: minmax(0, 1fr) 56px 92px 56px 48px; gap: 4px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.chosenline .what { font: 700 19px/1.1 var(--sign); text-transform: uppercase; overflow-wrap: anywhere; }
+.chosenline .step { height: 52px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 30px/1 var(--sign); }
+.chosenline .count { height: 52px; display: flex; align-items: baseline; justify-content: center; gap: 4px; background: #fff; box-shadow: inset 0 0 0 2px var(--ink); font: 800 26px/52px var(--sign); font-variant-numeric: tabular-nums; }
+.chosenline .count small { font-size: 14px; font-weight: 700; color: var(--dim); }
+.chosenline .drop { height: 52px; display: flex; align-items: center; justify-content: center; color: var(--stop); }
+.padshow { margin: 10px 0 8px; padding: 10px 14px; border: 2px solid var(--ink); font: 800 40px/1 var(--sign); text-align: right; font-variant-numeric: tabular-nums; }
+.padquick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 6px; }
+.padquick button { min-height: 48px; background: #fff; box-shadow: inset 0 0 0 2px var(--ink); font: 700 20px/1 var(--sign); }
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.numpad button { min-height: 62px; display: flex; align-items: center; justify-content: center; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 30px/1 var(--sign); }
+.numpad button:active { transform: translateY(2px); }
+@media (min-width: 900px) {
+  .neworder.making .nwgrid { grid-template-columns: 340px minmax(0, 1fr) min(36vw, calc((100vh - 110px) * .7)); gap: 16px; padding-inline: 14px; }
+  .neworder.making .nwitems { height: 100%; }
+}
+
+/* An item's details (NewOrder.jsx): a row of buttons per option, how many, the line it makes. */
+.optrow { margin-top: 12px; }
+.optrow .ask { margin-bottom: 6px; }
+.optrow .needs { flex-wrap: wrap; margin-top: 0; }
+.optrow .needs button { flex: 1 1 auto; min-width: 96px; min-height: 52px; padding: 0 12px; }
+.optqty { display: grid; grid-template-columns: 72px 1fr 72px; gap: 6px; align-items: center; margin-top: 14px; }
+.optqty .step { height: 60px; background: var(--key); box-shadow: inset 0 -4px 0 var(--line); font: 800 32px/1 var(--sign); }
+.optqty b { text-align: center; font: 800 34px/1 var(--sign); font-variant-numeric: tabular-nums; }
+.optqty b small { font-size: 16px; color: var(--dim); }
+.sheet p.optline { margin: 12px 0 0; padding: 10px 12px; background: var(--key); color: var(--ink); font: 700 19px/1.2 var(--sign); text-transform: uppercase; }
+
+/* A design number tapped in (NewOrder.jsx DesignKeys): the number shown, digits, then letters. */
+.optrow .needs button.typeno { flex: 0 0 auto; background: #fff; box-shadow: inset 0 0 0 2px var(--must); color: var(--must); }
+.optrow .needs button.typeno.on { background: var(--must); color: #fff; box-shadow: none; }
+.designkeys { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.designshow { padding: 8px 12px; border: 2px solid var(--ink); font: 800 30px/1 var(--sign); text-align: right; font-variant-numeric: tabular-nums; }
+.designkeys .numpad button { min-height: 52px; font-size: 26px; }
+.letterkeys { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; }
+.letterkeys button { min-height: 46px; background: var(--key); box-shadow: inset 0 -3px 0 var(--line); font: 800 20px/1 var(--sign); }
+.letterkeys button:active, .designkeys .numpad button:active { transform: translateY(2px); }
+
+/* ── an item's details, the whole width (NewOrder.jsx): no scrolling ─────────
+   The sheet widens to the screen; the choices take the left, compact; the
+   keypad, how many, the line and Add take the right. A phone stacks them. */
+.sheet:has(.optpanel) { max-width: min(1120px, 96vw); max-height: 96vh; padding: 14px 16px; }
+.optpanel { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, 1fr); gap: 18px; margin-top: 6px; align-items: start; }
+.optleft { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.optright { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.optpanel .optrow { margin-top: 0; }
+.optpanel .optrow .ask { margin-bottom: 4px; font-size: 14px; }
+.optpanel .optrow .needs { gap: 5px; }
+.optpanel .optrow .needs button { flex: 0 1 auto; min-width: 0; min-height: 46px; padding: 0 12px; font-size: 16px; }
+.optpanel .optqty { margin-top: 0; grid-template-columns: 64px 1fr 64px; }
+.optpanel .optqty .step { height: 52px; }
+.optpanel .optqty b { font-size: 30px; }
+.optpanel .optline { margin: 0; font-size: 17px; }
+.optpanel .sheetbtns { margin-top: 0; }
+.optpanel .designkeys { margin-top: 0; }
+.optpanel .designshow { padding: 6px 10px; font-size: 26px; }
+.optpanel .designkeys .numpad { gap: 4px; }
+.optpanel .designkeys .numpad button { min-height: 48px; font-size: 24px; }
+.optpanel .letterkeys { grid-template-columns: repeat(13, 1fr); gap: 3px; }
+.optpanel .letterkeys button { min-height: 42px; font-size: 17px; }
+@media (max-width: 760px) { .optpanel { grid-template-columns: 1fr; } }

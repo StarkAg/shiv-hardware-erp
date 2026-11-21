@@ -9,11 +9,14 @@ import {
 import { atOnce, deliver, discard, post, useOutbox } from './outbox.js'
 import {
   BackIcon, BoxIcon, CameraIcon, ClockIcon, CloseIcon, DeleteSheet, FlagIcon, PersonIcon, PhoneIcon, PhotosIcon, Picked, Pieces, PinIcon,
-  SendIcon, Sheet, Shot, StepTracker, TickIcon, useHold, usePicked,
+  SendIcon, Sheet, SheetIcon, Shot, StepTracker, TickIcon, useHold, usePicked,
 } from './ui.jsx'
 import { CustomerPicker, customerArgs } from './NewOrder.jsx'
 import Camera from './Camera.jsx'
 import Viewer from './Viewer.jsx'
+import MakeOrder, { whoOf } from './MakeOrder.jsx'
+import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
+import { PrintSlip, SlipSheet } from './pad/VisitSlip.jsx'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
 const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation', 'measurement', 'visit']
@@ -21,7 +24,7 @@ const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation
 const whenDay = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 const tagOf = (m) => m.step ?? (m.from === 'workshop' ? 'measurement' : 'visit')
 /** Whether a message marks something besides its photographs, so it stays when they are all deleted (removePhoto). */
-const marksOf = (m) => !!(m.text || m.boards != null || m.assemble != null || m.order != null || m.complete || m.ordered || m.arrived || m.visitAt)
+const marksOf = (m) => !!(m.text || m.boards != null || m.pad || m.slip || m.assemble != null || m.order != null || m.complete || m.ordered || m.arrived || m.visitAt)
 
 /**
  * One job, as a page built around its steps.
@@ -71,8 +74,19 @@ export default function JobPage({ job, onBack }) {
     window.history.pushState({ job: job.id, photo: true }, '')
     setViewer(photos.findIndex((p) => p.storageId === storageId))
   }
+  // The work order made on the app opens over the page as its own screen, and
+  // a pad sent opens large; the phone's Back closes either.
+  const [makingPad, setMakingPad] = useState(false)
+  const [padOpen, setPadOpen] = useState(null)
+  const [printPad, setPrintPad] = useState(null)
+  const [printSlip, setPrintSlip] = useState(null)
+  const openOver = (what, set) => { window.history.pushState({ job: job.id, [what]: true }, ''); set() }
   useEffect(() => {
-    const onPop = (e) => { if (!e.state?.photo) setViewer(null) }
+    const onPop = (e) => {
+      if (!e.state?.photo) setViewer(null)
+      if (!e.state?.pad) setMakingPad(false)
+      if (!e.state?.padview) setPadOpen(null)
+    }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
@@ -88,6 +102,7 @@ export default function JobPage({ job, onBack }) {
   }
   // The customer being chosen in the "Customer" sheet; undefined while it is shut.
   const [choosing, setChoosing] = useState(undefined)
+  const saveCustomer = () => { const args = customerArgs(choosing); setChoosing(undefined); setCustomer({ jobId: job.id, ...args }).catch((err) => setError(said(err))) }
 
   /* ── photographing a step ───────────────────────────────────────────────── */
   // The tag of the photos being taken, and the live camera open over the page.
@@ -256,7 +271,15 @@ export default function JobPage({ job, onBack }) {
     fitting: <>{head('Fit it', visitsLine(fitted.count))}{visit}{tray('fitting', { camera: fitted.count ? 'Photograph another visit' : '' })}</>,
   }[at] : {
     measurement: <>{head('Measurement', visitsLine(measured.count) || 'The workshop is to visit the site and measure.')}{tray('visit', { gallery: true, camera: 'Add a visit order photo' })}</>,
-    quotation: <>{head('Work order')}{tray('quotation', { gallery: true })}</>,
+    quotation: (
+      <>
+        {head('Work order', picked.length && step === 'quotation' ? '' : 'Make it on the app, or photograph the paper one.')}
+        {!(picked.length && step === 'quotation') && (
+          <button type="button" className="key ghost" onClick={() => openOver('pad', () => setMakingPad(true))}><SheetIcon /> Make it on the app</button>
+        )}
+        {tray('quotation', { gallery: true })}
+      </>
+    ),
     assemble: (
       <>
         {head(stageAt(job).label, needs.toOrder ? 'Order it from the supplier on WhatsApp, then mark it ordered.'
@@ -321,6 +344,8 @@ export default function JobPage({ job, onBack }) {
   const phones = job.phones ?? []
   const customerNow = job.ledgerId ? { ledgerId: job.ledgerId, name: job.title, place: job.place, phone: contacts.filter((n) => !phones.includes(n)).join(', '), phones }
     : job.title || phones.length ? { name: job.title, phones } : null
+
+  if (makingPad && SIDE === 'shop' && at === 'quotation' && !over) return <MakeOrder job={job} onClose={() => window.history.back()} />
 
   return (
     <div className="app page">
@@ -402,6 +427,28 @@ export default function JobPage({ job, onBack }) {
                       ))}
                     </div>
                   )}
+                  {/* A visit order made on the app: the letterhead slip; tapped, it opens large. */}
+                  {m.slip && (
+                    <>
+                      <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen({ slip: m.slip }))} aria-label="Open the visit order">
+                        <SlipSheet number={job.number} who={whoOf(job)} slip={m.slip} />
+                      </button>
+                      {SIDE === 'shop' && (
+                        <button type="button" className="key ghost" onClick={() => setPrintSlip(m.slip)}><SheetIcon /> Print on A4</button>
+                      )}
+                    </>
+                  )}
+                  {/* A work order made on the app: its yellow copy, the workshop's; tapped, it opens large. */}
+                  {m.pad && (
+                    <>
+                      <button type="button" className="padthumb" onClick={() => openOver('padview', () => setPadOpen(m.pad))} aria-label="Open the work order">
+                        <PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={m.pad} />
+                      </button>
+                      {SIDE === 'shop' && (
+                        <button type="button" className="key ghost" onClick={() => setPrintPad(m.pad)}><SheetIcon /> Print 3 pages</button>
+                      )}
+                    </>
+                  )}
                   {m.complete && <p className="mark ok"><TickIcon size={18} /> {DONE[tag] ?? 'Complete'} <time>{stampOf(m.at)}</time></p>}
                   {m.ordered && <p className="mark ok"><TickIcon size={18} /> Ordered <time>{stampOf(m.at)}</time></p>}
                   {tag === 'quotation' && (m.assemble != null || m.order != null) && (
@@ -453,6 +500,21 @@ export default function JobPage({ job, onBack }) {
           onFallback={() => file.current?.click()}
           onGallery={SIDE === 'shop' ? () => file.current?.click() : undefined} />
       )}
+      {padOpen && (
+        <div className="padview" role="dialog" aria-modal="true" aria-label="Work order">
+          <header>
+            <b>Work order {job.number}</b>
+            <button type="button" className="round" onClick={() => window.history.back()} aria-label="Close"><CloseIcon /></button>
+          </header>
+          <div className="padviewin">
+            {padOpen.slip
+              ? <SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={0.8} />
+              : <PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={0.8} />}
+          </div>
+        </div>
+      )}
+      {printPad && <PrintPads number={job.number} who={whoOf(job)} pad={printPad} onDone={() => setPrintPad(null)} />}
+      {printSlip && <PrintSlip number={job.number} who={whoOf(job)} slip={printSlip} onDone={() => setPrintSlip(null)} />}
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
       {completing && (
         <Sheet label="Complete" onClose={() => setCompleting(false)}>
@@ -493,10 +555,10 @@ export default function JobPage({ job, onBack }) {
         <Sheet label="Customer" wide onClose={() => setChoosing(undefined)}>
           <b className="sheettitle">Who is this for?</b>
           <p>Pick the customer's account from the panel; the name, place and phone come with it. Add any more numbers to ring under it.</p>
-          <CustomerPicker value={choosing} onChange={setChoosing} />
+          <CustomerPicker value={choosing} onChange={setChoosing} onDone={saveCustomer} autoFocus />
           <div className="sheetbtns">
             <button type="button" className="ghost" onClick={() => setChoosing(undefined)}>Cancel</button>
-            <button type="button" className="solid" onClick={() => { const args = customerArgs(choosing); setChoosing(undefined); setCustomer({ jobId: job.id, ...args }).catch((err) => setError(said(err))) }}>Save</button>
+            <button type="button" className="solid" onClick={saveCustomer}>Save</button>
           </div>
         </Sheet>
       )}
