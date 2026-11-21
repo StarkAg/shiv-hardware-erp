@@ -140,7 +140,7 @@ function SlideArrow({ cx, cy, w, dir }) {
 /**
  * A sliding window, 2 or 3 track: the shutters side by side in the frame,
  * each a little over the next where they meet, an arrow on each for the way
- * it slides and a handle at the edge that meets the next. No hinges, no swing.
+ * it slides and its lock on the outer side, at the frame. No hinges, no swing.
  * A 3 track window with Glass + Net has its last shutter in net.
  */
 function Sliding({ x, y, w, h, tracks, fill, netId, fillId }) {
@@ -159,9 +159,9 @@ function Sliding({ x, y, w, h, tracks, fill, netId, fillId }) {
             <rect x={px + 2.5} y={y + 2.5} width={pw - 5} height={h - 5} className="opinner" />
             {own === 'glass' && <Glint x={px} y={y} w={pw} h={h} />}
             <SlideArrow cx={px + pw / 2} cy={y + h * 0.72} w={pw} dir={dir} />
-            {/* The handle on the edge that meets the next shutter. */}
-            {i < tracks - 1 && <rect x={px + pw - 5} y={y + h / 2 - 6} width="2.4" height="12" rx="1.2" className="ophandle" />}
-            {i > 0 && i === tracks - 1 && <rect x={px + 2.6} y={y + h / 2 - 6} width="2.4" height="12" rx="1.2" className="ophandle" />}
+            {/* The lock on the shutter's outer side, at the frame (Tony, 21 Nov 2026): the last
+                shutter's on its right edge, every other one's on its left. */}
+            <rect x={i === tracks - 1 ? px + pw - 5 : px + 2.6} y={y + h / 2 - 6} width="2.4" height="12" rx="1.2" className="ophandle" />
             <FillLabel cx={px + pw / 2} cy={y + h * 0.4} text={FILLS[own]?.short || own} room={pw - 10} />
           </g>
         )
