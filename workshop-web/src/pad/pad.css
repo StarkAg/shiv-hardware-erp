@@ -205,3 +205,16 @@
 .pad:not(.worksheet) .pshop { font-family: "Barlow Condensed", "Barlow Condensed Fallback", "Arial Narrow", sans-serif; font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: .35mm; }
 .pad:not(.worksheet) .pphone { font-weight: 700; letter-spacing: 2.75mm; }
 .pad:not(.worksheet) .padl { background: #2a2a2a; }
+
+/* No blue ink, and plainer (Tony, 21 Nov 2026): what is filled in and the
+   drawings in black; the pad's printed words upright, not slanted; places
+   unchanged. */
+.pad:not(.worksheet) { --pen: #111; --print: #1f1f1f; }
+.pad:not(.worksheet) .pi, .pad:not(.worksheet) .pb i { font-style: normal; font-weight: 600; color: #2b2b2b; }
+.pad:not(.worksheet) .pshop { font-style: normal; letter-spacing: .45mm; }
+.pad:not(.worksheet) .ink { color: #111; font-weight: 700; }
+.pad:not(.worksheet) .padl.dbl { border-color: #111; }
+.pad:not(.worksheet) .padsketch .opswing { stroke: #666; }
+.pad:not(.worksheet) .padsketch .ophandle { fill: #111; }
+.pad:not(.worksheet) .padsketch .opcap small { color: #333; opacity: 1; }
+.pad:not(.worksheet) .padsketch .opext line { stroke: #555; }
