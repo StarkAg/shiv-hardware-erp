@@ -31,7 +31,8 @@ export const FILLS_FOR = {
   ventilator: ['net', 'acp', 'glass'],
   'window-1': ['net', 'glass', 'acp'],
   'window-2': ['net', 'glass', 'acp'],
-  'alu-door': ['glass', 'acp', 'acp-film'],
+  // No glass in an aluminium door (Tony, 21 Nov 2026).
+  'alu-door': ['acp', 'acp-film'],
   'acp-wall': ['acp', 'acp-film'],
 }
 
