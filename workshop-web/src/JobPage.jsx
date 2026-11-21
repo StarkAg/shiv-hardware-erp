@@ -9,7 +9,7 @@ import {
 import { atOnce, deliver, discard, post, useOutbox } from './outbox.js'
 import {
   BackIcon, BoxIcon, CameraIcon, ClockIcon, CloseIcon, DeleteSheet, FlagIcon, PersonIcon, PhoneIcon, PhotosIcon, Picked, Pieces, PinIcon,
-  SendIcon, Sheet, SheetIcon, Shot, StepTracker, TickIcon, useHold, usePicked,
+  FitLine, SendIcon, Sheet, SheetIcon, Shot, StepTracker, TickIcon, useHold, usePicked,
 } from './ui.jsx'
 import { CustomerPicker, customerArgs } from './NewOrder.jsx'
 import Camera from './Camera.jsx'
@@ -393,7 +393,7 @@ export default function JobPage({ job, onBack }) {
                     </button>
                     <div className="slipsays">
                       {m.slip.lines.length ? (
-                        <ol>{m.slip.lines.map((l) => <li key={l.id}><span>{l.text}</span><b>{qtyOf(l)}</b></li>)}</ol>
+                        <ol>{m.slip.lines.map((l) => <li key={l.id}><FitLine>{l.text}</FitLine><b>{qtyOf(l)}</b></li>)}</ol>
                       ) : <p>Visit only, no items written</p>}
                       {m.slip.advance > 0 && <p className="adv">Advance <b>Rs. {Math.round(m.slip.advance).toLocaleString('en-IN')}</b></p>}
                     </div>
@@ -413,7 +413,7 @@ export default function JobPage({ job, onBack }) {
                       <ol>
                         {m.pad.lines.map((l) => (
                           <li key={l.id}>
-                            <span>{l.label}{l.w && l.h ? ` ${fmtSize(l.w, l.h)}` : ''}</span>
+                            <FitLine>{l.label}{l.w && l.h ? ` ${fmtSize(l.w, l.h)}` : ''}</FitLine>
                             <b>{l.qty} {l.extra ? l.unit : 'Pc'}</b>
                           </li>
                         ))}

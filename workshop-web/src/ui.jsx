@@ -251,3 +251,31 @@ export function Picked({ picked, onDrop, onOpen }) {
     </div>
   )
 }
+
+/**
+ * One line of words that never wraps: when it is wider than its room it is
+ * pressed sideways to fit, as Tally prints a long item name (Tony, 21 Nov 2026).
+ */
+export function FitLine({ children, className = '' }) {
+  const box = useRef(null)
+  const text = useRef(null)
+  const [squeeze, setSqueeze] = useState(1)
+  useEffect(() => {
+    const fit = () => {
+      if (!box.current || !text.current) return
+      const room = box.current.clientWidth
+      const need = text.current.scrollWidth
+      setSqueeze(need > room && need > 0 ? room / need : 1)
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(box.current)
+    document.fonts?.ready.then(fit)
+    return () => ro.disconnect()
+  }, [children])
+  return (
+    <span ref={box} className={`fitline ${className}`}>
+      <span ref={text} style={squeeze < 1 ? { transform: `scaleX(${squeeze})` } : undefined}>{children}</span>
+    </span>
+  )
+}

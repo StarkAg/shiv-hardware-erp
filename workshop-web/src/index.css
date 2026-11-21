@@ -645,3 +645,9 @@ html, body, #root { height: 100%; }
 .vturn { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 56px; height: 72px; background: rgba(255, 255, 255, .18); color: #fff; font: 800 44px/1 var(--sign); display: flex; align-items: center; justify-content: center; }
 .vturn.prev { left: 12px; }
 .vturn.next { right: 12px; }
+
+/* An item line on one row, pressed sideways when long (FitLine in ui.jsx), as Tally does. */
+.fitline { display: block; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
+.fitline > span { display: inline-block; transform-origin: left center; }
+.slipsays li { align-items: baseline; }
+.slipsays li b { flex: none; }
