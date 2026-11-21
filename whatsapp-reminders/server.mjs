@@ -31,6 +31,7 @@
  *   SEND_KEY     the secret Convex and the print server send in x-shop-key
  *   SHOP_GROUP_ID         the shop's own group, for sends addressed to 'group'
  *   GUARANTEE_MESSAGE     the card-ready text; {name} is the customer's first name
+ *   REVIEW_URL            the Google review link put under GUARANTEE_MESSAGE ("off" for none)
  *   AUTOREPLY_MESSAGE     the reply to a direct message
  *   FROM_NUMBER  the only number allowed to send (917970550954)
  *   TO_NUMBER    who is reminded (918709964141)
@@ -53,6 +54,9 @@ const SEND_KEY = process.env.SEND_KEY || ''
 const SHOP_GROUP_ID = process.env.SHOP_GROUP_ID || ''
 const GUARANTEE_MESSAGE = (process.env.GUARANTEE_MESSAGE
   || 'Hi {name},\n\nThank you for purchasing with us. Your guarantee card is processed, please collect it from the shop.').replace(/\\n/g, '\n')
+/** The shop's Google review page, put under the card-ready text (REVIEW_URL to change it, "off" for none). */
+const REVIEW_URL = (process.env.REVIEW_URL ?? 'https://search.google.com/local/writereview?placeid=ChIJzc6OLIvz9DkRx0lBBZ214Gg').trim()
+const REVIEW_LINE = 'If you are happy with us, please rate Shiv Hardware Store on Google:'
 const AUTOREPLY_MESSAGE = (process.env.AUTOREPLY_MESSAGE
   || 'For any enquiries contact 8092850954 on WhatsApp.').replace(/\\n/g, '\n')
 const AUTOREPLY_EVERY_MS = 60 * 60_000
@@ -185,8 +189,13 @@ const firstName = (raw) => {
 }
 function guaranteeText(raw) {
   const name = firstName(raw)
-  if (GUARANTEE_MESSAGE.includes('{name}')) return GUARANTEE_MESSAGE.replace(/\{name\}/g, name || 'there')
-  return `${name ? `Hi ${name},` : 'Hi,'}\n\n${GUARANTEE_MESSAGE}`
+  const text = GUARANTEE_MESSAGE.includes('{name}')
+    ? GUARANTEE_MESSAGE.replace(/\{name\}/g, name || 'there')
+    : `${name ? `Hi ${name},` : 'Hi,'}\n\n${GUARANTEE_MESSAGE}`
+  // The review link goes under whatever text is set on Railway, once: not when
+  // that text already carries a Google review link of its own.
+  const hasOwn = /writereview|g\.page\/r\//i.test(text) || (REVIEW_URL && text.includes(REVIEW_URL))
+  return !REVIEW_URL || REVIEW_URL === 'off' || hasOwn ? text : `${text}\n\n${REVIEW_LINE}\n${REVIEW_URL}`
 }
 async function notifyGuarantee({ mobile, name = '', number = '' }) {
   const jid = chatOf(mobile)
