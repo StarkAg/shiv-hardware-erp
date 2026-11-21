@@ -11,8 +11,12 @@ import { dim } from './dims.js'
 /** What gets built. Leaves and the way it is drawn follow from this. */
 export const FORMS = {
   ventilator: { label: 'Ventilator', leaves: 1, draw: 'plain', nominal: { w: dim(20), h: dim(12) } },
-  'window-1': { label: '1 door window', leaves: 1, draw: 'openable', nominal: { w: dim(13, 7), h: dim(41, 5) } },
-  'window-2': { label: '2 door window', leaves: 2, draw: 'openable', nominal: { w: dim(26), h: dim(40, 6) } },
+  // Sliding windows, as the shop makes them beside the openable ones (Tony, 21 Nov 2026).
+  'slide-2': { label: '2 track window', leaves: 2, draw: 'sliding', nominal: { w: dim(48), h: dim(48) } },
+  'slide-3': { label: '3 track window', leaves: 3, draw: 'sliding', nominal: { w: dim(60), h: dim(48) } },
+  // The ids stay as they were, so work orders already made still read.
+  'window-1': { label: '1 door openable', leaves: 1, draw: 'openable', nominal: { w: dim(13, 7), h: dim(41, 5) } },
+  'window-2': { label: '2 door openable', leaves: 2, draw: 'openable', nominal: { w: dim(26), h: dim(40, 6) } },
   'alu-door': { label: 'Aluminium door', leaves: 1, draw: 'door', nominal: { w: dim(36), h: dim(84) } },
   'acp-wall': { label: 'ACP wall', leaves: 0, draw: 'panel', nominal: null },
 }
@@ -24,11 +28,15 @@ export const FILLS = {
   acp: { label: 'ACP', short: 'ACP' },
   glass: { label: 'Glass', short: 'Glass' },
   'acp-film': { label: 'ACP with film', short: 'ACP + film' },
+  // A 3 track window as it is usually fitted: two glass shutters and one of net.
+  'glass-net': { label: 'Glass + Net', short: 'Glass + Net' },
 }
 
 /** Which fills make sense in which form: a wall is never netted. */
 export const FILLS_FOR = {
   ventilator: ['net', 'acp', 'glass'],
+  'slide-2': ['glass', 'net'],
+  'slide-3': ['glass-net', 'glass'],
   'window-1': ['net', 'glass', 'acp'],
   'window-2': ['net', 'glass', 'acp'],
   // No glass in an aluminium door (Tony, 21 Nov 2026).

@@ -124,6 +124,52 @@ const Glint = ({ x, y, w, h }) => (
   </g>
 )
 
+/** Which way a shutter slides: a short arrow across its middle (both ways for a middle one). */
+function SlideArrow({ cx, cy, w, dir }) {
+  const half = Math.min(14, w * 0.28)
+  const head = 3
+  return (
+    <g className="oparrow">
+      <line x1={cx - half} y1={cy} x2={cx + half} y2={cy} />
+      {dir !== 'left' && <polyline points={`${cx + half - head},${cy - head} ${cx + half},${cy} ${cx + half - head},${cy + head}`} />}
+      {dir !== 'right' && <polyline points={`${cx - half + head},${cy - head} ${cx - half},${cy} ${cx - half + head},${cy + head}`} />}
+    </g>
+  )
+}
+
+/**
+ * A sliding window, 2 or 3 track: the shutters side by side in the frame,
+ * each a little over the next where they meet, an arrow on each for the way
+ * it slides and a handle at the edge that meets the next. No hinges, no swing.
+ * A 3 track window with Glass + Net has its last shutter in net.
+ */
+function Sliding({ x, y, w, h, tracks, fill, netId, fillId }) {
+  const lap = 4
+  const pw = (w + lap * (tracks - 1)) / tracks
+  return (
+    <>
+      {Array.from({ length: tracks }, (_, i) => {
+        const px = x + i * (pw - lap)
+        const own = fill === 'glass-net' ? (i === tracks - 1 ? 'net' : 'glass') : fill
+        const paint = paintOf(own, own === 'net' ? netId : fillId)
+        const dir = i === 0 ? 'right' : i === tracks - 1 ? 'left' : 'both'
+        return (
+          <g key={i}>
+            <rect x={px} y={y} width={pw} height={h} className="opsash" style={{ fill: paint }} />
+            <rect x={px + 2.5} y={y + 2.5} width={pw - 5} height={h - 5} className="opinner" />
+            {own === 'glass' && <Glint x={px} y={y} w={pw} h={h} />}
+            <SlideArrow cx={px + pw / 2} cy={y + h * 0.72} w={pw} dir={dir} />
+            {/* The handle on the edge that meets the next shutter. */}
+            {i < tracks - 1 && <rect x={px + pw - 5} y={y + h / 2 - 6} width="2.4" height="12" rx="1.2" className="ophandle" />}
+            {i > 0 && i === tracks - 1 && <rect x={px + 2.6} y={y + h / 2 - 6} width="2.4" height="12" rx="1.2" className="ophandle" />}
+            <FillLabel cx={px + pw / 2} cy={y + h * 0.4} text={FILLS[own]?.short || own} room={pw - 10} />
+          </g>
+        )
+      })}
+    </>
+  )
+}
+
 /** What goes in it, on a white label so no line runs through the words. */
 function FillLabel({ cx, cy, text, room }) {
   if (!text || room < 24) return null
@@ -163,7 +209,7 @@ export function Opening({ o, n, longest }) {
     <figure className="opening">
       <svg className="opbox" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img"
         aria-label={`${fmtDim(o.w)} by ${fmtDim(o.h)} inch ${form?.label || ''} with ${words}`}>
-        <defs><Paint id={uid} fill={o.fill} /></defs>
+        <defs><Paint id={uid} fill={o.fill} />{o.fill === 'glass-net' && <Paint id={`${uid}net`} fill="net" />}</defs>
         {/* Extension lines from the corners, and the dimension lines on them. */}
         <g className="opext">
           <line x1={X} y1={Y - 2} x2={X} y2={Y - DIM + 6} />
@@ -191,6 +237,9 @@ export function Opening({ o, n, longest }) {
             <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" paint={paint} glass={glass} />
             <FillLabel cx={ix + iw / 2} cy={iy + ih / 2} text={words} room={iw - 14} />
           </>
+        )}
+        {draw === 'sliding' && (
+          <Sliding x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} tracks={leaves >= 3 ? 3 : 2} fill={o.fill} fillId={uid} netId={`${uid}net`} />
         )}
         {draw === 'door' && (
           <>
