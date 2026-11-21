@@ -322,8 +322,9 @@ export default function MakeOrder({ job, onClose }) {
         </section>
 
         <section className="nwslip" aria-label="The pad">
-          <PadSheet key={format} copy={copyOf('customer')} number={job.number} who={who} pad={pad} format={format} fitHeight />
-          <button type="button" className="pick" disabled={!ready} onClick={() => setPrinting(true)}><SheetIcon /> Print 3 pages</button>
+          {/* Print right under the sheet, as wide as it. */}
+          <PadSheet key={format} copy={copyOf('customer')} number={job.number} who={who} pad={pad} format={format} fitHeight
+            below={<button type="button" className="pick" disabled={!ready} onClick={() => setPrinting(true)}><SheetIcon /> Print 3 pages</button>} />
         </section>
       </main>
 

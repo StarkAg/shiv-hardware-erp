@@ -175,6 +175,8 @@ function FillLabel({ cx, cy, text, room }) {
   if (!text || room < 24) return null
   const fs = Math.max(6.5, Math.min(9.5, room / (text.length * 0.62)))
   const w = text.length * fs * 0.6 + 8
+  // Only where it fits whole: a label wider than its shutter runs over the next; the texture says it anyway.
+  if (w > room + 6) return null
   return (
     <g>
       <rect x={cx - w / 2} y={cy - fs * 0.85} width={w} height={fs * 1.5} className="oplabelbg" />

@@ -606,3 +606,8 @@ html, body, #root { height: 100%; }
   .makeorder .nwslip { gap: 6px; }
   .makeorder .nwslip .pick { min-height: 48px; }
 }
+
+/* The sheet with Print under it, their edges in line (PadSheet `below`). */
+.neworder .padfit.tall.withbelow { flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; }
+.padbelow { flex: none; display: flex; }
+.padbelow .pick { flex: 1; }

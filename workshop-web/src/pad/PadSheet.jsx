@@ -36,11 +36,13 @@ const SHEET_H = 296 // a hair under A4, so it never spills a blank second page
 const PAD_W = 230.8
 const PAD_H = 270.8
 const PRINT_SCALE = 204 / PAD_W
-const DIVIDER_X = 118.6
+// The same margin, 13mm, on both sides (21 Nov 2026); the divider half way between.
+const MARGIN = 13
+const DIVIDER_X = 115.4
 // The top half closed up (21 Nov 2026): it ended at 130mm, with loose gaps.
 const SPLIT_Y = 106
-const EST_X0 = 119
-const EST_X1 = 223.5
+const EST_X0 = 115.8
+const EST_X1 = 230.8 - MARGIN
 const RULE_FIRST = 27.5
 const RULE_STEP = 8.8
 const RULES = 9
@@ -51,7 +53,7 @@ const FIELDS = [
   { label: 'Order Date', y: 80.5, from: 40, key: 'orderDate' },
   { label: 'Delivery Date', y: 89.0, from: 44.5, key: 'deliveryDate' },
 ]
-const FIELD_END = 116
+const FIELD_END = 112.6
 const LOGO_TOP = 29.6
 const LOGO_H = 45.8 - LOGO_TOP
 const LOGO_X = 31 - 2.6 - LOGO_H * 154 / 174
@@ -144,25 +146,52 @@ function PadSketch({ openings, style }) {
     return () => ro.disconnect()
   }, [])
   const scaleFor = (w, h) => (w && h && room.w && room.h ? Math.min(SKETCH_ZOOM_MAX, room.w / w, room.h / h) * 0.98 : 0)
-  // The drawings' own size, measured once a layout: all on one row and, where
-  // there are three or more, on two; whichever lets them be bigger is kept.
+  // The drawings' own size, measured once a layout: all on one row, then (with
+  // enough pieces) on two rows and on three; whichever lets them be biggest in
+  // the room there is is kept. A big order fills the bottom of the pad.
+  const maxRows = Math.min(3, Math.max(1, openings.length - 1))
   useLayoutEffect(() => {
     if (fit.ready || !room.w || !room.h) return
     const grid = box.current?.querySelector('.sketchgrid')
     if (!grid) return
-    const w = grid.offsetWidth
+    // The drawings' own extent, not the row they are laid in (a wrapped row is
+    // set wider than what sits in it).
+    const kids = [...grid.children]
+    if (!kids.length) return
+    const w = Math.max(...kids.map((k) => k.offsetLeft + k.offsetWidth)) - Math.min(...kids.map((k) => k.offsetLeft))
     const h = grid.offsetHeight
     if (!w || !h) return
-    if (!fit.wrap && openings.length > 2) {
-      setFit({ wrap: true, row: Math.ceil(w * 0.56), ready: false, one: { w, h } })
+    const rows = fit.rows ?? 1
+    const tried = [...(fit.tried ?? []), { rows, row: fit.row, w, h }]
+    const oneW = tried[0].w
+    if (rows < maxRows) {
+      // The next try: as many rows again, each about that share of the one long row.
+      setFit({ wrap: true, rows: rows + 1, row: Math.ceil((oneW / (rows + 1)) * 1.12), ready: false, tried })
       return
     }
-    if (fit.wrap && fit.one && scaleFor(fit.one.w, fit.one.h) >= scaleFor(w, h)) {
-      setFit({ wrap: false, row: 0, ready: true, w: fit.one.w, h: fit.one.h })
-      return
+    const best = tried.reduce((a, b) => (scaleFor(b.w, b.h) > scaleFor(a.w, a.h) ? b : a))
+    setFit({ wrap: best.rows > 1, rows: best.rows, row: best.row, w: best.w, h: best.h, ready: true })
+  }, [fit, maxRows, room])
+  // Once settled, the layout as it is actually drawn is measured again, and
+  // the scale and centring taken from that, not from a trial on the way.
+  // Watched as well: the lettering loads after the first layout and the
+  // drawings settle smaller, which nothing else would notice.
+  useLayoutEffect(() => {
+    if (!fit.ready) return undefined
+    const grid = box.current?.querySelector('.sketchgrid')
+    if (!grid) return undefined
+    const look = () => {
+      const kids = [...grid.children]
+      if (!kids.length) return
+      const w = Math.max(...kids.map((k) => k.offsetLeft + k.offsetWidth)) - Math.min(...kids.map((k) => k.offsetLeft))
+      const h = grid.offsetHeight
+      setFit((f) => (f.ready && (Math.abs(w - f.w) > 2 || Math.abs(h - f.h) > 2) ? { ...f, w, h } : f))
     }
-    setFit({ ...fit, w, h, ready: true })
-  }, [fit, openings.length, room])
+    look()
+    const ro = new ResizeObserver(look)
+    ro.observe(grid)
+    return () => ro.disconnect()
+  }, [fit.ready, fit.rows, fit.row])
   const zoom = fit.ready ? scaleFor(fit.w, fit.h) : 1
   return (
     <div ref={box} className="padsketch ink" style={style}>
@@ -172,7 +201,8 @@ function PadSketch({ openings, style }) {
       <div
         className={`padsketchin${fit.wrap ? ' rows2' : ''}`}
         style={{
-          position: 'absolute', left: '50%', top: 0,
+          // Centred up and down in the room too, so what is left over is shared above and below.
+          position: 'absolute', left: '50%', top: fit.ready ? Math.max(0, (room.h - fit.h * zoom) / 2) : 0,
           width: fit.wrap ? fit.row : 'max-content',
           transform: `translateX(-50%) scale(${zoom})`, transformOrigin: 'top center',
           visibility: fit.ready ? 'visible' : 'hidden',
@@ -212,10 +242,11 @@ const sizeOf = (format) => (format === 'format1' ? { w: SHEET_W, h: SHEET_H, pri
  * One copy of the work order. `who` is the customer: name, address, mobile;
  * `number` the work order's; `format` the look, else this counter's.
  */
-export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fitHeight = false, format }) {
+export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fitHeight = false, format, below = null }) {
   const fmt = format ?? padFormat()
   const size = sizeOf(fmt)
   const box = useRef(null)
+  const under = useRef(null)
   const [zoom, setZoom] = useState(fixedZoom ?? 1)
   useLayoutEffect(() => {
     if (fixedZoom) return undefined
@@ -224,8 +255,9 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fit
     // To the width it has; with `fitHeight`, the whole sheet within the height too, nothing to scroll.
     const fitTo = () => {
       const padPx = (size.w / 25.4) * 96
+      const room = el.clientHeight - (under.current?.offsetHeight ?? 0) - (under.current ? 6 : 0)
       // Only where the screen gives it a fixed height (the counter, 900px and up); on a phone its height is its own.
-      const byHeight = fitHeight && el.clientHeight && window.matchMedia('(min-width: 900px)').matches ? el.clientHeight / ((size.h / 25.4) * 96 + 2) : Infinity
+      const byHeight = fitHeight && room > 0 && window.matchMedia('(min-width: 900px)').matches ? room / ((size.h / 25.4) * 96 + 2) : Infinity
       if (el.clientWidth) setZoom(Math.min(1.2, el.clientWidth / padPx, byHeight))
     }
     fitTo()
@@ -235,7 +267,7 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fit
   }, [fixedZoom, fitHeight, size.w, size.h])
 
   return (
-    <div ref={box} className={`padfit${fitHeight ? ' tall' : ''}`} style={thumb ? { height: mm(size.h * zoom) } : undefined}>
+    <div ref={box} className={`padfit${fitHeight ? ' tall' : ''}${below ? ' withbelow' : ''}`} style={thumb ? { height: mm(size.h * zoom) } : undefined}>
       {/* A thumbnail is shrunk as one picture: a phone will not draw letters that small. */}
       <div
         className={`pad ${fmt === 'format1' ? 'worksheet ' : ''}copy-${copy.key}`}
@@ -248,6 +280,8 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fit
           ? <Format1 copy={copy} number={number} who={who} pad={pad} />
           : <PinkPad copy={copy} number={number} who={who} pad={pad} />}
       </div>
+      {/* What goes under the sheet (Print), exactly as wide as the sheet, its edges in line. */}
+      {below && <div ref={under} className="padbelow" style={{ width: `calc(${mm(size.w)} * ${zoom})` }}>{below}</div>}
     </div>
   )
 }
@@ -280,7 +314,7 @@ function PinkPad({ copy, number, who, pad }) {
   }
   return (
     <>
-      <At x={15.5} base={7} size={4.1} className="pi">Order No. -</At>
+      <At x={MARGIN + 1} base={7} size={4.1} className="pi">Order No. -</At>
       <At x={37} base={7.4} size={5.2} className="ink">{number}</At>
       <At x={24.5} base={18.6} size={8.6} className="pphone">8092850954</At>
       <At x={97.5} base={19.4} size={4.7} className="pi">Tony</At>
@@ -292,21 +326,21 @@ function PinkPad({ copy, number, who, pad }) {
 
       {FIELDS.map((f) => (
         <div key={f.key}>
-          {f.label && <At x={15} base={f.y - 0.6} size={4.0} className="pi">{f.label}</At>}
+          {f.label && <At x={MARGIN + 1} base={f.y - 0.6} size={4.0} className="pi">{f.label}</At>}
           <HLine y={f.y} x0={f.from} x1={FIELD_END} />
           <At centre={(f.from + FIELD_END) / 2} base={f.y - 1.3} size={5} fit={FIELD_END - f.from - 1} className="ink">{values[f.key]}</At>
         </div>
       ))}
-      <At x={15} base={100.5} size={4.0} className="pi">Customer Satisfaction Sig.</At>
+      <At x={MARGIN + 1} base={100.5} size={4.0} className="pi">Customer Satisfaction Sig.</At>
 
       <div className="padl" style={{ left: mm(DIVIDER_X - 0.2), top: 0, width: mm(0.4), height: mm(SPLIT_Y) }} />
-      <HLine y={SPLIT_Y} x0={13} x1={EST_X1} w={0.4} />
+      <HLine y={SPLIT_Y} x0={MARGIN} x1={EST_X1} w={0.4} />
 
       <At centre={170} base={7.4} size={4.2} className="pi">Estimate</At>
       {/* What each column is, small, on the double line. */}
-      <At x={120.5} base={15.2} size={2.8} className="phead">Particulars</At>
-      <At right={202} base={15.2} size={2.8} className="phead">Qty</At>
-      <At right={222.5} base={15.2} size={2.8} className="phead">Amount</At>
+      <At x={117.4} base={15.2} size={2.8} className="phead">Particulars</At>
+      <At right={EST_X1 - 21.5} base={15.2} size={2.8} className="phead">Qty</At>
+      <At right={EST_X1 - 1} base={15.2} size={2.8} className="phead">Amount</At>
       <HLine y={16.4} x0={EST_X0} x1={EST_X1} />
       <HLine y={18.6} x0={EST_X0} x1={EST_X1} />
       {Array.from({ length: ruleCount }, (_, i) => (
@@ -316,17 +350,17 @@ function PinkPad({ copy, number, who, pad }) {
         const base = RULE_FIRST + i * step - 1.3
         return (
           <div key={r.key}>
-            {r.label && <At x={120.5} base={base} size={size} fit={69} className="ink">{r.label}</At>}
-            {r.qty && <At right={202} base={base} size={size} className="ink">{r.qty}</At>}
-            {r.word && <At right={201} base={base} size={size} className="ink">{r.word}</At>}
-            <At right={222.5} base={base} size={r.strong ? size * 1.1 : size} className={`ink${r.strong ? ' pstrong' : ''}`}>{r.amt}</At>
-            {r.under && <HLine y={base + 1.1} x0={204} x1={222.8} w={0.35} pen double={r.under === 'double'} />}
+            {r.label && <At x={117.4} base={base} size={size} fit={EST_X1 - 21.5 - 117.4 - 15} className="ink">{r.label}</At>}
+            {r.qty && <At right={EST_X1 - 21.5} base={base} size={size} className="ink">{r.qty}</At>}
+            {r.word && <At right={EST_X1 - 22.5} base={base} size={size} className="ink">{r.word}</At>}
+            <At right={EST_X1 - 1} base={base} size={r.strong ? size * 1.1 : size} className={`ink${r.strong ? ' pstrong' : ''}`}>{r.amt}</At>
+            {r.under && <HLine y={base + 1.1} x0={EST_X1 - 19.5} x1={EST_X1 - 0.7} w={0.35} pen double={r.under === 'double'} />}
           </div>
         )
       })}
 
-      <PadSketch openings={openingsOf(pad)} style={{ left: mm(13), top: mm(SPLIT_Y + 6), width: mm(PAD_W - 26), height: mm(PAD_H - SPLIT_Y - 14) }} />
-      <At right={223} base={267.5} size={3.4} className="pcopy">{copy.label}</At>
+      <PadSketch openings={openingsOf(pad)} style={{ left: mm(MARGIN), top: mm(SPLIT_Y + 6), width: mm(PAD_W - MARGIN * 2), height: mm(PAD_H - SPLIT_Y - 18) }} />
+      <At right={EST_X1} base={PAD_H - 7} size={3.4} className="pcopy">{copy.label}</At>
     </>
   )
 }
