@@ -17,7 +17,7 @@ import Viewer, { SheetViewer } from './Viewer.jsx'
 import MakeOrder, { whoOf } from './MakeOrder.jsx'
 import { PadSheet, copyOf, padPictures } from './pad/PadSheet.jsx'
 import { SlipSheet, qtyOf } from './pad/VisitSlip.jsx'
-import { QueuePrint, sheetBlob } from './sendOut.jsx'
+import { sheetBlob } from './sendOut.jsx'
 import { inr, totalOf } from './pad/forms.js'
 import { fmtSize } from './pad/dims.js'
 
@@ -420,9 +420,6 @@ export default function JobPage({ job, onBack }) {
                       <p className="adv">Total <b>{inr(totalOf(m.pad))}</b>{m.pad.advance > 0 && <> · Advance <b>{inr(m.pad.advance)}</b></>}</p>
                     </div>
                   </div>
-                  {SIDE === 'shop' && (
-                    <QueuePrint label="Print 3 pages" mode="color" name={`Work order ${job.number}`} makeBlobs={() => padPictures(job.number, whoOf(job), m.pad)} />
-                  )}
                 </>
               )}
               {/* Measured once: the photos are the measurement, so no "Measuring done" under them. */}
@@ -556,6 +553,8 @@ export default function JobPage({ job, onBack }) {
           make={() => (padOpen.slip
             ? sheetBlob(<SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={1} />, '.slip')
             : sheetBlob(<PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={1} />, '.pad'))}
+          // A work order's Print: its three copies, banded, in colour.
+          printWith={padOpen.slip ? null : { blobs: () => padPictures(job.number, whoOf(job), padOpen), mode: 'color' }}
         />
       )}
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}

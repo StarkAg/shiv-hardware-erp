@@ -7,7 +7,7 @@ import { SendOut, photoBlob } from './sendOut.jsx'
  * picture in the same viewer as a photo, so everything opened has the same
  * Share, Send to group and Print. `make` draws it.
  */
-export function SheetViewer({ title, make, onClose }) {
+export function SheetViewer({ title, make, onClose, printWith = null }) {
   const [pic, setPic] = useState(null) // null | { url } | { error }
   const run = useRef(make)
   useEffect(() => {
@@ -20,7 +20,7 @@ export function SheetViewer({ title, make, onClose }) {
     }, () => { if (!gone) setPic({ error: true }) })
     return () => { gone = true; if (url) URL.revokeObjectURL(url) }
   }, [])
-  if (pic?.url) return <Viewer photos={[{ storageId: 'sheet', url: pic.url }]} start={0} title={title} onClose={onClose} />
+  if (pic?.url) return <Viewer photos={[{ storageId: 'sheet', url: pic.url }]} start={0} title={title} onClose={onClose} printWith={printWith} />
   return (
     <div className="viewer" role="dialog" aria-modal="true" aria-label={title}>
       <div className="vbar">
@@ -32,7 +32,7 @@ export function SheetViewer({ title, make, onClose }) {
 }
 
 /** A job's photos, full screen: swipe (or the arrow keys) from one to the next. */
-export default function Viewer({ photos, start, title, onClose }) {
+export default function Viewer({ photos, start, title, onClose, printWith = null }) {
   const strip = useRef(null)
   const [at, setAt] = useState(start)
   const [note, setNote] = useState('')
@@ -103,7 +103,7 @@ export default function Viewer({ photos, start, title, onClose }) {
       {/* The photo on screen: to the shop's group, or straight to the printer. */}
       {photos[at] && (
         <SendOut key={photos[at].storageId} className="onphoto" mode="auto"
-          name={`${title} ${at + 1}`} caption={title} getBlob={() => photoBlob(photos[at].url)} />
+          name={`${title} ${at + 1}`} caption={title} getBlob={() => photoBlob(photos[at].url)} printWith={printWith} />
       )}
     </div>
   )

@@ -126,7 +126,7 @@ export function QueuePrint({ label, makeBlobs, name, mode = 'auto', className = 
  * 'bw' for a sheet the app drew, 'auto' for a photo (the shop PC reads
  * whether it has colour).
  */
-export function SendOut({ getBlob, name, caption = '', mode = 'auto', className = '' }) {
+export function SendOut({ getBlob, name, caption = '', mode = 'auto', className = '', printWith = null }) {
   const convex = useConvex()
   const [group, setGroup] = useState(null) // null | 'sending' | 'sent' | { error }
   const [print, setPrint] = useState(null) // null | 'making' | { id } | { error }
@@ -147,7 +147,8 @@ export function SendOut({ getBlob, name, caption = '', mode = 'auto', className 
   const toPrinter = async () => {
     setPrint('making')
     try {
-      setPrint({ id: await printOnQueue(convex, [await getBlob()], name, mode) })
+      // A work order prints its three copies, in colour; anything else the picture on screen.
+      setPrint({ id: printWith ? await printOnQueue(convex, await printWith.blobs(), name, printWith.mode) : await printOnQueue(convex, [await getBlob()], name, mode) })
     } catch (err) {
       setPrint({ error: said(err) })
     }
