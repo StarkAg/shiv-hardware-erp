@@ -287,7 +287,8 @@ export default function JobPage({ job, onBack }) {
         {!(picked.length && step === 'quotation') && (
           <button type="button" className="key ghost" onClick={() => openOver('pad', () => setMakingPad(true))}><SheetIcon /> Make it on the app</button>
         )}
-        {tray('quotation', { gallery: true })}
+        {/* The three ways to a work order, in one place (Tony, 21 Nov 2026). */}
+        {tray('quotation', { gallery: true, camera: 'Photograph work order' })}
       </>
     ),
     assemble: (
@@ -332,7 +333,8 @@ export default function JobPage({ job, onBack }) {
     fitting: visitKey('fitting', 'Photograph it fitted', fitted.count),
   }[at] : {
     measurement: photoKey('visit', ''),
-    quotation: photoKey('quotation', 'Photograph work order'),
+    // The foot only once photos are taken: Send. The camera is in the panel, with the other two ways.
+    quotation: photoKey('quotation', ''),
     assemble: !needs.ordering ? null
       : needs.toOrder ? (orderProof
         ? { label: 'Send ordered', Icon: SendIcon, run: sendOrdered, tone: 'safe' }
