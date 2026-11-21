@@ -15,9 +15,9 @@ import { CustomerPicker, customerArgs } from './NewOrder.jsx'
 import Camera from './Camera.jsx'
 import Viewer, { SheetViewer } from './Viewer.jsx'
 import MakeOrder, { whoOf } from './MakeOrder.jsx'
-import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
+import { PadSheet, copyOf, padPictures } from './pad/PadSheet.jsx'
 import { SlipSheet, qtyOf } from './pad/VisitSlip.jsx'
-import { sheetBlob } from './sendOut.jsx'
+import { QueuePrint, sheetBlob } from './sendOut.jsx'
 import { inr, totalOf } from './pad/forms.js'
 import { fmtSize } from './pad/dims.js'
 
@@ -86,7 +86,6 @@ export default function JobPage({ job, onBack }) {
   // a pad sent opens large; the phone's Back closes either.
   const [makingPad, setMakingPad] = useState(false)
   const [padOpen, setPadOpen] = useState(null)
-  const [printPad, setPrintPad] = useState(null)
   const openOver = (what, set) => { window.history.pushState({ job: job.id, [what]: true }, ''); set() }
   useEffect(() => {
     const onPop = (e) => {
@@ -422,7 +421,7 @@ export default function JobPage({ job, onBack }) {
                     </div>
                   </div>
                   {SIDE === 'shop' && (
-                    <button type="button" className="key ghost" onClick={() => setPrintPad(m.pad)}><SheetIcon /> Print 3 pages</button>
+                    <QueuePrint label="Print 3 pages" mode="color" name={`Work order ${job.number}`} makeBlobs={() => padPictures(job.number, whoOf(job), m.pad)} />
                   )}
                 </>
               )}
@@ -559,7 +558,6 @@ export default function JobPage({ job, onBack }) {
             : sheetBlob(<PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={1} />, '.pad'))}
         />
       )}
-      {printPad && <PrintPads number={job.number} who={whoOf(job)} pad={printPad} onDone={() => setPrintPad(null)} />}
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
       {viewer?.picked != null && viewer.picked >= 0 && (
         <Viewer photos={picked.map((p) => ({ storageId: p.url, url: p.url }))} start={viewer.picked} title={titleOf(job)} onClose={() => window.history.back()} />

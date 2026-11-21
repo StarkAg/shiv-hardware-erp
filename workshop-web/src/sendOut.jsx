@@ -74,6 +74,54 @@ async function toBase64(blob) {
 }
 
 /**
+ * Pictures into the shop's print queue as one job, a page each, in order;
+ * returns the job's id. `mode` 'color' sends it to the Epson, 'bw' to the HP,
+ * 'auto' lets the shop PC look.
+ */
+export async function printOnQueue(convex, blobs, name, mode = 'auto') {
+  const files = []
+  for (let i = 0; i < blobs.length; i += 1) {
+    const url = await convex.mutation(api.files.generateUploadUrl, {})
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blobs[i] })
+    if (!res.ok) throw new Error('A page did not upload. Try again.')
+    const { storageId } = await res.json()
+    files.push({ storageId, name: `${tidy(name)}${blobs.length > 1 ? ` ${i + 1}` : ''}.jpg`, mediaType: 'image/jpeg' })
+  }
+  return convex.mutation(api.printJobs.sendFiles, { files, mode, copies: 1 })
+}
+
+/**
+ * A Print key that sends what `makeBlobs` draws straight to the printer and
+ * follows it to Printed: no print box.
+ */
+export function QueuePrint({ label, makeBlobs, name, mode = 'auto', className = 'key ghost', disabled = false }) {
+  const convex = useConvex()
+  const [state, setState] = useState(null) // null | 'making' | { id } | { error }
+  const job = useQuery(api.printJobs.getById, state?.id ? { id: state.id } : 'skip')
+  const go = async () => {
+    setState('making')
+    try {
+      setState({ id: await printOnQueue(convex, await makeBlobs(), name, mode) })
+    } catch (err) {
+      setState({ error: said(err) })
+    }
+  }
+  const printed = job?.status === 'printed'
+  const failed = state?.error || job?.status === 'failed'
+  const busy = state === 'making' || (state?.id && !printed && !failed)
+  const words = state === 'making' ? 'Sending' : busy ? (job?.status === 'printing' || job?.status === 'claimed' ? 'Printing' : 'In the queue') : printed ? 'Printed' : failed ? 'Print again' : label
+  return (
+    <>
+      <button type="button" className={className} disabled={disabled || busy} onClick={go}>
+        {printed ? <TickIcon size={22} /> : <SheetIcon size={22} />} {words}
+        {busy && <span className="spin tiny" />}
+      </button>
+      {failed && <p className="sendproblem" role="alert">{state?.error || job?.error || 'The printer could not print it.'}</p>}
+    </>
+  )
+}
+
+/**
  * The two keys, for the picture `getBlob` makes. `mode` is how it prints:
  * 'bw' for a sheet the app drew, 'auto' for a photo (the shop PC reads
  * whether it has colour).
@@ -99,13 +147,7 @@ export function SendOut({ getBlob, name, caption = '', mode = 'auto', className 
   const toPrinter = async () => {
     setPrint('making')
     try {
-      const blob = await getBlob()
-      const url = await convex.mutation(api.files.generateUploadUrl, {})
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob })
-      if (!res.ok) throw new Error('The picture did not upload. Try again.')
-      const { storageId } = await res.json()
-      const id = await convex.mutation(api.printJobs.sendFiles, { files: [{ storageId, name: file, mediaType: 'image/jpeg' }], mode, copies: 1 })
-      setPrint({ id })
+      setPrint({ id: await printOnQueue(convex, [await getBlob()], name, mode) })
     } catch (err) {
       setPrint({ error: said(err) })
     }

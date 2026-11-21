@@ -16,6 +16,7 @@ import { SketchGrid } from './sketch.jsx'
 import { totalOf } from './forms.js'
 import { fmtDim } from './dims.js'
 import { Letterhead, addressed, sheetDate } from './Letterhead.jsx'
+import { sheetBlob } from '../sendOut.jsx'
 import './pad.css'
 
 export const COPIES = [
@@ -246,7 +247,7 @@ const sizeOf = (format) => (format === 'format1' ? { w: SHEET_W, h: SHEET_H, pri
  * One copy of the work order. `who` is the customer: name, address, mobile;
  * `number` the work order's; `format` the look, else this counter's.
  */
-export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fitHeight = false, format, below = null }) {
+export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fitHeight = false, format, below = null, banded = false }) {
   const fmt = format ?? padFormat()
   const size = sizeOf(fmt)
   const box = useRef(null)
@@ -274,7 +275,7 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fit
     <div ref={box} className={`padfit${fitHeight ? ' tall' : ''}${below ? ' withbelow' : ''}`} style={thumb ? { height: mm(size.h * zoom) } : undefined}>
       {/* A thumbnail is shrunk as one picture: a phone will not draw letters that small. */}
       <div
-        className={`pad ${fmt === 'format1' ? 'worksheet ' : ''}copy-${copy.key}`}
+        className={`pad ${fmt === 'format1' ? 'worksheet ' : ''}copy-${copy.key}${banded ? ' banded' : ''}`}
         style={{
           width: mm(size.w), height: mm(size.h), '--print-zoom': size.print,
           ...(thumb ? { '--zoom': 1, transform: `scale(${zoom})`, transformOrigin: 'top left' } : { '--zoom': zoom }),
@@ -471,6 +472,20 @@ export function Printing({ margin = 3, onDone, children }) {
     return () => { clearTimeout(t); finish() }
   }, [margin])
   return createPortal(<div ref={box} className="padprint" aria-hidden="true">{children}</div>, document.body)
+}
+
+/**
+ * The three copies as pictures for the colour printer (Tony, 21 Nov 2026): on
+ * plain white paper, each with its colour as a band down both edges (pink for
+ * the customer, grey for the shop, yellow for the workshop), not a full page
+ * of colour. Customer, shop, workshop, in that order.
+ */
+export async function padPictures(number, who, pad) {
+  const blobs = []
+  for (const copy of COPIES) {
+    blobs.push(await sheetBlob(<PadSheet copy={copy} number={number} who={who} pad={pad} fixedZoom={1} banded />, '.pad'))
+  }
+  return blobs
 }
 
 /** All three copies of the pad, printed: load pink, white, yellow paper, in that order. */

@@ -4,7 +4,8 @@ import { post } from './outbox.js'
 import { BackIcon, CloseIcon, SendIcon, Sheet, SheetIcon } from './ui.jsx'
 import { NumberPad } from './NewOrder.jsx'
 import { DatePick } from './DatePick.jsx'
-import { FORMATS, PadSheet, PrintPads, copyOf, padFormat, setPadFormat } from './pad/PadSheet.jsx'
+import { FORMATS, PadSheet, copyOf, padFormat, padPictures, setPadFormat } from './pad/PadSheet.jsx'
+import { QueuePrint } from './sendOut.jsx'
 import {
   EXTRAS, FARE, FILLS, FILLS_FOR, FORMS, FORM_IDS, amountOf, inr, learnRate, productLabel, rateFor, todayKey, totalOf,
 } from './pad/forms.js'
@@ -199,7 +200,6 @@ export default function MakeOrder({ job, onClose }) {
   useEffect(() => { try { localStorage.setItem(draftKey(job), JSON.stringify(draft)) } catch { /* kept in memory only */ } }, [draft, job])
   const [editing, setEditing] = useState(null) // a line, open in PieceSheet
   const [money, setMoney] = useState(null) // 'fare' | 'advance', open on the number pad
-  const [printing, setPrinting] = useState(false)
   const [sending, setSending] = useState(false)
   const [format, setFormat] = useState(padFormat)
 
@@ -324,7 +324,7 @@ export default function MakeOrder({ job, onClose }) {
         <section className="nwslip" aria-label="The pad">
           {/* Print right under the sheet, as wide as it. */}
           <PadSheet key={format} copy={copyOf('customer')} number={job.number} who={who} pad={pad} format={format} fitHeight
-            below={<button type="button" className="pick" disabled={!ready} onClick={() => setPrinting(true)}><SheetIcon /> Print 3 pages</button>} />
+            below={<QueuePrint label="Print 3 pages" className="pick" mode="color" name={`Work order ${job.number}`} disabled={!ready} makeBlobs={() => padPictures(job.number, who, pad)} />} />
         </section>
       </main>
 
@@ -352,7 +352,6 @@ export default function MakeOrder({ job, onClose }) {
           </div>
         </Sheet>
       )}
-      {printing && <PrintPads number={job.number} who={who} pad={pad} onDone={() => setPrinting(false)} />}
     </div>
   )
 }
