@@ -182,3 +182,16 @@
 .padsketch .sketchgrid { gap: 10px 14px; }
 /* The totals end where the Amount column's figures end (the table's cells keep 2mm inside their edge). */
 .slip dl.worksums { margin: 3mm 2mm 0 0; }
+
+/* The pad, a little better (Tony, 21 Nov 2026), its layout as the real one:
+   what is filled in, in the apps' own clean lettering; small heads over the
+   estimate's columns; Total and Balance named; the copy's name readable. */
+.pad .ink { font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; font-weight: 600; letter-spacing: .1mm; }
+.pad .ink.pstrong { font-weight: 800; }
+.pad .phead { color: rgba(28, 28, 28, .6); font-weight: 700; text-transform: uppercase; letter-spacing: .3mm; font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; }
+.pad .pcopy { color: rgba(28, 28, 28, .7); font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; letter-spacing: .5mm; }
+.pad:not(.worksheet) .padsketch .opbox text, .pad:not(.worksheet) .padsketch .opcap { color: var(--pen); }
+.pad:not(.worksheet) .padsketch .opfig { fill: var(--pen); }
+.pad:not(.worksheet) .padsketch .opdim line { stroke: var(--pen); }
+.pad:not(.worksheet) .padsketch .opcap .opn { border-color: var(--pen); }
+.pad:not(.worksheet) .padsketch .opcap small { color: var(--pen); opacity: .85; }

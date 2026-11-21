@@ -74,10 +74,10 @@ function padDate(key) {
 const mm = (n) => `${n}mm`
 
 let ruler = null
-/** How wide `text` runs in mm at `size` mm, in the sheet's Arial. */
+/** How wide `text` runs in mm at `size` mm, in the lettering the pad is filled in with. */
 function textMm(text, size, weight = 600) {
   ruler = ruler || document.createElement('canvas').getContext('2d')
-  ruler.font = `${weight} 100px Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif`
+  ruler.font = `${weight} 100px "Barlow Semi Condensed", Arial, sans-serif`
   return (ruler.measureText(String(text ?? '')).width / 100) * size
 }
 
@@ -258,11 +258,11 @@ function PinkPad({ copy, number, who, pad }) {
   const rows = [
     ...pad.lines.map((l) => ({ key: l.id, label: `× ${l.label}`, qty: qtyOf(l), amt: l.amount ? plain(l.amount) : '' })),
     ...(pad.fare ? [{ key: 'fare', word: 'Fare', amt: plain(pad.fare), under: 'single' }] : []),
-    { key: 'total', amt: plain(total), strong: true },
+    { key: 'total', word: 'Total', amt: plain(total), strong: true },
     ...(adv > 0
       ? [
           { key: 'adv', word: 'Advance', amt: plain(adv), under: 'single' },
-          { key: 'bal', amt: plain(total - adv), strong: true, under: 'double' },
+          { key: 'bal', word: 'Balance', amt: plain(total - adv), strong: true, under: 'double' },
         ]
       : []),
   ]
@@ -302,6 +302,10 @@ function PinkPad({ copy, number, who, pad }) {
       <HLine y={SPLIT_Y} x0={13} x1={EST_X1} w={0.4} />
 
       <At centre={170} base={9} size={4.2} className="pi">Estimate</At>
+      {/* What each column is, small, on the double line. */}
+      <At x={120.5} base={25.2} size={2.8} className="phead">Particulars</At>
+      <At right={202} base={25.2} size={2.8} className="phead">Qty</At>
+      <At right={222.5} base={25.2} size={2.8} className="phead">Amount</At>
       <HLine y={26.2} x0={EST_X0} x1={EST_X1} />
       <HLine y={28.8} x0={EST_X0} x1={EST_X1} />
       {Array.from({ length: ruleCount }, (_, i) => (
@@ -321,7 +325,7 @@ function PinkPad({ copy, number, who, pad }) {
       })}
 
       <PadSketch openings={openingsOf(pad)} style={{ left: mm(13), top: mm(SPLIT_Y + 6), width: mm(PAD_W - 26), height: mm(PAD_H - SPLIT_Y - 14) }} />
-      <At right={223} base={267.5} size={2.6} className="pcopy">{copy.label}</At>
+      <At right={223} base={267.5} size={3.4} className="pcopy">{copy.label}</At>
     </>
   )
 }
