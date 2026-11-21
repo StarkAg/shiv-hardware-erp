@@ -37,22 +37,23 @@ const PAD_W = 230.8
 const PAD_H = 270.8
 const PRINT_SCALE = 204 / PAD_W
 const DIVIDER_X = 118.6
-const SPLIT_Y = 130
+// The top half closed up (21 Nov 2026): it ended at 130mm, with loose gaps.
+const SPLIT_Y = 106
 const EST_X0 = 119
 const EST_X1 = 223.5
-const RULE_FIRST = 38.0
-const RULE_STEP = 9.2
-const RULES = 10
+const RULE_FIRST = 27.5
+const RULE_STEP = 8.8
+const RULES = 9
 const FIELDS = [
-  { label: 'Name', y: 75.0, from: 29, key: 'name' },
-  { label: '', y: 83.9, from: 29, key: 'address' },
-  { label: 'Contact No.', y: 94.0, from: 41, key: 'mobile' },
-  { label: 'Order Date', y: 104.1, from: 40, key: 'orderDate' },
-  { label: 'Delivery Date', y: 113.9, from: 44.5, key: 'deliveryDate' },
+  { label: 'Name', y: 55.5, from: 29, key: 'name' },
+  { label: '', y: 63.5, from: 29, key: 'address' },
+  { label: 'Contact No.', y: 72.0, from: 41, key: 'mobile' },
+  { label: 'Order Date', y: 80.5, from: 40, key: 'orderDate' },
+  { label: 'Delivery Date', y: 89.0, from: 44.5, key: 'deliveryDate' },
 ]
 const FIELD_END = 116
-const LOGO_TOP = 45.4
-const LOGO_H = 61.6 - LOGO_TOP
+const LOGO_TOP = 29.6
+const LOGO_H = 45.8 - LOGO_TOP
 const LOGO_X = 31 - 2.6 - LOGO_H * 154 / 174
 
 /** A rate keeps its paise: 9.5 a foot. Figures only, no Rs.: the column heads say what they are (Tony, 21 Nov). */
@@ -117,7 +118,7 @@ function HLine({ y, x0, x1, w = 0.3, double, pen }) {
   return <div className={`padl${double ? ' dbl' : ''}${pen ? ' pen' : ''}`} style={{ top: mm(y - w / 2), left: mm(x0), width: mm(x1 - x0), height: mm(double ? w * 3 : w) }} />
 }
 
-const SKETCH_ZOOM_MAX = 2.35
+const SKETCH_ZOOM_MAX = 3.2
 
 /**
  * The bottom half: every piece with a size, drawn. As large as the pad's hand
@@ -280,14 +281,14 @@ function PinkPad({ copy, number, who, pad }) {
   return (
     <>
       <At x={15.5} base={7} size={4.1} className="pi">Order No. -</At>
-      <At x={42} base={13.2} size={5.2} className="ink">{number}</At>
-      <At x={24.5} base={25.6} size={8.6} className="pphone">8092850954</At>
-      <At x={97.5} base={26.4} size={4.7} className="pi">Tony</At>
-      <At right={107.5} base={33.2} size={4.2} className="pb">8092850956 <i>Vijay</i></At>
+      <At x={37} base={7.4} size={5.2} className="ink">{number}</At>
+      <At x={24.5} base={18.6} size={8.6} className="pphone">8092850954</At>
+      <At x={97.5} base={19.4} size={4.7} className="pi">Tony</At>
+      <At right={107.5} base={25.4} size={4.2} className="pb">8092850956 <i>Vijay</i></At>
       <img className="plogo" src="/shiv-logo.png" alt="" style={{ left: mm(LOGO_X), top: mm(LOGO_TOP), width: mm(LOGO_H * 154 / 174), height: mm(LOGO_H) }} />
-      <At x={31} base={50.6} size={6.3} className="pshop">Shiv Hardware Store</At>
-      <At x={31} base={56.2} size={4.15} className="pi">Shivaji Road, Near Gandhi High School</At>
-      <At x={31} base={61.6} size={4.15} className="pi">Ramgarh Cantt- 829122 Jharkhand</At>
+      <At x={31} base={34.8} size={6.3} className="pshop">Shiv Hardware Store</At>
+      <At x={31} base={40.4} size={4.15} className="pi">Shivaji Road, Near Gandhi High School</At>
+      <At x={31} base={45.8} size={4.15} className="pi">Ramgarh Cantt- 829122 Jharkhand</At>
 
       {FIELDS.map((f) => (
         <div key={f.key}>
@@ -296,18 +297,18 @@ function PinkPad({ copy, number, who, pad }) {
           <At centre={(f.from + FIELD_END) / 2} base={f.y - 1.3} size={5} fit={FIELD_END - f.from - 1} className="ink">{values[f.key]}</At>
         </div>
       ))}
-      <At x={15} base={124.6} size={4.0} className="pi">Customer Satisfaction Sig.</At>
+      <At x={15} base={100.5} size={4.0} className="pi">Customer Satisfaction Sig.</At>
 
       <div className="padl" style={{ left: mm(DIVIDER_X - 0.2), top: 0, width: mm(0.4), height: mm(SPLIT_Y) }} />
       <HLine y={SPLIT_Y} x0={13} x1={EST_X1} w={0.4} />
 
-      <At centre={170} base={9} size={4.2} className="pi">Estimate</At>
+      <At centre={170} base={7.4} size={4.2} className="pi">Estimate</At>
       {/* What each column is, small, on the double line. */}
-      <At x={120.5} base={25.2} size={2.8} className="phead">Particulars</At>
-      <At right={202} base={25.2} size={2.8} className="phead">Qty</At>
-      <At right={222.5} base={25.2} size={2.8} className="phead">Amount</At>
-      <HLine y={26.2} x0={EST_X0} x1={EST_X1} />
-      <HLine y={28.8} x0={EST_X0} x1={EST_X1} />
+      <At x={120.5} base={15.2} size={2.8} className="phead">Particulars</At>
+      <At right={202} base={15.2} size={2.8} className="phead">Qty</At>
+      <At right={222.5} base={15.2} size={2.8} className="phead">Amount</At>
+      <HLine y={16.4} x0={EST_X0} x1={EST_X1} />
+      <HLine y={18.6} x0={EST_X0} x1={EST_X1} />
       {Array.from({ length: ruleCount }, (_, i) => (
         <HLine key={i} y={RULE_FIRST + i * step} x0={EST_X0} x1={EST_X1} />
       ))}
