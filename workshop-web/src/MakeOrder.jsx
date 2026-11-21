@@ -140,8 +140,9 @@ function PieceSheet({ start, onClose, onSave }) {
   const fields = l.extra
     ? [['qty', `How many (${l.unit})`, l.qty || '0'], ['rate', `₹ each ${l.unit}`, l.rate || '0']]
     : [
-        ['w', 'Width ″', l.wText || fmtDim(FORMS[l.form].nominal?.w) || '0', !l.wText],
-        ['h', 'Height ″', l.hText || fmtDim(FORMS[l.form].nominal?.h) || '0', !l.hText],
+        // An unset size says so: a suggested figure in grey was read as a real one.
+        ['w', 'Width ″', l.wText || 'Not set', !l.wText],
+        ['h', 'Height ″', l.hText || 'Not set', !l.hText],
         ['rate', '₹ each', l.rate || '0'],
       ]
   const amount = amountOf({ qty: Number(l.qty) || 0, rate: Number(l.rate) || 0 })
@@ -241,7 +242,7 @@ export default function MakeOrder({ job, onClose }) {
   ]
 
   return (
-    <div className="app page neworder making makeorder" role="dialog" aria-modal="true" aria-label="Work order">
+    <div className={`app page neworder making makeorder fmt-${format}`} role="dialog" aria-modal="true" aria-label="Work order">
       <header className="pagehead">
         <button type="button" className="back" onClick={onClose} aria-label="Back to the job"><BackIcon /></button>
         <div className="who">

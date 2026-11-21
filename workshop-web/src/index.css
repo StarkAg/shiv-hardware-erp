@@ -596,3 +596,13 @@ html, body, #root { height: 100%; }
 .dategrid button.on { background: var(--ink); color: #fff; box-shadow: none; }
 .dategrid button:active, .datequick button:active { transform: translateY(2px); }
 @media (max-width: 640px) { .datepanel { grid-template-columns: 1fr; } .datequick { display: grid; grid-template-columns: 1fr 1fr; } }
+
+/* The work order screen: the page column as wide as the sheet's own shape
+   needs to fill the height (the pad is wider and shorter than A4), so no band
+   is left empty under it, and Print sits right below the sheet. */
+@media (min-width: 900px) {
+  .makeorder.fmt-pad .nwgrid { grid-template-columns: 330px minmax(0, 1fr) min(46vw, calc((100vh - 128px) * .852)); }
+  .makeorder.fmt-format1 .nwgrid { grid-template-columns: 330px minmax(0, 1fr) min(40vw, calc((100vh - 128px) * .709)); }
+  .makeorder .nwslip { gap: 6px; }
+  .makeorder .nwslip .pick { min-height: 48px; }
+}

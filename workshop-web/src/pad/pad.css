@@ -195,3 +195,13 @@
 .pad:not(.worksheet) .padsketch .opdim line { stroke: var(--pen); }
 .pad:not(.worksheet) .padsketch .opcap .opn { border-color: var(--pen); }
 .pad:not(.worksheet) .padsketch .opcap small { color: var(--pen); opacity: .85; }
+
+/* The pad's printed words in the apps' Barlow, every one where it was: the
+   labels in italic as the pad prints them, the shop's name heavy, the
+   phone number spaced out to the same width it had. */
+.pad:not(.worksheet) { font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; }
+.pad:not(.worksheet) .pi { font-weight: 600; font-style: italic; letter-spacing: .1mm; }
+.pad:not(.worksheet) .pb { font-weight: 700; letter-spacing: .15mm; }
+.pad:not(.worksheet) .pshop { font-family: "Barlow Condensed", "Barlow Condensed Fallback", "Arial Narrow", sans-serif; font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: .35mm; }
+.pad:not(.worksheet) .pphone { font-weight: 700; letter-spacing: 2.75mm; }
+.pad:not(.worksheet) .padl { background: #2a2a2a; }
