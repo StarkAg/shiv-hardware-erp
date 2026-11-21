@@ -519,3 +519,18 @@ html, body, #root { height: 100%; }
 .slipsays li b { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .slipsays p { margin: 0; font-size: 17px; color: #555; }
 .slipsays .adv { padding-top: 8px; border-top: 1px solid #e2e2e2; color: #111; }
+
+/* Any picture opened: Send to group and Print, at the foot. */
+.sendout { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px calc(env(safe-area-inset-bottom) + 10px); }
+.sendkeys { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sendkeys button { height: 60px; display: flex; align-items: center; justify-content: center; gap: 8px; font: 700 20px/1 var(--sign); text-transform: uppercase; letter-spacing: .02em; }
+.sendkeys button:disabled { opacity: .7; }
+.sendproblem { margin: 0; font: 600 16px/1.25 var(--text); }
+.sendout.onphoto { background: #000; }
+.sendout.onphoto .sendkeys button { background: rgba(255, 255, 255, .16); color: #fff; }
+.sendout.onphoto .sendkeys button.done { background: var(--safe); }
+.sendout.onphoto .sendproblem { color: #ffb4a8; }
+.sendout.onsheet { background: #fff; border-top: 2px solid var(--ink); }
+.sendout.onsheet .sendkeys button { background: var(--key); color: var(--ink); }
+.sendout.onsheet .sendkeys button.done { background: var(--safe); color: #fff; }
+.sendout.onsheet .sendproblem { color: var(--stop, #b3261e); }

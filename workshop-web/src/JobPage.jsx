@@ -17,7 +17,7 @@ import Viewer from './Viewer.jsx'
 import MakeOrder, { whoOf } from './MakeOrder.jsx'
 import { PadSheet, PrintPads, copyOf } from './pad/PadSheet.jsx'
 import { SlipSheet, qtyOf } from './pad/VisitSlip.jsx'
-import { PrintSlipButton } from './pad/PrintSlipButton.jsx'
+import { SendOut, sheetBlob } from './sendOut.jsx'
 
 /** The steps as they are listed down the page, the latest first; the visit order is where a job begins. */
 const DOWN = ['fitting', 'goahead', 'arrived', 'ordered', 'assemble', 'quotation', 'measurement', 'visit']
@@ -394,9 +394,6 @@ export default function JobPage({ job, onBack }) {
                       {m.slip.advance > 0 && <p className="adv">Advance <b>Rs. {Math.round(m.slip.advance).toLocaleString('en-IN')}</b></p>}
                     </div>
                   </div>
-                  {SIDE === 'shop' && (
-                    <PrintSlipButton number={job.number} who={whoOf(job)} slip={m.slip} />
-                  )}
                 </>
               )}
               {/* A work order made on the app: its yellow copy, the workshop's; tapped, it opens large. */}
@@ -470,9 +467,6 @@ export default function JobPage({ job, onBack }) {
           {error && <p className="error" role="alert">{error}</p>}
         </section>
 
-        {/* Under what to do now, the visit order: what the customer asked for. */}
-        {sections.filter((s) => s.tag === 'visit').map(sectionOf)}
-
         {/* Who it is for, a line each: every number to ring, the site on the map
             once a job carries one and, at the counter, where the customer is set. */}
         {(contacts.length > 0 || mapLinkOf(job) || SIDE === 'shop') && (
@@ -515,6 +509,9 @@ export default function JobPage({ job, onBack }) {
           </section>
         )}
 
+        {/* Under the customer, the visit order: what they asked for. */}
+        {sections.filter((s) => s.tag === 'visit').map(sectionOf)}
+
         {sections.filter((s) => s.tag !== 'visit').map(sectionOf)}
       </main>
 
@@ -542,6 +539,16 @@ export default function JobPage({ job, onBack }) {
               ? <SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={0.8} />
               : <PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={0.8} />}
           </div>
+          {/* The sheet as a picture: to the shop's group, or straight to the printer. */}
+          <SendOut
+            className="onsheet"
+            mode="bw"
+            name={`${padOpen.slip ? 'Visit order' : 'Work order'} ${job.number} ${titleOf(job)}`}
+            caption={`${padOpen.slip ? 'Visit order' : 'Work order'} ${job.number} · ${[nameOf(job), addressOf(job)].filter(Boolean).join(', ')}`}
+            getBlob={() => (padOpen.slip
+              ? sheetBlob(<SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={1} />, '.slip')
+              : sheetBlob(<PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={1} />, '.pad'))}
+          />
         </div>
       )}
       {printPad && <PrintPads number={job.number} who={whoOf(job)} pad={printPad} onDone={() => setPrintPad(null)} />}

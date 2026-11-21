@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CloseIcon, ShareIcon } from './ui.jsx'
+import { SendOut, photoBlob } from './sendOut.jsx'
 
 /** A job's photos, full screen: swipe (or the arrow keys) from one to the next. */
 export default function Viewer({ photos, start, title, onClose }) {
@@ -70,6 +71,11 @@ export default function Viewer({ photos, start, title, onClose }) {
         <div className="vdots" aria-hidden="true">{photos.map((p, i) => <i key={p.storageId} className={i === at ? 'on' : ''} />)}</div>
       )}
       {note && <div className="vnote" role="status">{note}</div>}
+      {/* The photo on screen: to the shop's group, or straight to the printer. */}
+      {photos[at] && (
+        <SendOut key={photos[at].storageId} className="onphoto" mode="auto"
+          name={`${title} ${at + 1}`} caption={title} getBlob={() => photoBlob(photos[at].url)} />
+      )}
     </div>
   )
 }
