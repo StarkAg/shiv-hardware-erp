@@ -4,7 +4,7 @@ Which number sends what. Checked 2026-10-30. Update this file when a link change
 
 | Label | Number | Sends from | What it sends | Checked how |
 |---|---|---|---|---|
-| Tony | +91 80928 50954 | Railway `whatsapp-bills` (`/data/auth`) | Sale bills, receipts and quotations to customers' chats | Service `/health` and the saved login on the volume |
+| Tony | +91 80928 50954 | Railway `whatsapp-bills` (`/data/auth`) | Sale bills, receipts and quotations to customers' chats; the greeting and visiting card back to a customer's first "hi" (`docs/whatsapp-hi-card.md`) | Service `/health` and the saved login on the volume |
 | Shop | +91 79705 50954 | Railway `whatsapp-reminders` (`/data/auth`), since 2026-10-30 | Ledger "Share to WhatsApp" PDFs, quotation and attachment shares, guarantee messages, the auto-reply, birthday reminders | The panel calls Convex `shopWhatsApp.*`, which calls the service with `SHOP_WHATSAPP_KEY`; the print server calls it for the card-printed message. Before 2026-10-30 this ran in the shop PC's print server; WhatsApp printing is retired |
 | Meta (C) | Not looked up, ID `1348201888369392` | Convex `convex/whatsapp.ts` | Guarantee cards sent from the panel | Convex variable `WHATSAPP_PHONE_NUMBER_ID` |
 | Twilio | +91 98357 16123 | Convex `convex/twilio.ts` | One notice when a template is approved | Convex variable `TWILIO_WHATSAPP_FROM` |

@@ -26,6 +26,11 @@
  * picture of the printed bill, drawn here with the shop PC's own template.
  * The pages go first, then one message saying which bill they are.
  *
+ * A customer who writes "hi" (hello, namaste...) to this number for the first
+ * time gets the greeting and visiting card at once, the same as a new bill's
+ * chat: the counter's QR (docs/whatsapp-hi-card.md) opens this chat with "Hi"
+ * typed. Once per number, ever; never to a chat the owner has written to.
+ *
  * The link is kept for good. It lives on the service's volume, so a restart
  * or an update picks it up again; a dropped connection is redialled for ever,
  * and a link stuck for ten minutes is redialled afresh. WhatsApp saying the
@@ -40,10 +45,12 @@
  *   SHIV_DEVICE_TOKEN   this service's key: npx convex run --prod devices:issueServerKey '{"name":"whatsapp-bills"}'
  *   LOGIN_KEY           the secret in the /login link, so only the shop sees the QR
  *   AUTH_DIR            where the WhatsApp link is kept, on the service's volume (/data/auth)
+ *                       (greeted.json beside it: the chats already greeted, see the hi-reply)
  *   BILL_WHATSAPP_REST_MIN, BILL_WHATSAPP_DAILY_MAX (10, 40)
  */
 import http from 'node:http'
-import { readFile, rename } from 'node:fs/promises'
+import { readFile, rename, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const PORT = Number(process.env.PORT || 8080)
@@ -53,6 +60,8 @@ const REST_MS = Number(process.env.BILL_WHATSAPP_REST_MIN || 10) * 60_000
 const DAILY_MAX = Number(process.env.BILL_WHATSAPP_DAILY_MAX || 40)
 /** The shop's visiting card, sent once to a number before its first bill. */
 const CARD = fileURLToPath(new URL('./visiting-card.jpg', import.meta.url))
+/** Every chat already greeted or already written to, kept beside the link on the volume. */
+const KNOWN_FILE = join(dirname(AUTH_DIR), 'greeted.json')
 /** The hours a customer can be sent anything, India time: never at night, the owner's rule. */
 const HOURS = [9, 21]
 const GAP_MS = [60_000, 180_000]
@@ -95,6 +104,13 @@ async function startWhatsApp() {
       markOnlineOnConnect: false,
     })
     s.ev.on('creds.update', () => { if (mine === gen) auth.saveCreds() })
+    // A customer's hi, and the chats the owner writes to (the hi-reply, below).
+    s.ev.on('messages.upsert', ({ messages, type }) => {
+      if (mine !== gen) return
+      for (const msg of messages) {
+        if (type === 'notify' || msg.key?.fromMe) void onMessage(msg)
+      }
+    })
     s.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
       if (mine !== gen) return
       if (qr) {
@@ -229,11 +245,84 @@ let nextAt = 0
  * visiting card. The one place emoji are allowed (AGENTS.md), written as code points.
  */
 async function greet(jid) {
-  for (const text of ['\u{1F642}', '\u{1F64F}']) {
+  remember(jid)
+  for (const text of ['\u{1F642}', '\u{1F64F}\u{1F3FB}']) {
     await sock.sendMessage(jid, { text })
     await new Promise((resolve) => setTimeout(resolve, 1_000 + Math.random() * 1_000))
   }
   await sock.sendMessage(jid, { image: await readFile(CARD) })
+}
+
+/* ── the hi-reply ────────────────────────────────────────────────────────── */
+/*
+ * A customer's first "hi" gets the greeting and card straight back. The chats
+ * already greeted (by a bill, Shiv Intro or a hi) and every chat the owner has
+ * written to are kept in KNOWN_FILE, so a number gets the card once, and the
+ * owner's friends, family and running customers are not sent it once he has
+ * written to them since this went live.
+ */
+const known = new Set()
+let knownSaving = null
+const loadKnown = readFile(KNOWN_FILE, 'utf8')
+  .then((text) => { for (const id of JSON.parse(text)) known.add(id) }, () => {})
+/** The number part of a chat id ("9180...@s.whatsapp.net", "1234:5@lid" → "1234@lid"). */
+const chatKey = (jid) => {
+  const [user = '', server = ''] = String(jid ?? '').split('@')
+  const id = user.split(':')[0]
+  return id ? (server === 'lid' ? `${id}@lid` : id) : ''
+}
+/** A personal chat's ids: WhatsApp may name it by number or by its private id (lid), or both. */
+const keysOf = (key) => [key?.remoteJid, key?.remoteJidAlt]
+  .filter((jid) => /@(s\.whatsapp\.net|lid)$/.test(jid ?? '')).map(chatKey).filter(Boolean)
+function remember(...jids) {
+  let added = false
+  for (const id of jids.flatMap((jid) => (jid && typeof jid === 'object' ? keysOf(jid) : [chatKey(jid)]))) {
+    if (id && !known.has(id)) { known.add(id); added = true }
+  }
+  if (added && !knownSaving) {
+    knownSaving = setTimeout(() => {
+      knownSaving = null
+      writeFile(KNOWN_FILE, JSON.stringify([...known])).catch((err) => log('[hi] could not save:', err?.message ?? err))
+    }, 2_000)
+  }
+}
+
+/** Words a greeting is made of; at least one must be a greeting itself (GREETS). */
+const GREETS = new Set(['hi', 'ram', 'hii', 'hey', 'hy', 'hai', 'hello', 'helo', 'hlo', 'hlw', 'hallo', 'namaste', 'namastey', 'namaskar',
+  'pranam', 'gm', 'morning', 'afternoon', 'evening', 'नमस्ते', 'नमस्कार', 'प्रणाम', 'हाय', 'हेलो', 'हैलो', 'राम'])
+const HI_WORDS = new Set([...GREETS, 'good', 'jai', 'shri', 'sri', 'sir', 'ji', 'bhaiya', 'bhai', 'uncle', 'there',
+  'shiv', 'hardware', 'store', 'जय', 'श्री', 'जी'])
+/** "Hi", "Hiii sir", "Hello Shiv Hardware", "नमस्ते जी": a greeting and nothing more. */
+function isHi(text) {
+  const words = String(text ?? '').toLowerCase()
+    .replace(/[^\p{L}\p{M}\s]/gu, ' ').split(/\s+/).filter(Boolean)
+    // "hiiii", "heyyy", "hellooo": a letter held down is the same word.
+    .map((word) => word.replace(/(\p{L})\1{2,}/gu, '$1'))
+  return words.length > 0 && words.length <= 5 && words.every((word) => HI_WORDS.has(word)) && words.some((word) => GREETS.has(word))
+}
+const textOf = (message) => message?.conversation ?? message?.extendedTextMessage?.text ?? ''
+
+/** What comes in: the owner's own writing marks a chat as his; a customer's first hi is greeted. */
+async function onMessage(msg) {
+  const keys = keysOf(msg.key)
+  if (!keys.length) return
+  await loadKnown
+  if (msg.key.fromMe) { remember(msg.key); return }
+  if (!msg.message || !sock || state.status !== 'ready' || stopping) return
+  if (keys.some((id) => known.has(id))) return
+  // A hi from hours ago, delivered when the link came back, is left to the owner.
+  const at = Number(msg.messageTimestamp ?? 0) * 1000
+  if (at && Date.now() - at > 6 * 60 * 60_000) return
+  if (!isHi(textOf(msg.message))) return
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 1_500 + Math.random() * 1_500))
+    if (keys.some((id) => known.has(id))) return
+    remember(msg.key)
+    await greet(msg.key.remoteJid)
+    log(`[hi] greeted ${msg.key.remoteJidAlt ?? msg.key.remoteJid}`)
+  } catch (err) {
+    log('[hi] failed:', err?.message ?? err)
+  }
 }
 
 /**
