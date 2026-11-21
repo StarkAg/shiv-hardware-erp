@@ -55,10 +55,10 @@ const LOGO_TOP = 45.4
 const LOGO_H = 61.6 - LOGO_TOP
 const LOGO_X = 31 - 2.6 - LOGO_H * 154 / 174
 
-/** A rate keeps its paise: Rs. 9.5 a foot. */
-const rateOf = (n) => `Rs. ${(Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-/** Amounts as the work order writes them: Rs. 1,250. */
-const rupees = (n) => `Rs. ${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
+/** A rate keeps its paise: 9.5 a foot. Figures only, no Rs.: the column heads say what they are (Tony, 21 Nov). */
+const rateOf = (n) => `${(Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+/** Amounts as the work order writes them: 1,250. */
+const rupees = (n) => `${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
 /** Amounts as the old pad wrote them: whole rupees, no sign, no commas. */
 const plain = (n) => String(Math.round(Number(n) || 0))
 /** Pieces as the pad writes them: 3 Pc, 12.5 ft. */
