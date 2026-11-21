@@ -126,6 +126,9 @@ export default function JobPage({ job, onBack }) {
     post({
       jobId: job.id, step, files: shots.map((p) => p.file), previews: shots.map((p) => p.url),
       ...(step === 'quotation' && needs.assemble && boardsToMake !== '' && n >= 0 ? { boards: n } : {}),
+      // Measured once (Tony, 21 Nov 2026): the photos sent are the measurement,
+      // and measuring is done with them; the job goes on to the work order.
+      ...(step === 'measurement' && SIDE === 'workshop' ? { complete: true } : {}),
     })
     setBoardsToMake('')
   }
