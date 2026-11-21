@@ -75,6 +75,11 @@ export default function JobPage({ job, onBack }) {
     window.history.pushState({ job: job.id, photo: true }, '')
     setViewer(photos.findIndex((p) => p.storageId === storageId))
   }
+  // A photo picked and not yet sent, opened large to check it before sending.
+  const openPicked = (url) => {
+    window.history.pushState({ job: job.id, photo: true }, '')
+    setViewer({ picked: picked.findIndex((p) => p.url === url) })
+  }
   // The work order made on the app opens over the page as its own screen, and
   // a pad sent opens large; the phone's Back closes either.
   const [makingPad, setMakingPad] = useState(false)
@@ -131,7 +136,7 @@ export default function JobPage({ job, onBack }) {
    */
   const tray = (tag, { gallery = false, camera = '' } = {}) => (picked.length && step === tag ? (
     <>
-      <Picked picked={picked} onDrop={drop} />
+      <Picked picked={picked} onDrop={drop} onOpen={openPicked} />
       {tag === 'quotation' && needs.assemble && (
         <label className="ask inline">
           Pieces to make
@@ -538,6 +543,9 @@ export default function JobPage({ job, onBack }) {
       )}
       {printPad && <PrintPads number={job.number} who={whoOf(job)} pad={printPad} onDone={() => setPrintPad(null)} />}
       {viewer != null && viewer >= 0 && <Viewer photos={photos} start={viewer} title={titleOf(job)} onClose={() => window.history.back()} />}
+      {viewer?.picked != null && viewer.picked >= 0 && (
+        <Viewer photos={picked.map((p) => ({ storageId: p.url, url: p.url }))} start={viewer.picked} title={titleOf(job)} onClose={() => window.history.back()} />
+      )}
       {completing && (
         <Sheet label="Complete" onClose={() => setCompleting(false)}>
           <b className="sheettitle">{DONE[at] ?? 'Complete'}?</b>

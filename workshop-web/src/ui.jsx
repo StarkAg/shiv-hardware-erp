@@ -235,13 +235,16 @@ export function usePicked() {
   return { picked, add, drop, take }
 }
 
-export function Picked({ picked, onDrop }) {
+/** Photos picked and not yet sent; with `onOpen`, a tap opens one large to check it. */
+export function Picked({ picked, onDrop, onOpen }) {
   if (!picked.length) return null
   return (
     <div className="picked">
       {picked.map((p) => (
         <span key={p.url}>
-          <img src={p.url} alt="" />
+          {onOpen
+            ? <img src={p.url} alt="Open this photo" role="button" tabIndex={0} onClick={() => onOpen(p.url)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.url) }} />
+            : <img src={p.url} alt="" />}
           <button type="button" onClick={() => onDrop(p.url)} aria-label="Remove this photo"><CloseIcon size={14} /></button>
         </span>
       ))}
