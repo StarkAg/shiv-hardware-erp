@@ -469,9 +469,15 @@ export default function JobPage({ job, onBack }) {
             once a job carries one and, at the counter, where the customer is set. */}
         {(contacts.length > 0 || mapLinkOf(job) || SIDE === 'shop') && (
           <section className="rows" aria-label="Customer">
+            {/* Who it is and where, written out: "Harsh, Ramgarh". */}
+            {job.title && (
+              <div className="rowline">
+                <span className="lbl">Customer</span><span className="val">{[nameOf(job), addressOf(job)].filter(Boolean).join(', ')}</span>
+              </div>
+            )}
             {contacts.map((number, i) => (
               <a key={number} className="rowline" href={`tel:${number}`} aria-label={`Call ${number}`}>
-                <span className="lbl">{i === 0 ? 'Customer' : `Number ${i + 1}`}</span><span className="val">{number}</span><span className="round"><PhoneIcon size={20} /></span>
+                <span className="lbl">{i === 0 ? (job.title ? 'Mobile' : 'Customer') : `Number ${i + 1}`}</span><span className="val">{number}</span><span className="round"><PhoneIcon size={20} /></span>
               </a>
             ))}
             {mapLinkOf(job) && (
