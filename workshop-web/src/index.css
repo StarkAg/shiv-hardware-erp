@@ -568,3 +568,7 @@ html, body, #root { height: 100%; }
 .eighths button { min-height: 50px; background: #fff; box-shadow: inset 0 0 0 2px var(--ink); font: 700 20px/1 var(--sign); }
 .eighths button.on { background: var(--ink); color: #fff; }
 .optpanel .numpad button { min-height: 56px; }
+
+/* Stacked boxes line up (DESIGN.md, Layout): every label the same width, so
+   each box starts and ends at the same place, the same size. */
+.sliprow { display: grid; grid-template-columns: 7.2em minmax(0, 1fr); }

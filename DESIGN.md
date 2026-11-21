@@ -104,6 +104,11 @@ Always `font-variant-numeric: tabular-nums` on numbers. Uppercase labels get
 
 A list is rows divided by hairlines, each opening with its sign, not boxes.
 
+Boxes stacked one under another line up (Tony, 21 Nov 2026): every label in
+the stack takes the same width, as wide as the longest, so each box starts at
+the same place and ends at the same place, the same size. A box never starts
+where its own label happens to end.
+
 Sizes that do not change: tap targets at least 44px (main buttons 56 to
 64px), 12px side margins, app column at most 640px wide on a big screen.
 
