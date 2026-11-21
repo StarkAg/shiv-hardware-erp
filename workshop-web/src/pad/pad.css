@@ -220,3 +220,6 @@
 .pad:not(.worksheet) .padsketch .opext line { stroke: #555; }
 .opglint line { stroke: #9a9a9a; stroke-width: .7; stroke-linecap: round; }
 .oparrow line, .oparrow polyline { fill: none; stroke: #222; stroke-width: .9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* A sheet made into a picture (Send to group, Print) has no outline of its own: the paper is its edge. */
+.padprint .pad, .padprint .slip { border: none; }
