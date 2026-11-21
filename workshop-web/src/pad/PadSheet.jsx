@@ -163,10 +163,14 @@ function PadSketch({ openings, style }) {
     if (!w || !h) return
     const rows = fit.rows ?? 1
     const tried = [...(fit.tried ?? []), { rows, row: fit.row, w, h }]
+    // The row widths to try after the one long row: for two rows and for three,
+    // a few widths each, since a tight one lays out a row more than meant.
     const oneW = tried[0].w
-    if (rows < maxRows) {
-      // The next try: as many rows again, each about that share of the one long row.
-      setFit({ wrap: true, rows: rows + 1, row: Math.ceil((oneW / (rows + 1)) * 1.12), ready: false, tried })
+    const plan = []
+    for (let k = 2; k <= maxRows; k += 1) for (const f of [1.08, 1.25, 1.45]) plan.push({ rows: k, row: Math.ceil((oneW / k) * f) })
+    const next = plan[tried.length - 1]
+    if (next) {
+      setFit({ wrap: true, rows: next.rows, row: next.row, ready: false, tried })
       return
     }
     const best = tried.reduce((a, b) => (scaleFor(b.w, b.h) > scaleFor(a.w, a.h) ? b : a))
