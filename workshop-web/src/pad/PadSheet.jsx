@@ -129,6 +129,8 @@ function PadSketch({ openings, style }) {
   const [fit, setFit] = useState({ zoom: 1, wrap: false, row: 0, ready: false })
   const key = openings.map((o) => `${o.id}:${o.form}:${o.fill}:${o.qty}:${o.w?.inches}/${o.w?.soot}x${o.h?.inches}/${o.h?.soot}`).join('|')
   useLayoutEffect(() => { setFit({ zoom: 1, wrap: false, row: 0, ready: false }) }, [key])
+  // Measured twice where there are three or more: all on one row, then on two;
+  // whichever lets the drawings be bigger is kept.
   useLayoutEffect(() => {
     if (fit.ready) return
     const el = box.current
@@ -138,8 +140,12 @@ function PadSketch({ openings, style }) {
     const h = grid.offsetHeight
     if (!w || !h) return
     const zoom = Math.min(SKETCH_ZOOM_MAX, el.clientWidth / w, el.clientHeight / h) * 0.98
-    if (!fit.wrap && zoom < 1.5 && openings.length > 2) {
-      setFit({ zoom: 1, wrap: true, row: Math.ceil(w * 0.56), ready: false })
+    if (!fit.wrap && openings.length > 2) {
+      setFit({ zoom: 1, wrap: true, row: Math.ceil(w * 0.56), ready: false, one: zoom })
+      return
+    }
+    if (fit.wrap && fit.one != null && fit.one >= zoom) {
+      setFit({ zoom: fit.one, wrap: false, row: 0, ready: true })
       return
     }
     setFit({ ...fit, zoom, ready: true })
@@ -158,8 +164,10 @@ function PadSketch({ openings, style }) {
 
 /** The pieces drawn in the bottom half: every built line with a size, once, its count beside it. */
 export const openingsOf = (pad) => pad.lines
+  // Each drawing keeps its line's number in the table above it.
+  .map((l, i) => ({ ...l, n: i + 1 }))
   .filter((l) => !l.extra && l.w && l.h && (l.w.inches || l.w.soot) && (l.h.inches || l.h.soot))
-  .map((l) => ({ id: l.id, form: l.form, fill: l.fill, w: l.w, h: l.h, qty: l.qty }))
+  .map((l) => ({ id: l.id, n: l.n, form: l.form, fill: l.fill, w: l.w, h: l.h, qty: l.qty }))
 
 /**
  * One copy of the work order, on A4 in the visit order's look (Tony, 21 Nov

@@ -147,3 +147,36 @@
 .pad.worksheet .slipfoot { align-items: flex-end; padding-top: 6mm; }
 .pad.worksheet .slipsign { min-width: 55mm; }
 .workcopy { padding: 1.5mm 4mm; border: .4mm solid var(--ink); font-size: 3.2mm; font-weight: 700; text-transform: uppercase; letter-spacing: .5mm; }
+
+/* ── the pieces drawn as a shop drawing (sketch.jsx) ───────────────────────── */
+.opening { margin: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.opbox { display: block; overflow: visible; }
+.opbox text { font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; }
+.opframe { fill: #fff; stroke: #111; stroke-width: 1.6; }
+.opinner { fill: none; stroke: #111; stroke-width: .7; }
+.opsash { fill: none; stroke: #111; stroke-width: 1; }
+.opswing { fill: none; stroke: #777; stroke-width: .6; stroke-dasharray: 3 2.5; }
+.ophinge, .ophandle { fill: #111; stroke: none; }
+.ophatch { stroke: #bbb; stroke-width: .6; }
+.opext line { stroke: #888; stroke-width: .5; }
+.opdim line { stroke: #111; stroke-width: .6; }
+.opfig { font-size: 10px; font-weight: 700; fill: #111; font-variant-numeric: tabular-nums; }
+.oplabelbg { fill: #fff; stroke: #111; stroke-width: .5; }
+.oplabel { font-weight: 700; fill: #111; text-transform: uppercase; letter-spacing: .3px; }
+.opcap { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 9.5px; line-height: 1.15; color: #111; font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; }
+.opcap span { flex: 1; min-width: 0; }
+.opcap .opn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border: 1px solid #111; border-radius: 50%; font-size: 8.5px; font-weight: 800; }
+.opcap .opq { flex: none; font-weight: 800; white-space: nowrap; }
+/* The worksheet's own sketch rules from before, kept from colouring the new drawing. */
+.pad.worksheet .padsketch .opframe { stroke: #111; }
+.pad.worksheet .padsketch .ophinge, .pad.worksheet .padsketch .ophandle { fill: #111; }
+.pad.worksheet .padsketch .oplabel { fill: #111; }
+.pad.worksheet .padsketch .opswing { stroke: #777; }
+.padsketch .sketchgrid { gap: 10px 22px; align-items: flex-start; }
+.opcap span { flex: none; white-space: nowrap; }
+.padsketch .sketchgrid { align-items: flex-end; }
+.opcap { align-items: flex-start; }
+.opcap span { display: flex; flex-direction: column; gap: 1px; }
+.opcap i { font-style: normal; font-weight: 700; white-space: nowrap; }
+.opcap small { font-size: 9px; color: #444; white-space: nowrap; }
+.padsketch .sketchgrid { gap: 10px 14px; }
