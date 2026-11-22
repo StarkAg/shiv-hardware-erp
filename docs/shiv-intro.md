@@ -7,6 +7,22 @@ For a new customer: type the name, place and mobile number, then use either of t
 
 Status on 5 Nov 2026: the code is written and the Android app builds on GitHub. **Nothing is deployed, and the app has never run on a phone.**
 
+## The simple screen (22 Nov 2026)
+
+Tony asked for it simpler: **type the number first, no name for now.** The page is now one number box, three tick choices and one green **Send** key:
+
+- **Greeting + card**: a smile, folded hands, the visiting card (as before). A number that already had it starts unticked, and sending it again asks first.
+- **Shop QR**: `whatsapp-bills/qr-shop.jpg` with its UPI link (MSwipe, Shiv Hardware Store) under it.
+- **Harsh QR**: `whatsapp-bills/qr-harsh.jpg` with its UPI link, "UPI Number - 8709964141" and "Harsh Agarwal" under it.
+
+The QRs can go to the same number any number of times. Tick several and they go in that order. All of it goes from Tony's number through Railway `whatsapp-bills`, 9 am to 9 pm, as before. Tapping a number under "Sent lately" puts it back in the box.
+
+**Save is off the screen** while there is no name; `shivIntro.save` still exists and still needs a name. A name saved earlier is kept when Send has none. Rows remember what went (`sendWhat`) and when the card last went (`cardSentAt`).
+
+**Deploy order for this change:** `whatsapp-bills` first, then `convex`, then `intro`. The old Railway service would read any send as "the card", so a QR-only send would go out as the card.
+
+The pictures on the page's tiles are copies in `intro-web/public/` (`card.jpg`, `qr-shop.jpg`, `qr-harsh.jpg`). Change a QR in both places.
+
 ## How it fits together
 
 ```

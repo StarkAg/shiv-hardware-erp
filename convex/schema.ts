@@ -1012,6 +1012,10 @@ export default defineSchema({
     sendError: v.optional(v.string()),
     sendAskedAt: v.optional(v.number()),
     sentAt: v.optional(v.number()),
+    /** What the last Send was for: the greeting and card, the shop's QR, Harsh's QR. None means the card (before 22 Nov 2026). */
+    sendWhat: v.optional(v.array(v.union(v.literal("card"), v.literal("shop"), v.literal("harsh")))),
+    /** When the greeting and card last went, so it is not sent twice by accident. */
+    cardSentAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

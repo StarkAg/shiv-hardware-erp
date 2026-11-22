@@ -3,90 +3,88 @@ import { useMutation, useQuery } from 'convex/react'
 import { anyApi } from 'convex/server'
 
 /**
- * Shiv Intro, for a new customer. Save puts them in the contacts on the owner's
- * Samsung; Send gives them the shop's greeting and visiting card on WhatsApp
- * from Tony's number. Two separate keys, because either can be wanted alone.
- * The functions are Shiv_Panel's convex/shivIntro.ts.
+ * Shiv Intro, kept simple (22 Nov 2026): type the customer's number, tick what
+ * to send, press Send. It goes on WhatsApp from Tony's number through the
+ * WhatsApp Bills service: the greeting and visiting card, the shop's QR
+ * (MSwipe) or Harsh's QR (Paytm), each QR with its UPI link under it.
+ * No name for now, so no Save to the Samsung's contacts from this screen; the
+ * server still has Save (convex/shivIntro.ts) for when the name comes back.
  */
 const api = anyApi
 
 /** A send that took this long never finished: the service stopped halfway. */
 const STUCK_MS = 5 * 60_000
 
-const saveSign = (row) => ({
-  waiting: ['Waiting for phone', 'wait'],
-  saved: ['Saved on phone', 'done'],
-  already: ['Already on phone', 'done'],
-  failed: ['Not saved', 'stop'],
-})[row.saveStatus] ?? null
+const CHOICES = [
+  { id: 'card', title: 'Greeting + card', small: 'Smile, folded hands, visiting card', pic: '/card.jpg' },
+  { id: 'shop', title: 'Shop QR', small: 'Shiv Hardware Store, MSwipe', pic: '/qr-shop.jpg' },
+  { id: 'harsh', title: 'Harsh QR', small: 'Harsh Agarwal, Paytm, 8709964141', pic: '/qr-harsh.jpg' },
+]
+const titleOf = (id) => CHOICES.find((c) => c.id === id)?.title ?? id
 
 const sendSign = (row) => ({
   requested: ['Waiting to send', 'wait'],
   sending: ['Sending', 'wait'],
-  sent: ['Card sent', 'done'],
+  sent: ['Sent', 'done'],
   skipped: ['Not on WhatsApp', 'stop'],
   failed: ['Not sent', 'stop'],
 })[row.sendStatus] ?? null
 
 const words = (err) => (typeof err?.data === 'string' ? err.data : 'Not done. Check the internet and try again.')
 const last10 = (typed) => typed.replace(/\D/g, '').slice(-10)
+const spaced = (p) => (p.length === 10 ? `${p.slice(0, 5)} ${p.slice(5)}` : p)
 
-const ago = (at) => {
-  const minutes = Math.round((Date.now() - at) / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes} min ago`
-  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} hours ago`
-  return `${Math.round(minutes / 1440)} days ago`
-}
-
-const canSave = (row) => !row || !row.saveStatus || row.saveStatus === 'failed'
-const canSend = (row) => {
-  if (!row?.sendStatus) return true
-  if (row.sendStatus === 'sending') return Date.now() - (row.sendAskedAt ?? 0) > STUCK_MS
-  return row.sendStatus !== 'requested' && row.sendStatus !== 'sent'
-}
+/** Rows from before the choices had only the card. */
+const hasCard = (row) => Boolean(row?.cardSentAt) || (row?.sendStatus === 'sent' && !row?.sendWhat)
+const onItsWay = (row) => row?.sendStatus === 'requested'
+  || (row?.sendStatus === 'sending' && Date.now() - (row.sendAskedAt ?? 0) <= STUCK_MS)
 
 export default function App() {
   const data = useQuery(api.shivIntro.recent)
-  const save = useMutation(api.shivIntro.save)
   const send = useMutation(api.shivIntro.send)
-  const [name, setName] = useState('')
-  const [place, setPlace] = useState('')
   const [phone, setPhone] = useState('')
+  const [picked, setPicked] = useState(['card'])
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState('')
+  const [done, setDone] = useState('')
 
   const rows = data?.rows ?? []
   const typed = last10(phone)
-  const current = typed.length === 10 ? rows.find((row) => row.phone === typed) : undefined
-  const filled = Boolean(name.trim() && typed.length === 10)
-  const seenAt = data?.phoneSeenAt ?? null
-  // The phone checks in every 15 minutes, so a good while longer means it stopped.
-  const phoneQuiet = seenAt === null || Date.now() - seenAt > 40 * 60_000
+  const ready = typed.length === 10
+  const current = ready ? rows.find((row) => row.phone === typed) : undefined
+  const waiting = onItsWay(current)
 
-  const clear = () => { setName(''); setPlace(''); setPhone('') }
+  const toggle = (id) => setPicked((now) => (now.includes(id) ? now.filter((x) => x !== id) : [...now, id]))
 
-  async function run(job, otherDone) {
-    if (busy) return
+  const typePhone = (value) => {
+    setPhone(value)
+    setProblem('')
+    setDone('')
+    // A number that already has the card starts with it unticked.
+    const p = last10(value)
+    const row = p.length === 10 ? rows.find((r) => r.phone === p) : undefined
+    if (row && hasCard(row)) setPicked((now) => now.filter((x) => x !== 'card'))
+  }
+
+  async function go() {
+    if (busy || !ready || !picked.length || waiting) return
+    let again = false
+    if (picked.includes('card') && hasCard(current)) {
+      if (!window.confirm(`${spaced(typed)} was already sent the greeting and card. Send it again?`)) return
+      again = true
+    }
     setBusy(true)
     setProblem('')
     try {
-      await job()
-      // Both done: ready for the next customer, with nothing to press.
-      if (otherDone) clear()
+      await send({ phone: typed, what: picked, again })
+      setDone(`${picked.map(titleOf).join(', ')} on its way to ${spaced(typed)}.`)
+      setPhone('')
+      setPicked(['card'])
     } catch (err) {
       setProblem(words(err))
     } finally {
       setBusy(false)
     }
-  }
-
-  const person = { name, place, phone }
-  const of = (row) => ({ name: row.name, place: row.place, phone: row.phone })
-  const sendRow = (row) => {
-    const again = Boolean(row.sendStatus)
-    if (again && !window.confirm(`${row.name} was already sent the card. Send it again?`)) return
-    void run(() => send({ ...of(row), again }), false)
   }
 
   return (
@@ -98,80 +96,78 @@ export default function App() {
 
       <main className="body">
         <label className="field">
-          <span>Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" autoCapitalize="words" />
-        </label>
-        <label className="field">
-          <span>Place</span>
-          <input value={place} onChange={(e) => setPlace(e.target.value)} autoComplete="off" autoCapitalize="words" />
-        </label>
-        <label className="field">
           <span>Mobile number</span>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="off" />
+          <input
+            value={phone}
+            onChange={(e) => typePhone(e.target.value)}
+            inputMode="tel"
+            autoComplete="off"
+            autoFocus
+            placeholder="10 digits"
+          />
         </label>
+
+        <div className="choices" role="group" aria-label="What to send">
+          {CHOICES.map((c) => {
+            const on = picked.includes(c.id)
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className={`choice${on ? ' on' : ''}`}
+                aria-pressed={on}
+                onClick={() => toggle(c.id)}
+              >
+                <img src={c.pic} alt="" />
+                <span className="choice-words">
+                  <span className="choice-title">{c.title}</span>
+                  <span className="small">{c.small}</span>
+                  {c.id === 'card' && hasCard(current) && <span className="small">Already sent to this number</span>}
+                </span>
+                <span className="tick" aria-hidden="true">
+                  {on && (
+                    <svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 12.5l5 5L20 6.5" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="square" /></svg>
+                  )}
+                </span>
+              </button>
+            )
+          })}
+        </div>
 
         {problem && <p className="problem">{problem}</p>}
-        {current && (
-          <p className="note">
-            {current.name} is already on the list below.{' '}
-            <button type="button" className="link" onClick={clear}>New customer</button>
-          </p>
-        )}
-        {data && (
-          <p className={`note${phoneQuiet ? ' quiet' : ''}`}>
-            Main phone: {seenAt === null ? 'not connected yet' : `last seen ${ago(seenAt)}`}
-            {phoneQuiet ? '. Saves will wait until it is back.' : ''}
-          </p>
-        )}
+        {done && <p className="done-note">{done}</p>}
+        {waiting && <p className="note quiet">Still sending to this number. Wait a moment.</p>}
 
+        {rows.length > 0 && <h2 className="list-head">Sent lately</h2>}
         <ul className="list">
           {rows.map((row) => {
-            const saved = saveSign(row)
-            const sent = sendSign(row)
+            const sign = sendSign(row)
+            const what = row.sendStatus ? (row.sendWhat ?? ['card']).map(titleOf).join(', ') : ''
             return (
               <li key={row._id}>
-                <div className="who">{row.name}{row.place ? `, ${row.place}` : ''}</div>
-                <div className="small">
-                  {row.phone}
-                  {row.savedAs ? ` · on phone as ${row.savedAs}` : ''}
-                </div>
-                <div className="row-signs">
-                  {saved && <span className={`tag ${saved[1]}`}>{saved[0]}</span>}
-                  {sent && <span className={`tag ${sent[1]}`}>{sent[0]}</span>}
-                  {canSave(row) && (
-                    <button type="button" className="mini" disabled={busy} onClick={() => void run(() => save(of(row)), false)}>
-                      {row.saveStatus === 'failed' ? 'Save again' : 'Save'}
-                    </button>
-                  )}
-                  {(canSend(row) || row.sendStatus === 'sent') && (
-                    <button type="button" className="mini" disabled={busy} onClick={() => sendRow(row)}>
-                      {row.sendStatus ? 'Send again' : 'Send'}
-                    </button>
-                  )}
-                </div>
-                {(row.saveError || row.sendError) && <div className="small">{row.saveError ?? row.sendError}</div>}
+                <button type="button" className="row" onClick={() => typePhone(row.phone)}>
+                  <span className="who">{spaced(row.phone)}</span>
+                  {row.name && <span className="small">{row.name}{row.place ? `, ${row.place}` : ''}</span>}
+                  <span className="row-signs">
+                    {sign && <span className={`tag ${sign[1]}`}>{sign[0]}</span>}
+                    {what && <span className="small">{what}</span>}
+                  </span>
+                  {row.sendError && <span className="small">{row.sendError}</span>}
+                </button>
               </li>
             )
           })}
         </ul>
       </main>
 
-      <footer className="dock two">
-        <button
-          type="button"
-          className="key must"
-          disabled={busy || !filled || !canSave(current)}
-          onClick={() => void run(() => save(person), Boolean(current?.sendStatus))}
-        >
-          Save
-        </button>
+      <footer className="dock">
         <button
           type="button"
           className="key safe"
-          disabled={busy || !filled || !canSend(current)}
-          onClick={() => void run(() => send(person), Boolean(current?.saveStatus))}
+          disabled={busy || !ready || !picked.length || waiting}
+          onClick={() => void go()}
         >
-          Send
+          {busy ? 'Sending' : 'Send'}
         </button>
       </footer>
     </div>

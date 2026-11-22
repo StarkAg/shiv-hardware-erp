@@ -1,7 +1,7 @@
 // The service worker: enables install, and keeps the app to open with when
 // there is no internet. Network-first, so a deploy is picked up immediately.
 // Nothing about customers is kept here: the list is read live.
-const SW_VERSION = '2026-11-05a-shiv-intro'
+const SW_VERSION = '2026-11-22a-shiv-intro'
 const SHELL = `intro-shell-${SW_VERSION}`
 
 self.addEventListener('install', () => self.skipWaiting())

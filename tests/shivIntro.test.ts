@@ -54,6 +54,37 @@ describe('Shiv Intro', () => {
     expect(await c.query(api.shivIntro.toSend, {})).toHaveLength(1)
   })
 
+  it('Send needs only the number, and keeps what was ticked in order', async () => {
+    const c = convexTest(schema, modules)
+    await c.mutation(api.shivIntro.send, { phone: '98765 43210', what: ['harsh', 'card'] })
+    expect(await c.query(api.shivIntro.toSend, {})).toEqual([
+      expect.objectContaining({ name: '9876543210', phone: '9876543210', what: ['card', 'harsh'] }),
+    ])
+    await expect(c.mutation(api.shivIntro.save, { phone: '9876543210' })).rejects.toThrow(/name/)
+    await expect(c.mutation(api.shivIntro.send, { phone: '9876500000', what: [] })).rejects.toThrow(/Tick/)
+  })
+
+  it('a QR can go again and again; a second card needs asking', async () => {
+    const c = convexTest(schema, modules)
+    const id = await c.mutation(api.shivIntro.send, { phone: '9876543210', what: ['card'] })
+    await c.mutation(api.shivIntro.claimSend, { id })
+    await c.mutation(api.shivIntro.recordSend, { id, status: 'sent' })
+    for (let i = 0; i < 2; i++) {
+      await c.mutation(api.shivIntro.send, { phone: '9876543210', what: ['shop'] })
+      await c.mutation(api.shivIntro.claimSend, { id })
+      await c.mutation(api.shivIntro.recordSend, { id, status: 'sent' })
+    }
+    await expect(c.mutation(api.shivIntro.send, { phone: '9876543210', what: ['card', 'harsh'] })).rejects.toThrow(/already sent/)
+  })
+
+  it('a name typed earlier is kept when Send has none', async () => {
+    const c = convexTest(schema, modules)
+    await c.mutation(api.shivIntro.save, ramesh)
+    await c.mutation(api.shivIntro.send, { phone: '9876543210', what: ['shop'] })
+    const rows = await c.run((ctx) => ctx.db.query('introContacts').collect())
+    expect(rows[0]).toMatchObject({ name: 'Ramesh Kumar', place: 'Ramgarh', sendWhat: ['shop'] })
+  })
+
   it('a send already on its way is not asked for again', async () => {
     const c = convexTest(schema, modules)
     const id = await c.mutation(api.shivIntro.send, ramesh)

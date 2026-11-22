@@ -62,6 +62,20 @@ const DAILY_MAX = Number(process.env.BILL_WHATSAPP_DAILY_MAX || 40)
 const CARD = fileURLToPath(new URL('./visiting-card.jpg', import.meta.url))
 /** Every chat already greeted or already written to, kept beside the link on the volume. */
 const KNOWN_FILE = join(dirname(AUTH_DIR), 'greeted.json')
+/**
+ * The two payment QRs Shiv Intro can send, each as the picture with its UPI
+ * link under it, the way they are posted in the SHS Accounts group.
+ */
+const QRS = {
+  shop: {
+    file: fileURLToPath(new URL('./qr-shop.jpg', import.meta.url)),
+    caption: ['upi://pay?pa=MSWIPE.2530091626717162%40MSWIPESBM&pn=SHIV%20HARDWARE%20STORE&cu=INR', 'Shiv Hardware Store - MSwipe'].join('\n\n'),
+  },
+  harsh: {
+    file: fileURLToPath(new URL('./qr-harsh.jpg', import.meta.url)),
+    caption: ['upi://pay?pa=HARSH4141%40PTAXIS&pn=HARSH%20AGARWAL&cu=INR', 'UPI Number - 8709964141', 'Harsh Agarwal'].join('\n\n'),
+  },
+}
 /** The hours a customer can be sent anything, India time: never at night, the owner's rule. */
 const HOURS = [9, 21]
 const GAP_MS = [60_000, 180_000]
@@ -328,8 +342,9 @@ async function onMessage(msg) {
 }
 
 /**
- * Shiv Intro's Send button (convex/shivIntro.ts): the greeting and card to a new
- * customer, one at a time, taking turns with the bills. A person pressed it, so
+ * Shiv Intro's Send button (convex/shivIntro.ts): whichever were ticked, the
+ * greeting and card and either QR, in that order, to one customer at a time,
+ * taking turns with the bills. A person pressed it, so
  * it does not wait for the bills' gap; outside the hours it waits like they do.
  */
 async function sendIntro() {
@@ -350,9 +365,14 @@ async function sendIntro() {
       const [check] = await sock.onWhatsApp(jid)
       if (check && check.exists === false) { await record('skipped'); return }
     } catch { /* the check failed: send anyway */ }
-    await greet(jid)
+    const what = item.what?.length ? item.what : ['card']
+    for (const [i, part] of what.entries()) {
+      if (i) await new Promise((resolve) => setTimeout(resolve, 1_000 + Math.random() * 1_000))
+      if (part === 'card') await greet(jid)
+      else if (QRS[part]) await sock.sendMessage(jid, { image: await readFile(QRS[part].file), caption: QRS[part].caption })
+    }
     await record('sent')
-    log(`[intro] card sent to ${item.name}`)
+    log(`[intro] ${what.join(' + ')} sent to ${item.name}`)
   } catch (err) {
     log('[intro]', item?.name ?? 'check', 'failed:', err?.message ?? err)
     if (item) await record('failed', String(err?.message ?? err)).catch(() => {})

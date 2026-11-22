@@ -11,24 +11,39 @@ import { parseMobile } from './lib/contactRead'
  *         (shiv-intro/), writes the contact into the phone and answers `report`.
  *         The phone is the one who knows what it holds, so it decides whether
  *         the number is already there.
- *   Send  the WhatsApp Bills service listens to `toSend` and sends the shop's
- *         greeting and visiting card from Tony's number.
+ *   Send  the WhatsApp Bills service listens to `toSend` and sends, from
+ *         Tony's number, whichever were ticked: the shop's greeting and
+ *         visiting card, the shop's QR (MSwipe) or Harsh's QR (Paytm).
+ *         Send needs only the number; Save needs a name too.
  *
  * A job stays waiting until its worker has answered, so a phone that is off or
  * a link that is down loses nothing.
  */
 
-const person = { name: v.string(), place: v.string(), phone: v.string() }
-type Person = { name: string; place: string; phone: string }
+const person = { name: v.optional(v.string()), place: v.optional(v.string()), phone: v.string() }
+type Person = { name?: string; place?: string; phone: string }
 
-/** The row for this number, made or brought up to date from what was typed. */
-async function upsert(ctx: MutationCtx, args: Person) {
-  const name = args.name.trim().replace(/\s+/g, ' ')
-  const place = args.place.trim().replace(/\s+/g, ' ')
-  if (!name) throw new ConvexError('Enter the name.')
+const what = v.union(v.literal('card'), v.literal('shop'), v.literal('harsh'))
+type What = 'card' | 'shop' | 'harsh'
+const ORDER: What[] = ['card', 'shop', 'harsh']
+
+/** Whether this customer already has the greeting and card. Rows from before the choices had only the card. */
+const hasCard = (row: { cardSentAt?: number; sendStatus?: string; sendWhat?: What[] }) =>
+  Boolean(row.cardSentAt) || (row.sendStatus === 'sent' && !row.sendWhat)
+
+/**
+ * The row for this number, made or brought up to date from what was typed.
+ * A name left empty keeps the one already there.
+ */
+async function upsert(ctx: MutationCtx, args: Person, needName: boolean) {
+  const typedName = (args.name ?? '').trim().replace(/\s+/g, ' ')
+  const typedPlace = (args.place ?? '').trim().replace(/\s+/g, ' ')
   const phone = parseMobile(args.phone)
   if (!phone) throw new ConvexError('Enter a 10-digit mobile number.')
   const row = await ctx.db.query('introContacts').withIndex('by_phone', (q) => q.eq('phone', phone)).first()
+  const name = typedName || row?.name || ''
+  const place = typedName ? typedPlace : (row?.place ?? typedPlace)
+  if (needName && !name) throw new ConvexError('Enter the name.')
   const now = Date.now()
   if (row) {
     await ctx.db.patch(row._id, { name, place, updatedAt: now })
@@ -42,20 +57,27 @@ async function upsert(ctx: MutationCtx, args: Person) {
 export const save = mutation({
   args: person,
   handler: async (ctx, args) => {
-    const row = await upsert(ctx, args)
+    const row = await upsert(ctx, args, true)
     await ctx.db.patch(row._id, { saveStatus: 'waiting', savedAs: undefined, saveError: undefined, savedAt: undefined, askedAt: Date.now() })
     return row._id
   },
 })
 
-/** Send: the card to the customer. A second one has to be asked for on purpose. */
+/**
+ * Send: whichever were ticked, to the customer. The QRs can go any number of
+ * times; a second greeting and card has to be asked for on purpose.
+ */
 export const send = mutation({
-  args: { ...person, again: v.optional(v.boolean()) },
-  handler: async (ctx, { again, ...args }) => {
-    const row = await upsert(ctx, args)
+  args: { ...person, what: v.optional(v.array(what)), again: v.optional(v.boolean()) },
+  handler: async (ctx, { again, what: picked, ...args }) => {
+    const items = ORDER.filter((item) => (picked ?? ['card']).includes(item))
+    if (!items.length) throw new ConvexError('Tick what to send.')
+    const row = await upsert(ctx, args, false)
     if (row.sendStatus === 'requested' || row.sendStatus === 'sending') return row._id
-    if (row.sendStatus === 'sent' && !again) throw new ConvexError(`${row.name} was already sent the card.`)
-    await ctx.db.patch(row._id, { sendStatus: 'requested', sendError: undefined, sentAt: undefined, sendAskedAt: Date.now() })
+    if (items.includes('card') && hasCard(row) && !again) {
+      throw new ConvexError(`${row.name || row.phone} was already sent the card.`)
+    }
+    await ctx.db.patch(row._id, { sendStatus: 'requested', sendWhat: items, sendError: undefined, sentAt: undefined, sendAskedAt: Date.now() })
     return row._id
   },
 })
@@ -121,7 +143,7 @@ export const toSend = query({
   handler: async (ctx) => {
     const rows = await ctx.db.query('introContacts')
       .withIndex('by_send', (q) => q.eq('sendStatus', 'requested')).take(10)
-    return rows.map((row) => ({ id: row._id, name: row.name, phone: row.phone }))
+    return rows.map((row) => ({ id: row._id, name: row.name || row.phone, phone: row.phone, what: row.sendWhat ?? ['card'] }))
   },
 })
 
@@ -146,6 +168,13 @@ export const recordSend = mutation({
   handler: async (ctx, { id, status, reason }) => {
     const row = await ctx.db.get(id)
     if (row?.sendStatus !== 'sending') return
-    await ctx.db.patch(id, { sendStatus: status, sendError: reason, sentAt: status === 'sent' ? Date.now() : undefined })
+    const now = Date.now()
+    const card = status === 'sent' && (row.sendWhat ?? ['card']).includes('card')
+    await ctx.db.patch(id, {
+      sendStatus: status,
+      sendError: reason,
+      sentAt: status === 'sent' ? now : undefined,
+      ...(card ? { cardSentAt: now } : {}),
+    })
   },
 })
