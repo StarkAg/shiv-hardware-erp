@@ -96,13 +96,17 @@ const setStatus = (status) => { if (state.status !== status) since = Date.now();
 const putAside = () => rename(AUTH_DIR, `${AUTH_DIR}-${new Date().toISOString().replace(/[:.]/g, '-')}`).catch(() => {})
 
 async function startWhatsApp() {
-  const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestBaileysVersion } = await import('@whiskeysockets/baileys')
+  const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestWaWebVersion } = await import('@whiskeysockets/baileys')
   const qrcode = await import('qrcode')
   let auth = await useMultiFileAuthState(AUTH_DIR)
   let gen = 0
   let attempts = 0
   let loggedOutRuns = 0
-  let version = null
+  // The WhatsApp Web version is taken from WhatsApp itself at every start: the
+  // one built into Baileys falls behind, and on 22 Nov 2026 a link made with it
+  // was accepted and then thrown out (401) within a second, every scan.
+  let version = (await fetchLatestWaWebVersion().catch(() => null))?.version ?? null
+  log('[whatsapp] using WhatsApp Web', version ? version.join('.') : 'built into Baileys')
 
   async function connect() {
     const mine = ++gen
@@ -151,11 +155,11 @@ async function startWhatsApp() {
         const loggedOut = loggedOutRuns >= 3
         setStatus(loggedOut ? 'logged_out' : 'reconnecting')
         state.lastError = message ? { at: new Date().toISOString(), code, message } : null
-        // An old client version is refused with 405: the current one is fetched.
-        if (!version && (code === 405 || /connection failure/i.test(message))) {
-          version = (await fetchLatestBaileysVersion().catch(() => null))?.version ?? null
+        // An old client version is refused: the current one is fetched again.
+        if (code === 405 || code === 401 || /connection failure/i.test(message)) {
+          version = (await fetchLatestWaWebVersion().catch(() => null))?.version ?? version
         }
-        log(`[whatsapp] closed code=${code}${loggedOut ? ', logged out three times running: old link put aside, scan the QR again' : ', reconnecting with the saved link'}`)
+        log(`[whatsapp] closed code=${code}${message ? ` (${message.slice(0, 120)})` : ''}${loggedOut ? ', logged out three times running: old link put aside, scan the QR again' : ', reconnecting with the saved link'}`)
         if (loggedOut) {
           loggedOutRuns = 0
           await putAside()
