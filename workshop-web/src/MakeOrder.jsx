@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useConvex } from 'convex/react'
-import { contactsOf, addressOf, nameOf, said } from './flow.js'
+import { useConvex, useQuery } from 'convex/react'
+import { api, contactsOf, addressOf, nameOf, said } from './flow.js'
 import { post } from './outbox.js'
 import { BackIcon, CloseIcon, SendIcon, Sheet, SheetIcon, TickIcon } from './ui.jsx'
 import { NumberPad } from './NewOrder.jsx'
 import { DatePick } from './DatePick.jsx'
-import { PadSheet, copyOf, padFormat, padPictures } from './pad/PadSheet.jsx'
+import { PadSheet, copyOf, padFormat, padPageCount, padPictures } from './pad/PadSheet.jsx'
 import { QueuePrint, printOnQueue } from './sendOut.jsx'
 import {
-  EXTRAS, FARE, FILLS, FILLS_FOR, FORMS, FORM_IDS, amountOf, inr, learnRate, productLabel, rateFor, todayKey, totalOf,
+  CHAUKHATS, EXTRAS, FARE, FILLS, FILLS_FOR, FLUSH_BRANDS, FORMS, FORM_IDS, HOME_IDS, THICK, THICKS, THICK_IDS, amountOf, flushLabel,
+  hasThick, homeRates, inr, learnHome, learnRate, productLabel, rateFor, sheetPrice, todayKey, totalOf,
 } from './pad/forms.js'
 import { SOOT_GLYPH, fmtDim, inchesOf, parseDim } from './pad/dims.js'
 
@@ -32,6 +33,11 @@ import { SOOT_GLYPH, fmtDim, inchesOf, parseDim } from './pad/dims.js'
 const draftKey = (job) => `workshop:pad-draft:${job.id}`
 const readDraft = (job) => { try { return JSON.parse(localStorage.getItem(draftKey(job)) || 'null') } catch { return null } }
 const newId = () => Math.random().toString(36).slice(2, 9)
+/** The tile, and the lines it makes: door fittings picked from the shop's catalog. */
+const FITTINGS = 'fitting'
+
+/** The advance already taken on this job's visit order(s), pulled onto the work order (Tony, 22 Nov 2026). */
+export const visitAdvanceOf = (job) => (job.messages || []).reduce((t, m) => t + (m.slip?.advance > 0 ? Math.round(m.slip.advance) : 0), 0)
 
 // Every number to ring, as the slip and the pad write them: "8709964141, 8709964142".
 export const whoOf = (job) => ({ name: nameOf(job), address: addressOf(job), mobile: contactsOf(job.phone).join(', ') })
@@ -43,20 +49,58 @@ function lineFor(id) {
     return { ...line, rate: String(rateFor(line) ?? '') }
   }
   const fill = FILLS_FOR[id][0]
-  const line = { id: newId(), form: id, fill, label: productLabel(id, fill), qty: '1', rate: '', wText: '', hText: '' }
+  const thick = hasThick(id) ? THICK : undefined
+  if (id === 'flush-door') {
+    const line = { id: newId(), form: id, fill, brand: FLUSH_BRANDS[0][0], qty: '1', rate: '', wText: '', hText: '' }
+    return { ...line, label: flushLabel(line) }
+  }
+  const line = { id: newId(), form: id, fill, ...(thick ? { thick } : {}), label: productLabel(id, fill, thick), qty: '1', rate: '', wText: '', hText: '' }
   return { ...line, rate: String(rateFor(line) ?? '') }
+}
+
+/**
+ * A line brought up to date: its thickness (1.2 MM on one made before it was
+ * asked), its label, and its rate worked out from the rate sheet when the
+ * sheet prices it and the counter has not typed one (`rateHand`).
+ */
+export function freshen(l) {
+  if (l.extra) return l
+  const thick = hasThick(l.form) ? (THICKS[l.thick] ? l.thick : THICK) : undefined
+  const next = { ...l, ...(thick ? { thick } : {}), label: l.form === 'flush-door' ? flushLabel(l) : productLabel(l.form, l.fill, thick) }
+  if (!next.rateHand) {
+    const s = sheetPrice(next)
+    if (s) next.rate = String(s.rate)
+  }
+  return next
 }
 
 /** The pad as it goes to the books: figures as numbers, sizes read. */
 export function padOf(draft) {
-  const lines = draft.lines.map((l) => {
+  // Each line worked out afresh from the rate sheet, so a door's rows never drop off for a price kept from before.
+  const lines = draft.lines.map(freshen).map((l) => {
     const qty = Number(l.qty) || 0
     const rate = Number(l.rate) || 0
     const base = { id: l.id, form: l.form, label: l.label, qty, rate, amount: amountOf({ qty, rate }) }
     if (l.extra) return { ...base, extra: true, unit: l.unit }
     const w = parseDim(l.wText)
     const h = parseDim(l.hText)
-    return { ...base, fill: l.fill, ...(inchesOf(w) > 0 && inchesOf(h) > 0 ? { w, h } : {}) }
+    // The area the rate sheet priced it at, written after the Pc on the pad: "1 Pc 11.38'" (Tony, 22 Nov 2026).
+    const sheet = sheetPrice(l)
+    const sqft = sheet?.sqft
+    // A door at the sheet's rate goes on the pad part by part, each on its own line:
+    // the door, the chaukhat, the accessories (Tony, 22 Nov 2026). A rate typed by hand is one line.
+    const parts = !l.rateHand && sheet?.parts ? sheet.parts : null
+    return {
+      ...base, fill: l.fill, ...(l.thick ? { thick: l.thick } : {}), ...(inchesOf(w) > 0 && inchesOf(h) > 0 ? { w, h } : {}),
+      ...(sqft ? { sqft } : {}), ...(parts ? { parts } : {}),
+      // A door sent without its fitting items is drawn with none (sketch.jsx DoorFittings).
+      ...(l.form === 'alu-door' && l.fitting === false ? { fitting: false } : {}),
+      ...(l.form === 'alu-door' && l.chaukhat === false ? { chaukhat: false } : {}),
+      // Which side it hangs on, seen from the room; left unless asked.
+      ...(HINGED.includes(l.form) && l.hinge === 'right' ? { hinge: 'right' } : {}),
+      // A flush door: its paneling, its chaukhat and whether it is fitted, for its drawing.
+      ...(l.form === 'flush-door' ? { brand: l.brand, paneling: !!l.paneling, ...(l.wpc ? { wpc: l.wpc } : {}), ...(l.fitting === false ? { fitting: false } : {}) } : {}),
+    }
   })
   return {
     orderDate: draft.orderDate || todayKey(),
@@ -66,6 +110,9 @@ export function padOf(draft) {
     lines,
   }
 }
+
+/** Pieces that hang on one side, so the customer is asked which (Tony, 22 Nov 2026). */
+const HINGED = ['alu-door', 'window-1', 'flush-door']
 
 const sized = (l) => !l.extra && inchesOf(parseDim(l.wText)) > 0 && inchesOf(parseDim(l.hText)) > 0
 const sizeLine = (l) => (sized(l) ? `${fmtDim(parseDim(l.wText))}″ × ${fmtDim(parseDim(l.hText))}″` : 'No size')
@@ -126,26 +173,39 @@ function FigureKeys({ value, onChange, decimal }) {
  * A loose item has only how many and its rate.
  */
 function PieceSheet({ start, onClose, onSave }) {
-  const [l, setL] = useState(start)
-  const [field, setField] = useState(start.extra ? 'qty' : sized(start) ? 'rate' : 'w')
+  const [l, setL] = useState(() => freshen(start))
+  const [field, setField] = useState(start.extra ? 'qty' : sized(start) ? (start.form === 'flush-door' ? 'w' : 'rate') : 'w')
   const set = (patch) => setL((x) => {
-    const next = { ...x, ...patch }
-    // A new fill is a new piece: its own label and, if the counter has used one, its own rate.
-    if (patch.fill) {
-      next.label = productLabel(next.form, next.fill)
+    let next = { ...x, ...patch }
+    // A new fill is a new piece: if the counter has used one, its own rate.
+    if (patch.fill && !next.rateHand) {
       const known = rateFor(next)
       if (known) next.rate = String(known)
     }
+    // A rate typed by hand stays; otherwise the rate sheet works it out from the size and thickness.
+    if (patch.rate !== undefined) next.rateHand = true
+    if (!next.extra) next = freshen(next)
     return next
   })
+  const sheet = l.extra ? null : sheetPrice(l)
   const title = l.extra ? l.label : FORMS[l.form]?.label
+  const flush = l.form === 'flush-door'
+  const kept = homeRates()
+  // A home job's own rates, typed once and remembered: a sunmica sheet, the fitting, the items.
+  const typed = (k) => (l[k] !== undefined && l[k] !== '' ? l[k] : kept[k] ? String(kept[k]) : '')
   const fields = l.extra
     ? [['qty', `How many (${l.unit})`, l.qty || '0'], ['rate', `₹ each ${l.unit}`, l.rate || '0']]
     : [
         // An unset size says so: a suggested figure in grey was read as a real one.
         ['w', 'Width ″', l.wText || 'Not set', !l.wText],
         ['h', 'Height ″', l.hText || 'Not set', !l.hText],
-        ['rate', '₹ each', l.rate || '0'],
+        ...(flush && FILLS[l.fill]?.sides ? [
+          ['micaNo', 'Front mica no.', l.micaNo || 'Not set', !l.micaNo],
+          ['sunRate', '₹ front mica sheet', typed('sunRate') || 'Not set', !typed('sunRate')],
+          ['linerRate', '₹ liner teak sheet', typed('linerRate') || 'Not set', !typed('linerRate')],
+        ] : []),
+        ...(flush && l.fitting !== false ? [['fitRate', '₹ door fitting', typed('fitRate') || 'Not set', !typed('fitRate')]] : []),
+        ...(flush ? [] : [['rate', '₹ each', l.rate || '0']]),
       ]
   const amount = amountOf({ qty: Number(l.qty) || 0, rate: Number(l.rate) || 0 })
   const step = (by) => set({ qty: String(Math.max(1, (Number(l.qty) || 0) + by)) })
@@ -165,13 +225,77 @@ function PieceSheet({ start, onClose, onSave }) {
               </div>
             </div>
           )}
-          <div className="figrows">
-            {fields.map(([k, label, shown, hint]) => (
-              <button key={k} type="button" className={`figrow ${field === k ? 'on' : ''}`} aria-pressed={field === k} onClick={() => setField(k)}>
-                <span>{label}</span><b className={hint ? 'hint' : ''}>{shown}</b>
-              </button>
-            ))}
-          </div>
+          {hasThick(l.form) && !l.extra && (
+            <div className="optrow">
+              <span className="ask">Thickness</span>
+              <div className="needs" role="group" aria-label="Thickness">
+                {THICK_IDS.map((t) => (
+                  <button key={t} type="button" className={l.thick === t ? 'on' : ''} aria-pressed={l.thick === t} onClick={() => set({ thick: t })}>{THICKS[t].label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {HINGED.includes(l.form) && (
+            <div className="optrow">
+              <span className="ask">Hinges, seen from the room</span>
+              <div className="needs hingeside" role="group" aria-label="Hinges, seen from the room">
+                {[['left', 'Left'], ['right', 'Right']].map(([k, word]) => {
+                  const on = (l.hinge === 'right' ? 'right' : 'left') === k
+                  return <button key={k} type="button" className={on ? 'on' : ''} aria-pressed={on} onClick={() => set({ hinge: k })}>{word}</button>
+                })}
+              </div>
+            </div>
+          )}
+          {flush && (
+            <>
+              <div className="optrow">
+                <span className="ask">Door brand (rate a sqft)</span>
+                <div className="needs" role="group" aria-label="Door brand">
+                  {FLUSH_BRANDS.map(([b, r]) => (
+                    <button key={b} type="button" className={l.brand === b ? 'on' : ''} aria-pressed={l.brand === b} onClick={() => set({ brand: b })}>{b} {r}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="optrow">
+                <span className="ask">Chaukhat</span>
+                <div className="needs" role="group" aria-label="Chaukhat">
+                  {[['', 'None'], ...Object.entries(CHAUKHATS).map(([k, c]) => [k, c.label])].map(([k, word]) => (
+                    <button key={k || 'none'} type="button" className={(l.wpc || '') === k ? 'on' : ''} aria-pressed={(l.wpc || '') === k} onClick={() => set({ wpc: k || undefined })}>{word}</button>
+                  ))}
+                </div>
+              </div>
+              {CHAUKHATS[l.wpc] && Object.keys(CHAUKHATS[l.wpc].sets).length > 1 && (
+                <div className="optrow">
+                  <span className="ask">Chaukhat brand</span>
+                  <div className="needs" role="group" aria-label="Chaukhat brand">
+                    {Object.entries(CHAUKHATS[l.wpc].sets).map(([b, r]) => {
+                      const on = (CHAUKHATS[l.wpc].sets[l.wpcBrand] ? l.wpcBrand : Object.keys(CHAUKHATS[l.wpc].sets)[0]) === b
+                      return <button key={b} type="button" className={on ? 'on' : ''} aria-pressed={on} onClick={() => set({ wpcBrand: b })}>{b} {r}</button>
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="optrow">
+                <span className="ask">With the door</span>
+                <div className="needs" role="group" aria-label="With the door">
+                  {[['paneling', 'Paneling', !!l.paneling], ['fitting', 'Fitting at home', l.fitting !== false]].map(([k, word, on]) => (
+                    <button key={k} type="button" className={on ? 'on' : ''} aria-pressed={on} onClick={() => set({ [k]: !on })}>{word}</button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+          {l.form === 'alu-door' && (
+            <div className="optrow">
+              <span className="ask">With the door</span>
+              <div className="needs" role="group" aria-label="With the door">
+                {[['chaukhat', 'Chaukhat'], ['fitting', 'Fitting items']].map(([k, word]) => {
+                  const on = l[k] !== false
+                  return <button key={k} type="button" className={on ? 'on' : ''} aria-pressed={on} onClick={() => set({ [k]: !on })}>{word}</button>
+                })}
+              </div>
+            </div>
+          )}
           {!l.extra && (
             <div className="optqty">
               <button type="button" className="step" onClick={() => step(-1)} aria-label="One less">−</button>
@@ -180,17 +304,85 @@ function PieceSheet({ start, onClose, onSave }) {
             </div>
           )}
           <p className="optline">{l.label}{sized(l) ? ` · ${sizeLine(l)}` : ''} · {inr(amount)}</p>
+          {sheet && (
+            <p className="sheetwork">
+              {l.rateHand
+                ? <>Rate sheet says {inr(sheet.rate)} each. <button type="button" className="linkish" onClick={() => setL((x) => freshen({ ...x, rateHand: false }))}>Use it</button></>
+                : <>From the rate sheet: {sheet.working} = {inr(sheet.rate)} each</>}
+            </p>
+          )}
         </div>
         <div className="optright">
+          {/* The figures sit over their keys, on the side with room, so the screen never scrolls. */}
+          <div className="figrows">
+            {fields.map(([k, label, shown, hint]) => (
+              <button key={k} type="button" className={`figrow ${field === k ? 'on' : ''}`} aria-pressed={field === k} onClick={() => setField(k)}>
+                <span>{label}</span><b className={hint ? 'hint' : ''}>{shown}</b>
+              </button>
+            ))}
+          </div>
           {field === 'w' && <SizeKeys value={l.wText} onChange={(v) => set({ wText: v })} />}
           {field === 'h' && <SizeKeys value={l.hText} onChange={(v) => set({ hText: v })} />}
           {field === 'rate' && <FigureKeys value={l.rate} decimal onChange={(v) => set({ rate: v })} />}
           {field === 'qty' && <FigureKeys value={l.qty} decimal onChange={(v) => set({ qty: v })} />}
+          {['sunRate', 'linerRate', 'fitRate'].includes(field) && <FigureKeys value={typed(field)} onChange={(v) => set({ [field]: v })} />}
+          {field === 'micaNo' && <FigureKeys value={l.micaNo || ''} onChange={(v) => set({ micaNo: v })} />}
           <div className="sheetbtns">
             <button type="button" className="ghost" onClick={onClose}>Cancel</button>
             <button type="button" className="solid safe" disabled={!(Number(l.qty) > 0)} onClick={() => onSave(l)}>{start.fresh ? 'Add' : 'Done'}</button>
           </div>
         </div>
+      </div>
+    </Sheet>
+  )
+}
+
+/* ── Door fittings, from the shop's own catalog ─────────────────────────────
+   (Tony, 22 Nov 2026.) Handles, hinges, aldrops, locks, tower bolts, magnets
+   and screws as the shop bills them, each with the rate it last went at: one
+   tapped, how many on the keys, and it is a line of the work order. */
+export const FIT_GROUPS = [
+  ['Handles', /handle/i],
+  ['Hinges', /hinge/i],
+  ['Aldrops', /aldrop|kunda/i],
+  ['Locks', /lock|latch/i],
+  ['Tower bolts', /tower\s*bolt|\bt\.?\s?b\b/i],
+  ['Magnets & stoppers', /magnet|stopper/i],
+  ['Screws', /screw|nut\s*bolt/i],
+]
+/** The catalog's door fittings, each in the first group its name fits. */
+export function fittingsOf(catalog) {
+  const items = Array.isArray(catalog?.customCatalog) ? catalog.customCatalog : []
+  return FIT_GROUPS.map(([name, re]) => [name, items.filter((i) => i?.name && re.test(i.name) && FIT_GROUPS.find(([, r]) => r.test(i.name))?.[0] === name)
+    .sort((a, b) => a.name.localeCompare(b.name))])
+}
+export function FittingsSheet({ catalog, onClose, onPick }) {
+  const groups = fittingsOf(catalog)
+  const [group, setGroup] = useState(groups.find(([, list]) => list.length)?.[0] ?? groups[0][0])
+  const list = groups.find(([g]) => g === group)?.[1] ?? []
+  return (
+    <Sheet label="Door fittings" wide onClose={onClose}>
+      <b className="sheettitle">Door fittings</b>
+      <div className="fitpick">
+        <div className="needs fitgroups" role="group" aria-label="Kind">
+          {groups.map(([g, items]) => (
+            <button key={g} type="button" className={group === g ? 'on' : ''} aria-pressed={group === g} disabled={!items.length} onClick={() => setGroup(g)}>{g} <small>{items.length}</small></button>
+          ))}
+        </div>
+        {catalog === undefined
+          ? <p className="fitnone">Reading the shop's list…</p>
+          : !list.length
+            ? <p className="fitnone">Nothing of this kind in the shop's list yet.</p>
+            : (
+              <div className="fititems">
+                {list.map((i) => (
+                  <button key={i.id ?? i.name} type="button" onClick={() => onPick(i)}>
+                    <span>{i.name}</span><b>{i.rate ? `${inr(i.rate)} / ${i.unit || 'Pc'}` : 'No rate'}</b>
+                  </button>
+                ))}
+              </div>
+            )}
+        <div className="sheetbtns"><button type="button" className="ghost" onClick={onClose}>Close</button></div>
       </div>
     </Sheet>
   )
@@ -216,6 +408,8 @@ function ProceedSheet({ job, who, pad, draft, pieces, unsized, total, onSend, on
   const loose = pad.lines.filter((l) => l.extra && l.qty > 0).length
   const adv = pad.advance || 0
   const name = `Work order ${job.number}`
+  // Three copies, each as many pages as the pad runs to.
+  const sheets = 3 * padPageCount(pad)
 
   const go = async () => {
     const mark = (k, v) => setSteps((s) => ({ ...s, [k]: v }))
@@ -228,7 +422,7 @@ function ProceedSheet({ job, who, pad, draft, pieces, unsized, total, onSend, on
     }
   }
   const busy = steps && Object.values(steps).some((v) => v === 'doing' || v === 'wait')
-  const STEP_WORDS = { send: 'Sent to the workshop', print: 'Three copies to the printer' }
+  const STEP_WORDS = { send: 'Sent to the workshop', print: sheets > 3 ? `Three copies, ${sheets} pages, to the printer` : 'Three copies to the printer' }
   const state = (v) => (v === 'done' ? <TickIcon size={22} /> : v === 'doing' ? <span className="spin" /> : v === 'wait' ? <span className="stepwait" /> : <CloseIcon size={20} />)
 
   return (
@@ -241,7 +435,7 @@ function ProceedSheet({ job, who, pad, draft, pieces, unsized, total, onSend, on
             <div><dt>Pieces to make</dt><dd>{pieces}</dd></div>
             {loose > 0 && <div><dt>Loose items</dt><dd>{loose}</dd></div>}
             <div><dt>Total</dt><dd>{inr(total)}</dd></div>
-            {adv > 0 && <div><dt>Advance</dt><dd>{inr(adv)}</dd></div>}
+            {adv > 0 && <div><dt>Advance</dt><dd>− {inr(adv)}</dd></div>}
             {adv > 0 && <div><dt>Balance</dt><dd>{inr(total - adv)}</dd></div>}
           </dl>
           {(unsized > 0 || !draft.deliveryDate) && (
@@ -253,7 +447,7 @@ function ProceedSheet({ job, who, pad, draft, pieces, unsized, total, onSend, on
           <span className="ask">With it</span>
           <div className="proceedopts">
             <button type="button" className={opts.print ? 'on' : ''} aria-pressed={opts.print} onClick={() => pick('print')}>
-              {opts.print ? <TickIcon size={22} /> : <span className="box" />} <span><b>Print 3 pages</b><small>Customer, shop and workshop copies, in colour</small></span>
+              {opts.print ? <TickIcon size={22} /> : <span className="box" />} <span><b>Print {sheets} pages</b><small>Customer, shop and workshop copies{sheets > 3 ? `, ${sheets / 3} pages each` : ''}, in colour</small></span>
             </button>
           </div>
           <p className="proceednote">The job moves on to Assemble, and the workshop sees the yellow copy. This cannot be gone back to.</p>
@@ -281,15 +475,32 @@ function ProceedSheet({ job, who, pad, draft, pieces, unsized, total, onSend, on
 }
 
 export default function MakeOrder({ job, onClose }) {
-  const [draft, setDraft] = useState(() => readDraft(job) ?? { orderDate: todayKey(), deliveryDate: '', fare: String(FARE), advance: '', lines: [] })
+  // The advance follows the visit order's until the counter changes it by hand (`advanceSet`).
+  const pulled = visitAdvanceOf(job)
+  const [draft, setDraft] = useState(() => {
+    const saved = readDraft(job)
+    // Lines kept from before the thickness and the rate sheet: brought up to date.
+    const d = saved ? { ...saved, lines: (saved.lines || []).map(freshen) } : { orderDate: todayKey(), deliveryDate: '', fare: String(FARE), advance: '', lines: [] }
+    // A draft from before the pull, with an advance typed in: that figure stays.
+    if (d.advanceSet || (d.advanceSet === undefined && d.advance)) return { ...d, advanceSet: true }
+    return { ...d, advanceSet: false, advance: pulled ? String(pulled) : '' }
+  })
   useEffect(() => { try { localStorage.setItem(draftKey(job), JSON.stringify(draft)) } catch { /* kept in memory only */ } }, [draft, job])
+  useEffect(() => { if (!draft.advanceSet) setDraft((d) => ({ ...d, advance: pulled ? String(pulled) : '' })) }, [pulled, draft.advanceSet])
+  const fromVisit = !draft.advanceSet && pulled > 0
   const [editing, setEditing] = useState(null) // a line, open in PieceSheet
+  const [fitting, setFitting] = useState(false) // the door fittings list, open
+  // The shop's catalog, for the door fittings and their rates.
+  const catalog = useQuery(api.catalog.get, {})
   const [money, setMoney] = useState(null) // 'fare' | 'advance', open on the number pad
   const [sending, setSending] = useState(false)
   // The look it prints in: the pad, the only one offered (Format 1 is kept in PadSheet.jsx, hidden).
   const [format] = useState(padFormat)
 
   const pad = useMemo(() => padOf(draft), [draft])
+  // A pad too long for one page runs on; the preview shows a page at a time.
+  const pageCount = format === 'pad' ? padPageCount(pad, format) : 1
+  const [viewPage, setViewPage] = useState(0)
   const who = whoOf(job)
   const ready = pad.lines.some((l) => l.qty > 0)
   const pieces = pad.lines.filter((l) => !l.extra).reduce((t, l) => t + l.qty, 0)
@@ -318,6 +529,7 @@ export default function MakeOrder({ job, onClose }) {
   const send = () => {
     const out = { ...pad, lines: pad.lines.filter((l) => l.qty > 0) }
     for (const l of out.lines) learnRate(l)
+    for (const l of draft.lines) if (l.form === 'flush-door') learnHome({ sunRate: l.sunRate, linerRate: l.linerRate, fitRate: l.fitRate })
     post({ jobId: job.id, step: 'quotation', pad: out })
     try { localStorage.removeItem(draftKey(job)) } catch { /* nothing kept */ }
     return out
@@ -325,7 +537,8 @@ export default function MakeOrder({ job, onClose }) {
 
   const tiles = [
     { group: 'Pieces to make', ids: FORM_IDS, label: (id) => FORMS[id].label },
-    { group: 'Loose items', ids: Object.keys(EXTRAS), label: (id) => EXTRAS[id].label },
+    { group: 'Home jobs', ids: HOME_IDS, label: (id) => FORMS[id].label },
+    { group: 'Loose items', ids: [...Object.keys(EXTRAS), FITTINGS], label: (id) => (id === FITTINGS ? 'Door fittings' : EXTRAS[id].label) },
   ]
 
   return (
@@ -352,14 +565,16 @@ export default function MakeOrder({ job, onClose }) {
               <span>Fare</span><b>{pad.fare ? inr(pad.fare) : 'None'}</b>
             </button>
             <button type="button" className="advkey" onClick={() => setMoney('advance')}>
-              <span>Advance</span><b>{pad.advance ? inr(pad.advance) : 'None'}</b>
+              <span>Advance{fromVisit && <small> from visit order</small>}</span><b>{pad.advance ? `− ${inr(pad.advance)}` : 'None'}</b>
             </button>
           </div>
           <div className="padsums">
             <p><span>Total</span><b>{inr(total)}</b></p>
             {pad.advance > 0 && <p><span>Balance</span><b>{inr(total - pad.advance)}</b></p>}
           </div>
-          <p className="padhint">The advance is written on the pad only. Put it in the cash book as usual.</p>
+          <p className="padhint">{fromVisit
+            ? 'The advance is taken from the visit order. Tap Advance to change it if more was paid.'
+            : 'The advance is written on the pad only. Put it in the cash book as usual.'}</p>
         </section>
 
         <section className="nwitems" aria-label="Items">
@@ -371,7 +586,7 @@ export default function MakeOrder({ job, onClose }) {
                   {g.ids.map((id) => {
                     const n = countOf(id)
                     return (
-                      <button key={id} type="button" className={`tile ${n ? 'on' : ''}`} onClick={() => setEditing({ ...lineFor(id), fresh: true })}>
+                      <button key={id} type="button" className={`tile ${n ? 'on' : ''}`} onClick={() => (id === FITTINGS ? setFitting(true) : setEditing({ ...lineFor(id), fresh: true }))}>
                         <span>{g.label(id)}</span>
                         {n > 0 && <b>{n}</b>}
                       </button>
@@ -383,38 +598,69 @@ export default function MakeOrder({ job, onClose }) {
           </div>
           <div className="chosenlist" aria-label="On the work order">
             {draft.lines.length === 0 && <p className="chosenempty">Tap each piece from the measurements: what goes in it, its size, how many and the rate.</p>}
-            {draft.lines.map((l) => (
+            {draft.lines.map(freshen).map((l) => {
+              const sheet = l.extra ? null : sheetPrice(l)
+              const q = Number(l.qty) || 0
+              // A door at the sheet's rate: its parts as rows of their own under it, as on the pad (Tony, 22 Nov 2026).
+              const parts = !l.rateHand && sheet?.parts ? sheet.parts : null
+              return [
               <div key={l.id} className="chosenline padline2">
                 <button type="button" className="what" onClick={() => setEditing(l)}>
                   {l.label}
                   <small className={!l.extra && !sized(l) ? 'wait' : ''}>
-                    {l.extra ? '' : `${sizeLine(l)} · `}{inr(Number(l.rate) || 0)} each · {inr(amountOf({ qty: Number(l.qty) || 0, rate: Number(l.rate) || 0 }))}
+                    {l.extra ? '' : `${sizeLine(l)} · `}{sheet ? `${sheet.sqft.toFixed(2)}' · ` : ''}
+                    {parts
+                      ? inr(parts[0].amount * q)
+                      : <>{inr(Number(l.rate) || 0)} each · {inr(amountOf({ qty: q, rate: Number(l.rate) || 0 }))}</>}
                   </small>
                 </button>
                 <button type="button" className="step" onClick={() => bump(l.id, -1)} aria-label={`One less ${l.label}`}>−</button>
                 <button type="button" className="count" onClick={() => setEditing(l)} aria-label={`Change ${l.label}`}>{l.qty}<small>{l.extra ? l.unit : 'Pc'}</small></button>
                 <button type="button" className="step" onClick={() => bump(l.id, 1)} aria-label={`One more ${l.label}`}>+</button>
                 <button type="button" className="drop" onClick={() => drop(l.id)} aria-label={`Remove ${l.label}`}><CloseIcon size={18} /></button>
-              </div>
-            ))}
+              </div>,
+              ...(parts || []).slice(1).map((p) => (
+                <div key={`${l.id}-${p.key}`} className="chosenpart">
+                  <span>{p.name}</span>
+                  <span>{Math.round(q * (p.per || 1) * 100) / 100} {p.unit || 'Pc'}{p.feet > 0 ? ` ${Number(p.feet).toFixed(2)}'` : ''}</span>
+                  <b>{inr(p.amount * q)}</b>
+                </div>
+              )),
+              ]
+            })}
           </div>
         </section>
 
         <section className="nwslip" aria-label="The pad">
           {/* Print right under the sheet, as wide as it. */}
-          <PadSheet key={format} copy={copyOf('customer')} number={job.number} who={who} pad={pad} format={format} fitHeight
-            below={<QueuePrint label="Print 3 pages" className="pick" mode="color" name={`Work order ${job.number}`} disabled={!ready} makeBlobs={() => padPictures(job.number, who, pad)} />} />
+          <PadSheet key={format} copy={copyOf('customer')} number={job.number} who={who} pad={pad} format={format} fitHeight page={Math.min(viewPage, pageCount - 1)}
+            below={(
+              <>
+                {pageCount > 1 && (
+                  <div className="pagepick" role="group" aria-label="Page">
+                    {Array.from({ length: pageCount }, (_, i) => (
+                      <button key={i} type="button" className={Math.min(viewPage, pageCount - 1) === i ? 'on' : ''} aria-pressed={Math.min(viewPage, pageCount - 1) === i} onClick={() => setViewPage(i)}>Page {i + 1}</button>
+                    ))}
+                  </div>
+                )}
+                <QueuePrint label={`Print ${3 * pageCount} pages`} className="pick" mode="color" name={`Work order ${job.number}`} disabled={!ready} makeBlobs={() => padPictures(job.number, who, pad)} />
+              </>
+            )} />
         </section>
       </main>
 
       {editing && <PieceSheet start={editing} onClose={() => setEditing(null)} onSave={save} />}
+      {fitting && (
+        <FittingsSheet catalog={catalog} onClose={() => setFitting(false)}
+          onPick={(i) => { setFitting(false); setEditing({ id: newId(), form: FITTINGS, extra: true, label: i.name, unit: i.unit || 'Pc', qty: '1', rate: i.rate ? String(i.rate) : '', fresh: true }) }} />
+      )}
       {money && (
         <NumberPad
           title={money === 'fare' ? 'Fare ₹' : 'Advance ₹'}
           start={draft[money]}
           quick={money === 'fare' ? [0, 100, 200, 300] : [500, 1000, 2000, 5000]}
           onClose={() => setMoney(null)}
-          onDone={(v) => { set({ [money]: v }); setMoney(null) }}
+          onDone={(v) => { set(money === 'advance' ? { advance: v, advanceSet: true } : { [money]: v }); setMoney(null) }}
         />
       )}
       {sending && (

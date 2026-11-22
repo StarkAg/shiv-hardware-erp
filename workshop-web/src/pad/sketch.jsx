@@ -67,12 +67,113 @@ const Handle = ({ x, y, h, side }) => (
   <rect x={side === 'left' ? x + 2 : x - 4} y={y + h / 2 - 6} width="2.4" height="12" rx="1.2" className="ophandle" />
 )
 
+
+/**
+ * A flush door as a door elevation draws it: the leaf; when panelled, four
+ * panels each in a moulding (two lines), a wider rail at the lock height; the
+ * hinge marks and the dashed lines meeting on the hinge side; and when it is
+ * fitted, the handle at the side it opens (a lever on its rose).
+ */
+function FlushDoor({ x, y, w, h, hinge, paneling, fitted, grain }) {
+  const hx = hinge === 'right' ? x + w : x
+  const ox = hinge === 'right' ? x : x + w
+  const inward = hinge === 'right' ? 1 : -1
+  const my = y + h * 0.5
+  const m = Math.min(4, w * 0.12) // the margin round the panels
+  const g = Math.min(4, h * 0.05) // the rail between upper and lower panels
+  const pw = (w - m * 3) / 2
+  const panels = paneling ? [
+    [x + m, y + m, pw, my - g / 2 - y - m], [x + m * 2 + pw, y + m, pw, my - g / 2 - y - m],
+    [x + m, my + g / 2, pw, y + h - m * 1.6 - my - g / 2], [x + m * 2 + pw, my + g / 2, pw, y + h - m * 1.6 - my - g / 2],
+  ] : []
+  const hy = y + h * 0.47
+  return (
+    <g className="opdoor">
+      {/* With sunmica, the leaf in its grain. */}
+      <rect x={x} y={y} width={w} height={h} className="opleaf" style={grain ? { fill: grain } : undefined} />
+      <polyline points={`${ox},${y} ${hx},${my} ${ox},${y + h}`} className="opswing" />
+      {panels.map(([px, py, pw2, ph], i) => (
+        <g key={i}>
+          <rect x={px} y={py} width={pw2} height={ph} className="oppanel" />
+          <rect x={px + 1.2} y={py + 1.2} width={pw2 - 2.4} height={ph - 2.4} className="oppanel thin" />
+        </g>
+      ))}
+      {[0.16, 0.5, 0.84].map((f) => (
+        <rect key={f} x={hx - 1.3} y={y + h * f - 2.6} width="2.6" height="5.2" rx="1.3" className="ophingemark" />
+      ))}
+      {fitted && (
+        <g className="opaldrop">
+          <circle cx={ox + inward * 3.2} cy={hy} r="1.5" className="opknob" />
+          <line x1={ox + inward * 3.2} y1={hy} x2={ox + inward * 9.5} y2={hy} />
+        </g>
+      )}
+    </g>
+  )
+}
+
+/**
+ * The floor a door stands on (Tony, 22 Nov 2026): a line across its foot,
+ * hatched below, so it reads that the chaukhat has no bottom.
+ */
+function Floor({ x0, x1, y }) {
+  const ticks = []
+  for (let x = x0 + 3; x <= x1; x += 3) ticks.push(x)
+  return (
+    <g className="opfloor">
+      <line x1={x0} y1={y} x2={x1} y2={y} />
+      {ticks.map((x) => <line key={x} x1={x} y1={y + 0.6} x2={x - 2.6} y2={y + 3.4} className="ophatch" />)}
+    </g>
+  )
+}
+
+/**
+ * A door as the shop draws it by hand (Tony's pad sketch, 22 Nov 2026), in
+ * clean lines: the leaf a plain box inside the chaukhat, one line across its
+ * middle, three hinge marks on the side it hangs, and, when its fitting items
+ * go with it, the aldrop just above the middle line at the side it opens: a
+ * bar from the edge with its staple across it.
+ */
+function DoorLines({ x, y, w, h, hinge, fittings, grain }) {
+  const my = y + h / 2
+  const hx = hinge === 'right' ? x + w : x
+  const ox = hinge === 'right' ? x : x + w
+  const inward = hinge === 'right' ? 1 : -1 // from the opening edge into the door
+  const bar = Math.min(10, w * 0.3)
+  // The door's own aluminium frame, drawn as professional door elevations draw it
+  // (Tony, 22 Nov 2026): narrow stiles and top rail, the middle rail, and a wider
+  // bottom rail, which carries the weight; each panel sits inside it.
+  const st = Math.min(2.6, w * 0.08)
+  const top = st
+  const bot = Math.min(5.4, h * 0.065)
+  const rail = Math.min(3, h * 0.035)
+  const ay = my - rail / 2 - Math.min(3.4, h * 0.045)
+  return (
+    <g className="opdoor">
+      <rect x={x} y={y} width={w} height={h} className="opleaf" />
+      {/* Which side it hangs: dashed lines from the opening edge's corners meet on the hinge side, as drawings show it. */}
+      <polyline points={`${ox},${y} ${hx},${my} ${ox},${y + h}`} className="opswing" />
+      {/* With film, each panel in the film's wood grain. */}
+      <rect x={x + st} y={y + top} width={w - st * 2} height={my - rail / 2 - y - top} className="oppanel" style={grain ? { fill: grain } : undefined} />
+      <rect x={x + st} y={my + rail / 2} width={w - st * 2} height={y + h - bot - my - rail / 2} className="oppanel" style={grain ? { fill: grain } : undefined} />
+      {[0.16, 0.5, 0.84].map((f) => (
+        <rect key={f} x={hx - 1.3} y={y + h * f - 2.6} width="2.6" height="5.2" rx="1.3" className="ophingemark" />
+      ))}
+      {fittings && (
+        <g className="opaldrop">
+          <line x1={ox} y1={ay} x2={ox + inward * bar} y2={ay} />
+          <line x1={ox + inward * bar * 0.7} y1={ay - 2.6} x2={ox + inward * bar * 0.7} y2={ay + 2.6} />
+        </g>
+      )}
+    </g>
+  )
+}
+
 /**
  * One leaf: the sash inside the frame, the way it opens (dashed lines from
  * the handle side's corners to the middle of the hinge side), its hinges and
  * handle. `hinge` is the side it hangs on.
  */
-function Leaf({ x, y, w, h, hinge, paint, glass }) {
+function Leaf({ x, y, w, h, hinge, paint, glass, fittings }) {
   const hx = hinge === 'left' ? x : x + w
   const ox = hinge === 'left' ? x + w : x
   return (
@@ -81,7 +182,8 @@ function Leaf({ x, y, w, h, hinge, paint, glass }) {
       {glass && <Glint x={x} y={y} w={w} h={h} />}
       <polyline points={`${ox},${y} ${hx},${y + h / 2} ${ox},${y + h}`} className="opswing" />
       <Hinges x={hx} y={y} h={h} />
-      <Handle x={ox} y={y} h={h} side={hinge === 'left' ? 'right' : 'left'} />
+      {/* A door draws its own fittings, and none when they do not go with it. */}
+      {fittings === undefined && <Handle x={ox} y={y} h={h} side={hinge === 'left' ? 'right' : 'left'} />}
     </>
   )
 }
@@ -195,12 +297,15 @@ export function Opening({ o, n, longest }) {
   const uid = `fill${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   const paint = paintOf(o.fill, uid)
   const glass = o.fill === 'glass'
+  // Film on an aluminium door, sunmica on a flush door: shown in a wood grain.
+  const grain = (draw === 'door' && o.fill === 'acp-film') || (draw === 'flush' && FILLS[o.fill]?.sides) ? `url(#${uid}grain)` : null
 
   // The box sits below and right of its dimension lines.
   const X = DIM
   const Y = DIM
   const W = DIM + width + 4
-  const H = DIM + height + 4
+  // A door has its floor drawn under it, so a little more room below.
+  const H = DIM + height + (draw === 'door' || draw === 'flush' ? 8 : 4)
   const ix = X + FRAME
   const iy = Y + FRAME
   const iw = width - FRAME * 2
@@ -211,7 +316,7 @@ export function Opening({ o, n, longest }) {
     <figure className="opening">
       <svg className="opbox" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img"
         aria-label={`${fmtDim(o.w)} by ${fmtDim(o.h)} inch ${form?.label || ''} with ${words}`}>
-        <defs><Paint id={uid} fill={o.fill} />{o.fill === 'glass-net' && <Paint id={`${uid}net`} fill="net" />}</defs>
+        <defs><Paint id={uid} fill={o.fill} />{grain && <Paint id={`${uid}grain`} fill="acp-film" />}{o.fill === 'glass-net' && <Paint id={`${uid}net`} fill="net" />}</defs>
         {/* Extension lines from the corners, and the dimension lines on them. */}
         <g className="opext">
           <line x1={X} y1={Y - 2} x2={X} y2={Y - DIM + 6} />
@@ -223,8 +328,19 @@ export function Opening({ o, n, longest }) {
         <Dim x1={X - DIM + 10} y1={Y} x2={X - DIM + 10} y2={Y + height} text={fmtDim(o.h)} vertical />
 
         {/* The frame: its outer and inner edge. A wall panel is one flat sheet in its own texture. */}
-        <rect x={X} y={Y} width={width} height={height} className="opframe" />
-        {draw !== 'panel' && <rect x={ix} y={iy} width={iw} height={ih} className="opinner" />}
+        {/* A door's chaukhat is two heights and a top, no bar on the floor (Tony, 22 Nov 2026). */}
+        {/* A door sent without its chaukhat has none drawn; the door is then the whole size (Tony, 22 Nov 2026). */}
+        {draw === 'door' || draw === 'flush' ? ((draw === 'door' ? o.chaukhat === false : !o.wpc) ? null : (
+          <>
+            <path d={`M${X} ${Y + height}V${Y}H${X + width}V${Y + height}`} className="opframe" />
+            <path d={`M${ix} ${Y + height}V${iy}H${ix + iw}V${Y + height}`} className="opinner" />
+          </>
+        )) : (
+          <>
+            <rect x={X} y={Y} width={width} height={height} className="opframe" />
+            {draw !== 'panel' && <rect x={ix} y={iy} width={iw} height={ih} className="opinner" />}
+          </>
+        )}
 
         {draw === 'openable' && leaves >= 2 && (
           <>
@@ -236,7 +352,7 @@ export function Opening({ o, n, longest }) {
         )}
         {draw === 'openable' && leaves < 2 && (
           <>
-            <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" paint={paint} glass={glass} />
+            <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge={o.hinge === 'right' ? 'right' : 'left'} paint={paint} glass={glass} />
             <FillLabel cx={ix + iw / 2} cy={iy + ih / 2} text={words} room={iw - 14} />
           </>
         )}
@@ -245,8 +361,16 @@ export function Opening({ o, n, longest }) {
         )}
         {draw === 'door' && (
           <>
-            <Leaf x={ix + 2} y={iy + 2} w={iw - 4} h={ih - 4} hinge="left" paint={paint} glass={glass} />
-            <FillLabel cx={ix + iw / 2} cy={iy + ih / 2} text={words} room={iw - 14} />
+            {/* Drawn as the shop draws it on the pad (Tony, 22 Nov 2026): lines only. */}
+            <DoorLines {...(o.chaukhat === false ? { x: X, y: Y, w: width, h: height - 0.6 } : { x: ix + 1.6, y: iy + 1.6, w: iw - 3.2, h: Y + height - iy - 2.2 })} hinge={o.hinge === 'right' ? 'right' : 'left'} fittings={o.fitting !== false} grain={grain} />
+            <Floor x0={X - 3} x1={X + width + 3} y={Y + height} />
+          </>
+        )}
+        {draw === 'flush' && (
+          <>
+            {/* A flush door, as the door drawing is (Tony, 22 Nov 2026): a plain leaf, or panelled. */}
+            <FlushDoor {...(!o.wpc ? { x: X, y: Y, w: width, h: height - 0.6 } : { x: ix + 1.6, y: iy + 1.6, w: iw - 3.2, h: Y + height - iy - 2.2 })} hinge={o.hinge === 'right' ? 'right' : 'left'} paneling={!!o.paneling} fitted={o.fitting !== false} grain={grain} />
+            <Floor x0={X - 3} x1={X + width + 3} y={Y + height} />
           </>
         )}
         {draw === 'plain' && (
@@ -265,10 +389,18 @@ export function Opening({ o, n, longest }) {
       </svg>
       {/* Two short lines, no wider than the drawing needs: what it is, then what goes in it and how many. */}
       <figcaption className="opcap" style={{ marginLeft: DIM }}>
-        {n != null && <b className="opn">{n}</b>}
+        {/* The piece's number in a small round circle, drawn, so it stays round with the number in its middle (Tony, 22 Nov 2026). */}
+        {n != null && (
+          <svg className="opdot" viewBox="0 0 20 20" aria-label={`Piece ${n}`}>
+            <circle cx="10" cy="10" r="8.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <text x="10" y="10.6" textAnchor="middle" dominantBaseline="middle" fontSize={String(n).length > 1 ? 10 : 12} fontWeight="800" fill="currentColor">{n}</text>
+          </svg>
+        )}
         <span>
           <i>{form?.label}</i>
-          <small>{[words, `${Math.round((Number(o.qty) || 0) * 100) / 100} Pc`].filter(Boolean).join(' · ')}</small>
+          <small>{[o.brand, words, `${Math.round((Number(o.qty) || 0) * 100) / 100} Pc`].filter(Boolean).join(' · ')}</small>
+          {/* What the pad bills it at, written under it as by hand: its area, its chaukhat's running feet. */}
+          {(o.sqft > 0 || o.rft > 0) && <small className="opfeet">{[o.sqft > 0 && `${Number(o.sqft).toFixed(2)}'`, o.rft > 0 && `Chaukhat ${Number(o.rft).toFixed(2)}'`].filter(Boolean).join(' · ')}</small>}
         </span>
       </figcaption>
     </figure>

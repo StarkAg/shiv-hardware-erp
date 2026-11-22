@@ -15,7 +15,7 @@ import { CustomerPicker, customerArgs } from './NewOrder.jsx'
 import Camera from './Camera.jsx'
 import Viewer, { SheetViewer } from './Viewer.jsx'
 import MakeOrder, { whoOf } from './MakeOrder.jsx'
-import { PadSheet, copyOf, padPictures } from './pad/PadSheet.jsx'
+import { PadSheet, copyOf, padCopyPictures, padPictures } from './pad/PadSheet.jsx'
 import { SlipSheet, qtyOf } from './pad/VisitSlip.jsx'
 import { sheetBlob } from './sendOut.jsx'
 import { inr, totalOf } from './pad/forms.js'
@@ -418,7 +418,7 @@ export default function JobPage({ job, onBack }) {
                           </li>
                         ))}
                       </ol>
-                      <p className="adv">Total <b>{inr(totalOf(m.pad))}</b>{m.pad.advance > 0 && <> · Advance <b>{inr(m.pad.advance)}</b></>}</p>
+                      <p className="adv">Total <b>{inr(totalOf(m.pad))}</b>{m.pad.advance > 0 && <> · Advance <b>− {inr(m.pad.advance)}</b></>}</p>
                     </div>
                   </div>
                 </>
@@ -557,7 +557,7 @@ export default function JobPage({ job, onBack }) {
             ? sheetBlob(<SlipSheet number={job.number} who={whoOf(job)} slip={padOpen.slip} fixedZoom={1} />, '.slip')
             : SIDE === 'shop'
               ? padPictures(job.number, whoOf(job), padOpen)
-              : sheetBlob(<PadSheet copy={copyOf('workshop')} number={job.number} who={whoOf(job)} pad={padOpen} fixedZoom={1} banded />, '.pad'))}
+              : padCopyPictures(job.number, whoOf(job), padOpen, 'workshop'))}
           mode={padOpen.slip ? 'bw' : 'color'}
           start={0}
         />

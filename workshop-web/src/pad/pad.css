@@ -213,7 +213,7 @@
 .pad:not(.worksheet) .pi, .pad:not(.worksheet) .pb i { font-style: normal; font-weight: 600; color: #2b2b2b; }
 .pad:not(.worksheet) .pshop { font-style: normal; letter-spacing: .45mm; }
 .pad:not(.worksheet) .ink { color: #111; font-weight: 700; }
-.pad:not(.worksheet) .padl.dbl { border-color: #111; }
+.pad:not(.worksheet) .padl.dbl { border-color: #111; background: none; }
 .pad:not(.worksheet) .padsketch .opswing { stroke: #666; }
 .pad:not(.worksheet) .padsketch .ophandle { fill: #111; }
 .pad:not(.worksheet) .padsketch .opcap small { color: #333; opacity: 1; }
@@ -233,3 +233,34 @@
 .pad.banded.copy-customer { --band: #f39ac8; }
 .pad.banded.copy-shop { --band: #c9c9c9; }
 .pad.banded.copy-workshop { --band: #f2e64a; }
+
+
+/* The caption under each drawing, smaller (Tony, 22 Nov 2026): the number, what it is, what goes in it. */
+.opcap { font-size: 6.5px; gap: 3px; margin-top: 3px; }
+.opcap .opdot { flex: none; display: block; width: 8px; height: 8px; margin-top: 1px; font-family: "Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Arial, sans-serif; }
+.opcap small { font-size: 6px; }
+
+/* A door's aldrop and knob handle (sketch.jsx DoorFittings): plates white, outlined; bars and knobs solid. */
+.opfit rect:not(.oplabelbg), .opfit circle, .opfit line { fill: none; stroke: #111; stroke-width: .75; stroke-linecap: round; }
+.opfit .opfitbar { stroke-width: 1.5; }
+.pad .padsketch .opfit rect, .pad .padsketch .opfit circle, .pad .padsketch .opfit line { stroke: var(--pen); }
+.oprail { fill: #fff; stroke: #111; stroke-width: .7; }
+.pad .padsketch .oprail { stroke: var(--pen); }
+/* The door in lines (sketch.jsx DoorLines). */
+.opdoor line, .opdoor .opleaf { fill: #fff; stroke: #111; stroke-width: .9; stroke-linecap: round; }
+.opdoor .ophingemark { fill: #111; stroke: none; }
+.opdoor .opaldrop line { stroke-width: 1.3; }
+.pad .padsketch .opdoor line, .pad .padsketch .opdoor .opleaf { stroke: var(--pen); }
+.pad .padsketch .opdoor .ophingemark { fill: var(--pen); }
+.opcap .opfeet { font-variant-numeric: tabular-nums; }
+/* The floor under a door (sketch.jsx Floor). */
+.opfloor line { stroke: #111; stroke-width: 1; stroke-linecap: round; }
+.opfloor .ophatch { stroke-width: .5; }
+.pad .padsketch .opfloor line { stroke: var(--pen); }
+.opdoor .oppanel { fill: none; stroke: #111; stroke-width: .7; }
+.opdoor .opswing { stroke: #111; stroke-width: .6; stroke-dasharray: 2.4 1.8; opacity: .45; fill: none; }
+.pad .padsketch .opdoor .oppanel { stroke: var(--pen); }
+/* A flush door (sketch.jsx FlushDoor): panel mouldings, the handle's rose. */
+.opdoor .oppanel.thin { stroke-width: .45; }
+.opdoor .opknob { fill: #fff; stroke: #111; stroke-width: .9; }
+.pad .padsketch .opdoor .opknob { stroke: var(--pen); }

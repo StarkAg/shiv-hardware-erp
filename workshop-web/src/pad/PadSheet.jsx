@@ -10,7 +10,7 @@
 // all three, one A4 each, with no colour of their own: the paper is loaded
 // pink, white, yellow, in that order.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { SketchGrid } from './sketch.jsx'
 import { totalOf } from './forms.js'
@@ -69,7 +69,52 @@ const rupees = (n) => `${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
 /** Amounts as the old pad wrote them: whole rupees, no sign, no commas. */
 const plain = (n) => String(Math.round(Number(n) || 0))
 /** Pieces as the pad writes them: 3 Pc, 12.5 ft. */
-const qtyOf = (l) => `${Math.round((Number(l.qty) || 0) * 100) / 100} ${l.unit && l.unit !== 'pc' ? l.unit : 'Pc'}`
+// A piece priced by the square foot carries its area after the count: "1 Pc 11.38'".
+/**
+ * A door's parts each on a line of their own (Tony, 22 Nov 2026): the door
+ * line carries the door's own amount, then the chaukhat, the accessories and
+ * any film under it. Their sum is the line's amount, the first taking any
+ * rupee left over.
+ */
+function partsOf(l) {
+  if (!l.parts?.length) return null
+  const q = Number(l.qty) || 0
+  const amts = l.parts.map((p) => Math.round(p.amount * q))
+  amts[0] = (Number(l.amount) || 0) - amts.slice(1).reduce((t, a) => t + a, 0)
+  return l.parts.map((p, i) => ({ ...p, amount: amts[i], text: p.key === 'door' ? null : p.text }))
+}
+// A part's count is the door's, its feet after it: "1 Pc 14.50'" (Tony, 22 Nov 2026).
+const partQty = (l, p) => `${Math.round((Number(l.qty) || 0) * 100) / 100} ${p.unit || 'Pc'}${p.feet > 0 ? ` ${Number(p.feet).toFixed(2)}'` : ''}`
+const partName = (p) => p.name || p.text
+/**
+ * The film and the fitting items of every door, each gathered into one line at
+ * the foot of the items (Tony, 22 Nov 2026): "× Décor Film  2 Pc  25.50'  765",
+ * "× Fitting Items  2 Set  320". A door's chaukhat stays under it.
+ */
+const GATHER = ['film', 'accessories']
+function gatheredOf(pad) {
+  return GATHER.map((key) => {
+    let qty = 0
+    let feet = 0
+    let amount = 0
+    let p0 = null
+    for (const l of pad.lines) {
+      const p = partsOf(l)?.find((x) => x.key === key)
+      if (!p) continue
+      const q = Number(l.qty) || 0
+      qty += q * (p.per || 1)
+      feet += (Number(p.feet) || 0) * q
+      amount += p.amount
+      p0 = p0 || p
+    }
+    return qty > 0 ? { key, qty: Math.round(qty * 100) / 100, feet: Math.round(feet * 100) / 100, amount, unit: p0.unit, name: partName(p0) } : null
+  }).filter(Boolean)
+}
+// The Qty in two: the count ("1 Pc", "1 Set", "10 ft") and the feet ("11.38'"), so each lines up down the pad.
+const countOf = (q, unit) => `${Math.round((Number(q) || 0) * 100) / 100} ${unit && unit !== 'pc' ? unit : 'Pc'}`
+const feetOf = (n) => (n > 0 ? `${Number(n).toFixed(2)}'` : '')
+
+const qtyOf = (l) => `${Math.round((Number(l.qty) || 0) * 100) / 100} ${l.unit && l.unit !== 'pc' ? l.unit : 'Pc'}${l.sqft > 0 ? ` ${Number(l.sqft).toFixed(2)}'` : ''}`
 
 /** dd/mm/yy, as the pad is dated. */
 function padDate(key) {
@@ -120,8 +165,36 @@ function At({ x, base, size, right, centre, fit, weight = 600, className = '', c
   )
 }
 
-function HLine({ y, x0, x1, w = 0.3, double, pen }) {
-  return <div className={`padl${double ? ' dbl' : ''}${pen ? ' pen' : ''}`} style={{ top: mm(y - w / 2), left: mm(x0), width: mm(x1 - x0), height: mm(double ? w * 3 : w) }} />
+/**
+ * A ruled line. Lines are snapped to whole screen pixels at the pad's scale
+ * (Tony, 22 Nov 2026): a line 0.3mm thick on a pad shown small came out 0 or 1
+ * pixel, a heavier one 1 or 2, so they stepped and swapped weights. Each line is
+ * centred on its rule's pixel row; a heavy line is at least a pixel thicker than
+ * a rule; a double is two heavy lines, one either side of the rule, the rule
+ * between them covered in the paper's colour.
+ */
+const PadScale = createContext({ zoom: 1, frac: 0 })
+const MM_PX = 96 / 25.4
+function HLine({ y, x0, x1, w = 0.3, double, gap = 0.6, pen, heavy }) {
+  // `frac`: how far into a screen pixel the pad's top edge falls; lines are snapped from the screen's own pixel rows.
+  const { zoom: z = 1, frac = 0 } = useContext(PadScale) || {}
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+  const unit = 1 / (MM_PX * z * dpr) // mm in one screen pixel
+  const px = (v) => Math.round(v / unit)
+  const row = (v) => Math.round(v / unit + frac) - frac // a screen pixel row, counted from the pad's top
+  const ruleN = Math.max(1, px(0.3))
+  const n = Math.max(1, px(w), heavy ? ruleN + 1 : 0)
+  const cy = row(y)
+  const base = { left: mm(x0), width: mm(x1 - x0) }
+  if (!double) return <div className={`padl${pen ? ' pen' : ''}`} style={{ ...base, top: mm((cy - Math.floor(n / 2)) * unit), height: mm(n * unit) }} />
+  const g = Math.max(ruleN + 2, px(gap))
+  const total = 2 * n + g
+  return (
+    <div className="padl" style={{ ...base, top: mm((cy - Math.floor(total / 2)) * unit), height: mm(total * unit), background: 'var(--pad)' }}>
+      <div className="padl pen" style={{ left: 0, right: 0, top: 0, height: mm(n * unit) }} />
+      <div className="padl pen" style={{ left: 0, right: 0, bottom: 0, height: mm(n * unit) }} />
+    </div>
+  )
 }
 
 const SKETCH_ZOOM_MAX = 3.2
@@ -227,7 +300,9 @@ export const openingsOf = (pad) => pad.lines
   // Each drawing keeps its line's number in the table above it.
   .map((l, i) => ({ ...l, n: i + 1 }))
   .filter((l) => !l.extra && l.w && l.h && (l.w.inches || l.w.soot) && (l.h.inches || l.h.soot))
-  .map((l) => ({ id: l.id, n: l.n, form: l.form, fill: l.fill, w: l.w, h: l.h, qty: l.qty }))
+  .map((l) => ({ id: l.id, n: l.n, form: l.form, fill: l.fill, w: l.w, h: l.h, qty: l.qty, ...(l.fitting === false ? { fitting: false } : {}), ...(l.hinge === 'right' ? { hinge: 'right' } : {}), ...(l.chaukhat === false ? { chaukhat: false } : {}),
+    ...(l.form === 'flush-door' ? { paneling: !!l.paneling, brand: l.brand, ...(l.wpc ? { wpc: l.wpc } : {}) } : {}),
+    ...(l.sqft > 0 ? { sqft: l.sqft } : {}), ...(l.parts?.find((x) => x.key === 'chaukhat')?.feet > 0 ? { rft: l.parts.find((x) => x.key === 'chaukhat').feet } : {}) }))
 
 /**
  * The two looks a work order is printed in (Tony, 21 Nov 2026):
@@ -255,11 +330,22 @@ const sizeOf = (format) => (format === 'format1' ? { w: SHEET_W, h: SHEET_H, pri
  * One copy of the work order. `who` is the customer: name, address, mobile;
  * `number` the work order's; `format` the look, else this counter's.
  */
-export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fitHeight = false, format, below = null, banded = false }) {
+export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fitHeight = false, format, below = null, banded = false, page = 0 }) {
   const fmt = format ?? padFormat()
   const size = sizeOf(fmt)
   const box = useRef(null)
   const under = useRef(null)
+  const sheet = useRef(null)
+  // Where the pad's inside top edge (inside its border, where its lines are measured
+  // from) falls inside a screen pixel, for the ruled lines (HLine).
+  const [frac, setFrac] = useState(0)
+  useLayoutEffect(() => {
+    const el = sheet.current?.querySelector(':scope > .padorigin')
+    if (!el) return
+    const d = window.devicePixelRatio || 1
+    const f = (((el.getBoundingClientRect().top * d) % 1) + 1) % 1
+    if (Math.abs(f - frac) > 0.02) setFrac(f)
+  })
   const [zoom, setZoom] = useState(fixedZoom ?? 1)
   useLayoutEffect(() => {
     if (fixedZoom) return undefined
@@ -283,15 +369,20 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fit
     <div ref={box} className={`padfit${fitHeight ? ' tall' : ''}${below ? ' withbelow' : ''}`} style={thumb ? { height: mm(size.h * zoom) } : undefined}>
       {/* A thumbnail is shrunk as one picture: a phone will not draw letters that small. */}
       <div
+        ref={sheet}
         className={`pad ${fmt === 'format1' ? 'worksheet ' : ''}copy-${copy.key}${banded ? ' banded' : ''}`}
         style={{
           width: mm(size.w), height: mm(size.h), '--print-zoom': size.print,
           ...(thumb ? { '--zoom': 1, transform: `scale(${zoom})`, transformOrigin: 'top left' } : { '--zoom': zoom }),
         }}
       >
-        {fmt === 'format1'
-          ? <Format1 copy={copy} number={number} who={who} pad={pad} />
-          : <PinkPad copy={copy} number={number} who={who} pad={pad} />}
+        <div className="padorigin" style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0 }} />
+        {/* The scale it is shown at, so its ruled lines land on whole screen pixels. */}
+        <PadScale.Provider value={{ zoom, frac }}>
+          {fmt === 'format1'
+            ? <Format1 copy={copy} number={number} who={who} pad={pad} />
+            : <PinkPad copy={copy} number={number} who={who} pad={pad} page={page} />}
+        </PadScale.Provider>
       </div>
       {/* What goes under the sheet (Print), exactly as wide as the sheet, its edges in line. */}
       {below && <div ref={under} className="padbelow" style={{ width: `calc(${mm(size.w)} * ${zoom})` }}>{below}</div>}
@@ -300,27 +391,134 @@ export function PadSheet({ copy, number, who, pad, fixedZoom, thumb = false, fit
 }
 
 /** The shop's pink carbon pad, drawn where its printed parts are. */
-function PinkPad({ copy, number, who, pad }) {
+/**
+ * The pad over as many pages as it needs (Tony, 22 Nov 2026). A page holds
+ * PAGE_ROWS lines of the estimate and PAGE_DRAWINGS drawings. An estimate too
+ * long for one page is cut as accounts are: the page's foot carries its sum
+ * forward ("Carried forward"), the next page's head brings it ("Brought
+ * forward"), and the totals close the last. Drawings run on in their order.
+ * Every page but the last says P.T.O. at its foot.
+ */
+const PAGE_ROWS = 13
+const PAGE_DRAWINGS = 6
+export function padPages(pad) {
   const total = totalOf(pad)
   const adv = Math.round(Number(pad.advance) || 0)
-  const rows = [
-    ...pad.lines.map((l) => ({ key: l.id, label: `× ${l.label}`, qty: qtyOf(l), amt: l.amount ? plain(l.amount) : '' })),
-    ...(pad.fare ? [{ key: 'fare', word: 'Fare', amt: plain(pad.fare), under: 'single' }] : []),
-    { key: 'total', word: 'Total', amt: plain(total), strong: true },
+  const gathered = gatheredOf(pad)
+  // Every line and every door's own parts, then like with like made one row
+  // (Tony, 22 Nov 2026): all the Aluminium Door 1.2mm/ACP together, all the
+  // Aluminium Chaukhat 1.2mm together, their pieces, feet and money added up, in
+  // the order each first comes. The Ft column is the row's whole area or length.
+  // Each piece keeps its own drawing below.
+  const each = pad.lines.flatMap((l) => {
+    const q = Number(l.qty) || 0
+    const parts = partsOf(l)
+    if (!parts) return [{ key: l.id, label: l.label, q, unit: l.unit, ft: (Number(l.sqft) || 0) * q, val: Number(l.amount) || 0, loose: !!l.extra }]
+    return [
+      { key: l.id, label: l.label, q, unit: l.unit, ft: (Number(l.sqft) || 0) * q, val: parts[0].amount },
+      ...parts.slice(1).filter((p) => !GATHER.includes(p.key)).map((p) => ({ key: `${l.id}-${p.key}`, label: partName(p), q: q * (p.per || 1), unit: p.unit, ft: (Number(p.feet) || 0) * q, val: p.amount, part: true })),
+    ]
+  })
+  const alike = new Map()
+  for (const r of each) {
+    const id = `${r.label}|${r.unit || ''}`
+    const had = alike.get(id)
+    if (had) { had.q += r.q; had.ft += r.ft; had.val += r.val } else alike.set(id, { ...r })
+  }
+  const row = (r) => ({ key: r.key, label: `× ${r.label}`, qn: countOf(Math.round(r.q * 100) / 100, r.unit), qf: feetOf(Math.round(r.ft * 100) / 100), amt: r.val ? plain(r.val) : '', val: r.val })
+  const items = [
+    // The pieces first, then their parts (the chaukhats together), then loose items and door
+    // fittings, then the film and fitting items gathered.
+    ...[...alike.values()].filter((r) => !r.part && !r.loose).map(row),
+    ...[...alike.values()].filter((r) => r.part).map(row),
+    ...[...alike.values()].filter((r) => r.loose).map(row),
+    ...gathered.map((g) => ({ key: `all-${g.key}`, label: `× ${g.name}`, qn: countOf(g.qty, g.unit), qf: feetOf(g.feet), amt: plain(g.amount), val: g.amount })),
+  ]
+  const totals = [
+    ...(pad.fare ? [{ key: 'fare', word: 'Fare', amt: plain(pad.fare) }] : []),
+    // As accounts are ruled (Tony, 22 Nov 2026): a single line over a sum, a double
+    // line under the last figure, the one to be paid: the Total when no advance was taken.
+    { key: 'total', word: 'Total', amt: plain(total), strong: true, over: 'single', ...(adv > 0 ? {} : { under: 'double' }) },
     ...(adv > 0
       ? [
-          { key: 'adv', word: 'Advance', amt: plain(adv), under: 'single' },
-          { key: 'bal', word: 'Balance', amt: plain(total - adv), strong: true, under: 'double' },
+          { key: 'adv', word: 'Advance', amt: `− ${plain(adv)}` },
+          { key: 'bal', word: 'Balance', amt: plain(total - adv), strong: true, over: 'single', under: 'double' },
         ]
       : []),
   ]
-  // The pad has ten ruled lines; a longer order closes them up to fit.
+  const est = []
+  let left = items
+  let carried = 0
+  for (;;) {
+    const top = est.length ? [{ key: `bf-${est.length}`, word: 'Brought forward', amt: plain(carried) }] : []
+    const room = PAGE_ROWS - top.length
+    if (left.length + totals.length <= room) { est.push([...top, ...left, ...totals]); break }
+    const take = Math.max(1, Math.min(left.length, room - 1))
+    const chunk = left.slice(0, take)
+    left = left.slice(take)
+    carried += chunk.reduce((t, r) => t + (r.val || 0), 0)
+    est.push([...top, ...chunk, { key: `cf-${est.length}`, word: 'Carried forward', amt: plain(carried), over: 'single' }])
+  }
+  const drawings = openingsOf(pad)
+  const drawPages = Math.max(1, Math.ceil(drawings.length / PAGE_DRAWINGS))
+  const count = Math.max(est.length, drawPages)
+  return Array.from({ length: count }, (_, i) => ({
+    index: i,
+    count,
+    rows: est[i] ?? [],
+    openings: drawings.slice(i * PAGE_DRAWINGS, (i + 1) * PAGE_DRAWINGS),
+  }))
+}
+/** How many pages the pad runs to in this look (Format 1 is always one). */
+export const padPageCount = (pad, format = padFormat()) => (format === 'format1' ? 1 : padPages(pad).length)
+
+function PinkPad({ copy, number, who, pad, page = 0 }) {
+  // Measured again once the lettering has loaded, or the columns are spaced by a stand-in font.
+  const [, setFontsIn] = useState(false)
+  useEffect(() => { let on = true; document.fonts?.ready.then(() => { if (on) setFontsIn(true) }); return () => { on = false } }, [])
+  const pages = padPages(pad)
+  const sheet = pages[Math.min(page, pages.length - 1)]
+  const rows = sheet.rows
+  const last = sheet.index === sheet.count - 1
+  // Up to the pad's own ten lines they keep its spacing; a fuller page closes them up.
   const step = rows.length > RULES ? (RULE_STEP * RULES) / rows.length : RULE_STEP
   const ruleCount = Math.max(RULES, rows.length)
-  const size = Math.min(4.6, step * 0.5)
-  // Every item line at one size, the longest's fitting before the Qty column, so they all match.
-  const labelRoom = EST_X1 - 21.5 - 117.4 - 12
-  const labelSize = Math.max(2.4, Math.min(size, ...rows.filter((r) => r.label).map((r) => (size * labelRoom) / textMm(r.label, size, 700))))
+  // Bigger writing, set in the middle between two rules (Tony, 22 Nov 2026).
+  const size = Math.min(5.6, step * 0.62)
+  // The three columns share the line's width evenly (Tony, 22 Nov 2026): the
+  // gap from the longest name to the Qty is the gap from the Qty to the Amount.
+  // The Qty is two columns of its own, the count lined up on the left and the
+  // feet on the right. Every item line at one size, the longest name fitting
+  // with a gap of 3mm at least, so they all match.
+  const LEFT = 117.4
+  const RIGHT = EST_X1 - 1
+  const wide = (list) => Math.max(0, ...list)
+  // As the ink is written: its lettering, plus the .1mm the pad puts between letters (pad.css).
+  const inkMm = (text, sz, weight) => textMm(text, sz, weight) + 0.1 * String(text ?? '').length
+  // One size for every word and figure in the estimate (Tony, 22 Nov 2026): the
+  // largest at which the longest name, the Qty and the Amount fit with their gaps.
+  const full = {
+    count: wide(rows.map((r) => (r.qn ? inkMm(r.qn, size, 700) : 0))),
+    feet: wide(rows.map((r) => (r.qf ? inkMm(r.qf, size, 700) : 0))),
+    amt: wide(rows.map((r) => inkMm(r.amt || '', size, r.strong ? 800 : 700))),
+    name: wide(rows.filter((r) => r.label).map((r) => inkMm(r.label, size, 700))),
+  }
+  // At least 5mm between the columns, so the name never runs into the Qty.
+  const fits = (RIGHT - LEFT - 10 - (full.feet ? 3 : 0)) / (full.count + full.feet + full.amt + full.name)
+  const fsz = Math.max(2.4, size * Math.min(1, fits))
+  const k = fsz / size
+  const countW = full.count * k
+  const feetW = full.feet * k
+  const qtyW = countW + (feetW ? 3 + feetW : 0)
+  // The amounts as wide as they are written, so the gaps look equal on the paper.
+  const amtW = full.amt * k
+  const nameW = full.name * k
+  const gap = Math.max(5, (RIGHT - LEFT - nameW - qtyW - amtW) / 2)
+  const QTY_R = RIGHT - amtW - gap
+  const QTY_L = QTY_R - qtyW
+  // The amounts' own width, a hair either side: where the sum lines run.
+  const SUM_X0 = RIGHT - amtW - 1
+  const SUM_X1 = RIGHT + 0.5
   const values = {
     name: who.name || '',
     address: who.address || '',
@@ -355,7 +553,9 @@ function PinkPad({ copy, number, who, pad }) {
       <At centre={170} base={7.4} size={4.2} className="pi">Estimate</At>
       {/* What each column is, small, on the double line. */}
       <At x={117.4} base={15.2} size={2.8} className="phead">Particulars</At>
-      <At right={EST_X1 - 21.5} base={15.2} size={2.8} className="phead">Qty</At>
+      {/* The count and the feet each a column with its own head (Tony, 22 Nov 2026). */}
+      <At centre={QTY_L + countW / 2} base={15.2} size={2.8} className="phead">Qty</At>
+      {feetW > 0 && <At right={QTY_R} base={15.2} size={2.8} className="phead">Ft</At>}
       <At right={EST_X1 - 1} base={15.2} size={2.8} className="phead">Amount</At>
       <HLine y={16.4} x0={EST_X0} x1={EST_X1} />
       <HLine y={18.6} x0={EST_X0} x1={EST_X1} />
@@ -363,19 +563,28 @@ function PinkPad({ copy, number, who, pad }) {
         <HLine key={i} y={RULE_FIRST + i * step} x0={EST_X0} x1={EST_X1} />
       ))}
       {rows.map((r, i) => {
-        const base = RULE_FIRST + i * step - 1.3
+        // The rule under this line, and the baseline that puts the figures' middle halfway up to the rule above.
+        const rule = RULE_FIRST + i * step
+        const base = rule - step / 2 + fsz * 0.36
         return (
           <div key={r.key}>
-            {r.label && <At x={117.4} base={base} size={labelSize} className="ink">{r.label}</At>}
-            {r.qty && <At right={EST_X1 - 21.5} base={base} size={size} className="ink">{r.qty}</At>}
-            {r.word && <At right={EST_X1 - 22.5} base={base} size={size} className="ink">{r.word}</At>}
-            <At right={EST_X1 - 1} base={base} size={r.strong ? size * 1.1 : size} className={`ink${r.strong ? ' pstrong' : ''}`}>{r.amt}</At>
-            {r.under && <HLine y={base + 1.1} x0={EST_X1 - 19.5} x1={EST_X1 - 0.7} w={0.35} pen double={r.under === 'double'} />}
+            {r.label && <At x={LEFT} base={base} size={fsz} className="ink">{r.label}</At>}
+            {r.qn && <At x={QTY_L} base={base} size={fsz} className="ink">{r.qn}</At>}
+            {r.qf && <At right={QTY_R} base={base} size={fsz} className="ink">{r.qf}</At>}
+            {r.word && <At right={QTY_R} base={base} size={fsz} className="ink">{r.word}</At>}
+            <At right={EST_X1 - 1} base={base} size={fsz} className={`ink${r.strong ? ' pstrong' : ''}`}>{r.amt}</At>
+            {/* The sum lines exactly on the pad's own rules, thicker, only as wide as the amounts (Tony, 22 Nov 2026).
+                A double line is that, and a thinner one just under it. */}
+            {r.over && <HLine y={rule - step} x0={SUM_X0} x1={SUM_X1} w={0.7} pen heavy />}
+            {r.under && <HLine y={rule} x0={SUM_X0} x1={SUM_X1} w={0.6} pen heavy double={r.under === 'double'} gap={0.8} />}
           </div>
         )
       })}
 
-      <PadSketch openings={openingsOf(pad)} style={{ left: mm(MARGIN), top: mm(SPLIT_Y + 6), width: mm(PAD_W - MARGIN * 2), height: mm(PAD_H - SPLIT_Y - 18) }} />
+      <PadSketch openings={sheet.openings} style={{ left: mm(MARGIN), top: mm(SPLIT_Y + 6), width: mm(PAD_W - MARGIN * 2), height: mm(PAD_H - SPLIT_Y - (last ? 18 : 26)) }} />
+      {/* More to come: P.T.O. at the foot of every page but the last, and each page numbered. */}
+      {!last && <At right={EST_X1} base={PAD_H - 13} size={6.4} className="ink pstrong pto">P.T.O.</At>}
+      {sheet.count > 1 && <At x={MARGIN + 1} base={PAD_H - 7} size={3.4} className="pcopy">Page {sheet.index + 1} of {sheet.count}</At>}
       <At right={EST_X1} base={PAD_H - 7} size={3.4} className="pcopy">{copy.label}</At>
     </>
   )
@@ -386,6 +595,7 @@ function Format1({ copy, number, who, pad }) {
   const total = totalOf(pad)
   const adv = Math.round(Number(pad.advance) || 0)
   const openings = openingsOf(pad)
+  const gathered = gatheredOf(pad)
   return (
     <div className="slip" style={{ '--zoom': 1 }}>
       <Letterhead />
@@ -408,14 +618,37 @@ function Format1({ copy, number, who, pad }) {
       <table className="sliptable worktable">
         <thead><tr><th className="n">No.</th><th>Item</th><th className="s">Size</th><th className="q">Qty</th><th className="r">Rate</th><th className="r">Amount</th></tr></thead>
         <tbody>
-          {pad.lines.map((l, i) => (
-            <tr key={l.id}>
-              <td className="n">{i + 1}</td>
-              <td>{l.label}</td>
-              <td className="s">{l.w && l.h && (l.w.inches || l.w.soot) ? `${fmtDim(l.w)}″ × ${fmtDim(l.h)}″` : ''}</td>
-              <td className="q">{qtyOf(l)}</td>
-              <td className="r">{l.rate ? rateOf(l.rate) : ''}</td>
-              <td className="r">{l.amount ? rupees(l.amount) : ''}</td>
+          {pad.lines.map((l, i) => {
+            const parts = partsOf(l)
+            return [
+              <tr key={l.id}>
+                <td className="n">{i + 1}</td>
+                <td>{l.label}</td>
+                <td className="s">{l.w && l.h && (l.w.inches || l.w.soot) ? `${fmtDim(l.w)}″ × ${fmtDim(l.h)}″` : ''}</td>
+                <td className="q">{qtyOf(l)}</td>
+                <td className="r">{parts ? '' : l.rate ? rateOf(l.rate) : ''}</td>
+                <td className="r">{parts ? rupees(parts[0].amount) : l.amount ? rupees(l.amount) : ''}</td>
+              </tr>,
+              ...(parts || []).slice(1).filter((p) => !GATHER.includes(p.key)).map((p) => (
+                <tr key={`${l.id}-${p.key}`} className="partrow">
+                  <td className="n" />
+                  <td>{partName(p)}</td>
+                  <td className="s" />
+                  <td className="q">{partQty(l, p)}</td>
+                  <td className="r" />
+                  <td className="r">{rupees(p.amount)}</td>
+                </tr>
+              )),
+            ]
+          })}
+          {gathered.map((g) => (
+            <tr key={g.key} className="partrow">
+              <td className="n" />
+              <td>{g.name}</td>
+              <td className="s" />
+              <td className="q">{countOf(g.qty, g.unit)}{g.feet > 0 ? ` ${feetOf(g.feet)}` : ''}</td>
+              <td className="r" />
+              <td className="r">{rupees(g.amount)}</td>
             </tr>
           ))}
         </tbody>
@@ -423,7 +656,7 @@ function Format1({ copy, number, who, pad }) {
       <dl className="worksums">
         {pad.fare > 0 && <div><dt>Fare</dt><dd>{rupees(pad.fare)}</dd></div>}
         <div className="strong"><dt>Total</dt><dd>{rupees(total)}</dd></div>
-        {adv > 0 && <div><dt>Advance</dt><dd>{rupees(adv)}</dd></div>}
+        {adv > 0 && <div><dt>Advance</dt><dd>− {rupees(adv)}</dd></div>}
         {adv > 0 && <div className="strong"><dt>Balance</dt><dd>{rupees(total - adv)}</dd></div>}
       </dl>
 
@@ -490,8 +723,16 @@ export function Printing({ margin = 3, onDone, children }) {
  */
 export async function padPictures(number, who, pad) {
   const blobs = []
-  for (const copy of COPIES) {
-    blobs.push(await sheetBlob(<PadSheet copy={copy} number={number} who={who} pad={pad} fixedZoom={1} banded />, '.pad'))
+  for (const copy of COPIES) blobs.push(...await padCopyPictures(number, who, pad, copy.key))
+  return blobs
+}
+
+/** One copy of the pad, every page of it, as pictures. */
+export async function padCopyPictures(number, who, pad, copyKey) {
+  const blobs = []
+  const pages = padPageCount(pad)
+  for (let page = 0; page < pages; page += 1) {
+    blobs.push(await sheetBlob(<PadSheet copy={copyOf(copyKey)} number={number} who={who} pad={pad} fixedZoom={1} banded page={page} />, '.pad'))
   }
   return blobs
 }
@@ -501,7 +742,9 @@ export function PrintPads({ number, who, pad, onDone }) {
   // The pad prints with a small edge; Format 1 fills the page.
   return (
     <Printing margin={sizeOf(padFormat()).margin} onDone={onDone}>
-      {COPIES.map((copy) => <PadSheet key={copy.key} copy={copy} number={number} who={who} pad={pad} fixedZoom={1} />)}
+      {COPIES.flatMap((copy) => Array.from({ length: padPageCount(pad) }, (_, page) => (
+        <PadSheet key={`${copy.key}-${page}`} copy={copy} number={number} who={who} pad={pad} fixedZoom={1} page={page} />
+      )))}
     </Printing>
   )
 }
