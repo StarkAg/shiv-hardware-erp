@@ -62,15 +62,15 @@ function keepCrop(crop) {
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
 
 /**
- * Where the box falls on the camera's own picture. The video fills its frame
- * with `object-fit: cover`, so part of the picture runs off two edges; the box
- * is worked back through that scale and offset into the picture's pixels.
+ * Where the box falls on the camera's own picture. The video covers its frame
+ * (see `fitVideo`), so part of the picture runs off two edges; the box is
+ * worked back through that scale and offset into the picture's pixels.
  */
 function cropArea(video, box) {
   const vw = video.videoWidth
   const vh = video.videoHeight
-  const cw = video.clientWidth
-  const ch = video.clientHeight
+  const cw = video.parentElement?.clientWidth
+  const ch = video.parentElement?.clientHeight
   if (!vw || !vh || !cw || !ch) return undefined
   const scale = Math.max(cw / vw, ch / vh)
   const ox = (cw - vw * scale) / 2
@@ -80,6 +80,33 @@ function cropArea(video, box) {
   const r = clamp((box.r * cw - ox) / scale, 0, vw)
   const b = clamp((box.b * ch - oy) / scale, 0, vh)
   return r - x > 8 && b - y > 8 ? { x, y, w: r - x, h: b - y } : undefined
+}
+
+/**
+ * Makes the live picture cover its frame, edge to edge, sized in pixels.
+ * iPhone Safari does not always honour `object-fit: cover` on a camera stream:
+ * after the camera restarts, the app comes back to the front, or the picture's
+ * own size changes, it can paint the picture small in the middle of a black
+ * box. Giving the video the exact cover size (same scale and centring as
+ * `cropArea` works back through) leaves Safari nothing to letterbox.
+ */
+function fitVideo(video) {
+  const frame = video?.parentElement
+  if (!frame) return
+  const vw = video.videoWidth
+  const vh = video.videoHeight
+  const cw = frame.clientWidth
+  const ch = frame.clientHeight
+  if (!vw || !vh || !cw || !ch) return
+  const scale = Math.max(cw / vw, ch / vh)
+  const w = Math.ceil(vw * scale)
+  const h = Math.ceil(vh * scale)
+  Object.assign(video.style, {
+    width: `${w}px`,
+    height: `${h}px`,
+    left: `${Math.floor((cw - w) / 2)}px`,
+    top: `${Math.floor((ch - h) / 2)}px`,
+  })
 }
 
 /** The crop box, with a handle at each corner. */
@@ -287,6 +314,29 @@ export default function App() {
       stream?.getTracks().forEach((track) => track.stop())
     }
   }, [cameraAttempt])
+
+  // Keep the live picture covering its frame whenever the frame or the picture changes size.
+  useEffect(() => {
+    const el = video.current
+    const frame = el?.parentElement
+    if (!el || !frame) return
+    const fit = () => fitVideo(el)
+    const events = ['loadedmetadata', 'resize', 'playing']
+    events.forEach((name) => el.addEventListener(name, fit))
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null
+    observer?.observe(frame)
+    window.addEventListener('resize', fit)
+    window.addEventListener('orientationchange', fit)
+    document.addEventListener('visibilitychange', fit)
+    fit()
+    return () => {
+      events.forEach((name) => el.removeEventListener(name, fit))
+      observer?.disconnect()
+      window.removeEventListener('resize', fit)
+      window.removeEventListener('orientationchange', fit)
+      document.removeEventListener('visibilitychange', fit)
+    }
+  }, [])
 
   const patch = useCallback((id, changes) => {
     setOutgoing((items) => items.map((item) => item.id === id ? { ...item, ...changes } : item))

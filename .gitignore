@@ -39,3 +39,6 @@ certs/dev-key.pem
 .deploy-state.json
 .intake/
 print-server/.card-check-*.mjs
+
+# Separate apps kept beside the panel, each its own repo (not part of the panel).
+separate-apps/

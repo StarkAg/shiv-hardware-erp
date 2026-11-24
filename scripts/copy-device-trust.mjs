@@ -11,8 +11,8 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const APPS = ['cash-web', 'print-web', 'order-web', 'sort-web', 'voucher-web', 'mica-web', 'stock-web', 'inventory-web', 'attendance-web', 'khata-web', 'mechanic-web', 'workshop-web', 'prices-web', 'billshoot-web', 'intro-web', 'bill-web']
   .map((app) => [app, path.join(root, app, 'src', 'deviceTrust')])
-// Shiv Rates, in the ShivLedger repo beside this one, reads the panel's bills.
-const rates = path.join(root, '..', 'ShivLedger', 'rates')
+// Shiv Rates, in the ShivLedger repo under separate-apps/, reads the panel's bills.
+const rates = path.join(root, 'separate-apps', 'ShivLedger', 'rates')
 if (existsSync(rates)) APPS.push(['ShivLedger/rates', path.join(rates, 'deviceTrust')])
 for (const [app, to] of APPS) {
   mkdirSync(to, { recursive: true })
