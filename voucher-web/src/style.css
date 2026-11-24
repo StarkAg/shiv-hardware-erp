@@ -37,7 +37,10 @@ h1, h2 { margin: 0; }
 /* Pinned to the box's four edges, not sized in percent: on iPhone Safari a
    percent height inside the flex column did not always take, and after the
    camera restarted the picture sat small in a black box. */
-.camera video { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.camera video { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; }
+/* App.jsx (fitVideo) then sets the video's width, height, left and top in
+   pixels so it covers the box exactly: object-fit alone still letterboxed on
+   iPhone Safari after the camera restarted or the app came back to the front. */
 .camera-message { position: absolute; inset: 0; display: grid; place-items: center; padding: 28px; background: #000; color: #fff; font-size: 17px; font-weight: 600; line-height: 1.4; text-align: center; }
 /* The live crop: what is outside the box is dimmed, and the shutter leaves it out. */
 .crop-box { position: absolute; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .5); outline: 2px solid #fff; touch-action: none; cursor: move; }
