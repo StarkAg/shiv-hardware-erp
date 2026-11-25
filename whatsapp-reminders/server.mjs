@@ -45,6 +45,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { birthdaysOn, indiaDate, sentKey } from './dates.mjs'
 import { createGroupPrinter } from './group-print.mjs'
+import { keepSentMessages, memoryCache, useSqliteAuthState } from './auth-store.mjs'
 
 const PORT = Number(process.env.PORT || 8080)
 const LOGIN_KEY = process.env.LOGIN_KEY || ''
@@ -67,8 +68,16 @@ const AUTOREPLY_EVERY_MS = 60 * 60_000
 const NOTIFY_COOLDOWN_MS = 10 * 60_000
 const BIRTHDAYS = JSON.parse(await readFile(new URL('./birthdays.json', import.meta.url), 'utf8'))
 
-const state = { status: 'starting', qr: null, me: null, lastSent: null, readyAt: null, lastError: null }
+const state = { status: 'starting', qr: null, me: null, lastSent: null, readyAt: null, lastError: null, pairing: null }
 let sock = null
+// The connection being made, before it is open: a pairing code is asked on it.
+let linking = null
+// What WhatsApp may ask of us again (baileys.wiki, Troubleshooting): messages
+// this device sent, for a retry; how often each was retried; and the shop
+// group's details, so a group send does not fetch them every time.
+const sentMessages = new Map()
+const retryCounts = memoryCache()
+const groupCache = memoryCache(5 * 60_000, 50)
 let busy = false
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
@@ -138,6 +147,11 @@ async function onWhatsApp(jid, raw) {
 }
 
 /** A file into a chat. A JPG or PNG goes as a photo, seen in the chat; anything else as a document. */
+/** The shop group's details, fetched once and kept (cachedGroupMetadata). */
+async function groupReady(jid) {
+  if (!groupCache.get(jid)) groupCache.set(jid, await sock.groupMetadata(jid))
+}
+
 async function sendDocument({ mobile, data, fileName = 'file.pdf', mimetype = 'application/pdf', caption = '' }) {
   const buffer = Buffer.from(String(data ?? ''), 'base64')
   if (!buffer.length) throw new Error('Nothing to send.')
@@ -146,6 +160,7 @@ async function sendDocument({ mobile, data, fileName = 'file.pdf', mimetype = 'a
   if (mobile === 'group') {
     if (!SHOP_GROUP_ID) throw new Error('No shop group is set (SHOP_GROUP_ID).')
     jid = SHOP_GROUP_ID
+    await groupReady(jid)
   } else {
     jid = chatOf(mobile)
     if (!jid) throw new Error(`Enter a valid mobile number (got "${mobile ?? ''}").`)
@@ -169,6 +184,7 @@ async function sendText({ mobile, text }) {
   if (mobile === 'group') {
     if (!SHOP_GROUP_ID) throw new Error('No shop group is set (SHOP_GROUP_ID).')
     jid = SHOP_GROUP_ID
+    await groupReady(jid)
   } else {
     jid = chatOf(mobile)
     if (!jid) throw new Error(`Enter a valid mobile number (got "${mobile ?? ''}").`)
@@ -243,10 +259,12 @@ async function autoReply(msg) {
 
 /* ── the WhatsApp link ───────────────────────────────────────────────────── */
 async function startWhatsApp() {
-  const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, downloadMediaMessage } = await import('@whiskeysockets/baileys')
+  const baileys = await import('@whiskeysockets/baileys')
+  const { makeWASocket, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, downloadMediaMessage } = baileys
   const qrcode = await import('qrcode')
   await mkdir(DATA_DIR, { recursive: true })
-  const auth = await useMultiFileAuthState(AUTH_DIR)
+  // The login in AUTH_DIR/session.db (auth-store.mjs), taken over from the old files.
+  const auth = await useSqliteAuthState(AUTH_DIR, baileys, log)
   let attempts = 0
   let version = null
 
@@ -258,7 +276,16 @@ async function startWhatsApp() {
       browser: ['Shiv Hardware Reminders', 'Chrome', '1.0'],
       syncFullHistory: false,
       markOnlineOnConnect: false,
+      getMessage: async (key) => sentMessages.get(key.id),
+      msgRetryCounterCache: retryCounts,
+      cachedGroupMetadata: async (jid) => groupCache.get(jid),
     })
+    linking = s
+    keepSentMessages(s, sentMessages)
+    // The group's details kept fresh as they change.
+    const refreshGroup = (jid) => { if (jid?.endsWith('@g.us')) s.groupMetadata(jid).then((meta) => groupCache.set(jid, meta), () => {}) }
+    s.ev.on('groups.update', (updates) => { for (const u of updates) refreshGroup(u.id) })
+    s.ev.on('group-participants.update', (u) => refreshGroup(u.id))
     s.ev.on('creds.update', () => auth.saveCreds())
     s.ev.on('messages.upsert', ({ messages, type }) => {
       // 'append' is the catch-up after a reconnect: group prints only, never replies.
@@ -278,6 +305,7 @@ async function startWhatsApp() {
         attempts = 0
         state.status = 'ready'
         state.qr = null
+        state.pairing = null
         state.readyAt = new Date().toISOString()
         state.me = s.user?.id?.split(':')[0]?.split('@')[0] ?? null
         log('[whatsapp] linked as', state.me, state.me === FROM_NUMBER ? '' : `, not ${FROM_NUMBER}: nothing will be sent`)
@@ -291,6 +319,14 @@ async function startWhatsApp() {
         }
         log(`[whatsapp] closed code=${code}`)
         if (state.status !== 'logged_out') {
+          // Right after a scan or a pairing code WhatsApp closes the connection on
+          // purpose ("restart required", 515) and wants a new one at once
+          // (baileys.wiki, QR code: "Keeping the connection alive").
+          if (code === DisconnectReason.restartRequired) {
+            attempts = 0
+            setTimeout(() => void connect(), 250)
+            return
+          }
           attempts += 1
           setTimeout(() => void connect(), Math.min(60_000, 10_000 * attempts))
           return
@@ -300,6 +336,7 @@ async function startWhatsApp() {
         // shows a new QR to scan with nobody touching the volume by hand.
         const aside = `${AUTH_DIR}-logged-out-${new Date().toISOString().replace(/[:.]/g, '-')}`
         // If it cannot be moved, it stays logged out rather than redialling the dead login.
+        auth.close?.()
         const moved = await rename(AUTH_DIR, aside).then(() => true, (err) => {
           log('[whatsapp] logged out, and the old login could not be moved:', err?.message ?? err)
           return false
@@ -313,17 +350,43 @@ async function startWhatsApp() {
   void connect()
 }
 
+/* ── linking with a pairing code ─────────────────────────────────────────── */
+// Instead of the QR: WhatsApp, Linked devices, Link a device, "Link with phone
+// number instead", and the 8-character code shown on /login (baileys.wiki,
+// "Pairing code"). Only FROM_NUMBER may be linked here.
+async function requestPairing(raw) {
+  let number = String(raw ?? '').replace(/\D/g, '')
+  if (number.length === 10) number = `91${number}`
+  if (number.length < 11 || number.length > 15) throw new Error('Enter the number with its country code, e.g. 917970550954.')
+  if (FROM_NUMBER && number !== FROM_NUMBER) throw new Error(`Only +${FROM_NUMBER} can be linked here.`)
+  if (state.status === 'ready') throw new Error('Already linked.')
+  // A code can only be asked while WhatsApp is offering a QR.
+  for (let waited = 0; waited < 20_000 && state.status !== 'qr'; waited += 250) await sleep(250)
+  if (state.status !== 'qr' || !linking) throw new Error('WhatsApp is not ready to link yet. Try again in a moment.')
+  if (linking.authState?.creds?.registered) throw new Error('A link is already being made.')
+  const code = await linking.requestPairingCode(number)
+  state.pairing = { number, code, at: Date.now() }
+  log(`[whatsapp] pairing code asked for ${number}`)
+  return code
+}
+const pairingShown = () => state.pairing && Date.now() - state.pairing.at < 3 * 60_000 ? state.pairing : null
+const codeText = (code) => String(code).replace(/^(.{4})(.{4})$/, '$1-$2')
+
 /* ── the login page ──────────────────────────────────────────────────────── */
-const page = (body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WhatsApp Reminders</title><meta http-equiv="refresh" content="5">
+const page = (body, refresh = true) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WhatsApp Reminders</title>${refresh ? '<meta http-equiv="refresh" content="5">' : ''}
 <style>body{margin:0;font:17px/1.4 system-ui,sans-serif;background:#fff;color:#111;display:flex;justify-content:center}
 main{max-width:420px;padding:24px 16px;text-align:center}h1{font-size:22px;margin:0 0 8px}img{width:280px;max-width:100%;border:4px solid #111}
-.ok{color:#137333;font-weight:700}.wait{background:#ffcc00;padding:6px 10px;display:inline-block}.bad{color:#b3202a;font-weight:700}</style></head><body><main><h1>WhatsApp Reminders</h1>${body}</main></body></html>`
+.ok{color:#137333;font-weight:700}.wait{background:#ffcc00;padding:6px 10px;display:inline-block}.bad{color:#b3202a;font-weight:700}
+.code{font:700 40px/1.2 ui-monospace,monospace;letter-spacing:.08em;border:4px solid #111;padding:12px 16px;display:inline-block}
+input{font:inherit;padding:10px;border:2px solid #111;width:220px}button{font:inherit;padding:10px 16px;border:2px solid #0b57d0;color:#fff;background:#0b57d0}</style></head><body><main><h1>WhatsApp Reminders</h1>${body}</main></body></html>`
 
-function loginPage() {
+function loginPage(key) {
+  const pairing = pairingShown()
+  if (state.status !== 'ready' && pairing) return page(`<p>On the phone with +${pairing.number}: WhatsApp, Settings, Linked devices, Link a device, <b>Link with phone number instead</b>. Enter this code:</p><p class="code">${codeText(pairing.code)}</p><p><small>It works for about 3 minutes. <a href="/pair?key=${encodeURIComponent(key)}">Ask for a new one</a></small></p>`)
   if (state.status === 'ready' && state.me !== FROM_NUMBER) return page(`<p class="bad">Linked to +${state.me}, not +${FROM_NUMBER}. Nothing will be sent.</p>`)
   if (state.status === 'ready') return page(`<p class="ok">Linked to +${state.me}</p>${state.lastSent ? `<p>Last sent: ${state.lastSent.name}, ${state.lastSent.at}</p>` : ''}`)
-  if (state.status === 'qr' && state.qr) return page(`<p>On the phone with +${FROM_NUMBER}: WhatsApp, Settings, Linked devices, Link a device. Scan this.</p><img alt="QR to link WhatsApp" src="${state.qr}">`)
+  if (state.status === 'qr' && state.qr) return page(`<p>On the phone with +${FROM_NUMBER}: WhatsApp, Settings, Linked devices, Link a device. Scan this.</p><img alt="QR to link WhatsApp" src="${state.qr}"><p><a href="/pair?key=${encodeURIComponent(key)}">Link with phone number instead</a></p>`)
   return page(`<p class="wait">${state.status === 'logged_out' ? 'Unlinked' : 'Connecting'}</p>`)
 }
 
@@ -375,7 +438,25 @@ http.createServer(async (req, res) => {
   }
   if (url.pathname === '/login' && LOGIN_KEY && url.searchParams.get('key') === LOGIN_KEY) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
-    res.end(loginPage())
+    res.end(loginPage(LOGIN_KEY))
+    return
+  }
+  if (url.pathname === '/pair' && LOGIN_KEY && url.searchParams.get('key') === LOGIN_KEY) {
+    const form = (error = '') => page(`<p>Link with a code instead of the QR. The phone number to link:</p>${error ? `<p class="bad">${error}</p>` : ''}<form method="post" action="/pair?key=${encodeURIComponent(LOGIN_KEY)}"><p><input name="number" inputmode="numeric" value="${FROM_NUMBER}" placeholder="917970550954"></p><p><button>Get the code</button></p></form><p><small><a href="/login?key=${encodeURIComponent(LOGIN_KEY)}">Back to the QR</a></small></p>`, false)
+    if (req.method === 'POST') {
+      try {
+        const body = await new Promise((resolve, reject) => { let t = ''; req.on('data', (c) => { t += c; if (t.length > 2000) req.destroy() }); req.on('end', () => resolve(t)); req.on('error', reject) })
+        await requestPairing(new URLSearchParams(body).get('number'))
+        res.writeHead(303, { location: `/login?key=${encodeURIComponent(LOGIN_KEY)}` })
+        res.end()
+      } catch (err) {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+        res.end(form(String(err?.message ?? err)))
+      }
+      return
+    }
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    res.end(form())
     return
   }
   res.writeHead(404)

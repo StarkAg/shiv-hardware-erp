@@ -50,3 +50,13 @@ Shop group (WhatsApp)
 Railway variables on `whatsapp-reminders`: `CONVEX_URL` (production), `SHIV_DEVICE_TOKEN` (a server key from `npx convex run --prod devices:issueServerKey '{"name":"whatsapp-print"}'`), `PRINT_GROUP_ID` (defaults to `SHOP_GROUP_ID`; the "Shiv Hardware" group is `120363396348781660@g.us`), optional `PRINTER_ID` (default `shiv-shop-printer`). Missing any of the first three, printing stays off and `/status` says which under `groupPrint.missing`.
 
 The old way (the print server's own WhatsApp link, `WHATSAPP_AUTO_PRINT_ENABLED`) stays off. Turning it on as well would print everything twice.
+
+## Linking a number (both Railway services)
+
+Since 2026-11-25, `whatsapp-reminders` (Shop) and `whatsapp-bills` (Tony) connect the same way, following https://baileys.wiki/:
+
+- **Two ways to link**, both on `/login?key=LOGIN_KEY`: scan the QR, or press "Link with phone number instead", get the 8-character code and type it on the phone (WhatsApp, Linked devices, Link a device, Link with phone number instead). Each service only takes its own number (Shop 917970550954, Tony 918092850954). A code lasts about 3 minutes.
+- **Right after a scan or code** WhatsApp closes the connection once on purpose ("restart required", 515); the service reconnects at once.
+- **The login is kept in SQLite**, `AUTH_DIR/session.db` (`auth-store.mjs`, the same file in both folders), not as a folder of JSON files: the wiki calls the file store "not recommended for deployment in production". On the first start after the change the old files were read in as needed, so no number had to be linked again. A logout puts the whole folder aside (database included) and shows a new QR.
+- **Resends**: sent messages are kept for WhatsApp's retry requests (`getMessage`, `msgRetryCounterCache`), and the Shop group's details are cached (`cachedGroupMetadata`).
+- **Version**: Baileys' own WhatsApp Web version. Tony's service used to fetch WhatsApp's newest one at every start (`fetchLatestWaWebVersion`), and its links were thrown out right after a scan (22 and 25 Nov 2026).
