@@ -33,10 +33,9 @@
  *
  * The link is kept for good. It lives on the service's volume, so a restart
  * or an update picks it up again; a dropped connection is redialled for ever,
- * and a link stuck for ten minutes is redialled afresh. WhatsApp saying the
- * device is logged out is believed only when it says so three times running,
- * and even then the old link is moved aside, not deleted, before a new QR is
- * shown. What ends the link for real is the owner removing it under Linked
+ * and a link stuck for ten minutes is redialled afresh. When WhatsApp says the
+ * device is logged out, the old link is moved aside, not deleted, and a new QR
+ * is shown, exactly as whatsapp-reminders does (since 25 Nov 2026). What ends the link for real is the owner removing it under Linked
  * devices, or his phone being off WhatsApp for about 14 days, which is
  * WhatsApp's own rule for every linked device.
  *
@@ -95,33 +94,34 @@ const setStatus = (status) => { if (state.status !== status) since = Date.now();
 /** A link put aside rather than deleted, so a logout WhatsApp did not mean can be undone by hand. */
 const putAside = () => rename(AUTH_DIR, `${AUTH_DIR}-${new Date().toISOString().replace(/[:.]/g, '-')}`).catch(() => {})
 
+// The connection is made exactly as in whatsapp-reminders/server.mjs, which
+// links and stays linked (owner's ask, 25 Nov 2026): Baileys' own WhatsApp Web
+// version (the latest is fetched only if WhatsApp refuses it), a logout believed
+// the first time and the old login moved aside for a fresh QR, and a redial
+// after 10 s, 20 s, ... up to a minute otherwise. Before, this service fetched
+// the latest version at every start and counted three 401s (a "conflict"
+// among them) before giving up, and a scan on 25 Nov was thrown away that way.
+let gen = 0
+
 async function startWhatsApp() {
-  const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestWaWebVersion } = await import('@whiskeysockets/baileys')
+  const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestBaileysVersion } = await import('@whiskeysockets/baileys')
   const qrcode = await import('qrcode')
-  let auth = await useMultiFileAuthState(AUTH_DIR)
-  let gen = 0
+  const auth = await useMultiFileAuthState(AUTH_DIR)
   let attempts = 0
-  let loggedOutRuns = 0
-  // The WhatsApp Web version is taken from WhatsApp itself at every start: the
-  // one built into Baileys falls behind, and on 22 Nov 2026 a link made with it
-  // was accepted and then thrown out (401) within a second, every scan.
-  let version = (await fetchLatestWaWebVersion().catch(() => null))?.version ?? null
-  log('[whatsapp] using WhatsApp Web', version ? version.join('.') : 'built into Baileys')
+  let version = null
 
   async function connect() {
     const mine = ++gen
     const s = makeWASocket({
       ...(version ? { version } : {}),
       auth: { creds: auth.state.creds, keys: makeCacheableSignalKeyStore(auth.state.keys, silent) },
-      printQRInTerminal: false,
       logger: silent,
       browser: ['Shiv Hardware Bills', 'Chrome', '1.0'],
-      generateHighQualityLinkPreview: false,
       syncFullHistory: false,
       // The owner's phone keeps its notifications: this device never shows as online.
       markOnlineOnConnect: false,
     })
-    s.ev.on('creds.update', () => { if (mine === gen) auth.saveCreds() })
+    s.ev.on('creds.update', () => auth.saveCreds())
     // A customer's hi, and the chats the owner writes to (the hi-reply, below).
     s.ev.on('messages.upsert', ({ messages, type }) => {
       if (mine !== gen) return
@@ -138,35 +138,33 @@ async function startWhatsApp() {
       if (connection === 'open') {
         sock = s
         attempts = 0
-        loggedOutRuns = 0
         setStatus('ready')
         state.qr = null
         state.readyAt = new Date().toISOString()
         state.me = s.user?.id?.split(':')[0]?.split('@')[0] ?? null
         state.lastError = null
-        log('[whatsapp] linked and ready as', state.me)
+        log('[whatsapp] linked as', state.me)
       }
       if (connection === 'close') {
         if (sock === s) sock = null
         const code = lastDisconnect?.error?.output?.statusCode
         const message = String(lastDisconnect?.error?.message ?? '')
-        // Believed on the third time running: a single 401 can be WhatsApp's own hiccup.
-        loggedOutRuns = code === DisconnectReason.loggedOut ? loggedOutRuns + 1 : 0
-        const loggedOut = loggedOutRuns >= 3
-        setStatus(loggedOut ? 'logged_out' : 'reconnecting')
+        setStatus(code === DisconnectReason.loggedOut ? 'logged_out' : 'reconnecting')
         state.lastError = message ? { at: new Date().toISOString(), code, message } : null
-        // An old client version is refused: the current one is fetched again.
-        if (code === 405 || code === 401 || /connection failure/i.test(message)) {
-          version = (await fetchLatestWaWebVersion().catch(() => null))?.version ?? version
+        if (!version && (code === 405 || /connection failure/i.test(message))) {
+          version = (await fetchLatestBaileysVersion().catch(() => null))?.version ?? null
         }
-        log(`[whatsapp] closed code=${code}${message ? ` (${message.slice(0, 120)})` : ''}${loggedOut ? ', logged out three times running: old link put aside, scan the QR again' : ', reconnecting with the saved link'}`)
-        if (loggedOut) {
-          loggedOutRuns = 0
-          await putAside()
-          auth = await useMultiFileAuthState(AUTH_DIR)
+        log(`[whatsapp] closed code=${code}${message ? ` (${message.slice(0, 120)})` : ''}`)
+        if (state.status !== 'logged_out') {
+          attempts += 1
+          setTimeout(() => { if (mine === gen) void connect() }, Math.min(60_000, 10_000 * attempts))
+          return
         }
-        attempts = loggedOut ? 0 : attempts + 1
-        setTimeout(() => { if (mine === gen) void connect() }, loggedOut ? 1000 : Math.min(60_000, 10_000 * attempts))
+        // The phone removed this link, so its login is no good. It is moved
+        // aside (kept, dated) and a fresh one started, so /login shows a new QR.
+        await putAside()
+        log('[whatsapp] logged out; old login put aside, asking for a new scan')
+        setTimeout(() => { if (mine === gen) void startWhatsApp() }, 2_000)
       }
     })
   }
@@ -179,8 +177,7 @@ async function startWhatsApp() {
     setStatus('starting')
     state.qr = null
     await putAside()
-    auth = await useMultiFileAuthState(AUTH_DIR)
-    void connect()
+    void startWhatsApp()
   }
 
   // Redial with the saved link, as a stuck connection needs.
