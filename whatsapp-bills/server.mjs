@@ -52,6 +52,7 @@ import { readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { keepSentMessages, memoryCache, useSqliteAuthState } from './auth-store.mjs'
+import { createLinkWatch } from './link-watch.mjs'
 
 const PORT = Number(process.env.PORT || 8080)
 const AUTH_DIR = process.env.AUTH_DIR || '/data/auth'
@@ -579,6 +580,15 @@ http.createServer(async (req, res) => {
 if (!LOGIN_KEY) log('LOGIN_KEY is not set: the login page answers nobody')
 void startWhatsApp().catch((err) => { setStatus('error'); state.lastError = { message: String(err?.message ?? err) }; log('[whatsapp] could not start', err) })
 setInterval(() => { void sendDue() }, 30_000)
+
+// The Shop number (whatsapp-reminders) watched from here: the owner hears
+// when it has been unlinked for 10 minutes (link-watch.mjs, ALERT_TO).
+const linkWatch = createLinkWatch({
+  send: (jid, text) => sock.sendMessage(jid, { text }),
+  canSend: () => !!sock && state.status === 'ready',
+  log,
+})
+linkWatch.start()
 setInterval(() => { void sendIntro() }, 30_000)
 void listenForIntros()
 

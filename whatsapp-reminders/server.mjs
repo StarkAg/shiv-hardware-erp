@@ -46,6 +46,7 @@ import { join } from 'node:path'
 import { birthdaysOn, indiaDate, sentKey } from './dates.mjs'
 import { createGroupPrinter } from './group-print.mjs'
 import { keepSentMessages, memoryCache, useSqliteAuthState } from './auth-store.mjs'
+import { createLinkWatch } from './link-watch.mjs'
 
 const PORT = Number(process.env.PORT || 8080)
 const LOGIN_KEY = process.env.LOGIN_KEY || ''
@@ -416,6 +417,7 @@ const ROUTES = {
     ok: true, status: state.status, me: state.me, readyAt: state.readyAt,
     qrDataUrl: state.status === 'qr' ? state.qr : null, lastError: state.lastError,
     groupPrint: groupPrint.state,
+    linkWatch: linkWatch.state,
   }),
 }
 
@@ -465,6 +467,17 @@ http.createServer(async (req, res) => {
 
 void startWhatsApp().catch((err) => { state.status = 'error'; log('[whatsapp] could not start', err) })
 setInterval(() => { void sendDue() }, 30_000)
+
+// Tony's number (whatsapp-bills) watched from here: the owner hears when it
+// has been unlinked for 10 minutes (link-watch.mjs). ALERT_TO defaults to
+// TO_NUMBER, the owner's own chat.
+const linkWatch = createLinkWatch({
+  env: { ...process.env, ALERT_TO: process.env.ALERT_TO || TO_NUMBER },
+  send: (jid, text) => sock.sendMessage(jid, { text }),
+  canSend: () => !!sock && state.status === 'ready' && (!FROM_NUMBER || state.me === FROM_NUMBER),
+  log,
+})
+linkWatch.start()
 
 process.on('unhandledRejection', (err) => log('[process] unhandled', err?.message ?? err))
 process.on('uncaughtException', (err) => log('[process] uncaught', err?.message ?? err))
