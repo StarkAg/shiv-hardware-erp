@@ -10,6 +10,9 @@
  *   POST /notify-guarantee  "your guarantee card is ready", once per card
  *   GET  /status            the link, with the QR while it needs a scan
  *   the auto-reply          a direct message gets the enquiry number, once an hour
+ *   group printing          a photo or PDF in the shop group with bw / cp goes to
+ *                           the shop PC's print server through the cloud print
+ *                           queue (group-print.mjs, since 2026-11-25)
  *
  * The POSTs and /status answer only with SEND_KEY in `x-shop-key`. The panel
  * never holds it: it calls Convex (convex/shopWhatsApp.ts), which calls here.
@@ -41,6 +44,7 @@ import http from 'node:http'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { birthdaysOn, indiaDate, sentKey } from './dates.mjs'
+import { createGroupPrinter } from './group-print.mjs'
 
 const PORT = Number(process.env.PORT || 8080)
 const LOGIN_KEY = process.env.LOGIN_KEY || ''
@@ -70,6 +74,7 @@ let busy = false
 const log = (...a) => console.log(new Date().toISOString(), ...a)
 const silent = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return silent } }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const groupPrint = createGroupPrinter({ dataDir: DATA_DIR, log, silent })
 
 /* ── what was sent ───────────────────────────────────────────────────────── */
 async function loadSent() {
@@ -238,7 +243,7 @@ async function autoReply(msg) {
 
 /* ── the WhatsApp link ───────────────────────────────────────────────────── */
 async function startWhatsApp() {
-  const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestBaileysVersion } = await import('@whiskeysockets/baileys')
+  const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestBaileysVersion, downloadMediaMessage } = await import('@whiskeysockets/baileys')
   const qrcode = await import('qrcode')
   await mkdir(DATA_DIR, { recursive: true })
   const auth = await useMultiFileAuthState(AUTH_DIR)
@@ -256,8 +261,12 @@ async function startWhatsApp() {
     })
     s.ev.on('creds.update', () => auth.saveCreds())
     s.ev.on('messages.upsert', ({ messages, type }) => {
-      if (type !== 'notify') return
-      for (const msg of messages) void autoReply(msg)
+      // 'append' is the catch-up after a reconnect: group prints only, never replies.
+      if (type !== 'notify' && type !== 'append') return
+      for (const msg of messages) {
+        if (type === 'notify') void autoReply(msg)
+        if (state.me === FROM_NUMBER || !FROM_NUMBER) void groupPrint.handle(s, downloadMediaMessage, msg, type)
+      }
     })
     s.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
       if (qr) {
@@ -343,6 +352,7 @@ const ROUTES = {
   'GET /status': async () => ({
     ok: true, status: state.status, me: state.me, readyAt: state.readyAt,
     qrDataUrl: state.status === 'qr' ? state.qr : null, lastError: state.lastError,
+    groupPrint: groupPrint.state,
   }),
 }
 

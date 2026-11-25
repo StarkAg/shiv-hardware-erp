@@ -30,6 +30,7 @@ import {
 } from './template.mjs'
 import { registerCardScan } from './card-scan.mjs'
 import { detectColourMode, registerColourCheck } from './colour-check.mjs'
+import { directPrintable, parseIppPrinters, printDirect, printerInfo } from './direct-print.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
@@ -59,6 +60,15 @@ const PRINTER_AGENT_ID = process.env.PRINTER_AGENT_ID || 'shiv-shop-printer'
 const CLOUD_POLL_INTERVAL_MS = Math.max(3000, Number(process.env.CLOUD_POLL_INTERVAL_MS) || 7000)
 const CLOUD_HEARTBEAT_INTERVAL_MS = Math.max(15000, Number(process.env.CLOUD_HEARTBEAT_INTERVAL_MS) || 30000)
 const SUMATRA_PDF_PATH = process.env.SUMATRA_PDF_PATH || findSumatraPdfPath()
+// How a file reaches a printer on Windows (printFileWithLp), quickest first:
+//   a printer in PRINTER_IPP_URLS: drawn here and sent straight over IPP (direct-print.mjs)
+//   any other: tools/print-file.ps1, Windows' own PDF reader and printing (nothing to install)
+//   PRINT_ENGINE=sumatra: SumatraPDF, as before 25 Nov 2026
+const PRINT_ENGINE = (process.env.PRINT_ENGINE || 'windows').toLowerCase()
+const PRINTER_IPP_URLS = parseIppPrinters(process.env.PRINTER_IPP_URLS)
+const IPP_PDF_DPI = Number(process.env.IPP_PDF_DPI) || 600
+const IPP_PHOTO_DPI = Number(process.env.IPP_PHOTO_DPI) || 300
+const WINDOWS_PRINT_SCRIPT = fileURLToPath(new URL('tools/print-file.ps1', import.meta.url))
 const EPSON_CARD_PRINT_SETTINGS = (process.env.EPSON_CARD_PRINT_SETTINGS || 'noscale,color,portrait,bin=Disc/ID Card Tray')
   .split(',')
   .map(setting => setting.trim())
@@ -1285,7 +1295,29 @@ function execFileAsync(file, args, options = {}) {
   })
 }
 
-async function getWindowsPrinterHealth(printer) {
+// Each check is a PowerShell of a second or more. One already running is shared,
+// so a check started early (warmPrinterHealth, when a job is on its way) is the
+// same one the job waits on, never a second PowerShell after it.
+const printerHealthInFlight = new Map()
+function getWindowsPrinterHealth(printer) {
+  const cache = printerHealthCache.get(printer)
+  if (cache && Date.now() - cache.at < 15000) return Promise.resolve(cache.health)
+  if (!printerHealthInFlight.has(printer)) {
+    printerHealthInFlight.set(printer, checkWindowsPrinterHealth(printer).finally(() => printerHealthInFlight.delete(printer)))
+  }
+  return printerHealthInFlight.get(printer)
+}
+
+/** Starts the printer checks now, while a job is still being fetched, so they are done when it prints. */
+function warmPrinterHealth() {
+  for (const printer of new Set([BW_PRINTER, COLOR_PRINTER])) {
+    void getWindowsPrinterHealth(printer).catch(() => {})
+    const ippUrl = PRINTER_IPP_URLS.get(printer)
+    if (ippUrl) void printerInfo(ippUrl).catch(() => {})
+  }
+}
+
+async function checkWindowsPrinterHealth(printer) {
   const cache = printerHealthCache.get(printer)
   if (cache && Date.now() - cache.at < 15000) return cache.health
 
@@ -1521,6 +1553,41 @@ async function saveWhatsAppPrintFile(file) {
 }
 
 async function printFileWithLp(filePath, copies, title, printer = PRINT_PRINTER, printSettings = []) {
+  // Quickest: straight to the printer over IPP, drawn here. If the printer
+  // cannot be reached that way (moved address, IPP off), the usual way below.
+  const ippUrl = PRINTER_IPP_URLS.get(printer)
+  if (ippUrl && directPrintable(filePath)) {
+    try {
+      const result = await printDirect(ippUrl, filePath, {
+        copies, title, settings: printSettings, pdfDpi: IPP_PDF_DPI, photoDpi: IPP_PHOTO_DPI,
+      })
+      console.log(`[ipp-print] ${title}: ${result.pages} page(s) at ${result.dpi} dpi, ${Math.round(result.bytes / 1024)} KB, drawn ${result.ms.draw} ms, sent ${result.ms.total} ms, job ${result.jobId} on "${printer}"`)
+      return { jobId: result.jobId, output: `ipp job ${result.jobId}` }
+    } catch (err) {
+      console.warn(`[ipp-print] ${title}: direct print to "${printer}" failed (${err?.message ?? err}), printing through Windows instead`)
+    }
+  }
+
+  if (process.platform === 'win32' && PRINT_ENGINE !== 'sumatra') {
+    return new Promise((ok, fail) => {
+      const settings = printSettings.join(',')
+      const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', WINDOWS_PRINT_SCRIPT,
+        '-Path', filePath, '-Printer', printer, '-Copies', String(copies), '-Settings', settings || 'fit',
+        '-JobName', String(title).slice(0, 120)]
+      console.log(`[windows-print] printer="${printer}" settings="${settings}" file="${filePath}"`)
+      // Time limit so a hung print can't block the serial print queue forever.
+      execFile('powershell.exe', args, { windowsHide: true, timeout: 3 * 60 * 1000 }, (err, stdout, stderr) => {
+        if (err) {
+          const why = String(stderr || '').trim().split('\n').find(line => line.trim()) || err.message
+          fail(new Error(`Printing to "${printer}" failed: ${why}`))
+          return
+        }
+        console.log(`[windows-print] ${title}`, String(stdout).trim() || `sent to ${printer}`)
+        ok({ jobId: null, output: String(stdout).trim() })
+      })
+    })
+  }
+
   if (process.platform === 'win32') {
     return new Promise((ok, fail) => {
       const settings = [`${copies}x`, ...printSettings].join(',')
@@ -1984,10 +2051,10 @@ async function printUploadedFileImpl(file, copies, printerOverride = null, print
   try {
     if (!savedPath) await writeFile(sourcePath, file.buffer)
 
-    // Images print directly (the printer driver scales them via the "fit"
-    // setting). Only fall back to the Chrome-rendered A4 PDF wrapper when
-    // direct printing is explicitly disabled.
-    if (file.mediaType.startsWith('image/') && !WHATSAPP_IMAGE_DIRECT_PRINT) {
+    // A photo prints as it is: direct IPP and tools/print-file.ps1 both fit it
+    // to A4 themselves. Only SumatraPDF needed it wrapped in an A4 PDF by
+    // Chrome first (unless WHATSAPP_IMAGE_DIRECT_PRINT), which cost a second.
+    if (file.mediaType.startsWith('image/') && PRINT_ENGINE === 'sumatra' && !WHATSAPP_IMAGE_DIRECT_PRINT) {
       const pdf = await renderUploadedImagePdf(file)
       renderedPdfPath = join(tmpdir(), `shiv-whatsapp-${Date.now()}-${Math.random().toString(16).slice(2)}.pdf`)
       await writeFile(renderedPdfPath, pdf)
@@ -2905,12 +2972,6 @@ async function cloudRequest(path, options = {}) {
   return json
 }
 
-async function markCloudJob(path, body) {
-  await cloudRequest(path, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-}
 
 /** A queued file kept in storage arrives as a link; fetch it into the shape an upload has. */
 async function withFileData(file) {
@@ -2956,8 +3017,10 @@ async function printCloudJob(job) {
     // Shared from a phone (print-web): B/W to the HP, colour to the Epson,
     // each falling back to the other as a WhatsApp print does.
     let mode = job.payload?.mode === 'color' || job.payload?.mode === 'bw' ? job.payload.mode : null
-    const decoded = []
-    for (let i = 0; i < files.length; i += 1) decoded.push(decodeUploadedFile(await withFileData(files[i]), i))
+    // The printer check (a PowerShell) runs while the files come down, not after.
+    let route = mode ? routeWhatsAppPrintJob(mode, null) : null
+    route?.catch(() => {})
+    const decoded = (await Promise.all(files.map(withFileData))).map((file, i) => decodeUploadedFile(file, i))
     // Shared silently from a phone ("auto"): colour or black and white is read
     // from the files here, before a printer is chosen.
     if (job.payload?.mode === 'auto') {
@@ -2966,14 +3029,15 @@ async function printCloudJob(job) {
         return decoded.every((f) => f.mediaType.startsWith('image/')) ? 'color' : 'bw'
       })
       job.payload.mode = mode
+      route = routeWhatsAppPrintJob(mode, null)
       console.log(`[cloud-print] ${job._id}: ${mode === 'color' ? 'colour' : 'black & white'} (read from the files)`)
     }
     const results = []
     for (let i = 0; i < decoded.length; i += 1) {
       const file = decoded[i]
       if (mode) {
-        const route = await routeWhatsAppPrintJob(mode, file)
-        results.push(await printUploadedFile(file, copies, route.printer, route.printSettings))
+        const { printer, printSettings } = await route
+        results.push(await printUploadedFile(file, copies, printer, printSettings))
       } else {
         results.push(await printUploadedFile(file, copies))
       }
@@ -3046,8 +3110,12 @@ async function watchCloudPrintQueue() {
     const { anyApi } = await import('convex/server')
     const client = new ConvexClient(url)
     client.setAuth(async () => token)
+    liveQueue = { client, api: anyApi.printJobs }
     client.onUpdate(anyApi.printJobs.listPending, { limit: 5 }, (jobs) => {
-      if (Array.isArray(jobs) && jobs.length) void pollCloudPrintJobs()
+      if (Array.isArray(jobs) && jobs.length) {
+        warmPrinterHealth()
+        void pollCloudPrintJobs()
+      }
     }, (err) => console.warn('[cloud-print] live queue:', err?.message ?? err))
     console.log('   Live print queue: on — new jobs print as they arrive')
   } catch (err) {
@@ -3055,30 +3123,60 @@ async function watchCloudPrintQueue() {
   }
 }
 
+/**
+ * The queue's steps, over the live link when it is up: one trip to the
+ * database instead of two (this PC, then Railway's cloud API, then the
+ * database). Only while the link is connected, so a step is never left
+ * waiting on a dropped link; otherwise through the cloud API as before.
+ */
+let liveQueue = null
+const QUEUE_HTTP = {
+  claimNext: (args) => ['/api/print-jobs/claim', args],
+  markPrinting: ({ id, ...rest }) => [`/api/print-jobs/${id}/printing`, rest],
+  complete: ({ id, ...rest }) => [`/api/print-jobs/${id}/complete`, rest],
+  fail: ({ id, ...rest }) => [`/api/print-jobs/${id}/fail`, rest],
+}
+async function queueStep(name, args) {
+  if (liveQueue?.client.connectionState().isWebSocketConnected) {
+    try {
+      return await liveQueue.client.mutation(liveQueue.api[name], args)
+    } catch (err) {
+      // A refusal from the database stands; only a lost link tries the other way.
+      if (liveQueue.client.connectionState().isWebSocketConnected) throw err
+    }
+  }
+  const [path, body] = QUEUE_HTTP[name](args)
+  const response = await cloudRequest(path, { method: 'POST', body: JSON.stringify(body) })
+  return name === 'claimNext' ? response.jobs : response
+}
+
 async function pollCloudPrintJobs() {
-  if (!CLOUD_API_URL) return
+  if (!CLOUD_API_URL && !liveQueue) return
   // A job that arrives while one pickup is running is fetched straight after
   // it, not left for the next regular check.
   if (cloudPollRunning) { cloudPollAgain = true; return }
   cloudPollRunning = true
   try {
-    const response = await cloudRequest('/api/print-jobs/claim', {
-      method: 'POST',
-      body: JSON.stringify({ printerId: PRINTER_AGENT_ID, limit: 3 }),
-    })
-    const jobs = Array.isArray(response.jobs) ? response.jobs : []
+    const claimed = await queueStep('claimNext', { printerId: PRINTER_AGENT_ID, limit: 3 })
+    const jobs = Array.isArray(claimed) ? claimed : []
+    if (jobs.length) warmPrinterHealth()
 
     for (const job of jobs) {
+      // "Printing" is told to the database while the job prints, not before it.
+      const printing = queueStep('markPrinting', { id: job._id, printerId: PRINTER_AGENT_ID })
+      printing.catch((err) => console.warn(`[cloud-print] ${job._id}: could not mark printing:`, err?.message ?? err))
       try {
-        await markCloudJob(`/api/print-jobs/${job._id}/printing`, { printerId: PRINTER_AGENT_ID })
         void tellPhone(job, { printing: true })
         const result = await printCloudJob(job)
-        await markCloudJob(`/api/print-jobs/${job._id}/complete`, { printerId: PRINTER_AGENT_ID })
+        await printing.catch(() => {})
+        await queueStep('complete', { id: job._id, printerId: PRINTER_AGENT_ID })
         console.log(`[cloud-print] completed ${job._id}`)
         void tellPhone(job, { ok: true, result })
       } catch (err) {
         console.error(`[cloud-print] failed ${job._id}`, err)
-        await markCloudJob(`/api/print-jobs/${job._id}/fail`, {
+        await printing.catch(() => {})
+        await queueStep('fail', {
+          id: job._id,
           printerId: PRINTER_AGENT_ID,
           error: String(err.message ?? err),
         }).catch(markErr => console.error('[cloud-print] failed to mark failure', markErr))
@@ -4299,6 +4397,14 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   Default printer: ${PRINT_PRINTER}`)
   console.log(`   Color/ID printer: ${COLOR_PRINTER}`)
   console.log(`   B/W laser printer: ${BW_PRINTER}`)
+  console.log(`   Print engine: ${PRINT_ENGINE === 'sumatra' ? 'SumatraPDF' : 'Windows (tools/print-file.ps1)'}${PRINTER_IPP_URLS.size ? `; straight over IPP: ${[...PRINTER_IPP_URLS.keys()].join(', ')}` : ''}`)
+  // Ask each IPP printer what it takes now, so the first print does not wait for it.
+  for (const [name, url] of PRINTER_IPP_URLS) {
+    printerInfo(url).then(
+      (a) => console.log(`[ipp-print] ${name}: ${a['printer-make-and-model'] ?? 'ready'} at ${url}`),
+      (err) => console.warn(`[ipp-print] ${name}: not reachable at ${url} (${err?.message ?? err}); it will print through Windows`),
+    )
+  }
   console.log(`   Browser: ${CHROME_PATH ?? 'Puppeteer managed Chrome'}`)
   if (CLOUD_API_URL) {
     console.log(`   Cloud API: ${CLOUD_API_URL}`)
