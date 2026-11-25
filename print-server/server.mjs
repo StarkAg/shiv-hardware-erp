@@ -31,6 +31,7 @@ import {
 import { registerCardScan } from './card-scan.mjs'
 import { detectColourMode, registerColourCheck } from './colour-check.mjs'
 import { directPrintable, parseIppPrinters, printDirect, printerInfo } from './direct-print.mjs'
+import { createFolderWatcher, parseWatchList } from './watch-print.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
@@ -2027,6 +2028,39 @@ async function startDropPrintFolder() {
     scanDropPrintFolder().catch(err => console.warn('[drop-print] scan failed', err?.message ?? err))
   }, 2000)
   console.log(`   Drop-folder print: ${DROP_PRINT_DIR}`)
+}
+
+// ── Watched folders (watch-print.mjs) ────────────────────────────────────────
+// Files that print by themselves where they land, such as SBI's PDFs in
+// Downloads (AUTO_PRINT_WATCH). Same printers and fallbacks as the drop folder.
+function startWatchPrint() {
+  const rules = parseWatchList(process.env.AUTO_PRINT_WATCH, homedir())
+  if (!rules.length) return
+  const modeFor = (item, mediaType) => item.mode ?? (mediaType.startsWith('image/') ? 'color' : 'bw')
+  const watcher = createFolderWatcher({
+    rules,
+    seenFile: fileURLToPath(new URL('data/watch-print-seen.json', import.meta.url)),
+    log: (line) => console.log(line),
+    async canPrint(item) {
+      const mediaType = DROP_PRINT_MEDIA_TYPES[extname(item.name).toLowerCase()]
+      if (!mediaType) return true // printFile says why it is skipped
+      const route = await routeWhatsAppPrintJob(modeFor(item, mediaType), { name: item.name, mediaType })
+      return (await getWindowsPrinterHealth(route.printer)).ok
+    },
+    async printFile(item) {
+      const mediaType = DROP_PRINT_MEDIA_TYPES[extname(item.name).toLowerCase()]
+      if (!mediaType) throw new Error('not a PDF or a picture')
+      const mode = modeFor(item, mediaType)
+      const route = await routeWhatsAppPrintJob(mode, { name: item.name, mediaType })
+      const buffer = await readFile(item.path)
+      // savedPath: printed from where it is, and never deleted afterwards.
+      const file = { name: item.name, mediaType, buffer, data: buffer.toString('base64'), savedPath: item.path }
+      const result = await printUploadedFile(file, 1, route.printer, withoutForcedOrientation(route.printSettings))
+      console.log(`[watch-print] printed ${item.name} (${mode}) on "${result.printer}"`)
+    },
+  })
+  watcher.start()
+  console.log(`   Watched print: ${rules.map((r) => `${r.pattern} in ${r.dir}`).join('; ')}`)
 }
 
 async function printUploadedFileImpl(file, copies, printerOverride = null, printSettingsOverride = null) {
@@ -4435,6 +4469,7 @@ app.listen(PORT, '0.0.0.0', () => {
   prepareEpsonPlainA4ColorDefaults(COLOR_PRINTER, 'startup')
   warmUpBrowser()
   startDropPrintFolder()
+  startWatchPrint()
   if (!process.env.ANTHROPIC_API_KEY) console.warn('Warning: ANTHROPIC_API_KEY not set')
   console.log()
 })

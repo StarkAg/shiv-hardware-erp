@@ -45,6 +45,7 @@ Shop group (WhatsApp)
 - Photo or PDF with `bw` / `cp` in the caption: prints at once.
 - Without a caption: waits up to 10 minutes for `bw` / `cp` from the same person.
 - `bw` / `cp` sent as a reply to a photo or PDF: prints that one.
+- An SBI PDF (`SBIDocument_*.pdf`) prints as soon as it is posted, black and white, with no `bw` / `cp` (Railway variable `PRINT_AUTO_NAMES`, "pattern=mode" pairs split by ";"; "off" for none). Group only: a PDF sent straight to the Shop number does not print.
 
 Railway variables on `whatsapp-reminders`: `CONVEX_URL` (production), `SHIV_DEVICE_TOKEN` (a server key from `npx convex run --prod devices:issueServerKey '{"name":"whatsapp-print"}'`), `PRINT_GROUP_ID` (defaults to `SHOP_GROUP_ID`; the "Shiv Hardware" group is `120363396348781660@g.us`), optional `PRINTER_ID` (default `shiv-shop-printer`). Missing any of the first three, printing stays off and `/status` says which under `groupPrint.missing`.
 

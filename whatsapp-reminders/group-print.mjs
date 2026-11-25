@@ -10,6 +10,8 @@
  *   a photo or PDF without one                         waits up to 10 minutes for
  *                                                      "bw" / "cp" from the same person
  *   "bw" / "cp" sent as a reply to a photo or PDF      prints that file
+ *   an SBI PDF (SBIDocument_*.pdf), no caption needed  prints now, black and white
+ *                                                      (PRINT_AUTO_NAMES)
  *
  * bw (also "b/w", "black") goes to the HP; cp (also "color", "colour") to the
  * Epson; each falls back to the other on the print server, as before.
@@ -26,6 +28,24 @@ import { readFile, writeFile } from 'node:fs/promises'
 const PRINTABLE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'])
 const EXTENSION = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'application/pdf': '.pdf' }
 const MAX_FILES_PER_JOB = 20
+
+/**
+ * Files that print as soon as they are posted, with no bw / cp, by name:
+ * PRINT_AUTO_NAMES, "pattern=mode" pairs split by ";", * and ? wildcards,
+ * case does not matter. Default: SBI's PDFs, black and white (owner's ask,
+ * 25 Nov 2026). "off" for none.
+ */
+export const DEFAULT_AUTO_NAMES = 'SBIDocument_*.pdf=bw'
+export function parseAutoNames(value) {
+  const text = String(value ?? DEFAULT_AUTO_NAMES).trim()
+  if (!text || /^(off|false|no|0)$/i.test(text)) return []
+  return text.split(';').map((entry) => {
+    const [pattern, mode = 'bw'] = entry.split('=').map((s) => s.trim())
+    if (!pattern) return null
+    const body = pattern.split('').map((c) => (c === '*' ? '.*' : c === '?' ? '.' : c.replace(/[.+^${}()|[\]\\]/g, '\\$&'))).join('')
+    return { match: new RegExp(`^${body}$`, 'i'), mode: mode.toLowerCase() === 'color' ? 'color' : 'bw' }
+  }).filter(Boolean)
+}
 
 /** "bw" / "cp" (and their longer spellings) in a caption or message, else null. */
 export function printModeOf(text) {
@@ -106,6 +126,8 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent }) 
   const groupId = env.PRINT_GROUP_ID || env.SHOP_GROUP_ID || ''
   const printerId = env.PRINTER_ID || 'shiv-shop-printer'
   const ttlMs = Math.max(10_000, Number(env.PRINT_COMMAND_TTL_MS) || 10 * 60_000)
+  const autoNames = parseAutoNames(env.PRINT_AUTO_NAMES)
+  const autoModeOf = (fileName) => (fileName ? autoNames.find((a) => a.match.test(fileName))?.mode ?? null : null)
   const seenFile = `${dataDir}/print-seen.json`
 
   const missing = [!convexUrl && 'CONVEX_URL', !token && 'SHIV_DEVICE_TOKEN', !groupId && 'PRINT_GROUP_ID'].filter(Boolean)
@@ -191,7 +213,8 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent }) 
       if (media) {
         if (!PRINTABLE.has(media.mediaType)) return
         const file = await download(sock, downloadMediaMessage, msg.key, content, media)
-        const mode = printModeOf(media.caption)
+        // A bw / cp in the caption wins; else a file named for printing (an SBI PDF) prints as it is.
+        const mode = printModeOf(media.caption) ?? autoModeOf(media.fileName)
         if (mode) await queue([file], mode, sender)
         else {
           pending.add(sender, file)

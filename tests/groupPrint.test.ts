@@ -117,6 +117,29 @@ describe('group printing', () => {
     expect(jobs).toHaveLength(1)
   })
 
+  it('prints an SBI PDF the moment it is posted, black and white, with no bw / cp', async () => {
+    const { send, msg } = setup()
+    await send(msg({ documentMessage: { mimetype: 'application/pdf', fileName: 'SBIDocument_25_Nov_2026.pdf' } }))
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0].payload).toMatchObject({ mode: 'bw', files: [{ name: 'SBIDocument_25_Nov_2026.pdf', mediaType: 'application/pdf' }] })
+    // Any other PDF still waits for its bw / cp.
+    await send(msg({ documentMessage: { mimetype: 'application/pdf', fileName: 'quotation.pdf' } }))
+    expect(jobs).toHaveLength(1)
+    // A caption still decides: cp on an SBI PDF prints in colour.
+    await send(msg({ documentWithCaptionMessage: { message: { documentMessage: { mimetype: 'application/pdf', fileName: 'sbidocument_1.PDF', caption: 'cp' } } } }))
+    expect(jobs.at(-1).payload.mode).toBe('color')
+  })
+
+  it('takes other names to print from PRINT_AUTO_NAMES, and none with "off"', async () => {
+    const custom = setup({ PRINT_AUTO_NAMES: 'Statement_*.pdf=bw; *receipt*.pdf=color' })
+    await custom.send(custom.msg({ documentMessage: { mimetype: 'application/pdf', fileName: 'UPI receipt 41.pdf' } }))
+    await custom.send(custom.msg({ documentMessage: { mimetype: 'application/pdf', fileName: 'SBIDocument_1.pdf' } }))
+    expect(jobs.map((j) => j.payload.mode)).toEqual(['color'])
+    const off = setup({ PRINT_AUTO_NAMES: 'off' })
+    await off.send(off.msg({ documentMessage: { mimetype: 'application/pdf', fileName: 'SBIDocument_2.pdf' } }))
+    expect(jobs).toHaveLength(1)
+  })
+
   it('stays off without its settings', async () => {
     const { printer, send, msg } = setup({ SHIV_DEVICE_TOKEN: '' })
     expect(printer.state.enabled).toBe(false)
