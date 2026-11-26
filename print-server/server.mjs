@@ -32,6 +32,7 @@ import { registerCardScan } from './card-scan.mjs'
 import { detectColourMode, registerColourCheck } from './colour-check.mjs'
 import { directPrintable, parseIppPrinters, printDirect, printerInfo } from './direct-print.mjs'
 import { createFolderWatcher, parseWatchList } from './watch-print.mjs'
+import { createBankPrinterStore, createPrinterStatus, isBankFile, parseBankNames } from './bank-print.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
@@ -1424,6 +1425,41 @@ async function prepareBwFallbackPrinter(printer, source = 'print') {
   await prepareEpsonPlainA4ColorDefaults(printer, source)
 }
 
+// ── Bank prints (bank-print.mjs) ─────────────────────────────────────────────
+// SBI's PDFs, from the shop group or Downloads, go to the printer chosen on the
+// Counter's Printers screen (the Epson until one is chosen; owner's ask,
+// 26 Nov 2026), black and white. If that printer is offline they go to the
+// other shop printer; if both are, they wait.
+const BANK_PRINT_NAMES = parseBankNames(process.env.BANK_PRINT_NAMES)
+const bankPrinter = createBankPrinterStore(new URL('data/bank-printer.json', import.meta.url), COLOR_PRINTER)
+const printerStatus = createPrinterStatus({ execFileAsync, knownAddresses: PRINTER_IPP_URLS })
+const isBankPrint = (name) => isBankFile(name, BANK_PRINT_NAMES)
+
+/** Black and white on this printer: the Epson needs its paper tray named. */
+function bankPrintSettings(printer) {
+  return /epson|l8050/i.test(printer) ? BW_FALLBACK_PRINT_SETTINGS : WHATSAPP_BW_PRINT_SETTINGS
+}
+
+async function routeBankPrintJob(source = 'bank-print') {
+  const chosen = await bankPrinter.get()
+  const status = await printerStatus.get(chosen).catch(() => null)
+  let printer = chosen
+  let fallback = null
+  if (!status?.online) {
+    const others = [...new Set([BW_PRINTER, COLOR_PRINTER, BW_FALLBACK_PRINTER])].filter((p) => p !== chosen)
+    for (const other of others) {
+      if ((await printerStatus.get(other).catch(() => null))?.online) {
+        fallback = { from: chosen, to: other, reason: status?.reason ?? 'not found' }
+        printer = other
+        console.warn(`[${source}] bank printer "${chosen}" offline (${fallback.reason}); printing on "${other}"`)
+        break
+      }
+    }
+  }
+  if (printer === COLOR_PRINTER) await prepareEpsonPlainA4ColorDefaults(printer, source)
+  return { printer, printSettings: bankPrintSettings(printer), fallback, online: printer !== chosen || Boolean(status?.online) }
+}
+
 async function routeWhatsAppPrintJob(mode, file) {
   const primaryPrinter = printerForWhatsAppPrintMode(mode, file)
   if (mode !== 'bw') {
@@ -2044,14 +2080,16 @@ function startWatchPrint() {
     async canPrint(item) {
       const mediaType = DROP_PRINT_MEDIA_TYPES[extname(item.name).toLowerCase()]
       if (!mediaType) return true // printFile says why it is skipped
+      if (isBankPrint(item.name)) return (await routeBankPrintJob('watch-print')).online
       const route = await routeWhatsAppPrintJob(modeFor(item, mediaType), { name: item.name, mediaType })
       return (await getWindowsPrinterHealth(route.printer)).ok
     },
     async printFile(item) {
       const mediaType = DROP_PRINT_MEDIA_TYPES[extname(item.name).toLowerCase()]
       if (!mediaType) throw new Error('not a PDF or a picture')
-      const mode = modeFor(item, mediaType)
-      const route = await routeWhatsAppPrintJob(mode, { name: item.name, mediaType })
+      const bank = isBankPrint(item.name)
+      const mode = bank ? 'bw' : modeFor(item, mediaType)
+      const route = bank ? await routeBankPrintJob('watch-print') : await routeWhatsAppPrintJob(mode, { name: item.name, mediaType })
       const buffer = await readFile(item.path)
       // savedPath: printed from where it is, and never deleted afterwards.
       const file = { name: item.name, mediaType, buffer, data: buffer.toString('base64'), savedPath: item.path }
@@ -3066,10 +3104,15 @@ async function printCloudJob(job) {
       route = routeWhatsAppPrintJob(mode, null)
       console.log(`[cloud-print] ${job._id}: ${mode === 'color' ? 'colour' : 'black & white'} (read from the files)`)
     }
+    route?.catch(() => {}) // not awaited when every file is a bank print
     const results = []
     for (let i = 0; i < decoded.length; i += 1) {
       const file = decoded[i]
-      if (mode) {
+      // A bank PDF (SBI) goes to the bank printer, black and white, unless it was sent as "cp".
+      if (mode !== 'color' && isBankPrint(file.name)) {
+        const bank = await routeBankPrintJob('cloud-print')
+        results.push(await printUploadedFile(file, copies, bank.printer, bank.printSettings))
+      } else if (mode) {
         const { printer, printSettings } = await route
         results.push(await printUploadedFile(file, copies, printer, printSettings))
       } else {
@@ -3779,6 +3822,33 @@ app.get('/printers', async (_req, res) => {
   }
 })
 
+// The Counter's Printers screen: each printer online or offline, and which one
+// the bank PDFs go to (bank-print.mjs).
+app.get('/printers/status', async (req, res) => {
+  try {
+    const [printers, bank] = await Promise.all([
+      printerStatus.list({ fresh: req.query.fresh === '1' }),
+      bankPrinter.get(),
+    ])
+    res.json({ ok: true, printers, bankPrinter: bank, colorPrinter: COLOR_PRINTER, bwPrinter: BW_PRINTER })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
+app.post('/printers/bank', async (req, res) => {
+  try {
+    const name = String(req.body?.printer ?? '').trim()
+    const printers = await printerStatus.list()
+    if (!printers.some((p) => p.name === name)) throw new Error(`No printer called "${name}" on this PC`)
+    await bankPrinter.set(name)
+    console.log(`[bank-print] bank PDFs now go to "${name}"`)
+    res.json({ ok: true, bankPrinter: name })
+  } catch (err) {
+    res.status(400).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
 app.get('/scan-bill', (_req, res) => res.json({ ok: true, message: 'Use POST with { image, mediaType }. Scanner uses Claude only.' }))
 
 // ── Scan Bill ─────────────────────────────────────────────────────────────────
@@ -4431,6 +4501,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   Default printer: ${PRINT_PRINTER}`)
   console.log(`   Color/ID printer: ${COLOR_PRINTER}`)
   console.log(`   B/W laser printer: ${BW_PRINTER}`)
+  void bankPrinter.get().then((p) => console.log(`[bank-print] bank PDFs (${BANK_PRINT_NAMES.length ? 'SBI' : 'none'}) go to "${p}"`))
   console.log(`   Print engine: ${PRINT_ENGINE === 'sumatra' ? 'SumatraPDF' : 'Windows (tools/print-file.ps1)'}${PRINTER_IPP_URLS.size ? `; straight over IPP: ${[...PRINTER_IPP_URLS.keys()].join(', ')}` : ''}`)
   // Ask each IPP printer what it takes now, so the first print does not wait for it.
   for (const [name, url] of PRINTER_IPP_URLS) {

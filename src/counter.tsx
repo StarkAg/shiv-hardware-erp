@@ -29,6 +29,7 @@ import { AluminiumCosting } from './features/rates/AluminiumCosting'
 import { SlipMaker } from './features/slip/SlipMaker'
 import { Transport } from './features/transport/Transport'
 import { Customers } from './features/customers/Customers'
+import { Printers } from './features/print/Printers'
 import { AppError, HOME, NotFound } from './components/RouteFallbacks'
 
 import { startProperInputs } from './lib/properInputs'
@@ -154,6 +155,7 @@ const router = createHashRouter([
       { path: 'transport', element: <Transport /> },
       { path: 'transport/:view', element: <Transport /> },
       { path: 'customers', element: <Customers /> },
+      { path: 'printers', element: <Printers /> },
       { path: '*', element: <NotFound /> },
     ],
   },

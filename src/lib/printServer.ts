@@ -363,6 +363,43 @@ export async function cancelPrintJob(job: { jobId?: string; printer?: string; nu
   if (!json?.ok) throw new Error(json?.error ?? 'Could not cancel the job')
 }
 
+// ── Printers screen: online / offline, and where bank PDFs print ────────────────
+
+export type PrinterStatus = {
+  name: string
+  online: boolean
+  /** Why it is offline, in words; null when online. */
+  reason: string | null
+  address: string | null
+}
+
+export type PrinterStatusSnapshot = {
+  ok: true
+  printers: PrinterStatus[]
+  /** The printer SBI's PDFs go to (print-server/bank-print.mjs). */
+  bankPrinter: string
+  colorPrinter: string
+  bwPrinter: string
+}
+
+export async function fetchPrinterStatus(fresh = false): Promise<PrinterStatusSnapshot> {
+  const res = await fetchPrintServer(`/printers/status${fresh ? '?fresh=1' : ''}`, undefined, 20000)
+  const json = await res.json().catch(() => null)
+  if (!json?.ok) throw new Error(json?.error ?? 'Could not read the printers')
+  return json as PrinterStatusSnapshot
+}
+
+export async function setBankPrinter(printer: string): Promise<string> {
+  const res = await fetchPrintServer('/printers/bank', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ printer }),
+  }, 20000)
+  const json = await res.json().catch(() => null)
+  if (!json?.ok) throw new Error(json?.error ?? 'Could not change the bank printer')
+  return json.bankPrinter as string
+}
+
 // ── Catalog sync ─────────────────────────────────────────────────────────────
 
 export interface CatalogSnapshot {

@@ -1,5 +1,5 @@
 import {
-  Calculator, CarTaxiFront, ClipboardList, CreditCard, FileText, History, IndianRupee, Inbox, Package, ScrollText, ShieldCheck,
+  Calculator, CarTaxiFront, ClipboardList, CreditCard, FileText, History, IndianRupee, Inbox, Package, Printer, ScrollText, ShieldCheck,
 } from 'lucide-react'
 
 /**
@@ -34,6 +34,8 @@ export const NAV = [
       { to: '/rates', label: 'Rates', icon: IndianRupee },
       { to: '/aluminium-rates', label: 'Aluminium rates', icon: Calculator },
       { to: '/transport', label: 'Toto', icon: CarTaxiFront },
+      // Each printer online or offline, and which one SBI's PDFs print on.
+      { to: '/printers', label: 'Printers', icon: Printer },
     ],
   },
 ]
