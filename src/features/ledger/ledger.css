@@ -222,6 +222,10 @@
   justify-content: space-between; gap: 16px; padding: 12px 18px;
   background: var(--card); border-bottom: 1px solid var(--line);
   font-size: 14px; font-weight: 600;}
+.ledger-root .packet-till{display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--muted);}
+.ledger-root .packet-till input{padding: 6px 8px; font: inherit; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px;}
+.ledger-root.dark .packet-till input{color-scheme: dark;}
 .ledger-root .sheet{background: #fff; color: #1c1917; width: 210mm; min-height: 297mm;
   margin: 20px auto; padding: 14mm 16mm 16mm; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.2);
   font-size: 12px; display: flex; flex-direction: column;}

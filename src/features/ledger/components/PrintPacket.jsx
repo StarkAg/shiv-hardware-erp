@@ -1,12 +1,12 @@
 import React from 'react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
-import { rupees, rupeesInWords, shortDate, longDate, aadhaarMasked, phoneDisplay, rowType } from '../lib/format';
+import { rupees, rupeesInWords, shortDate, longDate, inputDate, aadhaarMasked, phoneDisplay, rowType } from '../lib/format';
 
 const SHOP = 'Shiv Hardware Store';
 
 /** Typeset letterhead — the shop on the left, the document on the right. */
-function Head({ title }) {
+function Head({ title, till }) {
   return (
     <header className="letterhead">
       <div className="lh-shop">
@@ -20,6 +20,7 @@ function Head({ title }) {
       </div>
       <div className="lh-doc">
         <div className="lh-title">{title}</div>
+        {till && <div className="lh-date">Up to {longDate(till)}</div>}
         <div className="lh-date">Printed {longDate(Date.now())}</div>
       </div>
     </header>
@@ -51,8 +52,14 @@ const standing = (side) =>
   side === 'Cr' ? `Payable by ${SHOP}` : `Receivable by ${SHOP}`;
 
 /** Cover sheet, the account itself, then a page for every bill photo. */
-function PartyPacket({ ledgerId }) {
-  const data = useLive(api.reports.ledger, { ledgerId }, `ledger:${ledgerId}`);
+function PartyPacket({ ledgerId, till }) {
+  // A till date ends the statement there: entries after it are left out and the
+  // closing balance is the balance on that day (reports.ledger `to`).
+  const data = useLive(
+    api.reports.ledger,
+    till ? { ledgerId, to: till } : { ledgerId },
+    till ? `ledger:${ledgerId}:to:${till}` : `ledger:${ledgerId}`,
+  );
   if (!data) return null;
 
   const { account } = data;
@@ -77,7 +84,7 @@ function PartyPacket({ ledgerId }) {
   return (
     <>
       <div className="sheet">
-        <Head title="Statement of Account" />
+        <Head title="Statement of Account" till={till} />
 
         <div className="statement-head">
           <div className="to-block">
@@ -350,13 +357,25 @@ function AllPacket() {
 }
 
 export default function PrintPacket({ scope, ledgerId, onBack }) {
+  // "Till date" (owner's ask, 26 Nov 2026): the statement up to a chosen day.
+  // Entry dates are UTC midnights (format.js inputDate), so the end of that
+  // UTC day keeps every entry dated on it. Empty: everything, as before.
+  const [tillDay, setTillDay] = React.useState('');
+  const till = tillDay ? Date.parse(`${tillDay}T23:59:59.999Z`) : undefined;
   return (
     <div className="packet">
       <div className="packet-bar no-print">
         <button className="link" onClick={onBack}>← Back</button>
+        {scope === 'party' && (
+          <label className="packet-till">
+            Till date
+            <input type="date" value={tillDay} max={inputDate(Date.now())} onChange={(e) => setTillDay(e.target.value)} />
+            {tillDay && <button className="link" onClick={() => setTillDay('')}>All</button>}
+          </label>
+        )}
         <button className="btn" onClick={() => window.print()}>Print</button>
       </div>
-      {scope === 'party' ? <PartyPacket ledgerId={ledgerId} /> : <AllPacket />}
+      {scope === 'party' ? <PartyPacket ledgerId={ledgerId} till={till} /> : <AllPacket />}
     </div>
   );
 }
