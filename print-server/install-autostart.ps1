@@ -41,5 +41,30 @@ Register-ScheduledTask `
   -Description 'Starts the Shiv Hardware print server when this Windows user logs in.' `
   -Force | Out-Null
 
-$task = Get-ScheduledTask -TaskName $TaskName
-$task | Select-Object TaskName, State, TaskPath
+# Every 2 minutes, health-check.ps1 asks the server /status and restarts it if
+# it is hung or the whole chain is gone (what the restart loops cannot see).
+$healthName = "$TaskName Health"
+$healthScript = Join-Path $scriptDir 'health-check-hidden.vbs'
+$healthAction = New-ScheduledTaskAction `
+  -Execute 'wscript.exe' `
+  -Argument "`"$healthScript`"" `
+  -WorkingDirectory $scriptDir
+$healthTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
+  -RepetitionInterval (New-TimeSpan -Minutes 2)
+$healthSettings = New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries `
+  -ExecutionTimeLimit (New-TimeSpan -Minutes 5) `
+  -MultipleInstances IgnoreNew `
+  -StartWhenAvailable
+
+Register-ScheduledTask `
+  -TaskName $healthName `
+  -Action $healthAction `
+  -Trigger $healthTrigger `
+  -Settings $healthSettings `
+  -Principal $principal `
+  -Description 'Every 2 minutes: restarts the Shiv Hardware print server if it is hung or not running.' `
+  -Force | Out-Null
+
+Get-ScheduledTask -TaskName $TaskName, $healthName | Select-Object TaskName, State, TaskPath
