@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { Button, Card, Page, PageHeader } from '../../components/ui'
@@ -21,7 +21,7 @@ import {
   type PriceMode,
   type Thick3,
 } from '../../lib/aluCosting'
-import { calcAllThicknessesSheet, sheetSize, type Slab } from '../../lib/aluSheet'
+import { calcAllThicknessesSheet, sheetSize, slabRate, windowRates, type Slab } from '../../lib/aluSheet'
 import { resetAluCosting, saveAluCosting, useAluCosting } from '../../lib/aluCostingStore'
 import { formatINR } from '../../lib/pricing'
 
@@ -637,8 +637,7 @@ function SheetEditor({ product, costing, put }: {
         { label: 'Brown Coated', key: 'brownCoated', rate: 'brownCoatedRate' },
       ]
 
-  const tryIt = (
-    <Section title="Try a size" note="Rate x area, as on the sheet. The quotation shows the same.">
+  const sizeInputs = (
       <div className="mb-3 flex flex-wrap items-end gap-3 text-sm">
         <label className="w-28">
           <span className="mb-1 block text-xs font-semibold text-muted">Height (inch)</span>
@@ -653,6 +652,9 @@ function SheetEditor({ product, costing, put }: {
           {product === 'door' && size.h < costing.doorMinHeight && ` · priced as ${costing.doorMinHeight} in high`}
         </span>
       </div>
+  )
+
+  const results = (
       <table className="w-full text-sm">
         <thead>
           <tr>
@@ -677,6 +679,12 @@ function SheetEditor({ product, costing, put }: {
           ))}
         </tbody>
       </table>
+  )
+
+  const tryIt = (
+    <Section title="Try a size" note="Rate x area, as on the sheet. The quotation shows the same.">
+      {sizeInputs}
+      {results}
     </Section>
   )
 
@@ -711,82 +719,130 @@ function SheetEditor({ product, costing, put }: {
   const win = costing.sheet[product]
   const putWin = (fn: (x: typeof win) => void) => put((c) => { fn(c.sheet[product]); return c })
   const setSlab = (i: number, patch: Partial<Slab>) => putWin((x) => { x.slabs[i] = { ...x.slabs[i], ...patch } })
+  const setT3 = (k: 'extra' | 'ssNet' | 'brownCoated', i: number, v: number) =>
+    putWin((x) => {
+      const next = [...x[k]] as Thick3
+      next[i] = v
+      x[k] = next
+    })
+  const base = slabRate(s.area, win.slabs)
+  const wr = windowRates(s.area, win)
+  // The row the size falls in, as the sheet's MATCH picks it.
+  const inUse = win.slabs.reduce<number>((best, sl, i) => (s.area >= sl.area && (best < 0 || sl.area >= win.slabs[best].area) ? i : best), -1)
+  const approvedName = `${size.h} " X ${size.w} " ${product === 'win3' ? '3' : '2'} Track Aluminium Window`
+
+  // Laid out as the shop's sheet: Control Panel on the left, Rates According
+  // To Area on the right, so the counter finds every number where it always has.
+  const cell = 'border border-stone-300 px-2 py-1.5 text-center align-middle'
+  const head = `${cell} bg-stone-900 text-xs font-bold uppercase tracking-wide text-white`
+  const rowHead = `${cell} bg-stone-100 text-left font-semibold`
+  const rate = `${cell} text-base font-bold tabular-nums`
+  const box = (label: string, value: number, onChange: (v: number) => void) => (
+    <div className="mx-auto w-20"><Num label={label} value={value} onChange={onChange} /></div>
+  )
+  const glassRow = (label: string, key: 'clear' | 'reflective', steps: boolean) => (
+    <tr>
+      <td className={rowHead}>{label}</td>
+      <td className={rate}>{wr[0][key]}</td>
+      <td className={cell}>{steps && box('1.6 mm over 1.2 mm', win.extra[1], (v) => setT3('extra', 1, v))}</td>
+      <td className={rate}>{wr[1][key]}</td>
+      <td className={cell}>{steps && box('Hindalco over 1.2 mm', win.extra[2], (v) => setT3('extra', 2, v))}</td>
+      <td className={rate}>{wr[2][key]}</td>
+    </tr>
+  )
+  const addonRow = (label: string, k: 'ssNet' | 'brownCoated') => (
+    <tr>
+      <td className={rowHead}>{label}</td>
+      {ALU_THICKNESSES.map((t, i) => (
+        <Fragment key={t}>
+          {i > 0 && <td className={cell} />}
+          <td className={cell}>{box(`${label} ${t}`, win[k][i], (v) => setT3(k, i, v))}</td>
+        </Fragment>
+      ))}
+    </tr>
+  )
 
   return (
     <>
       <Section
-        title="Rates according to area"
-        note="The 1.2 mm clear rate, per sqft. A size takes the row with the biggest area not over its own; under the first row it takes the first."
+        title="Control panel"
+        note={<>The 1.2 mm rate is the rate by area for this size ({n2(s.area)} sqft: {base}). 1.6 mm and Hindalco add the steps between them; reflective glass adds its extra to each. Type a size to see its rates.</>}
       >
-        <table className="text-sm">
-          <thead>
-            <tr>
-              <th className={th}>From sqft</th>
-              <th className={th}>Rate</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {win.slabs.map((sl, i) => (
-              <tr key={i} className="border-t border-stone-100">
-                <td className={`${td} w-28`}><Num label="From sqft" value={sl.area} onChange={(area) => setSlab(i, { area })} /></td>
-                <td className={`${td} w-28`}><Num label="Rate per sqft" value={sl.rate} onChange={(rate) => setSlab(i, { rate })} /></td>
-                <td className={td}>
-                  <button
-                    type="button"
-                    aria-label="Remove row"
-                    className="rounded p-1 text-danger hover:bg-red-50 disabled:opacity-30"
-                    disabled={win.slabs.length <= 1}
-                    onClick={() => putWin((x) => { x.slabs.splice(i, 1) })}
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </td>
+        {sizeInputs}
+        <div className="flex flex-wrap items-start gap-4">
+          <table className="border-collapse text-sm">
+            <thead>
+              <tr><th colSpan={6} className={head}>Control Panel</th></tr>
+              <tr>
+                <th className={cell} />
+                <th className={`${cell} font-semibold`}>1.2 mm</th>
+                <th className={cell} />
+                <th className={`${cell} font-semibold`}>1.6 mm</th>
+                <th className={cell} />
+                <th className={`${cell} font-semibold`}>1.2 mm Hindalco</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <Button
-          variant="outline"
-          className="mt-2 flex items-center gap-1.5"
-          onClick={() => putWin((x) => {
-            const last = x.slabs[x.slabs.length - 1]
-            x.slabs.push({ area: (last?.area ?? 0) + 4, rate: last?.rate ?? 0 })
-          })}
-        >
-          <Plus size={16} /> Add row
-        </Button>
-      </Section>
+            </thead>
+            <tbody>
+              {glassRow('4 MM Clear & Texture Glass', 'clear', true)}
+              {glassRow('4 MM Reflective Glass', 'reflective', false)}
+              {product === 'win2' && addonRow('SS Net', 'ssNet')}
+              {addonRow('Brown Coated', 'brownCoated')}
+              <tr>
+                <td className={`${rowHead} bg-stone-900 text-white`}>Approved Name</td>
+                <td colSpan={5} className={`${cell} font-semibold`}>{approvedName}</td>
+              </tr>
+            </tbody>
+          </table>
 
-      <Section title="Control panel" note="Added to the rate by area. Reflective glass is the clear rate plus its extra.">
-        <table className="text-sm">
-          <thead>
-            <tr>
-              <th className={th} />
-              {ALU_THICKNESSES.map((t) => <th key={t} className={th}>{t}</th>)}
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            <ThickRow label="Thickness extra" unit="Rs per sqft over the rate by area" value={win.extra}
-              onChange={(v) => putWin((x) => { x.extra = v })} />
-            {product === 'win2' && (
-              <ThickRow label="SS Net" unit="Rs per sqft" value={win.ssNet} onChange={(v) => putWin((x) => { x.ssNet = v })} />
-            )}
-            <ThickRow label="Brown Coated" unit="Rs per sqft" value={win.brownCoated}
-              onChange={(v) => putWin((x) => { x.brownCoated = v })} />
-          </tbody>
-        </table>
+          <div>
+            <table className="border-collapse text-sm">
+              <thead>
+                <tr><th colSpan={3} className={head}>Rates According To Area</th></tr>
+              </thead>
+              <tbody>
+                {win.slabs.map((sl, i) => (
+                  <tr key={i} className={i === inUse ? 'bg-stone-100 font-bold' : ''}>
+                    <td className={cell}>{box('From sqft', sl.area, (area) => setSlab(i, { area }))}</td>
+                    <td className={cell}>{box('Rate per sqft', sl.rate, (r) => setSlab(i, { rate: r }))}</td>
+                    <td className={`${cell} border-l-0`}>
+                      <button
+                        type="button"
+                        aria-label="Remove row"
+                        className="rounded p-1 text-danger hover:bg-red-50 disabled:opacity-30"
+                        disabled={win.slabs.length <= 1}
+                        onClick={() => putWin((x) => { x.slabs.splice(i, 1) })}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Button
+              variant="outline"
+              className="mt-2 flex items-center gap-1.5"
+              onClick={() => putWin((x) => {
+                const last = x.slabs[x.slabs.length - 1]
+                x.slabs.push({ area: (last?.area ?? 0) + 4, rate: last?.rate ?? 0 })
+              })}
+            >
+              <Plus size={16} /> Add row
+            </Button>
+          </div>
+        </div>
         <div className="mt-3 flex items-center gap-2 text-sm">
           <span className="font-semibold">Reflective glass extra</span>
-          <div className="w-28">
+          <div className="w-24">
             <Num label="Reflective glass extra" value={win.reflective} onChange={(v) => putWin((x) => { x.reflective = v })} />
           </div>
           <span className="text-xs text-muted">Rs per sqft over clear</span>
         </div>
       </Section>
 
-      {tryIt}
+      <Section title="Price for this size" note="Rate x area, as on the sheet. The quotation shows the same.">
+        {results}
+      </Section>
     </>
   )
 }
