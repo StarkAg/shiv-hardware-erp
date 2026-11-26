@@ -7,7 +7,12 @@
 // site: nothing proxied from it, nothing linked to it, no name, logo or footer.
 import { next } from '@vercel/functions/middleware'
 
-const SITE = 'https://www.shivhardware.store/Gaurantee'
+// The shop site's own Vercel address, not www.shivhardware.store: that domain
+// lapsed at Namecheap on 19 Nov 2026 and every page of it went to Namecheap's
+// servers (404), so the cards' QRs broke (26 Nov 2026). Same page, same site.
+// Once the domain is renewed and its nameservers are Cloudflare's again, this
+// can go back to 'https://www.shivhardware.store/Gaurantee'.
+const SITE = 'https://shiv-hardware-store.vercel.app/Gaurantee'
 const CONVEX = 'https://sensible-panther-176.convex.cloud'
 // Same as BRANDED_DAYS on the guarantee page (shivhardware.store, app/Gaurantee).
 const BRANDED_DAYS = 20
