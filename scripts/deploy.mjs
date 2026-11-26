@@ -211,6 +211,8 @@ async function shellChangedSince(base, paths) {
 // ── Vercel ─────────────────────────────────────────────────────────────────
 const vercelAuthFile = [
   join(process.env.APPDATA ?? '', 'xdg.data', 'com.vercel.cli', 'auth.json'),
+  // Where newer Vercel CLIs keep it on Windows (found 26 Nov 2026, after the reinstall).
+  join(process.env.APPDATA ?? '', 'com.vercel.cli', 'Data', 'auth.json'),
   join(homedir(), 'Library', 'Application Support', 'com.vercel.cli', 'auth.json'),
   join(homedir(), '.local', 'share', 'com.vercel.cli', 'auth.json'),
 ].find((f) => existsSync(f))
