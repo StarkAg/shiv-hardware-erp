@@ -187,10 +187,11 @@ describe('auto-print chats (a supplier chat of paper bills)', () => {
 
   it('reads the chats from the setting, by name or id, bw unless said', () => {
     expect(parseAutoChats('Simran Ply=bw; 120363000000000009@g.us=cp ;Other')).toEqual([
-      { chat: 'Simran Ply', key: 'simranply', mode: 'bw' },
-      { chat: '120363000000000009@g.us', key: '120363000000000009@g.us', mode: 'color' },
-      { chat: 'Other', key: 'other', mode: 'bw' },
+      { chat: 'Simran Ply', key: 'simranply', mode: 'bw', onlyPaper: false },
+      { chat: '120363000000000009@g.us', key: '120363000000000009@g.us', mode: 'color', onlyPaper: false },
+      { chat: 'Other', key: 'other', mode: 'bw', onlyPaper: false },
     ])
+    expect(parseAutoChats('Simran Ply=bw,paper')[0]).toMatchObject({ mode: 'bw', onlyPaper: true })
     expect(parseAutoChats('off')).toEqual([])
     expect(parseAutoChats(undefined)).toEqual([])
   })
@@ -202,6 +203,12 @@ describe('auto-print chats (a supplier chat of paper bills)', () => {
     expect(jobs[0]).toMatchObject({ kind: 'raw-file', payload: { mode: 'bw' }, assignedPrinterId: 'shiv-shop-printer' })
     expect(jobs[0].requestedBy).toContain('Simran Ply Rajan Rnc Pulkari Sunmica')
     expect(printer.state.autoChats[0].id).toBe(SUPPLIER)
+  })
+
+  it('marks a paper-only chat\'s jobs for the print server\'s paper check', async () => {
+    const { send, msg } = setup({ PRINT_AUTO_CHATS: 'Simran Ply Rajan Rnc Pulkari Sunmica=bw,paper' })
+    await send(msg(SUPPLIER, { imageMessage: { mimetype: 'image/jpeg' } }))
+    expect(jobs[0].payload).toMatchObject({ mode: 'bw', onlyPaper: true })
   })
 
   it('leaves other chats, text, and the shop group alone', async () => {

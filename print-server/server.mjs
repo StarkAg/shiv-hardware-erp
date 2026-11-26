@@ -32,6 +32,7 @@ import { registerCardScan } from './card-scan.mjs'
 import { detectColourMode, registerColourCheck } from './colour-check.mjs'
 import { directPrintable, parseIppPrinters, printDirect, printerInfo } from './direct-print.mjs'
 import { createFolderWatcher, parseWatchList } from './watch-print.mjs'
+import { looksLikePaper } from './paper-check.mjs'
 import { JOBS, createPrinterStatus, createRouteStore, isBankFile, parseBankNames, pickRoute, settingsFor } from './bank-print.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
@@ -3107,8 +3108,23 @@ async function printCloudJob(job) {
     }
     route?.catch(() => {}) // not awaited when every file is a bank print
     const results = []
+    const skipped = []
     for (let i = 0; i < decoded.length; i += 1) {
       const file = decoded[i]
+      // From a supplier chat that sends paper bills (group-print.mjs, onlyPaper):
+      // a photo that does not look like a sheet of paper is not printed (paper-check.mjs, no AI).
+      if (job.payload?.onlyPaper && file.mediaType.startsWith('image/')) {
+        const look = await looksLikePaper(file.buffer).catch((err) => {
+          console.warn(`[cloud-print] ${file.name}: paper check failed, printing it (${err?.message ?? err})`)
+          return null
+        })
+        if (look && !look.paper) {
+          const s = look.stats
+          console.log(`[cloud-print] ${job._id}: ${file.name} skipped, not a paper slip (paper ${s.paper.toFixed(2)}, colour ${s.colour.toFixed(2)}, white ${s.pure.toFixed(2)})`)
+          skipped.push({ name: file.name, reason: 'not a paper slip' })
+          continue
+        }
+      }
       // A bank PDF (SBI) goes to the bank printer, black and white, unless it was sent as "cp".
       if (mode !== 'color' && isBankPrint(file.name)) {
         const bank = await routeBankPrintJob('cloud-print')
@@ -3120,7 +3136,7 @@ async function printCloudJob(job) {
         results.push(await printUploadedFile(file, copies))
       }
     }
-    return { files: results }
+    return skipped.length ? { files: results, skipped } : { files: results }
   }
 
   // The Card backs screen on a phone away from the shop Wi-Fi.

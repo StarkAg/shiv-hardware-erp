@@ -53,18 +53,27 @@ The old way (the print server's own WhatsApp link, `WHATSAPP_AUTO_PRINT_ENABLED`
 
 ### Supplier chats (auto-print, Tony's number)
 
-Since 2026-11-26 every photo and PDF posted in the supplier chat
-**"Simran Ply Rajan Rnc Pulkari Sunmica"** prints at the shop by itself, black
-and white on the HP (falling back to the Epson), with no `bw` needed: the
-supplier sends paper bills there (owner's ask). A `bw` / `cp` caption still
-decides. The chat is in Tony's WhatsApp (80928 50954), not the Shop number's,
+Since 2026-11-26 the paper bills (handwritten slips) posted in the supplier
+chat **"Simran Ply Rajan Rnc Pulkari Sunmica"** print at the shop by
+themselves, black and white on the HP (falling back to the Epson), with no
+`bw` needed (owner's ask). A `bw` / `cp` caption still decides the colour.
+
+Only the slips: the owner wants "only this typo paper", and "no ai". So the
+print server looks at each photo's colours (`print-server/paper-check.mjs`):
+it prints when the photo is mostly pale, colourless paper and not a made
+image on pure white; a vehicle, goods or person photo is skipped and logged
+(`[cloud-print] ... skipped, not a paper slip`). PDFs from the chat always
+print. Tuned on the chat's two real slips; a very pale design or a screenshot
+of a white page can still pass, and a slip shot in deep shadow could be
+skipped. If the check itself fails, the photo prints. The chat is in Tony's WhatsApp (80928 50954), not the Shop number's,
 so `whatsapp-bills` reads it, with the same `group-print.mjs` as
 `whatsapp-reminders` (a copy: change one, copy it to the other). It finds the
 chat by its name and logs its id (`[print] auto-print chat ... is ...@g.us`).
 
-- Every photo prints, not only bills (the owner's call to start with).
 - To add or change chats: Railway variable `PRINT_AUTO_CHATS` on
-  `whatsapp-bills`, "chat name or id=bw|color" split by ";" ("off" for none).
+  `whatsapp-bills`, "chat name or id=bw|color" split by ";" ("off" for none);
+  add ",paper" (as in `=bw,paper`) for paper slips only, or leave it off to
+  print every photo.
   Without it the Simran Ply chat above is the default. A renamed group needs
   its new name, or its id, there.
 - The shop group is never read by `whatsapp-bills` (Tony is in it too), so it

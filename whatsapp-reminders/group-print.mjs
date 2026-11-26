@@ -60,7 +60,9 @@ export const chatKey = (name) => String(name ?? '').toLowerCase().replace(/[^a-z
  * Chats where every photo and PDF prints as soon as it comes, with no bw / cp,
  * such as a supplier's chat of paper bills: "chat=mode" pairs split by ";",
  * where chat is the group's name (as WhatsApp shows it) or its id
- * (...@g.us), and mode bw or color (default bw). "off" or empty for none.
+ * (...@g.us), and mode bw or color (default bw). Add ",paper" to the mode to
+ * print only photos that look like a sheet of paper (the print server checks,
+ * print-server/paper-check.mjs; PDFs always print). "off" or empty for none.
  */
 export function parseAutoChats(value) {
   const text = String(value ?? '').trim()
@@ -68,9 +70,10 @@ export function parseAutoChats(value) {
   return text.split(';').map((entry) => {
     const at = entry.lastIndexOf('=')
     const chat = (at > 0 ? entry.slice(0, at) : entry).trim()
-    const mode = at > 0 ? entry.slice(at + 1).trim().toLowerCase() : 'bw'
+    const words = (at > 0 ? entry.slice(at + 1) : 'bw').toLowerCase().split(',').map((s) => s.trim())
     if (!chat) return null
-    return { chat, key: chatKey(chat), mode: mode === 'color' || mode === 'colour' || mode === 'cp' ? 'color' : 'bw' }
+    const color = words.some((w) => w === 'color' || w === 'colour' || w === 'cp')
+    return { chat, key: chatKey(chat), mode: color ? 'color' : 'bw', onlyPaper: words.includes('paper') }
   }).filter(Boolean)
 }
 
@@ -169,7 +172,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
   const state = {
     enabled: missing.length === 0,
     groupId: groupId || null,
-    autoChats: autoChats.map((a) => ({ chat: a.chat, mode: a.mode, id: null })),
+    autoChats: autoChats.map((a) => ({ chat: a.chat, mode: a.mode, onlyPaper: a.onlyPaper, id: null })),
     printerId,
     missing,
     waiting: 0,
@@ -233,7 +236,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
   }
 
   /** Uploads the files and queues one print job for the shop PC. */
-  async function queue(files, mode, sender, from = 'WhatsApp group') {
+  async function queue(files, mode, sender, from = 'WhatsApp group', extra = {}) {
     // All files up at once, in their order.
     const stored = await Promise.all(files.slice(0, MAX_FILES_PER_JOB).map(async (file) => {
       const uploadUrl = await convexCall(convexUrl, token, 'mutation', 'files:generateUploadUrl', {})
@@ -245,7 +248,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
     const id = await convexCall(convexUrl, token, 'mutation', 'printJobs:create', {
       kind: 'raw-file',
       source: 'whatsapp',
-      payload: { files: stored, mode },
+      payload: { files: stored, mode, ...extra },
       copies: 1,
       requestedBy: `${from} (${String(sender).split('@')[0]})`,
       // Addressed to the print server, so the Counter app does not hold it back.
@@ -281,7 +284,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
       if (auto) {
         // Every photo and PDF prints at once, in the chat's mode (a bw / cp caption still wins).
         const file = await download(sock, downloadMediaMessage, msg.key, content, media)
-        await queue([file], printModeOf(media.caption) ?? auto.mode, sender, `WhatsApp ${auto.chat}`)
+        await queue([file], printModeOf(media.caption) ?? auto.mode, sender, `WhatsApp ${auto.chat}`, auto.onlyPaper ? { onlyPaper: true } : {})
         return
       }
       if (media) {
@@ -321,7 +324,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
 
   if (state.enabled) {
     if (groupId) log(`[print] group printing on: ${groupId} -> ${printerId}`)
-    for (const a of autoChats) log(`[print] auto-print chat: "${a.chat}" ${a.mode} -> ${printerId}`)
+    for (const a of autoChats) log(`[print] auto-print chat: "${a.chat}" ${a.mode}${a.onlyPaper ? " (paper slips only)" : ""} -> ${printerId}`)
   }
   else log(`[print] group printing off, missing ${missing.join(', ')}`)
 
