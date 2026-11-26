@@ -5,8 +5,7 @@ import { Button, Card, Page, PageHeader } from '../../components/ui'
 import Confirm from '../ledger/components/Confirm'
 import { ALU_THICKNESSES } from '../../lib/aluminium'
 import {
-  CHAUKHAT_MIN_RFT,
-  DOOR_MIN_SQFT,
+  chargedHeight,
   costOut,
   newId,
   partAmount,
@@ -167,7 +166,10 @@ export function AluminiumCosting() {
 
   const isDoor = product === 'door'
   const spec = isDoor ? costing.door : costing[product]
-  const s = sizeOf({ inches: size.h, soot: 0 }, { inches: size.w, soot: 0 })
+  const s = sizeOf(
+    chargedHeight(isDoor ? 'aluminium-door' : 'window-2-track', { inches: size.h, soot: 0 }, costing.doorMinHeight),
+    { inches: size.w, soot: 0 },
+  )
   const rows = costOut(product, s, costing)
 
   const bySheet = costing.priceBy[product] === 'sheet'
@@ -223,6 +225,21 @@ export function AluminiumCosting() {
             onChange={(m) => put((c) => { c.priceBy[product] = m; return c })}
           />
         </Section>
+
+        {isDoor && (
+          <Section
+            title="Shortest height charged"
+            note="A door lower than this is priced as this high, at its real width, whether by costing or by the sheet. No other minimum. 0 for none."
+          >
+            <label className="flex items-center gap-2 text-sm">
+              <div className="w-28">
+                <Num label="Shortest height charged" value={costing.doorMinHeight}
+                  onChange={(v) => put((c) => { c.doorMinHeight = v; return c })} />
+              </div>
+              <span className="text-xs text-muted">inches</span>
+            </label>
+          </Section>
+        )}
 
         {bySheet ? (
           <SheetEditor product={product} costing={costing} put={put} />
@@ -407,7 +424,7 @@ export function AluminiumCosting() {
 
         <Section
           title="Margin"
-          note={<>Added to the making cost, for each thickness: a percentage of the cost, or rupees per unit sold.{isDoor && ` A door is billed as at least ${DOOR_MIN_SQFT} sqft and its chaukhat as at least ${CHAUKHAT_MIN_RFT} rft, as on the selling sheet.`}</>}
+          note="Added to the making cost, for each thickness: a percentage of the cost, or rupees per unit sold."
         >
           <table className="text-sm">
             <thead>
@@ -481,6 +498,7 @@ export function AluminiumCosting() {
             </label>
             <span className="pb-2 text-muted">
               {n2(s.area)} sqft{isDoor && ` · chaukhat ${n2(s.rft)} rft`}
+              {isDoor && size.h < costing.doorMinHeight && ` · priced as ${costing.doorMinHeight} in high`}
             </span>
           </div>
           <table className="w-full text-sm">
@@ -597,7 +615,7 @@ function SheetEditor({ product, costing, put }: {
   }, [product])
 
   const category = product === 'door' ? 'aluminium-door' : product === 'win2' ? 'window-2-track' : 'window-3-track'
-  const h = { inches: size.h, soot: 0 }
+  const h = chargedHeight(category, { inches: size.h, soot: 0 }, costing.doorMinHeight)
   const w = { inches: size.w, soot: 0 }
   const s = sheetSize(h, w)
   const addons = { chaukhat: true, accessories: true, decorFilm: true, ssNet: true, brownCoated: true, glassType: 'clear' as const }
@@ -632,6 +650,7 @@ function SheetEditor({ product, costing, put }: {
         </label>
         <span className="pb-2 text-muted">
           {n2(s.area)} sqft{product === 'door' && ` · chaukhat ${n2(s.rft)} rft`}
+          {product === 'door' && size.h < costing.doorMinHeight && ` · priced as ${costing.doorMinHeight} in high`}
         </span>
       </div>
       <table className="w-full text-sm">
@@ -683,18 +702,6 @@ function SheetEditor({ product, costing, put }: {
               <ThickRow label="Brown Coated" unit="Rs per sqft" value={d.brownCoated} onChange={set('brownCoated')} />
             </tbody>
           </table>
-        </Section>
-        <Section title="Minimum bill size" note="A smaller door is charged as this size. 0 for none.">
-          <div className="flex flex-wrap items-end gap-3 text-sm">
-            <label className="w-32">
-              <span className="mb-1 block text-xs font-semibold text-muted">Area (sqft)</span>
-              <Num label="Minimum area" value={d.minSqft} onChange={(v) => put((c) => { c.sheet.door.minSqft = v; return c })} />
-            </label>
-            <label className="w-32">
-              <span className="mb-1 block text-xs font-semibold text-muted">Chaukhat (rft)</span>
-              <Num label="Minimum chaukhat" value={d.minRft} onChange={(v) => put((c) => { c.sheet.door.minRft = v; return c })} />
-            </label>
-          </div>
         </Section>
         {tryIt}
       </>

@@ -31,12 +31,12 @@ describe('aluminium priced from its materials', () => {
     expect(rate('win3', 42, 42)).toEqual([360, 420, 410])
   })
 
-  it('bills a small door as 15 sqft and its chaukhat as 14.5 rft', () => {
+  it('has no minimum bill size: a door is billed at its own area and chaukhat feet', () => {
     const c = defaultCosting()
-    const s = sizeOf(dim(60), dim(24))   // 10 sqft, 12 rft
+    const s = sizeOf(dim(78), dim(20))   // 10.83 sqft, 14.67 rft
     const [t] = costOut('door', s, c)
-    expect(t.door!.door.sell).toBe(Math.round(t.door!.door.rate * 15))
-    expect(t.door!.chk.sell).toBe(Math.round(t.door!.chk.rate * 14.5))
+    expect(t.door!.door.sell).toBe(Math.round(t.door!.door.rate * s.area))
+    expect(t.door!.chk.sell).toBe(Math.round(t.door!.chk.rate * s.rft))
   })
 
   it('takes a margin in rupees per sqft', () => {

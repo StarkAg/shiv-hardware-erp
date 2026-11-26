@@ -190,6 +190,8 @@ export interface Quotation {
       /** 2-track: the SS Net add-on is `accessories`, at this rate per sqft. */
       ssNetRate?: number
       chaukhatRft?: number
+      /** Door: the sqft it was priced at (a short door is raised to the shortest height charged). */
+      area?: number
     }[]
   }
   notes?: string

@@ -49,10 +49,11 @@ describe('aluminium priced by the selling sheet', () => {
     expect(t.glassCost).toBe(4680)
   })
 
-  it('charges a small door its minimum bill size', () => {
-    const [t] = calcAllThicknessesSheet('aluminium-door', dim(60), dim(24), defaultAddons(), defaultSheet())
-    expect(t.doorCost).toBe(150 * 15)
-    expect(t.chaukhatCost).toBe(Math.round(90 * 14.5))
+  it('has no minimum bill size of its own', () => {
+    const [t] = calcAllThicknessesSheet('aluminium-door', dim(78), dim(20), defaultAddons(), defaultSheet())
+    expect(t.area).toBe(10.83)
+    expect(t.doorCost).toBe(Math.round(150 * 10.83))
+    expect(t.chaukhatCost).toBe(Math.round(90 * 14.67))
   })
 
   it('follows an edited rate', () => {
@@ -61,6 +62,47 @@ describe('aluminium priced by the selling sheet', () => {
     sheet.win3.extra[1] = 70
     const rows = calcAllThicknessesSheet('window-3-track', dim(39), dim(48), defaultAddons(), sheet)
     expect(pick(rows, 'glassRate')).toEqual([370, 440, 420])
+  })
+})
+
+describe('a door under 72 inches high is priced as 72 high', () => {
+  const same = (h: number, soot = 0) => ['aluminium-door', dim(h, soot), dim(30), defaultAddons()] as const
+
+  it.each(['sheet', 'costing'] as const)('by %s, at its real width, with no other minimum', (mode) => {
+    const c = defaultCosting()
+    c.priceBy.door = mode
+    expect(calcAluminiumQuote(...same(60), c)).toEqual(calcAluminiumQuote(...same(72), c))
+    expect(calcAluminiumQuote(...same(71, 4), c)).toEqual(calcAluminiumQuote(...same(72), c))
+    // Taller doors are their own size.
+    expect(calcAluminiumQuote(...same(78), c)).not.toEqual(calcAluminiumQuote(...same(72), c))
+  })
+
+  it('by the sheet: a 60 x 30 door is the 72 x 30 one, 15 sqft and 14.5 rft', () => {
+    const c = defaultCosting()
+    c.priceBy.door = 'sheet'
+    const rows = calcAluminiumQuote(...same(60), c)
+    expect(pick(rows, 'doorCost')).toEqual([2250, 3000, 2850])
+    expect(pick(rows, 'chaukhatCost')).toEqual([1305, 1450, 1450])
+    expect(rows[0].area).toBe(15)
+    expect(rows[0].chaukhatRft).toBe(14.5)
+  })
+
+  it('leaves windows alone, and can be turned off', () => {
+    const c = defaultCosting()
+    c.priceBy.win3 = 'sheet'
+    expect(calcAluminiumQuote('window-3-track', dim(39), dim(48), defaultAddons(), c)[0].glassCost).toBe(4680)
+    c.priceBy.door = 'sheet'
+    c.doorMinHeight = 0
+    expect(calcAluminiumQuote(...same(60), c)[0].area).toBe(12.5)
+  })
+
+  it('keeps the setting through a save, and gives an older copy 72', () => {
+    const c = defaultCosting()
+    c.doorMinHeight = 75
+    expect(normaliseCosting(JSON.parse(JSON.stringify(c))).doorMinHeight).toBe(75)
+    const older = JSON.parse(JSON.stringify(c))
+    delete older.doorMinHeight
+    expect(normaliseCosting(older).doorMinHeight).toBe(72)
   })
 })
 

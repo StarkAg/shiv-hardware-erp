@@ -29,9 +29,14 @@ quotation calls `calcAluminiumQuote`, which picks the one set for the product.
     but no total on the sheet uses them, so the app does not quote them.
 - Door: door rate x area (150/200/190), chaukhat rate x (2H + W)/12 (90/100/100),
   accessories 160 flat; total = the three. Decor film 30, brown coated 40 per sqft.
-  - The sheet has a "Minimum Bill Size" box (area 15, chaukhat 14.5) and shows the
-    chaukhat as at least 14.5 rft, but its amount formulas multiply the real size.
-    The app applies both minimums (editable; 0 turns one off), as costing does.
+  - The sheet has a "Minimum Bill Size" box (area 15, chaukhat 14.5), but its amount
+    formulas multiply the real size.
+  - **The owner's rule (2026-11-26): no minimum bill size. A door under 72 in high is
+    priced as 72 in high, at its real width**, by Costing and by Sheet price alike
+    (`chargedHeight` in `src/lib/aluCosting.ts`, applied in `calcAluminiumQuote`).
+    The height is "Shortest height charged" on the Aluminium rates screen (0 = none).
+    So a 60 x 30 door is priced as 72 x 30: 15 sqft, chaukhat 14.5 rft. Each door row
+    carries `area` and `chaukhatRft` as priced, for the printed sheet to show.
 
 Example: 3 track 39 x 48 = 13 sqft, slab 12 -> 360: 4680 / 5460 / 5330 clear,
 4940 / 5720 / 5590 reflective, brown coated 520 (`tests/aluSheet.test.ts`).

@@ -82,6 +82,8 @@ export interface AluCosting {
   priceBy: Record<AluProduct, PriceMode>
   /** The selling sheet's own rates, used when a product is priced by the sheet. */
   sheet: AluSheet
+  /** Inches: a door lower than this is priced as this high (see DOOR_MIN_HEIGHT). 0 = none. */
+  doorMinHeight: number
   /** Rs per kg, per thickness. One rate for the door and both windows. */
   alu: Thick3
   door: DoorCosting
@@ -173,6 +175,7 @@ export function defaultCosting(): AluCosting {
   return {
     priceBy: { door: 'costing', win2: 'costing', win3: 'costing' },
     sheet: defaultSheet(),
+    doorMinHeight: DOOR_MIN_HEIGHT,
     alu: [470, 470, 470],
     door: {
       sections: [
@@ -256,11 +259,17 @@ export function withMargin(cost: number, m: Margin, units: number, t: number): n
 }
 
 /**
- * The sheet's minimum bill for a door: a small one is charged as 15 sqft, and
- * its chaukhat as 14.5 rft. The making cost is still the real size.
+ * A door lower than this many inches is priced as this high, at its real
+ * width, by costing and by the sheet alike. There is no minimum bill size
+ * besides it (the owner, 2026-11-26). Editable: AluCosting.doorMinHeight.
  */
-export const DOOR_MIN_SQFT = 15
-export const CHAUKHAT_MIN_RFT = 14.5
+export const DOOR_MIN_HEIGHT = 72
+
+/** The height a product is priced at: a door under the shortest height is charged as that height. */
+export function chargedHeight(category: ProductCategory, height: Dimension, minHeight: number): Dimension {
+  if (category !== 'aluminium-door') return height
+  return toAluminiumExcelInches(height) < minHeight ? { inches: minHeight, soot: 0 } : height
+}
 
 /**
  * A priced line the way the quotation prints it: a whole-rupee rate per unit,
@@ -308,8 +317,8 @@ export function costOut(product: AluProduct, s: AluSize, c: AluCosting): Thickne
       return {
         name,
         door: {
-          door: item(doorKg, partsSum(d.parts, s, 'door'), d.margin.door, Math.max(s.area, DOOR_MIN_SQFT)),
-          chk: item(chkKg, 0, d.margin.chk, Math.max(s.rft, CHAUKHAT_MIN_RFT)),
+          door: item(doorKg, partsSum(d.parts, s, 'door'), d.margin.door, s.area),
+          chk: item(chkKg, 0, d.margin.chk, s.rft),
           // A flat sum: a Rs margin is added once.
           acc: { kg: 0, cost: accCost, sell: Math.round(withMargin(accCost, d.margin.acc, 1, t)), rate: 0 },
         },
@@ -358,7 +367,8 @@ export function calcAllThicknessesCosted(
         name,
         doorRate: d.door.rate, doorCost: d.door.sell,
         chaukhatRate: d.chk.rate, chaukhatCost,
-        chaukhatRft: Math.max(s.rft, CHAUKHAT_MIN_RFT),
+        chaukhatRft: s.rft,
+        area: s.area,
         accessories,
         total: d.door.sell + chaukhatCost + accessories,
         decorFilmRate: a.decorFilm, decorFilm: perSqft(addons.decorFilm, a.decorFilm),
@@ -395,9 +405,10 @@ export function calcAluminiumQuote(
   addons: AluAddons,
   c: AluCosting,
 ) {
+  const h = chargedHeight(category, height, c.doorMinHeight)
   return c.priceBy[productOf(category)] === 'sheet'
-    ? calcAllThicknessesSheet(category, height, width, addons, c.sheet)
-    : calcAllThicknessesCosted(category, height, width, addons, c)
+    ? calcAllThicknessesSheet(category, h, width, addons, c.sheet)
+    : calcAllThicknessesCosted(category, h, width, addons, c)
 }
 
 /**
@@ -439,6 +450,7 @@ export function normaliseCosting(raw: unknown): AluCosting {
   return {
     priceBy: { door: mode(by.door), win2: mode(by.win2), win3: mode(by.win3) },
     sheet: normaliseSheet(r.sheet),
+    doorMinHeight: Number.isFinite(Number(r.doorMinHeight)) && r.doorMinHeight !== undefined ? Number(r.doorMinHeight) : DOOR_MIN_HEIGHT,
     alu: t3(r.alu, d.alu),
     door: {
       sections: sections(door.sections, d.door.sections),

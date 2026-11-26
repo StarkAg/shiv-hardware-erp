@@ -14,6 +14,8 @@
 //            price = rate x area                                 C14 ...
 //   door     door rate x area, chaukhat rate x (2H + W) / 12 feet, accessories
 //            a flat sum; the three make the total                C15 ... B18
+//            (the owner, 2026-11-26: no minimum bill size; a door under 72 in
+//            high is priced as 72 high, done by aluCosting chargedHeight)
 //   add-ons  rate x area (brown coated, decor film, SS net)
 //
 // Every number is editable on the Aluminium rates screen; these are the
@@ -47,9 +49,6 @@ export interface DoorSheet {
   accessories: T3
   decorFilm: T3
   brownCoated: T3
-  /** The sheet's "Minimum Bill Size": a smaller door is charged as this. 0 = none. */
-  minSqft: number
-  minRft: number
 }
 
 export interface AluSheet {
@@ -68,8 +67,6 @@ export function defaultSheet(): AluSheet {
       accessories: [160, 160, 160],
       decorFilm: [30, 30, 30],
       brownCoated: [40, 40, 40],
-      minSqft: 15,
-      minRft: 14.5,
     },
     win2: {
       slabs: slabs([[6, 350], [7.5, 310], [9, 290], [12, 260], [14, 260], [16, 240], [20, 240], [24, 230]]),
@@ -136,8 +133,9 @@ export function calcAllThicknessesSheet(
 
   if (category === 'aluminium-door') {
     const d = sheet.door
-    const area = Math.max(s.area, num(d.minSqft))
-    const rft = Math.max(s.rft, num(d.minRft))
+    // No minimum bill size: a short door comes in already raised to the
+    // shortest height charged (aluCosting chargedHeight).
+    const { area, rft } = s
     return ALU_THICKNESSES.map((name, t) => {
       const doorCost = Math.round(area * num(d.door[t]))
       const chaukhatCost = addons.chaukhat ? Math.round(rft * num(d.chaukhat[t])) : 0
@@ -147,6 +145,7 @@ export function calcAllThicknessesSheet(
         doorRate: num(d.door[t]), doorCost,
         chaukhatRate: num(d.chaukhat[t]), chaukhatCost,
         chaukhatRft: rft,
+        area,
         accessories,
         total: doorCost + chaukhatCost + accessories,
         decorFilmRate: num(d.decorFilm[t]), decorFilm: perSqft(addons.decorFilm, num(d.decorFilm[t])),
@@ -206,8 +205,6 @@ export function normaliseSheet(raw: unknown): AluSheet {
       accessories: t3(dr?.accessories, d.door.accessories),
       decorFilm: t3(dr?.decorFilm, d.door.decorFilm),
       brownCoated: t3(dr?.brownCoated, d.door.brownCoated),
-      minSqft: one(dr?.minSqft, d.door.minSqft),
-      minRft: one(dr?.minRft, d.door.minRft),
     },
     win2: win(r.win2, d.win2),
     win3: win(r.win3, d.win3),
