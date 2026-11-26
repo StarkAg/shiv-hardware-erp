@@ -136,12 +136,16 @@ export function AluminiumPrint({ quote }: { quote: Quotation }) {
   const wIn = toAluminiumExcelInches(width)
   const diagramHIn = Number(height.inches || 0) + Number(height.soot || 0) / 8
   const diagramWIn = Number(width.inches || 0) + Number(width.soot || 0) / 8
-  const area = r2((hIn * wIn) / 144)
   const isDoor = category === 'aluminium-door'
   const is2Track = category === 'window-2-track'
+  // A door prints the area and chaukhat it was priced at (a door under the
+  // shortest height charged, 72 in, is priced as that tall; owner's ask,
+  // 26 Nov 2026). Quotes saved before that work them out as they always did.
+  const priced = isDoor ? quote.alu?.thicknesses?.[0] : undefined
+  const area = priced?.area ?? r2((hIn * wIn) / 144)
 
   const chaukhatRft = isDoor
-    ? Math.max(r2((hIn * 2 + wIn) / 12), 14.5)
+    ? priced?.chaukhatRft ?? Math.max(r2((hIn * 2 + wIn) / 12), 14.5)
     : r2((hIn * 2 + wIn) / 12)
   const selectedAddons = new Set(quote.alu?.addons ?? [])
   const hasChaukhat = selectedAddons.has('Chaukhat')
