@@ -373,9 +373,20 @@ export type PrinterStatus = {
   address: string | null
 }
 
+/** The jobs whose printer is chosen on the Printers screen. */
+export type PrintJob = 'bank' | 'quotation'
+
+/** Where one job prints: its printer, colour or not, and the printer used when that one is offline. */
+export type PrintRoute = {
+  printer: string
+  color: boolean
+  fallback: string | null
+}
+
 export type PrinterStatusSnapshot = {
   ok: true
   printers: PrinterStatus[]
+  routes: Record<PrintJob, PrintRoute>
   /** The printer SBI's PDFs go to (print-server/bank-print.mjs). */
   bankPrinter: string
   colorPrinter: string
@@ -389,15 +400,16 @@ export async function fetchPrinterStatus(fresh = false): Promise<PrinterStatusSn
   return json as PrinterStatusSnapshot
 }
 
-export async function setBankPrinter(printer: string): Promise<string> {
-  const res = await fetchPrintServer('/printers/bank', {
+/** Changes some of one job's printer / colour / fallback (fallback null = none). */
+export async function setPrintRoute(job: PrintJob, patch: Partial<PrintRoute>): Promise<PrintRoute> {
+  const res = await fetchPrintServer('/printers/route', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ printer }),
+    body: JSON.stringify({ job, ...patch }),
   }, 20000)
   const json = await res.json().catch(() => null)
-  if (!json?.ok) throw new Error(json?.error ?? 'Could not change the bank printer')
-  return json.bankPrinter as string
+  if (!json?.ok) throw new Error(json?.error ?? 'Could not change where it prints')
+  return json.route as PrintRoute
 }
 
 // ── Catalog sync ─────────────────────────────────────────────────────────────

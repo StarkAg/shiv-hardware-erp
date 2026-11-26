@@ -1,10 +1,11 @@
 /**
- * Bank prints (SBI's PDFs) and the shop's printers as the Counter's Printers
- * screen shows them.
+ * Bank prints (SBI's PDFs), quotations, and the shop's printers as the
+ * Counter's Printers screen shows them.
  *
- * Which printer the bank PDFs go to is chosen on that screen and kept in
- * data/bank-printer.json. Until one is chosen they go to the Epson (owner's
- * ask, 26 Nov 2026). They print black and white wherever they go.
+ * For each job (bank PDFs, quotations) that screen chooses a printer, colour
+ * or black and white, and a fallback printer for when the first is offline
+ * (owner's ask, 26 Nov 2026); kept in data/print-routes.json. Until chosen:
+ * both on the Epson in colour, falling back to the HP.
  *
  * BANK_PRINT_NAMES in .env: the file names that count as bank prints, split
  * by ";", * and ? wildcards. Default: SBIDocument_*.pdf.
@@ -32,28 +33,76 @@ export function isBankFile(name, patterns) {
   return Boolean(n) && patterns.some((re) => re.test(n))
 }
 
-/** The chosen bank printer, kept on disk; `fallback` until one is chosen. */
-export function createBankPrinterStore(fileUrl, fallback) {
-  let printer = fallback
-  let loaded = false
+/** The jobs whose printer is chosen on the Printers screen. */
+export const JOBS = ['bank', 'quotation']
+
+/**
+ * Where each job prints, kept on disk (data/print-routes.json):
+ * { bank: { printer, color, fallback }, quotation: { ... } }. fallback is the
+ * printer used when the first is offline, or null for none. `defaults` until
+ * one is chosen; a bank printer chosen before routes existed
+ * (data/bank-printer.json) is kept.
+ */
+export function createRouteStore(fileUrl, defaults, legacyBankUrl = null) {
+  let routes = null
+  const clean = (job, r) => {
+    const d = defaults[job]
+    return {
+      printer: typeof r?.printer === 'string' && r.printer ? r.printer : d.printer,
+      color: typeof r?.color === 'boolean' ? r.color : d.color,
+      fallback: r?.fallback === null ? null : typeof r?.fallback === 'string' && r.fallback ? r.fallback : d.fallback,
+    }
+  }
+  async function load() {
+    let saved = null
+    try { saved = JSON.parse(await readFile(fileUrl, 'utf8')) } catch { /* none chosen yet */ }
+    if (!saved && legacyBankUrl) {
+      try {
+        const old = JSON.parse(await readFile(legacyBankUrl, 'utf8'))
+        if (old?.printer) saved = { bank: { printer: String(old.printer) } }
+      } catch { /* none */ }
+    }
+    routes = Object.fromEntries(JOBS.map((job) => [job, clean(job, saved?.[job])]))
+    return routes
+  }
   return {
-    async get() {
-      if (!loaded) {
-        loaded = true
-        try {
-          const saved = JSON.parse(await readFile(fileUrl, 'utf8'))
-          if (saved?.printer) printer = String(saved.printer)
-        } catch { /* none chosen yet */ }
-      }
-      return printer
-    },
-    async set(name) {
-      printer = String(name)
-      loaded = true
-      await writeFile(fileUrl, JSON.stringify({ printer, at: new Date().toISOString() }, null, 2))
-      return printer
+    async all() { return routes ?? await load() },
+    async get(job) { return (await this.all())[job] },
+    /** Changes some of one job's printer / color / fallback. */
+    async set(job, patch) {
+      if (!JOBS.includes(job)) throw new Error(`No print job called "${job}"`)
+      const all = await this.all()
+      all[job] = clean(job, { ...all[job], ...patch })
+      await writeFile(fileUrl, JSON.stringify({ ...all, at: new Date().toISOString() }, null, 2))
+      return all[job]
     },
   }
+}
+
+/** A print job's settings for this printer, in colour or black and white. A tray (bin=) only for the Epson. */
+export function settingsFor(base, printer, color) {
+  const epson = /epson|l8050/i.test(String(printer))
+  return [
+    ...base.filter((s) => !/^(color|colour|monochrome)$/i.test(s) && (epson || !/^bin=/i.test(s))),
+    color ? 'color' : 'monochrome',
+  ]
+}
+
+/**
+ * Which printer a job goes to now: its own when online, else its fallback
+ * when that is online, else its own (it waits or fails there).
+ * isOnline(name) -> { online, reason } | null.
+ */
+export async function pickRoute(route, isOnline) {
+  const first = await isOnline(route.printer).catch(() => null)
+  if (first?.online) return { printer: route.printer, fallback: null, online: true }
+  if (route.fallback && route.fallback !== route.printer) {
+    const second = await isOnline(route.fallback).catch(() => null)
+    if (second?.online) {
+      return { printer: route.fallback, fallback: { from: route.printer, to: route.fallback, reason: first?.reason ?? 'not found' }, online: true }
+    }
+  }
+  return { printer: route.printer, fallback: null, online: false }
 }
 
 /** "http://192.168.29.232:80/WSD/DEVICE", "192.168.29.184" -> { host, ports }. */

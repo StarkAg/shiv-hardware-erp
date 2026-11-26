@@ -32,7 +32,7 @@ import { registerCardScan } from './card-scan.mjs'
 import { detectColourMode, registerColourCheck } from './colour-check.mjs'
 import { directPrintable, parseIppPrinters, printDirect, printerInfo } from './direct-print.mjs'
 import { createFolderWatcher, parseWatchList } from './watch-print.mjs'
-import { createBankPrinterStore, createPrinterStatus, isBankFile, parseBankNames } from './bank-print.mjs'
+import { JOBS, createPrinterStatus, createRouteStore, isBankFile, parseBankNames, pickRoute, settingsFor } from './bank-print.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
 const COLOR_PRINTER = process.env.COLOR_PRINTER || process.env.PRINT_PRINTER || 'EPSON L8050 Series'
@@ -1425,40 +1425,33 @@ async function prepareBwFallbackPrinter(printer, source = 'print') {
   await prepareEpsonPlainA4ColorDefaults(printer, source)
 }
 
-// ── Bank prints (bank-print.mjs) ─────────────────────────────────────────────
-// SBI's PDFs, from the shop group or Downloads, go to the printer chosen on the
-// Counter's Printers screen (the Epson until one is chosen; owner's ask,
-// 26 Nov 2026), black and white. If that printer is offline they go to the
-// other shop printer; if both are, they wait.
+// ── Print routes (bank-print.mjs) ────────────────────────────────────────────
+// Bank PDFs (SBI's, from the shop group or Downloads) and quotations each go to
+// the printer chosen on the Counter's Printers screen, in colour or black and
+// white as chosen there, and to its fallback printer when that one is offline
+// (owner's ask, 26 Nov 2026). Until chosen: the Epson in colour, falling back
+// to the HP. Both offline: a bank PDF from Downloads waits; others fail there.
 const BANK_PRINT_NAMES = parseBankNames(process.env.BANK_PRINT_NAMES)
-const bankPrinter = createBankPrinterStore(new URL('data/bank-printer.json', import.meta.url), COLOR_PRINTER)
+const printRoutes = createRouteStore(new URL('data/print-routes.json', import.meta.url), {
+  bank: { printer: COLOR_PRINTER, color: true, fallback: BW_PRINTER },
+  quotation: { printer: COLOR_PRINTER, color: true, fallback: BW_PRINTER },
+}, new URL('data/bank-printer.json', import.meta.url))
 const printerStatus = createPrinterStatus({ execFileAsync, knownAddresses: PRINTER_IPP_URLS })
 const isBankPrint = (name) => isBankFile(name, BANK_PRINT_NAMES)
+// Each job's own paper settings; colour or black and white is set from its route.
+const ROUTE_BASE_SETTINGS = { bank: WHATSAPP_COLOR_PRINT_SETTINGS, quotation: QUOTATION_PRINT_SETTINGS }
 
-/** Black and white on this printer: the Epson needs its paper tray named. */
-function bankPrintSettings(printer) {
-  return /epson|l8050/i.test(printer) ? BW_FALLBACK_PRINT_SETTINGS : WHATSAPP_BW_PRINT_SETTINGS
+/** Where a job prints now, with its settings: { printer, printSettings, fallback, online }. */
+async function routePrintJob(job, source = `${job}-print`) {
+  const route = await printRoutes.get(job)
+  const picked = await pickRoute(route, (name) => printerStatus.get(name))
+  if (picked.fallback) console.warn(`[${source}] "${picked.fallback.from}" offline (${picked.fallback.reason}); printing on fallback "${picked.printer}"`)
+  if (picked.printer === COLOR_PRINTER) await prepareEpsonPlainA4ColorDefaults(picked.printer, source)
+  // The HP LaserJets print black only: never ask them for colour.
+  const color = route.color && !/laserjet|npi/i.test(picked.printer)
+  return { ...picked, printSettings: settingsFor(ROUTE_BASE_SETTINGS[job], picked.printer, color) }
 }
-
-async function routeBankPrintJob(source = 'bank-print') {
-  const chosen = await bankPrinter.get()
-  const status = await printerStatus.get(chosen).catch(() => null)
-  let printer = chosen
-  let fallback = null
-  if (!status?.online) {
-    const others = [...new Set([BW_PRINTER, COLOR_PRINTER, BW_FALLBACK_PRINTER])].filter((p) => p !== chosen)
-    for (const other of others) {
-      if ((await printerStatus.get(other).catch(() => null))?.online) {
-        fallback = { from: chosen, to: other, reason: status?.reason ?? 'not found' }
-        printer = other
-        console.warn(`[${source}] bank printer "${chosen}" offline (${fallback.reason}); printing on "${other}"`)
-        break
-      }
-    }
-  }
-  if (printer === COLOR_PRINTER) await prepareEpsonPlainA4ColorDefaults(printer, source)
-  return { printer, printSettings: bankPrintSettings(printer), fallback, online: printer !== chosen || Boolean(status?.online) }
-}
+const routeBankPrintJob = (source) => routePrintJob('bank', source)
 
 async function routeWhatsAppPrintJob(mode, file) {
   const primaryPrinter = printerForWhatsAppPrintMode(mode, file)
@@ -2088,7 +2081,7 @@ function startWatchPrint() {
       const mediaType = DROP_PRINT_MEDIA_TYPES[extname(item.name).toLowerCase()]
       if (!mediaType) throw new Error('not a PDF or a picture')
       const bank = isBankPrint(item.name)
-      const mode = bank ? 'bw' : modeFor(item, mediaType)
+      const mode = bank ? 'bank' : modeFor(item, mediaType)
       const route = bank ? await routeBankPrintJob('watch-print') : await routeWhatsAppPrintJob(mode, { name: item.name, mediaType })
       const buffer = await readFile(item.path)
       // savedPath: printed from where it is, and never deleted afterwards.
@@ -2911,6 +2904,14 @@ async function printDocumentPayloadImpl({ kind, quote, document, bill, layout = 
   // 3-9s here before Chrome even started (owner's ask, 2 Nov 2026).
   const printerReady = (async () => {
     let chosen = printer
+    // A quotation goes where the Printers screen says: its printer, colour or
+    // black and white, and its fallback printer when that one is offline.
+    if (documentKind === 'quotation' && !printerOverride) {
+      const picked = await routePrintJob('quotation', 'document-print:quotation')
+      route.printSettings = picked.printSettings
+      route.fallback = picked.fallback
+      return picked.printer
+    }
     // Auto-route away from an offline printer to any online one (cards need the
     // EPSON ID-card tray, so they are never re-routed).
     if (!isCard) {
@@ -3822,28 +3823,51 @@ app.get('/printers', async (_req, res) => {
   }
 })
 
-// The Counter's Printers screen: each printer online or offline, and which one
-// the bank PDFs go to (bank-print.mjs).
+// The Counter's Printers screen: each printer online or offline, and where each
+// job (bank PDFs, quotations) prints: printer, colour, fallback (bank-print.mjs).
 app.get('/printers/status', async (req, res) => {
   try {
-    const [printers, bank] = await Promise.all([
+    const [printers, routes] = await Promise.all([
       printerStatus.list({ fresh: req.query.fresh === '1' }),
-      bankPrinter.get(),
+      printRoutes.all(),
     ])
-    res.json({ ok: true, printers, bankPrinter: bank, colorPrinter: COLOR_PRINTER, bwPrinter: BW_PRINTER })
+    res.json({ ok: true, printers, routes, bankPrinter: routes.bank.printer, colorPrinter: COLOR_PRINTER, bwPrinter: BW_PRINTER })
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err?.message ?? err) })
   }
 })
 
+async function setPrintRoute(job, body) {
+  const patch = {}
+  const names = new Set((await printerStatus.list()).map((p) => p.name))
+  const known = (name) => {
+    if (!names.has(name)) throw new Error(`No printer called "${name}" on this PC`)
+    return name
+  }
+  if (typeof body?.printer === 'string') patch.printer = known(body.printer.trim())
+  if (typeof body?.color === 'boolean') patch.color = body.color
+  if (body?.fallback === null || body?.fallback === '') patch.fallback = null
+  else if (typeof body?.fallback === 'string') patch.fallback = known(body.fallback.trim())
+  const route = await printRoutes.set(job, patch)
+  console.log(`[print-routes] ${job}: "${route.printer}" ${route.color ? 'colour' : 'black and white'}, fallback ${route.fallback ? `"${route.fallback}"` : 'none'}`)
+  return route
+}
+
+app.post('/printers/route', async (req, res) => {
+  try {
+    const job = String(req.body?.job ?? '')
+    if (!JOBS.includes(job)) throw new Error(`No print job called "${job}"`)
+    res.json({ ok: true, job, route: await setPrintRoute(job, req.body) })
+  } catch (err) {
+    res.status(400).json({ ok: false, error: String(err?.message ?? err) })
+  }
+})
+
+// Screens from before routes: the bank printer alone.
 app.post('/printers/bank', async (req, res) => {
   try {
-    const name = String(req.body?.printer ?? '').trim()
-    const printers = await printerStatus.list()
-    if (!printers.some((p) => p.name === name)) throw new Error(`No printer called "${name}" on this PC`)
-    await bankPrinter.set(name)
-    console.log(`[bank-print] bank PDFs now go to "${name}"`)
-    res.json({ ok: true, bankPrinter: name })
+    const route = await setPrintRoute('bank', { printer: String(req.body?.printer ?? '') })
+    res.json({ ok: true, bankPrinter: route.printer })
   } catch (err) {
     res.status(400).json({ ok: false, error: String(err?.message ?? err) })
   }
@@ -4501,7 +4525,11 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   Default printer: ${PRINT_PRINTER}`)
   console.log(`   Color/ID printer: ${COLOR_PRINTER}`)
   console.log(`   B/W laser printer: ${BW_PRINTER}`)
-  void bankPrinter.get().then((p) => console.log(`[bank-print] bank PDFs (${BANK_PRINT_NAMES.length ? 'SBI' : 'none'}) go to "${p}"`))
+  void printRoutes.all().then((routes) => {
+    for (const [job, r] of Object.entries(routes)) {
+      console.log(`[print-routes] ${job === 'bank' ? `bank PDFs (${BANK_PRINT_NAMES.length ? 'SBI' : 'none'})` : job}: "${r.printer}" ${r.color ? 'colour' : 'black and white'}, fallback ${r.fallback ? `"${r.fallback}"` : 'none'}`)
+    }
+  })
   console.log(`   Print engine: ${PRINT_ENGINE === 'sumatra' ? 'SumatraPDF' : 'Windows (tools/print-file.ps1)'}${PRINTER_IPP_URLS.size ? `; straight over IPP: ${[...PRINTER_IPP_URLS.keys()].join(', ')}` : ''}`)
   // Ask each IPP printer what it takes now, so the first print does not wait for it.
   for (const [name, url] of PRINTER_IPP_URLS) {
