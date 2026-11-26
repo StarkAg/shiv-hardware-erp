@@ -38,6 +38,7 @@ import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/G
 import { BedPlyBuilder } from './BedPlyBuilder'
 import { SizeRatesBuilder } from './SizeRatesBuilder'
 import { CopiesBox } from './CopiesBox'
+import { PriceBySwitch } from './PriceBySwitch'
 import { DimInput } from './DimInput'
 
 const blankDim = (): Dimension => ({ inches: 0, soot: 0 })
@@ -288,7 +289,8 @@ function RateCardBuilder() {
           </span>
         </div>
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {alu && <PriceBySwitch category={cat} />}
             <Button
               variant="outline"
               onClick={shareWhatsApp}
