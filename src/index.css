@@ -379,7 +379,13 @@ input[type='number'] { -moz-appearance: textfield; }
      cells) to actually print — browsers drop backgrounds without this. */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
-  body * { visibility: hidden; }
+  /* Only while a print area is mounted (A4Page, PrintPreview, a direct print):
+     then that is all that prints. A screen that prints itself with the browser's
+     Print (the party statement, Cash) has none, and prints as it is, its own
+     .no-print parts left out. Hiding everything unconditionally printed those
+     as a blank page. :where keeps this as weak as plain `body *`, so the
+     .print-root rule below still wins. */
+  body:where(:has(.print-root)) * { visibility: hidden; }
   .print-root, .print-root * { visibility: visible; }
   .print-root { position: absolute; left: 0; top: 0; width: 210mm; }
   .print-offscreen { position: absolute; left: 0; top: 0; }
