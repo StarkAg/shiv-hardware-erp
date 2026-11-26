@@ -12,6 +12,7 @@
 
 import type { Dimension, ProductCategory } from './types'
 import { ALU_THICKNESSES, toAluminiumExcelInches, type AluAddons } from './aluminium'
+import { calcAllThicknessesSheet, defaultSheet, normaliseSheet, type AluSheet } from './aluSheet'
 
 /** One value per thickness, in ALU_THICKNESSES order: 1.2 MM, 1.6 MM, 1.2 MM Hindalco. */
 export type Thick3 = [number, number, number]
@@ -73,7 +74,14 @@ export interface WindowCosting {
   addons: { ssNet: number; decorFilm: number; brownCoated: number }
 }
 
+/** How a product is priced: worked out from its parts, or straight off the selling sheet. */
+export type PriceMode = 'costing' | 'sheet'
+
 export interface AluCosting {
+  /** Per product: which of the two ways the quotation prices it. */
+  priceBy: Record<AluProduct, PriceMode>
+  /** The selling sheet's own rates, used when a product is priced by the sheet. */
+  sheet: AluSheet
   /** Rs per kg, per thickness. One rate for the door and both windows. */
   alu: Thick3
   door: DoorCosting
@@ -163,6 +171,8 @@ const MARGINS: Record<'door' | 'chk' | 'acc' | 'win2' | 'win3', Thick3> = {
 
 export function defaultCosting(): AluCosting {
   return {
+    priceBy: { door: 'costing', win2: 'costing', win3: 'costing' },
+    sheet: defaultSheet(),
     alu: [470, 470, 470],
     door: {
       sections: [
@@ -377,6 +387,19 @@ export function calcAllThicknessesCosted(
   })
 }
 
+/** The quotation's rows, priced the way the Aluminium rates screen has this product set to. */
+export function calcAluminiumQuote(
+  category: ProductCategory,
+  height: Dimension,
+  width: Dimension,
+  addons: AluAddons,
+  c: AluCosting,
+) {
+  return c.priceBy[productOf(category)] === 'sheet'
+    ? calcAllThicknessesSheet(category, height, width, addons, c.sheet)
+    : calcAllThicknessesCosted(category, height, width, addons, c)
+}
+
 /**
  * A saved copy read back. Anything missing or mistyped falls back to the
  * starting value, so an older copy (or a hand-edited one) can never leave a
@@ -411,7 +434,11 @@ export function normaliseCosting(raw: unknown): AluCosting {
     }
   }
   const door = (r.door ?? {}) as Partial<DoorCosting>
+  const by = (r.priceBy ?? {}) as Partial<Record<AluProduct, unknown>>
+  const mode = (x: unknown): PriceMode => (x === 'sheet' ? 'sheet' : 'costing')
   return {
+    priceBy: { door: mode(by.door), win2: mode(by.win2), win3: mode(by.win3) },
+    sheet: normaliseSheet(r.sheet),
     alu: t3(r.alu, d.alu),
     door: {
       sections: sections(door.sections, d.door.sections),

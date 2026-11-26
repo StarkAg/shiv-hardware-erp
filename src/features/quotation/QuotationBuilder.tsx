@@ -20,7 +20,7 @@ import {
   defaultAddons,
   isAluminium,
 } from '../../lib/aluminium'
-import { calcAllThicknessesCosted, productOf } from '../../lib/aluCosting'
+import { calcAluminiumQuote, productOf } from '../../lib/aluCosting'
 import { useAluCosting } from '../../lib/aluCostingStore'
 import { calcAllUpvcBrands, isUpvc } from '../../lib/upvc'
 import { FIXED_CARDS, FIXED_CARD_META, isFixedCard } from '../../lib/data/fixedCards'
@@ -135,10 +135,11 @@ function RateCardBuilder() {
   const hasSize = h.inches > 0 || w.inches > 0
   const brands = (activeSet?.brands ?? []).filter((b) => b.category === cat)
   const sqft = areaSqft(h, w, cat)
-  // Aluminium is priced from its sections, materials and margin (Aluminium rates screen).
+  // Aluminium is priced from its sections, materials and margin, or straight off
+  // the selling sheet: the Aluminium rates screen sets which, per product.
   const aluCosting = useAluCosting()
   const aluThicknesses = alu
-    ? calcAllThicknessesCosted(cat, h, w, addons, aluCosting)
+    ? calcAluminiumQuote(cat, h, w, addons, aluCosting)
     : upvc
       ? calcAllUpvcBrands(cat, h, w, addons)
       : []
@@ -423,7 +424,10 @@ function RateCardBuilder() {
                 to={`/aluminium-rates/${productOf(cat)}`}
                 className="mt-2 flex min-h-10 items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 hover:border-shiv-green dark:border-white/15 dark:bg-transparent dark:text-stone-100 md:mt-3"
               >
-                <Calculator size={16} /> Section kg, aluminium rate, materials &amp; margin
+                <Calculator size={16} />
+                {aluCosting.priceBy[productOf(cat)] === 'sheet'
+                  ? 'Priced by the sheet: rates by area'
+                  : <>Section kg, aluminium rate, materials &amp; margin</>}
               </Link>
             )}
 

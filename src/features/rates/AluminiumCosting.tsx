@@ -19,8 +19,10 @@ import {
   type AluProduct,
   type AluSection,
   type Margin,
+  type PriceMode,
   type Thick3,
 } from '../../lib/aluCosting'
+import { calcAllThicknessesSheet, sheetSize, type Slab } from '../../lib/aluSheet'
 import { resetAluCosting, saveAluCosting, useAluCosting } from '../../lib/aluCostingStore'
 import { formatINR } from '../../lib/pricing'
 
@@ -168,6 +170,8 @@ export function AluminiumCosting() {
   const s = sizeOf({ inches: size.h, soot: 0 }, { inches: size.w, soot: 0 })
   const rows = costOut(product, s, costing)
 
+  const bySheet = costing.priceBy[product] === 'sheet'
+
   const put = (fn: (c: AluCosting) => AluCosting) => saveAluCosting(fn(structuredClone(costing)))
   const putSpec = (fn: (sp: typeof spec) => void) =>
     put((c) => {
@@ -190,7 +194,7 @@ export function AluminiumCosting() {
     <>
       <PageHeader
         title="Aluminium rates"
-        subtitle="Section kg, aluminium rate, raw materials and margin. Every quotation price is worked out from these."
+        subtitle="Price each product from its section kg, aluminium rate, materials and margin, or straight off the selling sheet."
         actions={
           <Link to={PRODUCTS.find((p) => p.id === product)!.quote}>
             <Button variant="outline" className="flex items-center gap-1.5">
@@ -200,6 +204,30 @@ export function AluminiumCosting() {
         }
       />
       <Page>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Choice value={product} options={PRODUCTS} onChange={(p) => navigate(`/aluminium-rates/${p}`, { replace: true })} />
+          <Button variant="ghost" className="flex items-center gap-1.5 text-danger" onClick={() => setResetting(true)}>
+            <RotateCcw size={15} /> Reset all to starting values
+          </Button>
+        </div>
+
+        <Section
+          title={`Price the ${PRODUCTS.find((p) => p.id === product)!.label.toLowerCase()} by`}
+          note={bySheet
+            ? 'The quotation takes the rates below, as on the selling sheet (Aluminium Rates.xlsm).'
+            : 'The quotation works the price out from the section kg, aluminium rate, materials and margin below.'}
+        >
+          <Choice<PriceMode>
+            value={costing.priceBy[product]}
+            options={[{ id: 'costing', label: 'Costing' }, { id: 'sheet', label: 'Sheet price' }]}
+            onChange={(m) => put((c) => { c.priceBy[product] = m; return c })}
+          />
+        </Section>
+
+        {bySheet ? (
+          <SheetEditor product={product} costing={costing} put={put} />
+        ) : (
+        <>
         <Section title="Aluminium rate" note="Rs per kg. The same rate for the door and both windows.">
           <table className="text-sm">
             <thead><tr>{ALU_THICKNESSES.map((t) => <th key={t} className={th}>{t}</th>)}</tr></thead>
@@ -218,13 +246,6 @@ export function AluminiumCosting() {
             </tbody>
           </table>
         </Section>
-
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Choice value={product} options={PRODUCTS} onChange={(p) => navigate(`/aluminium-rates/${p}`, { replace: true })} />
-          <Button variant="ghost" className="flex items-center gap-1.5 text-danger" onClick={() => setResetting(true)}>
-            <RotateCcw size={15} /> Reset all to starting values
-          </Button>
-        </div>
 
         <Section
           title="Aluminium sections"
@@ -486,12 +507,14 @@ export function AluminiumCosting() {
             </tbody>
           </table>
         </Section>
+        </>
+        )}
       </Page>
 
       {resetting && (
         <Confirm
           title="Reset aluminium rates?"
-          body="Every section weight, aluminium rate, material, price and margin on all three products goes back to its starting value, on every counter."
+          body="Every section weight, aluminium rate, material, price, margin and sheet rate on all three products goes back to its starting value, and all three go back to Costing, on every counter."
           confirmLabel="Reset"
           danger
           onConfirm={() => resetAluCosting()}
@@ -525,6 +548,238 @@ function ResultRows({ label, unit, items }: {
           </td>
         ))}
       </tr>
+    </>
+  )
+}
+
+type DoorSheetKey = 'door' | 'chaukhat' | 'accessories' | 'decorFilm' | 'brownCoated'
+
+/** One row of the sheet's Control Panel: a rate for each thickness. */
+function ThickRow({ label, unit, value, onChange }: {
+  label: string; unit: string; value: Thick3; onChange: (v: Thick3) => void
+}) {
+  return (
+    <tr className="border-t border-stone-100">
+      <td className={`${td} font-semibold`}>{label}</td>
+      {ALU_THICKNESSES.map((t, i) => (
+        <td key={t} className={`${td} w-28`}>
+          <Num
+            label={`${label} ${t}`}
+            value={value[i]}
+            onChange={(v) => {
+              const next = [...value] as Thick3
+              next[i] = v
+              onChange(next)
+            }}
+          />
+        </td>
+      ))}
+      <td className={`${td} text-xs text-muted`}>{unit}</td>
+    </tr>
+  )
+}
+
+interface TryRow { label: string; key: string; rate?: string; bold?: boolean }
+
+/**
+ * The selling sheet's rates, edited where the sheet keeps them: the door's
+ * Control Panel, or a window's Rates According To Area and the thickness and
+ * glass steps on top of it.
+ */
+function SheetEditor({ product, costing, put }: {
+  product: AluProduct
+  costing: AluCosting
+  put: (fn: (c: AluCosting) => AluCosting) => void
+}) {
+  const [size, setSize] = useState({ h: 39, w: 48 })
+  useEffect(() => {
+    setSize(product === 'door' ? { h: 72, w: 30 } : product === 'win2' ? { h: 36, w: 30 } : { h: 39, w: 48 })
+  }, [product])
+
+  const category = product === 'door' ? 'aluminium-door' : product === 'win2' ? 'window-2-track' : 'window-3-track'
+  const h = { inches: size.h, soot: 0 }
+  const w = { inches: size.w, soot: 0 }
+  const s = sheetSize(h, w)
+  const addons = { chaukhat: true, accessories: true, decorFilm: true, ssNet: true, brownCoated: true, glassType: 'clear' as const }
+  const rows = calcAllThicknessesSheet(category, h, w, addons, costing.sheet)
+
+  const tryRows: TryRow[] = product === 'door'
+    ? [
+        { label: 'Door', key: 'doorCost', rate: 'doorRate' },
+        { label: 'Chaukhat', key: 'chaukhatCost', rate: 'chaukhatRate' },
+        { label: 'Accessories', key: 'accessories' },
+        { label: 'Total', key: 'total', bold: true },
+        { label: 'Decor Film', key: 'decorFilm', rate: 'decorFilmRate' },
+        { label: 'Brown Coated', key: 'brownCoated', rate: 'brownCoatedRate' },
+      ]
+    : [
+        { label: '4 MM Clear & Texture Glass', key: 'glassCost', rate: 'glassRate', bold: true },
+        { label: '4 MM Reflective Glass', key: 'reflectiveCost', rate: 'reflectiveRate', bold: true },
+        ...(product === 'win2' ? [{ label: 'SS Net', key: 'accessories', rate: 'ssNetRate' }] : []),
+        { label: 'Brown Coated', key: 'brownCoated', rate: 'brownCoatedRate' },
+      ]
+
+  const tryIt = (
+    <Section title="Try a size" note="Rate x area, as on the sheet. The quotation shows the same.">
+      <div className="mb-3 flex flex-wrap items-end gap-3 text-sm">
+        <label className="w-28">
+          <span className="mb-1 block text-xs font-semibold text-muted">Height (inch)</span>
+          <Num label="Height" value={size.h} onChange={(v) => setSize((z) => ({ ...z, h: v }))} />
+        </label>
+        <label className="w-28">
+          <span className="mb-1 block text-xs font-semibold text-muted">Width (inch)</span>
+          <Num label="Width" value={size.w} onChange={(v) => setSize((z) => ({ ...z, w: v }))} />
+        </label>
+        <span className="pb-2 text-muted">
+          {n2(s.area)} sqft{product === 'door' && ` · chaukhat ${n2(s.rft)} rft`}
+        </span>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr>
+            <th className={th} />
+            {ALU_THICKNESSES.map((t) => <th key={t} className={`${th} text-right`}>{t}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {tryRows.map(({ label, key, rate, bold }) => (
+            <tr key={key} className="border-t border-stone-100">
+              <td className={`${td} ${bold ? 'font-semibold' : 'text-muted'}`}>{label}</td>
+              {rows.map((r, i) => {
+                const rec = r as Record<string, unknown>
+                return (
+                  <td key={i} className={`${td} text-right tabular-nums ${bold ? 'font-bold text-shiv-green' : ''}`}>
+                    {formatINR(Number(rec[key] ?? 0))}
+                    {rate && <div className="text-xs font-normal text-muted">@{Number(rec[rate] ?? 0)}</div>}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Section>
+  )
+
+  if (product === 'door') {
+    const d = costing.sheet.door
+    const set = (k: DoorSheetKey) => (v: Thick3) => put((c) => { c.sheet.door[k] = v; return c })
+    return (
+      <>
+        <Section title="Control panel" note="Door: rate x area. Chaukhat: rate x (2 heights + width) in feet. Accessories: the set, once.">
+          <table className="text-sm">
+            <thead>
+              <tr>
+                <th className={th} />
+                {ALU_THICKNESSES.map((t) => <th key={t} className={th}>{t}</th>)}
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              <ThickRow label="Door" unit="Rs per sqft" value={d.door} onChange={set('door')} />
+              <ThickRow label="Chaukhat" unit="Rs per rft" value={d.chaukhat} onChange={set('chaukhat')} />
+              <ThickRow label="Accessories" unit="Rs the set" value={d.accessories} onChange={set('accessories')} />
+              <ThickRow label="Decor Film" unit="Rs per sqft" value={d.decorFilm} onChange={set('decorFilm')} />
+              <ThickRow label="Brown Coated" unit="Rs per sqft" value={d.brownCoated} onChange={set('brownCoated')} />
+            </tbody>
+          </table>
+        </Section>
+        <Section title="Minimum bill size" note="A smaller door is charged as this size. 0 for none.">
+          <div className="flex flex-wrap items-end gap-3 text-sm">
+            <label className="w-32">
+              <span className="mb-1 block text-xs font-semibold text-muted">Area (sqft)</span>
+              <Num label="Minimum area" value={d.minSqft} onChange={(v) => put((c) => { c.sheet.door.minSqft = v; return c })} />
+            </label>
+            <label className="w-32">
+              <span className="mb-1 block text-xs font-semibold text-muted">Chaukhat (rft)</span>
+              <Num label="Minimum chaukhat" value={d.minRft} onChange={(v) => put((c) => { c.sheet.door.minRft = v; return c })} />
+            </label>
+          </div>
+        </Section>
+        {tryIt}
+      </>
+    )
+  }
+
+  const win = costing.sheet[product]
+  const putWin = (fn: (x: typeof win) => void) => put((c) => { fn(c.sheet[product]); return c })
+  const setSlab = (i: number, patch: Partial<Slab>) => putWin((x) => { x.slabs[i] = { ...x.slabs[i], ...patch } })
+
+  return (
+    <>
+      <Section
+        title="Rates according to area"
+        note="The 1.2 mm clear rate, per sqft. A size takes the row with the biggest area not over its own; under the first row it takes the first."
+      >
+        <table className="text-sm">
+          <thead>
+            <tr>
+              <th className={th}>From sqft</th>
+              <th className={th}>Rate</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {win.slabs.map((sl, i) => (
+              <tr key={i} className="border-t border-stone-100">
+                <td className={`${td} w-28`}><Num label="From sqft" value={sl.area} onChange={(area) => setSlab(i, { area })} /></td>
+                <td className={`${td} w-28`}><Num label="Rate per sqft" value={sl.rate} onChange={(rate) => setSlab(i, { rate })} /></td>
+                <td className={td}>
+                  <button
+                    type="button"
+                    aria-label="Remove row"
+                    className="rounded p-1 text-danger hover:bg-red-50 disabled:opacity-30"
+                    disabled={win.slabs.length <= 1}
+                    onClick={() => putWin((x) => { x.slabs.splice(i, 1) })}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <Button
+          variant="outline"
+          className="mt-2 flex items-center gap-1.5"
+          onClick={() => putWin((x) => {
+            const last = x.slabs[x.slabs.length - 1]
+            x.slabs.push({ area: (last?.area ?? 0) + 4, rate: last?.rate ?? 0 })
+          })}
+        >
+          <Plus size={16} /> Add row
+        </Button>
+      </Section>
+
+      <Section title="Control panel" note="Added to the rate by area. Reflective glass is the clear rate plus its extra.">
+        <table className="text-sm">
+          <thead>
+            <tr>
+              <th className={th} />
+              {ALU_THICKNESSES.map((t) => <th key={t} className={th}>{t}</th>)}
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            <ThickRow label="Thickness extra" unit="Rs per sqft over the rate by area" value={win.extra}
+              onChange={(v) => putWin((x) => { x.extra = v })} />
+            {product === 'win2' && (
+              <ThickRow label="SS Net" unit="Rs per sqft" value={win.ssNet} onChange={(v) => putWin((x) => { x.ssNet = v })} />
+            )}
+            <ThickRow label="Brown Coated" unit="Rs per sqft" value={win.brownCoated}
+              onChange={(v) => putWin((x) => { x.brownCoated = v })} />
+          </tbody>
+        </table>
+        <div className="mt-3 flex items-center gap-2 text-sm">
+          <span className="font-semibold">Reflective glass extra</span>
+          <div className="w-28">
+            <Num label="Reflective glass extra" value={win.reflective} onChange={(v) => putWin((x) => { x.reflective = v })} />
+          </div>
+          <span className="text-xs text-muted">Rs per sqft over clear</span>
+        </div>
+      </Section>
+
+      {tryIt}
     </>
   )
 }
