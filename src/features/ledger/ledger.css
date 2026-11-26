@@ -222,7 +222,8 @@
   justify-content: space-between; gap: 16px; padding: 12px 18px;
   background: var(--card); border-bottom: 1px solid var(--line);
   font-size: 14px; font-weight: 600;}
-.ledger-root .packet-till{display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--muted);}
+.ledger-root .packet-till{display: flex; align-items: center; gap: 14px; margin-left: auto; color: var(--muted);}
+.ledger-root .packet-till label{display: flex; align-items: center; gap: 8px;}
 .ledger-root .packet-till input{padding: 6px 8px; font: inherit; color: var(--fg); background: var(--bg);
   border: 1px solid var(--line); border-radius: 6px;}
 .ledger-root.dark .packet-till input{color-scheme: dark;}

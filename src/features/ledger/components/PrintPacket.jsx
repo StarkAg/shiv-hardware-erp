@@ -6,7 +6,7 @@ import { rupees, rupeesInWords, shortDate, longDate, inputDate, aadhaarMasked, p
 const SHOP = 'Shiv Hardware Store';
 
 /** Typeset letterhead — the shop on the left, the document on the right. */
-function Head({ title, till }) {
+function Head({ title, from, till }) {
   return (
     <header className="letterhead">
       <div className="lh-shop">
@@ -20,7 +20,11 @@ function Head({ title, till }) {
       </div>
       <div className="lh-doc">
         <div className="lh-title">{title}</div>
-        {till && <div className="lh-date">Up to {longDate(till)}</div>}
+        {(from || till) && (
+          <div className="lh-date">
+            {from && till ? `${longDate(from)} to ${longDate(till)}` : from ? `From ${longDate(from)}` : `Up to ${longDate(till)}`}
+          </div>
+        )}
         <div className="lh-date">Printed {longDate(Date.now())}</div>
       </div>
     </header>
@@ -52,14 +56,14 @@ const standing = (side) =>
   side === 'Cr' ? `Payable by ${SHOP}` : `Receivable by ${SHOP}`;
 
 /** Cover sheet, the account itself, then a page for every bill photo. */
-function PartyPacket({ ledgerId, till }) {
-  // A till date ends the statement there: entries after it are left out and the
-  // closing balance is the balance on that day (reports.ledger `to`).
-  const data = useLive(
-    api.reports.ledger,
-    till ? { ledgerId, to: till } : { ledgerId },
-    till ? `ledger:${ledgerId}:to:${till}` : `ledger:${ledgerId}`,
-  );
+function PartyPacket({ ledgerId, from, till }) {
+  // A from date starts the statement there: everything before it rolls into the
+  // opening balance (reports.ledger `from`). A till date ends it: entries after
+  // it are left out and the closing balance is the balance on that day (`to`).
+  const args = { ledgerId };
+  if (from !== undefined) args.from = from;
+  if (till !== undefined) args.to = till;
+  const data = useLive(api.reports.ledger, args, `ledger:${ledgerId}${from !== undefined ? `:from:${from}` : ''}${till !== undefined ? `:to:${till}` : ''}`);
   if (!data) return null;
 
   const { account } = data;
@@ -84,7 +88,7 @@ function PartyPacket({ ledgerId, till }) {
   return (
     <>
       <div className="sheet">
-        <Head title="Statement of Account" till={till} />
+        <Head title="Statement of Account" from={from} till={till} />
 
         <div className="statement-head">
           <div className="to-block">
@@ -98,7 +102,7 @@ function PartyPacket({ ledgerId, till }) {
           <table className="figures">
             <tbody>
               <tr>
-                <td>Opening as at {shortDate(data.openingAsOf)}</td>
+                <td>Opening as at {shortDate(from ?? data.openingAsOf)}</td>
                 <td className="num">{rupees(data.opening)} {data.openingSide}</td>
               </tr>
               <tr>
@@ -135,7 +139,7 @@ function PartyPacket({ ledgerId, till }) {
           </thead>
           <tbody>
             <tr className="rule">
-              <td>{shortDate(data.openingAsOf)}</td>
+              <td>{shortDate(from ?? data.openingAsOf)}</td>
               <td colSpan={4}>{openingDr ? 'To' : 'By'} Opening Balance</td>
               <td className="num">{openingDr ? rupees(data.opening) : ''}</td>
               <td className="num">{openingDr ? '' : rupees(data.opening)}</td>
@@ -357,25 +361,35 @@ function AllPacket() {
 }
 
 export default function PrintPacket({ scope, ledgerId, onBack }) {
-  // "Till date" (owner's ask, 26 Nov 2026): the statement up to a chosen day.
-  // Entry dates are UTC midnights (format.js inputDate), so the end of that
-  // UTC day keeps every entry dated on it. Empty: everything, as before.
+  // From and till dates (owner's ask, 26 Nov 2026): the statement for a chosen
+  // stretch. Entry dates are UTC midnights (format.js inputDate), so the start
+  // of the from day and the end of the till day keep every entry dated on
+  // them. Either may be left empty; both empty is the whole account, as before.
+  const [fromDay, setFromDay] = React.useState('');
   const [tillDay, setTillDay] = React.useState('');
+  const from = fromDay ? Date.parse(`${fromDay}T00:00:00.000Z`) : undefined;
   const till = tillDay ? Date.parse(`${tillDay}T23:59:59.999Z`) : undefined;
+  const today = inputDate(Date.now());
   return (
     <div className="packet">
       <div className="packet-bar no-print">
         <button className="link" onClick={onBack}>← Back</button>
         {scope === 'party' && (
-          <label className="packet-till">
-            Till date
-            <input type="date" value={tillDay} max={inputDate(Date.now())} onChange={(e) => setTillDay(e.target.value)} />
-            {tillDay && <button className="link" onClick={() => setTillDay('')}>All</button>}
-          </label>
+          <div className="packet-till">
+            <label>
+              From
+              <input type="date" value={fromDay} max={tillDay || today} onChange={(e) => setFromDay(e.target.value)} />
+            </label>
+            <label>
+              To
+              <input type="date" value={tillDay} min={fromDay || undefined} max={today} onChange={(e) => setTillDay(e.target.value)} />
+            </label>
+            {(fromDay || tillDay) && <button className="link" onClick={() => { setFromDay(''); setTillDay('') }}>All</button>}
+          </div>
         )}
         <button className="btn" onClick={() => window.print()}>Print</button>
       </div>
-      {scope === 'party' ? <PartyPacket ledgerId={ledgerId} till={till} /> : <AllPacket />}
+      {scope === 'party' ? <PartyPacket ledgerId={ledgerId} from={from} till={till} /> : <AllPacket />}
     </div>
   );
 }
