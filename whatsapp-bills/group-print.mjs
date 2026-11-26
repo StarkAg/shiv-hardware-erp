@@ -1,0 +1,329 @@
+/**
+ * WhatsApp group printing, from Railway.
+ *
+ * The shop's group prints again (owner's ask, 25 Nov 2026), now without the
+ * shop PC holding a WhatsApp link: this service (the Shop number, always on)
+ * reads the group, and each print goes into the cloud print queue addressed to
+ * the shop PC's print server, which watches the queue live and prints at once.
+ *
+ *   a photo or PDF with "bw" / "cp" in its caption    prints now
+ *   a photo or PDF without one                         waits up to 10 minutes for
+ *                                                      "bw" / "cp" from the same person
+ *   "bw" / "cp" sent as a reply to a photo or PDF      prints that file
+ *   an SBI PDF (SBIDocument_*.pdf), no caption needed  prints now, black and white
+ *                                                      (PRINT_AUTO_NAMES)
+ *
+ * bw (also "b/w", "black") goes to the HP; cp (also "color", "colour") to the
+ * Epson; each falls back to the other on the print server, as before.
+ *
+ * Environment (Railway variables):
+ *   CONVEX_URL           the production deployment (https://sensible-panther-176.convex.cloud)
+ *   SHIV_DEVICE_TOKEN    a server key: npx convex run --prod devices:issueServerKey '{"name":"whatsapp-print"}'
+ *   PRINT_GROUP_ID       the group to print from (defaults to SHOP_GROUP_ID)
+ *   PRINTER_ID           the print server's agent id (shiv-shop-printer)
+ *   PRINT_COMMAND_TTL_MS how long a file waits for its bw / cp (10 minutes)
+ *   PRINT_AUTO_CHATS     chats where every photo and PDF prints at once, no bw / cp:
+ *                        "chat name or id=bw|color" split by ";" (see parseAutoChats)
+ *
+ * The same file is in whatsapp-reminders/ (the Shop number: the shop group)
+ * and whatsapp-bills/ (Tony's number: the supplier chats it is in). Change
+ * one, copy it to the other.
+ */
+import { readFile, writeFile } from 'node:fs/promises'
+
+const PRINTABLE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'])
+const EXTENSION = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'application/pdf': '.pdf' }
+const MAX_FILES_PER_JOB = 20
+
+/**
+ * Files that print as soon as they are posted, with no bw / cp, by name:
+ * PRINT_AUTO_NAMES, "pattern=mode" pairs split by ";", * and ? wildcards,
+ * case does not matter. Default: SBI's PDFs, black and white (owner's ask,
+ * 25 Nov 2026). "off" for none.
+ */
+export const DEFAULT_AUTO_NAMES = 'SBIDocument_*.pdf=bw'
+export function parseAutoNames(value) {
+  const text = String(value ?? DEFAULT_AUTO_NAMES).trim()
+  if (!text || /^(off|false|no|0)$/i.test(text)) return []
+  return text.split(';').map((entry) => {
+    const [pattern, mode = 'bw'] = entry.split('=').map((s) => s.trim())
+    if (!pattern) return null
+    const body = pattern.split('').map((c) => (c === '*' ? '.*' : c === '?' ? '.' : c.replace(/[.+^${}()|[\]\\]/g, '\\$&'))).join('')
+    return { match: new RegExp(`^${body}$`, 'i'), mode: mode.toLowerCase() === 'color' ? 'color' : 'bw' }
+  }).filter(Boolean)
+}
+
+/** A chat's name as compared: case, spaces and punctuation do not matter. */
+export const chatKey = (name) => String(name ?? '').toLowerCase().replace(/[^a-z0-9@.]+/g, '')
+
+/**
+ * Chats where every photo and PDF prints as soon as it comes, with no bw / cp,
+ * such as a supplier's chat of paper bills: "chat=mode" pairs split by ";",
+ * where chat is the group's name (as WhatsApp shows it) or its id
+ * (...@g.us), and mode bw or color (default bw). "off" or empty for none.
+ */
+export function parseAutoChats(value) {
+  const text = String(value ?? '').trim()
+  if (!text || /^(off|false|no|0)$/i.test(text)) return []
+  return text.split(';').map((entry) => {
+    const at = entry.lastIndexOf('=')
+    const chat = (at > 0 ? entry.slice(0, at) : entry).trim()
+    const mode = at > 0 ? entry.slice(at + 1).trim().toLowerCase() : 'bw'
+    if (!chat) return null
+    return { chat, key: chatKey(chat), mode: mode === 'color' || mode === 'colour' || mode === 'cp' ? 'color' : 'bw' }
+  }).filter(Boolean)
+}
+
+/** "bw" / "cp" (and their longer spellings) in a caption or message, else null. */
+export function printModeOf(text) {
+  const clean = String(text ?? '').trim().toLowerCase()
+  if (!clean) return null
+  if (/\bcp\b/.test(clean) || /\bcolou?r\b/.test(clean)) return 'color'
+  if (/\bbw\b/.test(clean) || /\bb\/w\b/.test(clean) || /\bblack\b/.test(clean)) return 'bw'
+  return null
+}
+
+/** The message inside WhatsApp's wrappers (disappearing, view once, document with caption, edits). */
+function contentOf(message) {
+  let m = message
+  for (let i = 0; i < 6 && m; i += 1) {
+    const inner = m.ephemeralMessage?.message
+      ?? m.viewOnceMessage?.message
+      ?? m.viewOnceMessageV2?.message
+      ?? m.viewOnceMessageV2Extension?.message
+      ?? m.documentWithCaptionMessage?.message
+      ?? m.editedMessage?.message
+    if (!inner) break
+    m = inner
+  }
+  return m ?? null
+}
+
+/** The printable file a message carries: { kind, mediaType, fileName, caption }, or null. */
+export function mediaOf(content) {
+  if (!content) return null
+  if (content.imageMessage) {
+    const mediaType = String(content.imageMessage.mimetype || 'image/jpeg').split(';')[0].trim()
+    return { kind: 'imageMessage', mediaType, fileName: null, caption: content.imageMessage.caption ?? '' }
+  }
+  if (content.documentMessage) {
+    const mediaType = String(content.documentMessage.mimetype || '').split(';')[0].trim()
+    return { kind: 'documentMessage', mediaType, fileName: content.documentMessage.fileName ?? null, caption: content.documentMessage.caption ?? '' }
+  }
+  return null
+}
+
+const textOf = (content) => content?.conversation ?? content?.extendedTextMessage?.text ?? ''
+
+/** Files waiting for their bw / cp, per sender in the group. */
+export function createPendingFiles(ttlMs, now = () => Date.now()) {
+  const pending = new Map()
+  return {
+    add(sender, file) {
+      const list = (pending.get(sender) ?? []).filter((e) => now() - e.at <= ttlMs)
+      list.push({ file, at: now() })
+      pending.set(sender, list)
+    },
+    take(sender) {
+      const list = pending.get(sender) ?? []
+      pending.delete(sender)
+      return list.filter((e) => now() - e.at <= ttlMs).map((e) => e.file)
+    },
+    size: () => [...pending.values()].reduce((n, list) => n + list.length, 0),
+  }
+}
+
+/** Calls a Convex function over its HTTP API, as the server key's device. */
+async function convexCall(convexUrl, token, kind, path, args) {
+  const res = await fetch(`${convexUrl}/api/${kind}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ path, args, format: 'json' }),
+  })
+  const json = await res.json().catch(() => null)
+  if (!res.ok || json?.status !== 'success') {
+    throw new Error(`Convex ${path}: ${json?.errorMessage ?? json?.message ?? `HTTP ${res.status}`}`)
+  }
+  return json.value
+}
+
+/**
+ * `shopGroup: false` reads no bw / cp group, only the auto-print chats
+ * (whatsapp-bills: Tony is in the shop group too, which the Shop number prints).
+ */
+export function createGroupPrinter({ env = process.env, dataDir, log, silent, shopGroup = true }) {
+  const convexUrl = String(env.CONVEX_URL || '').replace(/\/+$/, '')
+  const token = env.SHIV_DEVICE_TOKEN || ''
+  const groupId = shopGroup ? env.PRINT_GROUP_ID || env.SHOP_GROUP_ID || '' : ''
+  const printerId = env.PRINTER_ID || 'shiv-shop-printer'
+  const ttlMs = Math.max(10_000, Number(env.PRINT_COMMAND_TTL_MS) || 10 * 60_000)
+  const autoNames = parseAutoNames(env.PRINT_AUTO_NAMES)
+  const autoModeOf = (fileName) => (fileName ? autoNames.find((a) => a.match.test(fileName))?.mode ?? null : null)
+  const autoChats = parseAutoChats(env.PRINT_AUTO_CHATS)
+  const seenFile = `${dataDir}/print-seen.json`
+
+  const missing = [
+    !convexUrl && 'CONVEX_URL', !token && 'SHIV_DEVICE_TOKEN',
+    !groupId && !autoChats.length && (shopGroup ? 'PRINT_GROUP_ID' : 'PRINT_AUTO_CHATS'),
+  ].filter(Boolean)
+  const state = {
+    enabled: missing.length === 0,
+    groupId: groupId || null,
+    autoChats: autoChats.map((a) => ({ chat: a.chat, mode: a.mode, id: null })),
+    printerId,
+    missing,
+    waiting: 0,
+    lastQueued: null,
+    lastError: null,
+  }
+
+  // A group's name, looked up once per group (a group renamed is looked up again after a day).
+  const names = new Map()
+  async function chatName(sock, jid) {
+    const hit = names.get(jid)
+    if (hit && Date.now() - hit.at < 24 * 3600_000) return hit.name
+    let name = ''
+    if (jid.endsWith('@g.us')) name = (await sock.groupMetadata(jid).catch(() => null))?.subject ?? ''
+    names.set(jid, { name, at: Date.now() })
+    return name
+  }
+  /** The auto-print chat this message's chat is, by id or by name, else null. */
+  async function autoChatFor(sock, jid) {
+    if (!autoChats.length || !jid) return null
+    const byId = autoChats.find((a) => a.key === chatKey(jid))
+    if (byId) return byId
+    if (!jid.endsWith('@g.us')) return null
+    const key = chatKey(await chatName(sock, jid))
+    const found = key ? autoChats.find((a) => a.key === key) ?? null : null
+    if (found) {
+      const shown = state.autoChats.find((a) => a.chat === found.chat)
+      if (shown && shown.id !== jid) {
+        shown.id = jid
+        log(`[print] auto-print chat "${found.chat}" is ${jid}`)
+      }
+    }
+    return found
+  }
+  const pending = createPendingFiles(ttlMs)
+
+  // Message ids already handled, so a catch-up after a reconnect never prints twice.
+  let seen = null
+  async function seenIds() {
+    if (!seen) {
+      try { seen = new Set(JSON.parse(await readFile(seenFile, 'utf8'))) } catch { seen = new Set() }
+    }
+    return seen
+  }
+  async function markSeen(id) {
+    const ids = await seenIds()
+    if (ids.has(id)) return false
+    ids.add(id)
+    if (ids.size > 1000) seen = new Set([...ids].slice(-500))
+    await writeFile(seenFile, JSON.stringify([...seen])).catch(() => {})
+    return true
+  }
+
+  async function download(sock, downloadMediaMessage, key, content, media) {
+    const buffer = await downloadMediaMessage(
+      { key, message: content }, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage, logger: silent },
+    )
+    if (!buffer?.length) throw new Error('the file came down empty')
+    const name = media.fileName || `whatsapp-${Date.now()}${EXTENSION[media.mediaType] ?? ''}`
+    return { name, mediaType: media.mediaType, buffer }
+  }
+
+  /** Uploads the files and queues one print job for the shop PC. */
+  async function queue(files, mode, sender, from = 'WhatsApp group') {
+    // All files up at once, in their order.
+    const stored = await Promise.all(files.slice(0, MAX_FILES_PER_JOB).map(async (file) => {
+      const uploadUrl = await convexCall(convexUrl, token, 'mutation', 'files:generateUploadUrl', {})
+      const res = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Type': file.mediaType }, body: file.buffer })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.storageId) throw new Error(`upload of ${file.name} failed (HTTP ${res.status})`)
+      return { storageId: json.storageId, name: file.name, mediaType: file.mediaType }
+    }))
+    const id = await convexCall(convexUrl, token, 'mutation', 'printJobs:create', {
+      kind: 'raw-file',
+      source: 'whatsapp',
+      payload: { files: stored, mode },
+      copies: 1,
+      requestedBy: `${from} (${String(sender).split('@')[0]})`,
+      // Addressed to the print server, so the Counter app does not hold it back.
+      assignedPrinterId: printerId,
+    })
+    state.lastQueued = { at: new Date().toISOString(), id, mode, files: stored.map((f) => f.name) }
+    state.lastError = null
+    log(`[print] queued ${stored.length} file(s) ${mode} as ${id}`)
+    return id
+  }
+
+  /** One group message: a file to print or keep, or a bw / cp to act on. */
+  async function handle(sock, downloadMediaMessage, msg, type) {
+    if (!state.enabled) return
+    const jid = msg.key?.remoteJid || ''
+    // An undecrypted stub comes again with the same id; leave its id unseen.
+    if (!msg.message) return
+    const content = contentOf(msg.message)
+    const media = mediaOf(content)
+    // An auto-print chat: only its photos and PDFs matter, so only those look its name up.
+    const auto = jid !== groupId && media && PRINTABLE.has(media.mediaType)
+      ? await autoChatFor(sock, jid).catch(() => null)
+      : null
+    if (jid !== groupId && !auto) return
+    // After a reconnect, only what was sent within the bw / cp window counts.
+    if (type === 'append' && Date.now() - Number(msg.messageTimestamp ?? 0) * 1000 > ttlMs) return
+    if (!(await markSeen(msg.key.id))) return
+
+    // The Shop phone's own sends are the group's too (fromMe), so they count.
+    const sender = msg.key.participant || msg.key.participantAlt || jid
+
+    try {
+      if (auto) {
+        // Every photo and PDF prints at once, in the chat's mode (a bw / cp caption still wins).
+        const file = await download(sock, downloadMediaMessage, msg.key, content, media)
+        await queue([file], printModeOf(media.caption) ?? auto.mode, sender, `WhatsApp ${auto.chat}`)
+        return
+      }
+      if (media) {
+        if (!PRINTABLE.has(media.mediaType)) return
+        const file = await download(sock, downloadMediaMessage, msg.key, content, media)
+        // A bw / cp in the caption wins; else a file named for printing (an SBI PDF) prints as it is.
+        const mode = printModeOf(media.caption) ?? autoModeOf(media.fileName)
+        if (mode) await queue([file], mode, sender)
+        else {
+          pending.add(sender, file)
+          log(`[print] ${file.name} waiting for bw / cp`)
+        }
+        return
+      }
+
+      const mode = printModeOf(textOf(content))
+      if (!mode) return
+      // "bw" / "cp" as a reply to a photo or PDF prints that file.
+      const quotedInfo = content?.extendedTextMessage?.contextInfo
+      const quoted = contentOf(quotedInfo?.quotedMessage)
+      const quotedMedia = mediaOf(quoted)
+      if (quotedMedia && PRINTABLE.has(quotedMedia.mediaType)) {
+        const key = { remoteJid: jid, id: quotedInfo.stanzaId, participant: quotedInfo.participant }
+        const file = await download(sock, downloadMediaMessage, key, quoted, quotedMedia)
+        await queue([file], mode, sender)
+        return
+      }
+      const files = pending.take(sender)
+      if (files.length) await queue(files, mode, sender)
+    } catch (err) {
+      state.lastError = { at: new Date().toISOString(), error: String(err?.message ?? err) }
+      log('[print] failed:', err?.message ?? err)
+    } finally {
+      state.waiting = pending.size()
+    }
+  }
+
+  if (state.enabled) {
+    if (groupId) log(`[print] group printing on: ${groupId} -> ${printerId}`)
+    for (const a of autoChats) log(`[print] auto-print chat: "${a.chat}" ${a.mode} -> ${printerId}`)
+  }
+  else log(`[print] group printing off, missing ${missing.join(', ')}`)
+
+  return { handle, state }
+}

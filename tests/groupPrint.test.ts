@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // @ts-expect-error plain ESM module without types
-import { createGroupPrinter, createPendingFiles, printModeOf } from '../whatsapp-reminders/group-print.mjs'
+import { createGroupPrinter, createPendingFiles, parseAutoChats, printModeOf } from '../whatsapp-reminders/group-print.mjs'
 
 const GROUP = '120363396348781660@g.us'
 const SENDER = '919999999999@s.whatsapp.net'
@@ -146,5 +146,77 @@ describe('group printing', () => {
     expect(printer.state.missing).toEqual(['SHIV_DEVICE_TOKEN'])
     await send(msg({ imageMessage: { mimetype: 'image/jpeg', caption: 'cp' } }))
     expect(jobs).toHaveLength(0)
+  })
+})
+
+describe('auto-print chats (a supplier chat of paper bills)', () => {
+  const SUPPLIER = '120363000000000001@g.us'
+  const OTHER = '120363000000000002@g.us'
+  let jobs: any[]
+
+  beforeEach(() => {
+    jobs = []
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: any) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body
+      const ok = (value: unknown) => new Response(JSON.stringify(value), { status: 200 })
+      if (url.endsWith('/api/mutation') && body.path === 'files:generateUploadUrl') return ok({ status: 'success', value: `https://upload/${++n}` })
+      if (url.startsWith('https://upload/')) return ok({ storageId: `kg${url.split('/').pop()}` })
+      if (url.endsWith('/api/mutation') && body.path === 'printJobs:create') { jobs.push(body.args); return ok({ status: 'success', value: `job${jobs.length}` }) }
+      return new Response('{}', { status: 404 })
+    }))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  function setup(env: Record<string, string> = {}) {
+    const printer = createGroupPrinter({
+      env: { CONVEX_URL: 'https://convex.test', SHIV_DEVICE_TOKEN: 'tok', SHOP_GROUP_ID: GROUP, PRINT_AUTO_CHATS: 'Simran Ply Rajan Rnc Pulkari Sunmica=bw', ...env },
+      dataDir: mkdtempSync(join(tmpdir(), 'auto-print-')), log: () => {}, silent, shopGroup: false,
+    })
+    const subjects: Record<string, string> = { [SUPPLIER]: 'Simran Ply  Rajan Rnc Pulkari Sunmica', [OTHER]: 'Family', [GROUP]: 'Shiv Hardware' }
+    const sock = { updateMediaMessage: vi.fn(), groupMetadata: vi.fn(async (jid: string) => ({ subject: subjects[jid] })) }
+    const download = vi.fn(async () => Buffer.from('photo-bytes'))
+    let id = 0
+    const msg = (jid: string, message: any) => ({
+      key: { remoteJid: jid, id: `a${++id}`, participant: SENDER },
+      messageTimestamp: Math.floor(Date.now() / 1000),
+      message,
+    })
+    return { printer, sock, send: (m: any) => printer.handle(sock, download, m, 'notify'), msg }
+  }
+
+  it('reads the chats from the setting, by name or id, bw unless said', () => {
+    expect(parseAutoChats('Simran Ply=bw; 120363000000000009@g.us=cp ;Other')).toEqual([
+      { chat: 'Simran Ply', key: 'simranply', mode: 'bw' },
+      { chat: '120363000000000009@g.us', key: '120363000000000009@g.us', mode: 'color' },
+      { chat: 'Other', key: 'other', mode: 'bw' },
+    ])
+    expect(parseAutoChats('off')).toEqual([])
+    expect(parseAutoChats(undefined)).toEqual([])
+  })
+
+  it('prints every photo in the supplier chat at once, black and white, no bw needed', async () => {
+    const { send, msg, printer } = setup()
+    await send(msg(SUPPLIER, { imageMessage: { mimetype: 'image/jpeg' } }))
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0]).toMatchObject({ kind: 'raw-file', payload: { mode: 'bw' }, assignedPrinterId: 'shiv-shop-printer' })
+    expect(jobs[0].requestedBy).toContain('Simran Ply Rajan Rnc Pulkari Sunmica')
+    expect(printer.state.autoChats[0].id).toBe(SUPPLIER)
+  })
+
+  it('leaves other chats, text, and the shop group alone', async () => {
+    const { send, msg } = setup()
+    await send(msg(OTHER, { imageMessage: { mimetype: 'image/jpeg', caption: 'bw' } }))
+    await send(msg(SUPPLIER, { conversation: 'bw' }))
+    await send(msg(GROUP, { imageMessage: { mimetype: 'image/jpeg', caption: 'bw' } }))
+    expect(jobs).toHaveLength(0)
+  })
+
+  it('prints a message only once', async () => {
+    const { send, msg } = setup()
+    const m = msg(SUPPLIER, { imageMessage: { mimetype: 'image/jpeg' } })
+    await send(m)
+    await send(m)
+    expect(jobs).toHaveLength(1)
   })
 })

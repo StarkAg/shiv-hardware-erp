@@ -4,7 +4,7 @@ Which number sends what. Checked 2026-10-30. Update this file when a link change
 
 | Label | Number | Sends from | What it sends | Checked how |
 |---|---|---|---|---|
-| Tony | +91 80928 50954 | Railway `whatsapp-bills` (`/data/auth`) | Sale bills, receipts and quotations to customers' chats; the greeting and visiting card back to a customer's first "hi" (`docs/whatsapp-hi-card.md`) | Service `/health` and the saved login on the volume |
+| Tony | +91 80928 50954 | Railway `whatsapp-bills` (`/data/auth`) | Sale bills, receipts and quotations to customers' chats; the greeting and visiting card back to a customer's first "hi" (`docs/whatsapp-hi-card.md`); and reads the supplier chats set to auto-print, since 2026-11-26 (see "Supplier chats" below) | Service `/health` and the saved login on the volume |
 | Shop | +91 79705 50954 | Railway `whatsapp-reminders` (`/data/auth`), since 2026-10-30 | Ledger "Share to WhatsApp" PDFs, quotation and attachment shares, guarantee messages (with the Google review link under them, `REVIEW_URL`), the auto-reply, birthday reminders; and reads the shop group for printing (photo or PDF with `bw` / `cp`), since 2026-11-25 | The panel calls Convex `shopWhatsApp.*`, which calls the service with `SHOP_WHATSAPP_KEY`; the print server calls it for the card-printed message. Before 2026-10-30 this ran in the shop PC's print server. Group printing: see "WhatsApp group printing" below |
 | Meta (C) | Not looked up, ID `1348201888369392` | Convex `convex/whatsapp.ts` | Guarantee cards sent from the panel | Convex variable `WHATSAPP_PHONE_NUMBER_ID` |
 | Twilio | +91 98357 16123 | Convex `convex/twilio.ts` | One notice when a template is approved | Convex variable `TWILIO_WHATSAPP_FROM` |
@@ -50,6 +50,25 @@ Shop group (WhatsApp)
 Railway variables on `whatsapp-reminders`: `CONVEX_URL` (production), `SHIV_DEVICE_TOKEN` (a server key from `npx convex run --prod devices:issueServerKey '{"name":"whatsapp-print"}'`), `PRINT_GROUP_ID` (defaults to `SHOP_GROUP_ID`; the "Shiv Hardware" group is `120363396348781660@g.us`), optional `PRINTER_ID` (default `shiv-shop-printer`). Missing any of the first three, printing stays off and `/status` says which under `groupPrint.missing`.
 
 The old way (the print server's own WhatsApp link, `WHATSAPP_AUTO_PRINT_ENABLED`) stays off. Turning it on as well would print everything twice.
+
+### Supplier chats (auto-print, Tony's number)
+
+Since 2026-11-26 every photo and PDF posted in the supplier chat
+**"Simran Ply Rajan Rnc Pulkari Sunmica"** prints at the shop by itself, black
+and white on the HP (falling back to the Epson), with no `bw` needed: the
+supplier sends paper bills there (owner's ask). A `bw` / `cp` caption still
+decides. The chat is in Tony's WhatsApp (80928 50954), not the Shop number's,
+so `whatsapp-bills` reads it, with the same `group-print.mjs` as
+`whatsapp-reminders` (a copy: change one, copy it to the other). It finds the
+chat by its name and logs its id (`[print] auto-print chat ... is ...@g.us`).
+
+- Every photo prints, not only bills (the owner's call to start with).
+- To add or change chats: Railway variable `PRINT_AUTO_CHATS` on
+  `whatsapp-bills`, "chat name or id=bw|color" split by ";" ("off" for none).
+  Without it the Simran Ply chat above is the default. A renamed group needs
+  its new name, or its id, there.
+- The shop group is never read by `whatsapp-bills` (Tony is in it too), so it
+  does not print twice.
 
 ## Linking a number (both Railway services)
 

@@ -53,6 +53,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { keepSentMessages, memoryCache, useSqliteAuthState } from './auth-store.mjs'
 import { createLinkWatch } from './link-watch.mjs'
+import { createGroupPrinter } from './group-print.mjs'
 
 const PORT = Number(process.env.PORT || 8080)
 const AUTH_DIR = process.env.AUTH_DIR || '/data/auth'
@@ -95,6 +96,23 @@ const retryCounts = memoryCache()
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
+
+/**
+ * Supplier chats whose paper bills print at the shop by themselves: every
+ * photo and PDF posted there goes to the shop PC's print server, black and
+ * white on the HP (owner's ask, 26 Nov 2026, the Simran Ply chat). Railway
+ * variable PRINT_AUTO_CHATS ("chat name=bw" split by ";", "off" for none)
+ * replaces the default. The shop group is not read here: the Shop number
+ * prints it (whatsapp-reminders), and Tony is in it too.
+ */
+const DEFAULT_AUTO_CHATS = 'Simran Ply Rajan Rnc Pulkari Sunmica=bw'
+const groupPrint = createGroupPrinter({
+  env: { ...process.env, PRINT_AUTO_CHATS: process.env.PRINT_AUTO_CHATS ?? DEFAULT_AUTO_CHATS },
+  dataDir: dirname(AUTH_DIR),
+  log,
+  silent: { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return this } },
+  shopGroup: false,
+})
 
 /* ── the WhatsApp link ───────────────────────────────────────────────────── */
 const silent = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return silent } }
@@ -144,6 +162,8 @@ async function startWhatsApp() {
       if (mine !== gen) return
       for (const msg of messages) {
         if (type === 'notify' || msg.key?.fromMe) void onMessage(msg)
+        // A paper bill in a supplier chat prints at the shop (group-print.mjs).
+        void groupPrint.handle(s, baileys.downloadMediaMessage, msg, type).catch((err) => log('[print] failed:', err?.message ?? err))
       }
     })
     s.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
