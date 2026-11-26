@@ -12,6 +12,10 @@ print-server/data/guarantees.json
 print-server/data/bills.jsonl
 print-server/data/bills.json
 print-server/data/scan-feedback.jsonl
+# This PC's own print choices and what its watched folders already printed.
+print-server/data/bank-printer.json
+print-server/data/print-routes.json
+print-server/data/watch-print-seen.json
 print-server/.wwebjs_cache/
 *.log
 cloud-api/.env
