@@ -387,6 +387,16 @@ input[type='number'] { -moz-appearance: textfield; }
      .print-root rule below still wins. */
   body:where(:has(.print-root)) * { visibility: hidden; }
   .print-root, .print-root * { visibility: visible; }
+  /* A screen printing itself: the window-high, inner-scrolling layout would cut
+     it to one page, so it opens out to its full length. Not while a print area
+     is mounted: then the clipped screen behind it is what keeps a quotation
+     from running on into blank pages. */
+  body:not(:has(.print-root)) :is(.min-h-screen, .mobile-main, .mobile-main > *, .page-area):not(.no-print) {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
   .print-root { position: absolute; left: 0; top: 0; width: 210mm; }
   .print-offscreen { position: absolute; left: 0; top: 0; }
   .no-print { display: none !important; }
