@@ -292,7 +292,11 @@
    would also take the margin off every A4 quotation printed later in the visit. */
 @page ledger{size: A4; margin: 12mm;}
 body:not(:has(.print-root)) .ledger-root{page: ledger;}
-.ledger-root, .ledger-root{background: #fff;}
+.ledger-root, .ledger-root{background: #fff !important;}
+/* The packet and page wear the screen's background, dark in dark mode; with
+   backgrounds forced to print (index.css) it came out as a black block under
+   the statement. Paper is white. */
+.ledger-root .packet, .ledger-root .app{background: #fff !important; padding-bottom: 0;}
 .ledger-root *{-webkit-print-color-adjust: exact; print-color-adjust: exact;}
 .ledger-root .no-print{display: none !important;}
 .ledger-root .sheet{width: auto; min-height: 0; margin: 0; padding: 0;

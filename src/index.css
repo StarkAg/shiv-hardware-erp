@@ -396,6 +396,7 @@ input[type='number'] { -moz-appearance: textfield; }
     height: auto !important;
     min-height: 0 !important;
     overflow: visible !important;
+    background: #fff !important;
   }
   .print-root { position: absolute; left: 0; top: 0; width: 210mm; }
   .print-offscreen { position: absolute; left: 0; top: 0; }
