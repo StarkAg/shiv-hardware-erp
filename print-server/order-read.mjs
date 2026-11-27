@@ -57,6 +57,17 @@ export function orderLines(text) {
   return lines
 }
 
+/**
+ * The environment for claude.exe without the print server's API key: .env has
+ * ANTHROPIC_API_KEY for other features, and Claude Code prefers it over the
+ * PC's sign-in ("Invalid API key", first live test 27 Nov 2026).
+ */
+export function signedInEnv(env = process.env) {
+  const out = { ...env }
+  for (const key of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL']) delete out[key]
+  return out
+}
+
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' }
 
 /** Reads one photo: its item lines, or throws. */
@@ -71,7 +82,7 @@ export async function readOrderPhoto(buffer, mediaType, { env = process.env, mod
         '--model', model,
         '--allowedTools', 'Read',
         '--disallowedTools', 'Bash,Edit,Write,WebFetch,WebSearch,NotebookEdit',
-      ], { cwd: dir, timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, out, errOut) => {
+      ], { cwd: dir, env: signedInEnv(env), timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, out, errOut) => {
         if (err) reject(new Error(String(out || errOut || err.message).trim().slice(0, 300)))
         else resolve(out)
       })

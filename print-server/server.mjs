@@ -5,6 +5,7 @@
 // POST /whatsapp-print/jobs { files, copies }       -> uploaded PDFs/images -> printer
 // DROP_PRINT_DIR ("~/Print Drop")                   -> dropped PDFs/images -> printer
 
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'fs'
 // .env, then .env.local — kept out of git, for keys such as SHIV_DEVICE_TOKEN.
 for (const file of ['.env', '.env.local']) {
@@ -3192,6 +3193,14 @@ async function printCloudJob(job) {
           continue
         }
       }
+      // One file shared to two WhatsApp chats at once (an SBI receipt to the shop
+      // group and to the supplier's chat, read by the Shop and Bills numbers)
+      // comes as two jobs: printed once (owner, 27 Nov 2026).
+      if (job.source === 'whatsapp' && isSameFileFromAnotherChat(file.buffer, job.requestedBy)) {
+        console.log(`[cloud-print] ${job._id}: ${file.name} skipped, the same file just printed from another chat`)
+        skipped.push({ name: file.name, reason: 'printed from another chat' })
+        continue
+      }
       // A bank PDF (SBI) goes to the bank printer, black and white, unless it was sent as "cp".
       if (mode !== 'color' && isBankPrint(file.name)) {
         const bank = await routeBankPrintJob('cloud-print')
@@ -3210,6 +3219,27 @@ async function printCloudJob(job) {
   if (job.kind === 'card-backs') return await printCardBacks(job.payload?.files)
 
   throw new Error(`Unsupported cloud print job kind: ${job.kind}`)
+}
+
+// WhatsApp files printed lately, by content: which chat sent each, and when.
+const recentWhatsAppFiles = new Map()
+const SAME_FILE_WINDOW_MS = 5 * 60_000
+
+/**
+ * True when these exact bytes printed from a different WhatsApp chat within
+ * the last 5 minutes. The same chat asking again (a second "bw") still prints.
+ */
+function isSameFileFromAnotherChat(buffer, requestedBy) {
+  if (!buffer?.length) return false
+  const now = Date.now()
+  for (const [key, seen] of recentWhatsAppFiles) if (now - seen.at > SAME_FILE_WINDOW_MS) recentWhatsAppFiles.delete(key)
+  // "WhatsApp group (9199...)" / "WhatsApp Simran Ply (9199...)": the chat is before the sender.
+  const chat = String(requestedBy ?? '').replace(/\s*\([^)]*\)\s*$/, '')
+  const key = createHash('sha1').update(buffer).digest('hex')
+  const seen = recentWhatsAppFiles.get(key)
+  if (seen && seen.chat !== chat) return true
+  recentWhatsAppFiles.set(key, { chat, at: now })
+  return false
 }
 
 let cloudPollRunning = false
