@@ -117,6 +117,23 @@ export function signedInEnv(env = process.env) {
   return out
 }
 
+/**
+ * A short reason a read failed, fit to post in the group. Node's own error
+ * text is "Command failed: " and the whole command line, prompt included, and
+ * a timeout has no output of its own, so that is what the group got (27 Nov
+ * 2026). Never the word "order" either: the group reads its own messages.
+ */
+export function readFailure(err, out = '', errOut = '', timeoutMs = 180_000) {
+  let reason
+  if (err?.killed || err?.signal) reason = `Claude took longer than ${Math.round(timeoutMs / 1000)} s`
+  else if (err?.code === 'ENOENT') reason = 'Claude Code is not installed here'
+  else {
+    const said = String(out || errOut || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? ''
+    reason = said && !/^command failed/i.test(said) ? said : `Claude stopped (exit code ${err?.code ?? 'unknown'})`
+  }
+  return reason.replace(/\border\b/gi, 'slip').slice(0, 200)
+}
+
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' }
 
 /** Reads one photo: its item lines, or throws. */
@@ -138,7 +155,7 @@ export async function readOrderPhoto(buffer, mediaType, { env = process.env, mod
         '--setting-sources', '',
         '--system-prompt', ORDER_SYSTEM,
       ], { cwd: dir, env: signedInEnv(env), timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, out, errOut) => {
-        if (err) reject(new Error(String(out || errOut || err.message).trim().slice(0, 300)))
+        if (err) reject(new Error(readFailure(err, out, errOut, timeoutMs)))
         else resolve(out)
       })
     })

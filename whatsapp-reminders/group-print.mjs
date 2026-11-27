@@ -158,6 +158,30 @@ export function createPendingFiles(ttlMs, now = () => Date.now()) {
   }
 }
 
+/**
+ * Photos already typed out, by message id, and who asked last: a second
+ * "order" from the same person within a minute of a read is the same ask, not
+ * a new one. Every way of asking marks the photo here (a caption, a reply, an
+ * "order" after it); before 27 Nov 2026 only the last did, so an "order" sent
+ * again after a captioned photo waited for, and typed out, the next photo.
+ */
+export function createTypedPhotos(windowMs = 60_000, now = () => Date.now(), max = 500) {
+  const ids = new Map()
+  const asked = createPendingFiles(windowMs, now)
+  return {
+    mark(sender, photoId) {
+      if (photoId) {
+        ids.set(photoId, now())
+        if (ids.size > max) ids.delete(ids.keys().next().value)
+      }
+      asked.add(sender, photoId ?? true)
+    },
+    has: (photoId) => Boolean(photoId) && ids.has(photoId),
+    /** This person asked for a read within the window. */
+    recent: (sender) => asked.peek(sender).length > 0,
+  }
+}
+
 /** Calls a Convex function over its HTTP API, as the server key's device. */
 async function convexCall(convexUrl, token, kind, path, args) {
   const res = await fetch(`${convexUrl}/api/${kind}`, {
@@ -261,6 +285,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
   const pending = createPendingFiles(ttlMs)
   // An "order" that came before its photo had downloaded, per sender (2 minutes).
   const orderAsked = createPendingFiles(2 * 60_000)
+  const typed = createTypedPhotos()
 
   // Message ids already handled, so a catch-up after a reconnect never prints twice.
   let seen = null
@@ -364,6 +389,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         file.replyTo = { id: msg.key.id, participant: sender }
         // "order" under a photo: typed out; printed too only if the caption also says bw / cp.
         if (isOrderText(media.caption) && media.mediaType.startsWith('image/')) {
+          typed.mark(senderIds, msg.key.id)
           await queueOrder(file, file.replyTo, sender)
           const printMode = printModeOf(media.caption)
           if (printMode) await queue([file], printMode, sender)
@@ -374,7 +400,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         if (mode) await queue([file], mode, sender)
         else if (media.mediaType.startsWith('image/') && orderAsked.take(senderIds).length) {
           // "order" got here before this photo had downloaded: it was for this photo.
-          file.typedOut = Date.now()
+          typed.mark(senderIds, msg.key.id)
           pending.add(senderIds, file)
           await queueOrder(file, file.replyTo, sender)
         } else {
@@ -393,15 +419,16 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         if (qMedia && qMedia.mediaType.startsWith('image/')) {
           const key = { remoteJid: jid, id: info.stanzaId, participant: info.participant }
           const file = await download(sock, downloadMediaMessage, key, q, qMedia)
+          typed.mark(senderIds, info.stanzaId)
           await queueOrder(file, { id: info.stanzaId, participant: info.participant || sender }, sender)
           return
         }
-        // A photo already typed out is not typed out again.
-        const last = pending.peek(senderIds).filter((f) => f.mediaType.startsWith('image/') && !f.typedOut).at(-1)
+        // A photo already typed out (by its caption, a reply or an earlier "order") is not typed out again.
+        const last = pending.peek(senderIds).filter((f) => f.mediaType.startsWith('image/') && !typed.has(f.replyTo?.id)).at(-1)
         if (last) {
-          last.typedOut = Date.now()
+          typed.mark(senderIds, last.replyTo?.id)
           await queueOrder(last, last.replyTo, sender)
-        } else if (pending.peek(senderIds).some((f) => f.typedOut && Date.now() - f.typedOut < 60_000)) {
+        } else if (typed.recent(senderIds)) {
           // A second "order" just after this person's photo was typed out: already done.
           log(`[print] "order" again from ${senderIds.join(' / ')}, its photo was just typed out`)
         } else {

@@ -95,9 +95,9 @@ Since 2026-11-25, `whatsapp-reminders` (Shop) and `whatsapp-bills` (Tony) connec
 
 In the shop group, a photo of a bill or order slip with "order" in its caption
 (or "order" sent as a reply to it, or right after it by the same person) is not
-printed: it goes to the shop PC's print server, where Claude Code (the desktop
-app's own `claude.exe`, `print-server/order-read.mjs`) reads the handwriting,
-and the Shop number posts the lines back as a reply to the photo:
+printed: the Shop number's Railway service reads it with Claude Code (see "Read
+on Railway" below; the shop PC's `print-server/order-read.mjs` is the fallback)
+and posts the lines back as a reply to the photo:
 only what is bought from the suppliers, typed the way the staff do (owner, 27 Nov
 2026): plywood and flush doors as `18mm MS Solid 7x4 - 5 pc` / `30mm SG 78x40 - 1 pc`
 with the grade rewritten (SGC on the bill -> SG, SG -> S, S stays S); sunmica
@@ -149,3 +149,15 @@ read: 2 lines in 7 s. Without the token, or if a read there fails, the photo
 goes to the shop PC as before. To change the token: `setup-token` again, then
 the script. "order" may come before its photo (sent together): it waits 2
 minutes for that person's photo; a second "order" right after a read is ignored.
+
+Fixed 27 Nov 2026 (`createTypedPhotos` in group-print.mjs, tests in
+`tests/orderRead.test.ts`):
+
+- A photo is marked as typed out however it was asked for: "order" in its
+  caption, "order" as a reply to it, or "order" after it. Before, only the last
+  counted, so "order" sent again after a captioned photo waited for that
+  person's next photo and typed it out unasked; and a photo asked for by reply
+  was typed out again by a later plain "order".
+- A failed read posts a short reason ("Claude took longer than 180 s", "Claude
+  stopped (exit code 1)"), never Node's "Command failed: ..." text, which held
+  the whole command line and prompt (`readFailure` in order-read.mjs).
