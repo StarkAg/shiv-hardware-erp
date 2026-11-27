@@ -227,11 +227,12 @@ export async function statementPdf(data, { onPhoto } = {}) {
   const cols = [
     { label: 'Date', w: 48 },
     { label: 'Vch', w: 56 },
-    { label: 'Type', w: 78 },
-    { label: 'Ref', w: 56 },
+    { label: 'Type', w: 64 },
+    { label: 'Ref', w: 48 },
     { label: 'Particulars', w: 0 },
-    { label: 'Debit', w: 68, num: true },
-    { label: 'Credit', w: 68, num: true },
+    { label: 'Debit', w: 62, num: true },
+    { label: 'Credit', w: 62, num: true },
+    { label: 'Balance', w: 76, num: true },
   ];
   cols[4].w = right - MARGIN - cols.reduce((t, c) => t + c.w, 0);
   let x = MARGIN;
@@ -270,11 +271,15 @@ export async function statementPdf(data, { onPhoto } = {}) {
   const totalCr = data.totals.credit + (openingDr ? 0 : data.opening);
   const closingOnDebit = totalCr > totalDr;
   const grand = Math.max(totalDr, totalCr);
+  // The running balance after each entry (Dr above zero), as a passbook shows it.
+  let running = openingDr ? data.opening : -data.opening;
+  const balanceText = (v) => `${rupees(Math.abs(v))} ${v < -0.005 ? 'Cr' : 'Dr'}`;
 
   header();
   row([shortDate(data.openingAsOf), `${openingDr ? 'To' : 'By'} Opening Balance`, '', '', '',
-    openingDr ? rupees(data.opening) : '', openingDr ? '' : rupees(data.opening)], { span: true });
+    openingDr ? rupees(data.opening) : '', openingDr ? '' : rupees(data.opening), balanceText(running)], { span: true });
   for (const r of data.rows) {
+    running += r.side === 'Dr' ? r.amount : -r.amount;
     const particulars = (r.contra ?? []).join(', ') || '-';
     row([
       shortDate(r.date),
@@ -284,12 +289,13 @@ export async function statementPdf(data, { onPhoto } = {}) {
       r.narration && r.narration !== r.vchType ? `${particulars} - ${r.narration}` : particulars,
       r.side === 'Dr' ? rupees(r.amount) : '',
       r.side === 'Cr' ? rupees(r.amount) : '',
+      balanceText(running),
     ]);
   }
-  row(['', '', '', '', '', rupees(totalDr), rupees(totalCr)], { rule: true });
+  row(['', '', '', '', '', rupees(totalDr), rupees(totalCr), ''], { rule: true });
   row(['', `${closingOnDebit ? 'To' : 'By'} Closing Balance`, '', '', '',
-    closingOnDebit ? rupees(data.closing) : '', closingOnDebit ? '' : rupees(data.closing)], { span: true });
-  row(['', '', '', '', '', rupees(grand), rupees(grand)], { bold: true, rule: true });
+    closingOnDebit ? rupees(data.closing) : '', closingOnDebit ? '' : rupees(data.closing), ''], { span: true });
+  row(['', '', '', '', '', rupees(grand), rupees(grand), ''], { bold: true, rule: true });
 
   // Bills with no amount yet: listed by name, so a statement sent for one of
   // them shows it, and its photo follows on its own page.

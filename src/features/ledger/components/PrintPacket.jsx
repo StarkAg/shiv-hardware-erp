@@ -84,6 +84,14 @@ function PartyPacket({ ledgerId, from, till }) {
   const totalCr = data.totals.credit + (openingDr ? 0 : data.opening);
   const closingOnDebit = totalCr > totalDr;
   const grand = Math.max(totalDr, totalCr);
+  // The running balance after each entry (Dr above zero), as a passbook shows it.
+  let running = openingDr ? data.opening : -data.opening;
+  const openingBalance = running;
+  const balanceAfter = data.rows.map((r) => (running += r.side === 'Dr' ? r.amount : -r.amount));
+  const balanceText = (v) => `${rupees(Math.abs(v))} ${v < -0.005 ? 'Cr' : 'Dr'}`;
+  // An account's opening date can come after its first entries (its opening
+  // balance set later): the opening line then takes the first entry's date.
+  const openingDate = from ?? Math.min(data.openingAsOf ?? Infinity, ...data.rows.map((r) => r.date));
 
   return (
     <>
@@ -102,7 +110,7 @@ function PartyPacket({ ledgerId, from, till }) {
           <table className="figures">
             <tbody>
               <tr>
-                <td>Opening as at {shortDate(from ?? data.openingAsOf)}</td>
+                <td>Opening as at {shortDate(openingDate)}</td>
                 <td className="num">{rupees(data.opening)} {data.openingSide}</td>
               </tr>
               <tr>
@@ -135,14 +143,16 @@ function PartyPacket({ ledgerId, from, till }) {
               <th>Particulars</th>
               <th className="num">Debit</th>
               <th className="num">Credit</th>
+              <th className="num">Balance</th>
             </tr>
           </thead>
           <tbody>
             <tr className="rule">
-              <td>{shortDate(from ?? data.openingAsOf)}</td>
+              <td>{shortDate(openingDate)}</td>
               <td colSpan={4}>{openingDr ? 'To' : 'By'} Opening Balance</td>
               <td className="num">{openingDr ? rupees(data.opening) : ''}</td>
               <td className="num">{openingDr ? '' : rupees(data.opening)}</td>
+              <td className="num">{balanceText(openingBalance)}</td>
             </tr>
             {data.rows.map((r, i) => (
               <tr key={`${r.voucherId}-${i}`}>
@@ -156,6 +166,7 @@ function PartyPacket({ ledgerId, from, till }) {
                 </td>
                 <td className="num">{r.side === 'Dr' ? rupees(r.amount) : ''}</td>
                 <td className="num">{r.side === 'Cr' ? rupees(r.amount) : ''}</td>
+                <td className="num">{balanceText(balanceAfter[i])}</td>
               </tr>
             ))}
             {/* Tally's footer: the two columns as they stand, the closing
@@ -165,16 +176,19 @@ function PartyPacket({ ledgerId, from, till }) {
               <td colSpan={5} />
               <td className="num">{rupees(totalDr)}</td>
               <td className="num">{rupees(totalCr)}</td>
+              <td />
             </tr>
             <tr className="closing-line">
               <td colSpan={5}>{closingOnDebit ? 'To' : 'By'} Closing Balance</td>
               <td className="num">{closingOnDebit ? rupees(data.closing) : ''}</td>
               <td className="num">{closingOnDebit ? '' : rupees(data.closing)}</td>
+              <td />
             </tr>
             <tr className="grand">
               <td colSpan={5} />
               <td className="num">{rupees(grand)}</td>
               <td className="num">{rupees(grand)}</td>
+              <td />
             </tr>
           </tbody>
         </table>
