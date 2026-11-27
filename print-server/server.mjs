@@ -33,6 +33,7 @@ import { detectColourMode, registerColourCheck } from './colour-check.mjs'
 import { directPrintable, parseIppPrinters, printDirect, printerInfo } from './direct-print.mjs'
 import { createFolderWatcher, parseWatchList } from './watch-print.mjs'
 import { looksLikePaper } from './paper-check.mjs'
+import { readOrderPhoto } from './order-read.mjs'
 import { JOBS, createPrinterStatus, createRouteStore, isBankFile, parseBankNames, pickRoute, settingsFor } from './bank-print.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
@@ -2797,6 +2798,37 @@ async function notifyCustomerGuaranteeReady(document) {
 const SHOP_WHATSAPP_URL = (process.env.SHOP_WHATSAPP_URL || '').replace(/\/+$/, '')
 const SHOP_WHATSAPP_KEY = process.env.SHOP_WHATSAPP_KEY || ''
 
+/** Posts text in the shop group through the Shop number (whatsapp-reminders), as a reply when given. */
+async function sendToShopGroup(text, replyTo) {
+  if (!SHOP_WHATSAPP_URL || !SHOP_WHATSAPP_KEY) throw new Error('SHOP_WHATSAPP_URL / SHOP_WHATSAPP_KEY not set')
+  const res = await fetch(`${SHOP_WHATSAPP_URL}/send-text`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-shop-key': SHOP_WHATSAPP_KEY },
+    body: JSON.stringify({ mobile: 'group', text, ...(replyTo ? { replyTo } : {}) }),
+  })
+  const json = await res.json().catch(() => null)
+  if (!res.ok || !json?.ok) throw new Error(json?.error || `HTTP ${res.status}`)
+}
+
+/** Reads an "order" photo with Claude on this PC and posts its item lines in the group. */
+async function typeOutOrder(job, files) {
+  const replyTo = job.payload?.replyTo ?? null
+  for (const file of files.filter((f) => f.mediaType.startsWith('image/'))) {
+    const started = Date.now()
+    let text
+    try {
+      const lines = await readOrderPhoto(file.buffer, file.mediaType)
+      text = lines.length ? lines.join('\n') : 'No items found in this photo.'
+      console.log(`[order-read] ${job._id}: ${lines.length} line(s) in ${Math.round((Date.now() - started) / 1000)}s`)
+    } catch (err) {
+      console.warn(`[order-read] ${job._id}: could not read:`, err?.message ?? err)
+      // Never the word "order" here: the group reads its own messages too (group-print.mjs).
+      text = `Could not read this photo: ${err?.message ?? err}`
+    }
+    await sendToShopGroup(text, replyTo).catch((err) => console.warn('[order-read] could not post it:', err?.message ?? err))
+  }
+}
+
 async function notifyThroughShopWhatsApp(document) {
   const number = String(document?.number ?? document?.id ?? '')
   const mobile = String(document?.customer?.mobile ?? '').trim()
@@ -3110,6 +3142,15 @@ async function printCloudJob(job) {
         console.error('[whatsapp-notify] unhandled', err?.message ?? err))
     }
     return result
+  }
+
+  if (job.kind === 'raw-file' && job.payload?.readOrder) {
+    // "order" under a photo in the shop group: typed out, not printed (order-read.mjs).
+    // Read behind the queue, so prints never wait the half minute it takes.
+    const files = Array.isArray(job.payload?.files) ? job.payload.files : []
+    const decoded = (await Promise.all(files.map(withFileData))).map((file, i) => decodeUploadedFile(file, i))
+    void typeOutOrder(job, decoded)
+    return { readOrder: decoded.length }
   }
 
   if (job.kind === 'raw-file') {

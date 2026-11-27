@@ -13,6 +13,10 @@
  *   an SBI PDF (SBIDocument_*.pdf), no caption needed  prints now, black and white
  *                                                      (PRINT_AUTO_NAMES)
  *
+ *   "order" in a photo's caption, as a reply    typed out (not printed) by Claude on the shop
+ *   to a photo, or after a photo by the same    PC and posted back as a reply, "<item> - <qty>"
+ *   person                                      lines (print-server/order-read.mjs, 27 Nov 2026)
+ *
  * bw (also "b/w", "black") goes to the HP; cp (also "color", "colour") to the
  * Epson; each falls back to the other on the print server, as before.
  *
@@ -116,6 +120,9 @@ export function mediaOf(content) {
   return null
 }
 
+/** "order" in a caption or message: the photo is to be typed out (order-read.mjs). */
+export const isOrderText = (text) => /\border\b/i.test(String(text ?? ''))
+
 const textOf = (content) => content?.conversation ?? content?.extendedTextMessage?.text ?? ''
 
 /** Files waiting for their bw / cp, per sender in the group. */
@@ -126,6 +133,10 @@ export function createPendingFiles(ttlMs, now = () => Date.now()) {
       const list = (pending.get(sender) ?? []).filter((e) => now() - e.at <= ttlMs)
       list.push({ file, at: now() })
       pending.set(sender, list)
+    },
+    /** The files waiting, left waiting (a bw / cp may still come for them). */
+    peek(sender) {
+      return (pending.get(sender) ?? []).filter((e) => now() - e.at <= ttlMs).map((e) => e.file)
     },
     take(sender) {
       const list = pending.get(sender) ?? []
@@ -260,6 +271,12 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
     return id
   }
 
+  /** Queues a photo to be typed out on the shop PC and posted back as a reply to it. */
+  async function queueOrder(file, replyTo, sender) {
+    await queue([file], 'bw', sender, 'WhatsApp group order', { readOrder: true, replyTo })
+    log(`[print] ${file.name} queued to be typed out (order)`)
+  }
+
   /** One group message: a file to print or keep, or a bw / cp to act on. */
   async function handle(sock, downloadMediaMessage, msg, type) {
     if (!state.enabled) return
@@ -290,6 +307,14 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
       if (media) {
         if (!PRINTABLE.has(media.mediaType)) return
         const file = await download(sock, downloadMediaMessage, msg.key, content, media)
+        file.replyTo = { id: msg.key.id, participant: sender }
+        // "order" under a photo: typed out; printed too only if the caption also says bw / cp.
+        if (isOrderText(media.caption) && media.mediaType.startsWith('image/')) {
+          await queueOrder(file, file.replyTo, sender)
+          const printMode = printModeOf(media.caption)
+          if (printMode) await queue([file], printMode, sender)
+          return
+        }
         // A bw / cp in the caption wins; else a file named for printing (an SBI PDF) prints as it is.
         const mode = printModeOf(media.caption) ?? autoModeOf(media.fileName)
         if (mode) await queue([file], mode, sender)
@@ -300,7 +325,23 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         return
       }
 
-      const mode = printModeOf(textOf(content))
+      const text = textOf(content)
+      if (isOrderText(text) && !printModeOf(text)) {
+        // "order" as a reply to a photo, else after this person's last photo.
+        const info = content?.extendedTextMessage?.contextInfo
+        const q = contentOf(info?.quotedMessage)
+        const qMedia = mediaOf(q)
+        if (qMedia && qMedia.mediaType.startsWith('image/')) {
+          const key = { remoteJid: jid, id: info.stanzaId, participant: info.participant }
+          const file = await download(sock, downloadMediaMessage, key, q, qMedia)
+          await queueOrder(file, { id: info.stanzaId, participant: info.participant || sender }, sender)
+          return
+        }
+        const last = pending.peek(sender).filter((f) => f.mediaType.startsWith('image/')).at(-1)
+        if (last) await queueOrder(last, last.replyTo, sender)
+        return
+      }
+      const mode = printModeOf(text)
       if (!mode) return
       // "bw" / "cp" as a reply to a photo or PDF prints that file.
       const quotedInfo = content?.extendedTextMessage?.contextInfo

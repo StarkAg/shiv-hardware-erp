@@ -176,7 +176,7 @@ async function sendDocument({ mobile, data, fileName = 'file.pdf', mimetype = 'a
 }
 
 /** A typed message into a chat, or the shop's group (`mobile: 'group'`). */
-async function sendText({ mobile, text }) {
+async function sendText({ mobile, text, replyTo }) {
   const body = String(text ?? '').trim()
   if (!body) throw new Error('Nothing to send.')
   if (body.length > 4000) throw new Error('The message is too long.')
@@ -191,7 +191,11 @@ async function sendText({ mobile, text }) {
     if (!jid) throw new Error(`Enter a valid mobile number (got "${mobile ?? ''}").`)
     await onWhatsApp(jid, mobile)
   }
-  await sock.sendMessage(jid, { text: body })
+  // replyTo { id, participant }: sent as a reply to that message (an order photo's typed lines).
+  const quoted = replyTo?.id
+    ? { key: { remoteJid: jid, id: String(replyTo.id), ...(replyTo.participant ? { participant: String(replyTo.participant) } : {}) }, message: { conversation: '' } }
+    : undefined
+  await sock.sendMessage(jid, { text: body }, quoted ? { quoted } : undefined)
   log(`[send] text (${body.length} chars) to ${jid}`)
   return { jid }
 }

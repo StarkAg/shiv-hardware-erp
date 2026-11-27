@@ -90,3 +90,16 @@ Since 2026-11-25, `whatsapp-reminders` (Shop) and `whatsapp-bills` (Tony) connec
 - **Version**: Baileys' own WhatsApp Web version. Tony's service used to fetch WhatsApp's newest one at every start (`fetchLatestWaWebVersion`), and its links were thrown out right after a scan (22 and 25 Nov 2026).
 - **Drop alerts** (`link-watch.mjs`, the same file in both folders): each service reads the other's `/health` once a minute. When the other has not been linked for 10 minutes, one WhatsApp message goes to `ALERT_TO` (the owner's chat, `TO_NUMBER`) with the other's login link; when it is linked again, one more says so. Railway variables `WATCH_HEALTH_URL`, `WATCH_LOGIN_URL` (a reference to the other service's `LOGIN_KEY`), `WATCH_NAME`. If both are down at once, nothing can be sent.
 - **Deploys never run two copies at once.** Railway stops the old deployment before starting the new one for a service with a volume ("we prevent multiple deployments from being active and mounted to the same service"), so a deploy cannot cause a WhatsApp "conflict"; it costs a few seconds offline.
+
+## Order photos typed out (since 2026-11-27)
+
+In the shop group, a photo of a bill or order slip with "order" in its caption
+(or "order" sent as a reply to it, or right after it by the same person) is not
+printed: it goes to the shop PC's print server, where Claude Code (the desktop
+app's own `claude.exe`, `print-server/order-read.mjs`) reads the handwriting,
+and the Shop number posts the lines back as a reply to the photo:
+`<item as written> - <qty>`, no rates or totals. Add "bw" / "cp" to the caption
+to print it as well. Claude on the PC must be signed in once: run that
+`claude.exe` in a terminal and `/login`. If it is not, the group gets "Could not
+read this photo: ...". `ORDER_READ_MODEL` in the print server's `.env.local`
+picks the model (default sonnet).

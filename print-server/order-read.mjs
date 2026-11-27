@@ -1,0 +1,84 @@
+/**
+ * Order slips typed out for the shop group (owner's ask, 27 Nov 2026).
+ *
+ * A bill or order slip photo posted in the shop group with "order" under it
+ * (group-print.mjs, readOrder) comes here, to the shop PC. Claude Code on this
+ * PC (the desktop app's own claude.exe, signed in once with `claude` then
+ * /login) reads the handwriting, and its item lines go back to the group as a
+ * reply to the photo, one per line: "<item as written> - <qty>", the way the
+ * staff type orders ("PLK 9615 AMG - 7 pc"). No rates, amounts or totals.
+ *
+ * Not the Anthropic API: the owner asked for a Claude session on this PC.
+ */
+import { execFile } from 'node:child_process'
+import { existsSync, readdirSync, statSync } from 'node:fs'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+export const ORDER_PROMPT = (file) => [
+  `Read the image file ${file}. It is a photo of a handwritten shop bill, order slip or estimate from a hardware and plywood shop in India.`,
+  'Type out every item line, top to bottom, one per line, exactly in this form:',
+  '<item as written> - <quantity with its unit>',
+  'Examples: "19mm S 7x4 - 1 pc", "Fevicol Marine - 4 kg", "3D 107 75x39 6/8 - 1 pc", "4\'\' Screw SS - 20 pc".',
+  'Keep sizes, codes and brand words as written; write fractions like 39 6/8. Spell the item as a shop would (Fevicol, Hinges, Screw).',
+  'Leave out rates, amounts, totals, the customer name, dates, phone numbers, headings and labour or delivery charges.',
+  'If a quantity is missing, write the item alone. If the photo holds no item lines, answer exactly: NONE',
+  'Answer with the lines only: no other words, no numbering, no markdown.',
+].join('\n')
+
+/** The newest claude.exe: CLAUDE_EXE, else the desktop app's own copy, else `claude` on PATH. */
+export function findClaude(env = process.env) {
+  if (env.CLAUDE_EXE && existsSync(env.CLAUDE_EXE)) return env.CLAUDE_EXE
+  const base = join(env.LOCALAPPDATA || '', 'Claude-Data')
+  const found = []
+  try {
+    for (const data of readdirSync(base)) {
+      const code = join(base, data, 'claude-code')
+      if (!existsSync(code)) continue
+      for (const version of readdirSync(code)) {
+        for (const build of readdirSync(join(code, version))) {
+          const exe = join(code, version, build, 'claude.exe')
+          if (existsSync(exe)) found.push({ exe, at: statSync(exe).mtimeMs })
+        }
+      }
+    }
+  } catch { /* none here */ }
+  found.sort((a, b) => b.at - a.at)
+  return found[0]?.exe ?? 'claude'
+}
+
+/** The item lines Claude gave back, cleaned: no bullets, numbering or blank lines. */
+export function orderLines(text) {
+  const lines = String(text ?? '').split(/\r?\n/)
+    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/[`*]/g, '').trim())
+    .filter(Boolean)
+  if (lines.length === 1 && /^none\.?$/i.test(lines[0])) return []
+  return lines
+}
+
+const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' }
+
+/** Reads one photo: its item lines, or throws. */
+export async function readOrderPhoto(buffer, mediaType, { env = process.env, model = env.ORDER_READ_MODEL || 'sonnet', timeoutMs = 180_000 } = {}) {
+  const dir = await mkdtemp(join(tmpdir(), 'shiv-order-'))
+  try {
+    const file = join(dir, `order${EXT[mediaType] ?? '.jpg'}`)
+    await writeFile(file, buffer)
+    const stdout = await new Promise((resolve, reject) => {
+      execFile(findClaude(env), [
+        '-p', ORDER_PROMPT(file),
+        '--model', model,
+        '--allowedTools', 'Read',
+        '--disallowedTools', 'Bash,Edit,Write,WebFetch,WebSearch,NotebookEdit',
+      ], { cwd: dir, timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, out, errOut) => {
+        if (err) reject(new Error(String(out || errOut || err.message).trim().slice(0, 300)))
+        else resolve(out)
+      })
+    })
+    if (/not logged in|please run \/login/i.test(stdout)) throw new Error('Claude on the shop PC is not signed in')
+    return orderLines(stdout)
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {})
+  }
+}
