@@ -129,6 +129,16 @@ function PartyPacket({ ledgerId, from, till }) {
         </p>
 
         <table className="print statement">
+          {/* Set widths, so the figures sit in evenly spaced columns instead
+              of bunching against the right edge. */}
+          <colgroup>
+            <col className="c-date" />
+            <col className="c-no" />
+            <col />
+            <col className="c-amt" />
+            <col className="c-amt" />
+            <col className="c-bal" />
+          </colgroup>
           <thead>
             <tr>
               <th className="w-date">Date</th>
@@ -144,8 +154,8 @@ function PartyPacket({ ledgerId, from, till }) {
               <td>{shortDate(openingDate)}</td>
               <td />
               <td>Opening Balance</td>
-              <td className="num">{openingDr ? rupees(data.opening) : ''}</td>
-              <td className="num">{openingDr ? '' : rupees(data.opening)}</td>
+              <td className="num">{data.opening && openingDr ? rupees(data.opening) : ''}</td>
+              <td className="num">{data.opening && !openingDr ? rupees(data.opening) : ''}</td>
               <td className="num">{balanceText(openingBalance)}</td>
             </tr>
             {data.rows.map((r, i) => (

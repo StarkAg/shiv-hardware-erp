@@ -264,8 +264,15 @@
 .ledger-root table.print tr.rule td{background: #faf9f8; font-weight: 700;}
 .ledger-root table.print th, .ledger-root table.print td{white-space: nowrap;}
 .ledger-root table.print td:nth-child(5){max-width: 58mm; overflow: hidden; text-overflow: ellipsis;}
+.ledger-root table.print.statement{table-layout: fixed;}
 .ledger-root table.print.statement td:nth-child(5){max-width: none; overflow: visible;}
-.ledger-root table.print.statement td.details{white-space: normal; width: 100%;}
+.ledger-root table.print.statement td.details{white-space: normal;}
+.ledger-root table.print.statement th, .ledger-root table.print.statement td{padding: 6px 10px;}
+.ledger-root table.print.statement .num{padding-left: 16px; padding-right: 14px;}
+.ledger-root table.print.statement col.c-date{width: 19mm;}
+.ledger-root table.print.statement col.c-no{width: 22mm;}
+.ledger-root table.print.statement col.c-amt{width: 32mm;}
+.ledger-root table.print.statement col.c-bal{width: 37mm;}
 .ledger-root table.print tr.subtotal td{border-top: 1px solid #1c1917; border-bottom: none;
   padding-top: 6px; font-weight: 700;}
 .ledger-root table.print tr.closing-line td{border-bottom: 1px solid #1c1917; font-weight: 700;}

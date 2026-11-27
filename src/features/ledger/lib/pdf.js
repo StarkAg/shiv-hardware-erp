@@ -225,12 +225,12 @@ export async function statementPdf(data, { onPhoto } = {}) {
 
   // The entries. Details takes what the fixed columns leave, and wraps.
   const cols = [
-    { label: 'Date', w: 50 },
+    { label: 'Date', w: 54 },
     { label: 'No.', w: 60 },
     { label: 'Details', w: 0 },
-    { label: 'Debit', w: 70, num: true },
-    { label: 'Credit', w: 70, num: true },
-    { label: 'Balance', w: 82, num: true },
+    { label: 'Debit', w: 90, num: true },
+    { label: 'Credit', w: 90, num: true },
+    { label: 'Balance', w: 106, num: true },
   ];
   cols[2].w = right - MARGIN - cols.reduce((t, c) => t + c.w, 0);
   let x = MARGIN;
@@ -266,7 +266,7 @@ export async function statementPdf(data, { onPhoto } = {}) {
 
   header();
   row([shortDate(data.openingAsOf), '', 'Opening Balance',
-    openingDr ? rupees(data.opening) : '', openingDr ? '' : rupees(data.opening), balanceText(running)]);
+    data.opening && openingDr ? rupees(data.opening) : '', data.opening && !openingDr ? rupees(data.opening) : '', balanceText(running)]);
   for (const r of data.rows) {
     running += r.side === 'Dr' ? r.amount : -r.amount;
     row([
