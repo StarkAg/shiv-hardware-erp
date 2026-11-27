@@ -19,11 +19,13 @@ import { join } from 'node:path'
 
 export const ORDER_PROMPT = (file) => [
   `Read the image file ${file}. It is a photo of a handwritten shop bill, order slip or estimate from a hardware and plywood shop in India.`,
-  'Type out only the sunmica lines (also written mica, laminate or lam): sheets with a design number. Leave out every other item (plywood, doors, Fevicol, screws, hinges, handles and the rest).',
-  'One line per sunmica, top to bottom, exactly in this form:',
-  '<brand> <design number> <finish> - <number of sheets> pc',
-  'Examples: "PLK 9615 AMG - 7 pc", "PLK 9520 MLT - 4 pc", "PLK 8221 FR - 4 pc".',
-  'The brand is the short code written (PLK is Pulkari); when no brand is written, use PLK. Drop the word mica, sunmica or laminate itself. Keep the design number and the finish letters (AMG, MLT, FR, SF, HG and so on) as written, in capitals.',
+  'Type out only the sunmica needed: the lines with a sunmica design number (a 3 or 4 digit number followed by finish letters such as CU, AMG, MLT, FR, SF, SM, HG). That is loose sunmica sheets (written mica, sunmica, laminate or lam) and doors made with a sunmica (a door code such as DDSM or DD SM, then the design number and finish, then the door size). Leave out every other item (plywood, Fevicol, screws, hinges, handles, nut bolts, rubber and the rest).',
+  'Exactly in this form, one line per sunmica:',
+  '<design number> <finish> - <total pieces> pc',
+  'Examples: "9165 CU - 9 pc", "8221 FR - 4 pc", "9615 AMG - 7 pc".',
+  'Drop door codes (DDSM), sizes and the words mica, sunmica or laminate. Add up the pieces of every line with the same design number and finish into one line: nine DDSM 9165 CU doors of different sizes, 1 pc each, are "9165 CU - 9 pc".',
+  'Put a brand code in front only when one is written with the sunmica (PLK is Pulkari): "PLK 9615 AMG - 7 pc". Finish letters in capitals.',
+  '3D doors (a door code such as DDLNT, then 3D and a number, then the size) are typed too, one line per door with its size: "3D 107 75x39 6/8 - 1 pc", "3D 139 74 6/8x39 6/8 - 1 pc". Drop the door code (DDLNT), write a space between 3D and its number, and write fractions with a slash after a space, as in 39 6/8. In this handwriting a small raised 6 is written like a b; read it as 6, not 4.',
   'Leave out rates, amounts, totals, the customer name, dates, phone numbers, headings and labour or delivery charges.',
   'If a quantity is missing, write the sunmica alone. If the photo holds no sunmica, answer exactly: NONE',
   'Answer with the lines only: no other words, no numbering, no markdown.',
@@ -56,7 +58,15 @@ export function orderLines(text) {
     .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/[`*]/g, '').trim())
     .filter(Boolean)
   if (lines.length === 1 && /^none\.?$/i.test(lines[0])) return []
-  return lines
+  return lines.map(raisedFractions)
+}
+
+const SUPERSCRIPT = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
+const raise = (digits) => [...digits].map((d) => SUPERSCRIPT[d]).join('')
+
+/** "75x39 6/8" -> "75x39⁶/⁸", the small raised fraction the staff type. */
+export function raisedFractions(line) {
+  return line.replace(/(\d) (\d{1,2})\/(\d{1,2})(?!\d)/g, (_, whole, top, bottom) => `${whole}${raise(top)}/${raise(bottom)}`)
 }
 
 /**
