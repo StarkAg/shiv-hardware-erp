@@ -105,6 +105,16 @@ describe('group printing', () => {
     expect(jobs).toHaveLength(1)
   })
 
+  it('takes a second "order" right after a typed-out photo as done, not as one for the next photo', async () => {
+    const { send, msg } = setup()
+    await send(msg({ imageMessage: { mimetype: 'image/jpeg' } }))
+    await send(msg({ conversation: 'order' }))
+    await send(msg({ conversation: 'order' }))
+    expect(jobs).toHaveLength(1)
+    await send(msg({ imageMessage: { mimetype: 'image/jpeg' } }))
+    expect(jobs).toHaveLength(1)
+  })
+
   it('keeps uncaptioned files until the same sender says bw, then prints them as one job', async () => {
     const { send, msg } = setup()
     await send(msg({ imageMessage: { mimetype: 'image/jpeg' } }))

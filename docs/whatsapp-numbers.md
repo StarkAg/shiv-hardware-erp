@@ -127,3 +127,14 @@ the Bills number and printed twice (27 Nov 2026). The print server now skips a
 WhatsApp file whose exact bytes printed from a different chat in the last 5
 minutes (`isSameFileFromAnotherChat`); a second "bw" in the same chat still
 prints again.
+
+Read on Railway, PC on or off (since 27 Nov 2026): the Shop number's service
+(whatsapp-reminders) has Claude Code in its image and reads the photo itself,
+signed in by the Railway variable `CLAUDE_CODE_OAUTH_TOKEN` (a token from
+`claude setup-token`, about 108 characters). The owner puts it there with
+`node scripts/set-claude-token.mjs`: paste and Enter, never shown; it joins a
+token split over two lines and keeps one copy of one pasted twice. First live
+read: 2 lines in 7 s. Without the token, or if a read there fails, the photo
+goes to the shop PC as before. To change the token: `setup-token` again, then
+the script. "order" may come before its photo (sent together): it waits 2
+minutes for that person's photo; a second "order" right after a read is ignored.

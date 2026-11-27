@@ -374,7 +374,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         if (mode) await queue([file], mode, sender)
         else if (media.mediaType.startsWith('image/') && orderAsked.take(senderIds).length) {
           // "order" got here before this photo had downloaded: it was for this photo.
-          file.typedOut = true
+          file.typedOut = Date.now()
           pending.add(senderIds, file)
           await queueOrder(file, file.replyTo, sender)
         } else {
@@ -399,8 +399,11 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         // A photo already typed out is not typed out again.
         const last = pending.peek(senderIds).filter((f) => f.mediaType.startsWith('image/') && !f.typedOut).at(-1)
         if (last) {
-          last.typedOut = true
+          last.typedOut = Date.now()
           await queueOrder(last, last.replyTo, sender)
+        } else if (pending.peek(senderIds).some((f) => f.typedOut && Date.now() - f.typedOut < 60_000)) {
+          // A second "order" just after this person's photo was typed out: already done.
+          log(`[print] "order" again from ${senderIds.join(' / ')}, its photo was just typed out`)
         } else {
           // A photo and "order" sent together can come in the other way round:
           // the next photo from this person within 2 minutes is the one.
