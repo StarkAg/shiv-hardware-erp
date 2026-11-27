@@ -26,7 +26,7 @@ import { calcAllUpvcBrands, isUpvc } from '../../lib/upvc'
 import { FIXED_CARDS, FIXED_CARD_META, isFixedCard } from '../../lib/data/fixedCards'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Button, Toggle } from '../../components/ui'
-import { QuotationPrint, firstSectionRows, hasSections } from '../print/QuotationPrint'
+import { QuotationPrint, firstSectionRows, hasSections, yearsColor } from '../print/QuotationPrint'
 import { printViaShop } from '../../lib/printViaShop'
 import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
 import { sendWhatsAppDocument } from '../../lib/printServer'
@@ -57,6 +57,115 @@ function coverageLabel(coverage: CoverageType | undefined) {
 
 function tintedRowStyle(item: Pick<Brand, 'accentColor'> | Pick<BrandQuoteRow, 'accentColor'>) {
   return item.accentColor ? { backgroundColor: item.accentColor } : undefined
+}
+
+/**
+ * The brands of a price set while editing it ("Edit set"), laid out like the
+ * printed quotation: Rate, Brand, Cost, Guarantee, Warranty, in its big Arial,
+ * on its green rows, years in red (7 years black). Each cell is still a box to
+ * type in or pick from; the box shows only on hover and while typing, so the
+ * rows read like the sheet (owner's ask, 27 Nov 2026).
+ */
+export function PrintLikeBrandEditor({ brands, costOf, onChange, onRemove, onAdd }: {
+  brands: Brand[]
+  costOf: (name: string) => number | undefined
+  onChange: (id: string, patch: Partial<Brand>) => void
+  onRemove: (id: string) => void
+  onAdd: () => void
+}) {
+  const box = 'w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 outline-none hover:border-stone-400 focus:border-blue-600 focus:bg-white'
+  const yearsCell = (b: Brand, coverage: CoverageType) => {
+    const here = (b.coverage ?? 'guarantee') === coverage && b.guaranteeYears > 0
+    return (
+      <select
+        aria-label={coverage === 'guarantee' ? 'Guarantee' : 'Warranty'}
+        // Blank like the sheet when empty; the "-" shows on hover, to show it can be picked.
+        className={`${box} cursor-pointer appearance-none text-center ${here ? '' : 'text-transparent hover:text-stone-400 focus:text-stone-400'}`}
+        style={here ? { color: yearsColor(b.guaranteeYears) } : undefined}
+        value={here ? b.guaranteeYears : 0}
+        onChange={(e) => {
+          const years = Number(e.target.value) as GuaranteeYears
+          // Picking years in one column moves the cover there; "-" clears it.
+          if (years) onChange(b.id, { guaranteeYears: years, coverage })
+          else if (here) onChange(b.id, { guaranteeYears: 0 })
+        }}
+      >
+        {GUARANTEE_OPTIONS.map((g) => (
+          <option key={g} value={g} style={{ color: '#000' }}>{g === 0 ? '-' : `${g} Years`}</option>
+        ))}
+      </select>
+    )
+  }
+  return (
+    <div className="overflow-x-auto bg-white text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <table className="w-full min-w-[640px] table-fixed text-[20px] leading-tight">
+        <colgroup>
+          <col className="w-[11%]" />
+          <col className="w-[38%]" />
+          <col className="w-[13%]" />
+          <col className="w-[16%]" />
+          <col className="w-[16%]" />
+          <col className="w-[6%]" />
+        </colgroup>
+        <thead>
+          <tr className="font-normal">
+            <th className="px-2 pb-3 pt-2 text-right font-normal">Rate</th>
+            <th className="px-2 pb-3 pt-2 text-left font-normal">Brand</th>
+            <th className="px-2 pb-3 pt-2 text-left font-normal">Cost</th>
+            <th className="px-2 pb-3 pt-2 text-center font-normal">Guarantee</th>
+            <th className="px-2 pb-3 pt-2 text-center font-normal">Warranty</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {brands.map((b) => {
+            const cost = costOf(b.name)
+            return (
+              <tr key={b.id} style={tintedRowStyle(b)}>
+                <td className="px-1">
+                  <input
+                    type="number"
+                    aria-label="Rate"
+                    className={`${box} text-right tabular-nums`}
+                    value={b.rate}
+                    onChange={(e) => onChange(b.id, { rate: Number(e.target.value) })}
+                  />
+                </td>
+                <td className="px-1">
+                  <input
+                    aria-label="Brand"
+                    className={box}
+                    value={b.name}
+                    onChange={(e) => onChange(b.id, { name: e.target.value })}
+                  />
+                </td>
+                <td className="px-2 tabular-nums">{cost === undefined ? '' : Math.round(cost)}</td>
+                <td className="px-1">{yearsCell(b, 'guarantee')}</td>
+                <td className="px-1">{yearsCell(b, 'warranty')}</td>
+                <td className="px-1 text-center">
+                  <button
+                    className="rounded p-1 text-red-600 hover:bg-red-50"
+                    onClick={() => onRemove(b.id)}
+                    title="Remove brand"
+                  >
+                    <Minus size={18} />
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+          {!brands.length && (
+            <tr><td colSpan={6} className="px-4 py-6 text-center text-[15px] text-muted">No brands — add one below.</td></tr>
+          )}
+        </tbody>
+      </table>
+      <div className="px-2 py-3">
+        <Button variant="outline" className="flex items-center gap-1.5" onClick={onAdd}>
+          <Plus size={16} /> Add brand
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -514,6 +623,15 @@ function RateCardBuilder() {
                 ))}
               </ul>
             )}
+            {editMode ? (
+              <PrintLikeBrandEditor
+                brands={brands}
+                costOf={(name) => (hasSize ? rows.find((r) => r.brandName === name)?.cost : undefined)}
+                onChange={(id, patch) => editRates((t) => updateBrand(t, id, patch))}
+                onRemove={(id) => editRates((t) => removeBrand(t, id))}
+                onAdd={() => editRates((t) => addBrand(t, cat))}
+              />
+            ) : (
             <table className={`w-full table-fixed text-[11px] leading-tight md:text-sm ${editMode ? '' : 'hidden md:table'}`}>
               <thead className="bg-stone-50 text-left text-[11px] uppercase text-muted dark:bg-white/5 dark:text-muted md:text-xs">
                 <tr>
@@ -621,6 +739,7 @@ function RateCardBuilder() {
                 </tfoot>
               )}
             </table>
+            )}
             </>
             ) : (
             // Aluminium — all 3 thicknesses side by side
