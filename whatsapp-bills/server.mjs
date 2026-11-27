@@ -105,7 +105,9 @@ const log = (...a) => console.log(new Date().toISOString(), ...a)
  * replaces the default. The shop group is not read here: the Shop number
  * prints it (whatsapp-reminders), and Tony is in it too.
  */
-const DEFAULT_AUTO_CHATS = 'Simran Ply Rajan Rnc Pulkari Sunmica=bw,paper'
+// The supplier's chat is a saved contact, not a group: found by its number
+// (+91 95781 00086, owner, 27 Nov 2026); the name stays for a saved-name match.
+const DEFAULT_AUTO_CHATS = '919578100086=bw,paper;Simran Ply Rajan Rnc Pulkari Sunmica=bw,paper'
 const groupPrint = createGroupPrinter({
   env: { ...process.env, PRINT_AUTO_CHATS: process.env.PRINT_AUTO_CHATS ?? DEFAULT_AUTO_CHATS },
   dataDir: dirname(AUTH_DIR),
