@@ -1,4 +1,4 @@
-import { shortDate, longDate, rupees, rupeesInWords, phoneDisplay, rowType } from './format';
+import { shortDate, longDate, rupees, rupeesInWords, phoneDisplay, statementDetails } from './format';
 
 const SHOP = 'Shiv Hardware Store';
 
@@ -223,18 +223,16 @@ export async function statementPdf(data, { onPhoto } = {}) {
   pdf.text(`${rupeesInWords(data.closing)} - ${owing}`, MARGIN, y, { maxWidth: right - MARGIN });
   y += 20;
 
-  // The entries. Particulars takes what the fixed columns leave, and wraps.
+  // The entries. Details takes what the fixed columns leave, and wraps.
   const cols = [
-    { label: 'Date', w: 48 },
-    { label: 'Vch', w: 56 },
-    { label: 'Type', w: 64 },
-    { label: 'Ref', w: 48 },
-    { label: 'Particulars', w: 0 },
-    { label: 'Debit', w: 62, num: true },
-    { label: 'Credit', w: 62, num: true },
-    { label: 'Balance', w: 76, num: true },
+    { label: 'Date', w: 50 },
+    { label: 'No.', w: 60 },
+    { label: 'Details', w: 0 },
+    { label: 'Debit', w: 70, num: true },
+    { label: 'Credit', w: 70, num: true },
+    { label: 'Balance', w: 82, num: true },
   ];
-  cols[4].w = right - MARGIN - cols.reduce((t, c) => t + c.w, 0);
+  cols[2].w = right - MARGIN - cols.reduce((t, c) => t + c.w, 0);
   let x = MARGIN;
   for (const c of cols) { c.x = x; x += c.w; }
   const PAD = 3;
@@ -246,13 +244,10 @@ export async function statementPdf(data, { onPhoto } = {}) {
     line(y + 4, 60);
     y += 15;
   };
-  // `span`: the second cell runs on across Type, Ref and Particulars, as the
-  // opening and closing lines do on paper.
-  const spanW = cols[1].w + cols[2].w + cols[3].w + cols[4].w;
-  const row = (cells, { bold = false, rule = false, span = false } = {}) => {
+  const row = (cells, { bold = false, rule = false } = {}) => {
     font(8.5, bold);
     const wrapped = cells.map((text, i) =>
-      (text ? pdf.splitTextToSize(String(text), (span && i === 1 ? spanW : cols[i].w) - PAD * 2) : []));
+      (text ? pdf.splitTextToSize(String(text), cols[i].w - PAD * 2) : []));
     const h = Math.max(1, ...wrapped.map((w) => w.length)) * LH;
     if (y + h > bottom) { pdf.addPage(); y = MARGIN + 10; header(); font(8.5, bold); }
     if (rule) line(y - 8, 120);
@@ -264,38 +259,28 @@ export async function statementPdf(data, { onPhoto } = {}) {
     y += h + 3;
   };
 
-  // Tally's footer, as the printed one: the columns as they stand, the closing
-  // balance on the lighter side to square them, then the equal grand totals.
   const openingDr = data.openingSide === 'Dr';
-  const totalDr = data.totals.debit + (openingDr ? data.opening : 0);
-  const totalCr = data.totals.credit + (openingDr ? 0 : data.opening);
-  const closingOnDebit = totalCr > totalDr;
-  const grand = Math.max(totalDr, totalCr);
   // The running balance after each entry (Dr above zero), as a passbook shows it.
   let running = openingDr ? data.opening : -data.opening;
   const balanceText = (v) => `${rupees(Math.abs(v))} ${v < -0.005 ? 'Cr' : 'Dr'}`;
 
   header();
-  row([shortDate(data.openingAsOf), `${openingDr ? 'To' : 'By'} Opening Balance`, '', '', '',
-    openingDr ? rupees(data.opening) : '', openingDr ? '' : rupees(data.opening), balanceText(running)], { span: true });
+  row([shortDate(data.openingAsOf), '', 'Opening Balance',
+    openingDr ? rupees(data.opening) : '', openingDr ? '' : rupees(data.opening), balanceText(running)]);
   for (const r of data.rows) {
     running += r.side === 'Dr' ? r.amount : -r.amount;
-    const particulars = (r.contra ?? []).join(', ') || '-';
     row([
       shortDate(r.date),
       r.vchLabel,
-      `${r.side === 'Dr' ? 'To' : 'By'} ${rowType(r)}`,
-      r.refNo || '-',
-      r.narration && r.narration !== r.vchType ? `${particulars} - ${r.narration}` : particulars,
+      statementDetails(r),
       r.side === 'Dr' ? rupees(r.amount) : '',
       r.side === 'Cr' ? rupees(r.amount) : '',
       balanceText(running),
     ]);
   }
-  row(['', '', '', '', '', rupees(totalDr), rupees(totalCr), ''], { rule: true });
-  row(['', `${closingOnDebit ? 'To' : 'By'} Closing Balance`, '', '', '',
-    closingOnDebit ? rupees(data.closing) : '', closingOnDebit ? '' : rupees(data.closing), ''], { span: true });
-  row(['', '', '', '', '', rupees(grand), rupees(grand), ''], { bold: true, rule: true });
+  // One closing line: the Balance column already shows where the account
+  // stands after every entry.
+  row(['', '', 'Closing Balance', '', '', `${rupees(data.closing)} ${data.closingSide}`], { bold: true, rule: true });
 
   // Bills with no amount yet: listed by name, so a statement sent for one of
   // them shows it, and its photo follows on its own page.

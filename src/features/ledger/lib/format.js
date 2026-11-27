@@ -129,3 +129,25 @@ export const rowType = (row) => {
   if (money && row.vchType === 'Purchase' && row.side === 'Dr') return 'Payment';
   return row.vchType;
 };
+
+/**
+ * One statement line in words a customer reads: "Receipt - Cash",
+ * "Sale - Bill no. 4512 - fitting charges". No To/By, no account named after
+ * the line's own type ("Sale - Sales"), and none of the books' own refs
+ * (BILL-370, CASH-12), which only tie a voucher to its bill.
+ */
+const AUTO_REF = /^(BILL|CASH)-\d+$/;
+const DEFAULT_NARRATION = /^(Sale|Purchase|Receipt|Payment|Goods Return|Refund|Advance) \S+$/;
+export const statementDetails = (row) => {
+  const type = rowType(row);
+  const stem = type.toLowerCase().slice(0, 4);
+  const against = (row.contra ?? []).filter((name) => !String(name).toLowerCase().startsWith(stem));
+  const ref = String(row.refNo ?? '').trim();
+  const note = String(row.narration ?? '').trim();
+  return [
+    type,
+    against.join(', '),
+    ref && !AUTO_REF.test(ref) && `Bill no. ${ref}`,
+    note && note !== row.vchType && note !== type && !DEFAULT_NARRATION.test(note) && note,
+  ].filter(Boolean).join(' - ');
+};

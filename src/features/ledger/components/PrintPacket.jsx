@@ -1,7 +1,7 @@
 import React from 'react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
-import { rupees, rupeesInWords, shortDate, longDate, inputDate, aadhaarMasked, phoneDisplay, rowType } from '../lib/format';
+import { rupees, rupeesInWords, shortDate, longDate, inputDate, aadhaarMasked, phoneDisplay, statementDetails } from '../lib/format';
 
 const SHOP = 'Shiv Hardware Store';
 
@@ -77,13 +77,8 @@ function PartyPacket({ ledgerId, from, till }) {
   ].filter(Boolean);
   const withShots = data.rows.filter((r) => r.attachmentUrls.length > 0);
 
-  // The opening balance belongs in its own column, so that the two columns and
-  // the closing figure add up the way a ledger is meant to.
+  // The opening balance sits in its own column, as the first line.
   const openingDr = data.openingSide === 'Dr';
-  const totalDr = data.totals.debit + (openingDr ? data.opening : 0);
-  const totalCr = data.totals.credit + (openingDr ? 0 : data.opening);
-  const closingOnDebit = totalCr > totalDr;
-  const grand = Math.max(totalDr, totalCr);
   // The running balance after each entry (Dr above zero), as a passbook shows it.
   let running = openingDr ? data.opening : -data.opening;
   const openingBalance = running;
@@ -133,14 +128,12 @@ function PartyPacket({ ledgerId, from, till }) {
           {rupeesInWords(data.closing)} — {standing(data.closingSide)}
         </p>
 
-        <table className="print">
+        <table className="print statement">
           <thead>
             <tr>
               <th className="w-date">Date</th>
-              <th>Vch</th>
-              <th>Type</th>
-              <th>Ref</th>
-              <th>Particulars</th>
+              <th>No.</th>
+              <th>Details</th>
               <th className="num">Debit</th>
               <th className="num">Credit</th>
               <th className="num">Balance</th>
@@ -149,7 +142,8 @@ function PartyPacket({ ledgerId, from, till }) {
           <tbody>
             <tr className="rule">
               <td>{shortDate(openingDate)}</td>
-              <td colSpan={4}>{openingDr ? 'To' : 'By'} Opening Balance</td>
+              <td />
+              <td>Opening Balance</td>
               <td className="num">{openingDr ? rupees(data.opening) : ''}</td>
               <td className="num">{openingDr ? '' : rupees(data.opening)}</td>
               <td className="num">{balanceText(openingBalance)}</td>
@@ -158,37 +152,17 @@ function PartyPacket({ ledgerId, from, till }) {
               <tr key={`${r.voucherId}-${i}`}>
                 <td>{shortDate(r.date)}</td>
                 <td>{r.vchLabel}</td>
-                <td>{r.side === 'Dr' ? 'To' : 'By'} {rowType(r)}</td>
-                <td>{r.refNo || '—'}</td>
-                <td>
-                  {(r.contra ?? []).join(', ') || '—'}
-                  {r.narration && r.narration !== r.vchType ? ` — ${r.narration}` : ''}
-                </td>
+                <td className="details">{statementDetails(r)}</td>
                 <td className="num">{r.side === 'Dr' ? rupees(r.amount) : ''}</td>
                 <td className="num">{r.side === 'Cr' ? rupees(r.amount) : ''}</td>
                 <td className="num">{balanceText(balanceAfter[i])}</td>
               </tr>
             ))}
-            {/* Tally's footer: the two columns as they stand, the closing
-                balance entered on the lighter side to square them, then the
-                grand totals — equal, which is the proof. */}
-            <tr className="subtotal">
-              <td colSpan={5} />
-              <td className="num">{rupees(totalDr)}</td>
-              <td className="num">{rupees(totalCr)}</td>
-              <td />
-            </tr>
-            <tr className="closing-line">
-              <td colSpan={5}>{closingOnDebit ? 'To' : 'By'} Closing Balance</td>
-              <td className="num">{closingOnDebit ? rupees(data.closing) : ''}</td>
-              <td className="num">{closingOnDebit ? '' : rupees(data.closing)}</td>
-              <td />
-            </tr>
+            {/* One closing line: the Balance column already shows where the
+                account stands after every entry. */}
             <tr className="grand">
-              <td colSpan={5} />
-              <td className="num">{rupees(grand)}</td>
-              <td className="num">{rupees(grand)}</td>
-              <td />
+              <td colSpan={5}>Closing Balance</td>
+              <td className="num">{rupees(data.closing)} {data.closingSide}</td>
             </tr>
           </tbody>
         </table>
