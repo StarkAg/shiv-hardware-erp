@@ -151,3 +151,37 @@ export const statementDetails = (row) => {
     note && note !== row.vchType && note !== type && !DEFAULT_NARRATION.test(note) && note,
   ].filter(Boolean).join(' - ');
 };
+
+/** A running balance as a statement prints it: "23,895.00 Dr", Dr above zero. */
+export const balanceText = (v) => `${rupees(Math.abs(v))} ${v < -0.005 ? 'Cr' : 'Dr'}`;
+
+/**
+ * A party's entries as the lines of a statement, each with the balance after it.
+ *
+ * A receipt or payment settled with a discount is one entry in the books (the
+ * party cleared for 30,080 against Cash 29,830 and Discount Allowed 250), but
+ * the statement shows it as an accountant would: the money handed over, then
+ * the discount on a line of its own, so the customer sees what was let off.
+ */
+const DISCOUNT_ACCOUNT = /^Discount (Allowed|Received)$/;
+export const statementLines = (data) => {
+  let running = (data.openingSide === 'Dr' ? 1 : -1) * (Number(data.opening) || 0);
+  const lines = [];
+  const add = (r, key, no, details, amount) => {
+    running += r.side === 'Dr' ? amount : -amount;
+    lines.push({ key, date: r.date, no, details, side: r.side, amount, balance: running });
+  };
+  (data.rows ?? []).forEach((r, i) => {
+    const key = `${r.voucherId}-${i}`;
+    const discount = Number(r.discount) || 0;
+    const money = Math.round((r.amount - discount) * 100) / 100;
+    if (discount > 0.005 && money > 0.005) {
+      const contra = (r.contra ?? []).filter((name) => !DISCOUNT_ACCOUNT.test(name));
+      add(r, key, r.vchLabel, statementDetails({ ...r, contra }), money);
+      add(r, `${key}-discount`, '', 'Discount', discount);
+    } else {
+      add(r, key, r.vchLabel, statementDetails(r), r.amount);
+    }
+  });
+  return lines;
+};

@@ -33,6 +33,8 @@ const dayRank = (typeName?: string) => SAME_DAY_ORDER[typeName ?? ""] ?? 5;
 
 /** The party's side that money taken with a bill lands on. */
 const SETTLED_SIDE: Record<string, "Dr" | "Cr"> = { Sale: "Cr", Purchase: "Dr" };
+/** Where a settlement discount is posted: allowed on a receipt, received on a payment. */
+const DISCOUNT_ACCOUNT = /^Discount (Allowed|Received)$/;
 
 async function context(ctx: QueryCtx) {
   const [ledgers, groups, types] = await Promise.all([
@@ -170,7 +172,7 @@ export const ledger = query({
      * For an ordinary one-sided entry the answer is unchanged: a sale's only
      * opposite line is Sales, a receipt's only opposite line is Cash.
      */
-    const contra = new Map<Id<"vouchers">, { Dr: string[]; Cr: string[]; all: string[] }>();
+    const contra = new Map<Id<"vouchers">, { Dr: string[]; Cr: string[]; all: string[]; discount: { Dr: number; Cr: number } }>();
     await Promise.all(
       [...vouchers.keys()].map(async (voucherId) => {
         const all = await ctx.db
@@ -183,10 +185,19 @@ export const ledger = query({
             others.filter((l) => l.side === side).map((l) => ledgerById.get(l.ledgerId)?.name ?? "—"),
           ),
         ];
+        // The discount let go at settlement, by side, so a statement can show
+        // a receipt of 30,080 as the 29,830 handed over and the 250 let off.
+        const discountOn = (side: "Dr" | "Cr") =>
+          round2(
+            others
+              .filter((l) => l.side === side && DISCOUNT_ACCOUNT.test(ledgerById.get(l.ledgerId)?.name ?? ""))
+              .reduce((t, l) => t + l.amount, 0),
+          );
         contra.set(voucherId, {
           Dr: named("Dr"),
           Cr: named("Cr"),
           all: [...new Set(others.map((l) => ledgerById.get(l.ledgerId)?.name ?? "—"))],
+          discount: { Dr: discountOn("Dr"), Cr: discountOn("Cr") },
         });
       }),
     );
@@ -199,6 +210,12 @@ export const ledger = query({
       // only ever reached by something malformed — say everything rather than
       // nothing.
       return opposite.length ? opposite : c.all;
+    };
+    /** The part of a line that is a settlement discount rather than money. */
+    const discountFor = (voucherId: Id<"vouchers">, side: "Dr" | "Cr", amount: number) => {
+      const c = contra.get(voucherId);
+      if (!c) return 0;
+      return Math.min(side === "Dr" ? c.discount.Cr : c.discount.Dr, amount);
     };
 
     const sorted = lines
@@ -257,6 +274,7 @@ export const ledger = query({
         refNo: voucher.refNo ?? "",
         narration: voucher.narration ?? "",
         contra: contraFor(voucher._id, line.side),
+        discount: discountFor(voucher._id, line.side, line.amount),
         side: line.side,
         amount: line.amount,
         balance: running,

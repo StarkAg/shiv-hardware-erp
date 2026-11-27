@@ -1,7 +1,7 @@
 import React from 'react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
-import { rupees, rupeesInWords, shortDate, longDate, inputDate, aadhaarMasked, phoneDisplay, statementDetails } from '../lib/format';
+import { rupees, rupeesInWords, shortDate, longDate, inputDate, aadhaarMasked, phoneDisplay, statementLines, balanceText } from '../lib/format';
 
 const SHOP = 'Shiv Hardware Store';
 
@@ -80,10 +80,9 @@ function PartyPacket({ ledgerId, from, till }) {
   // The opening balance sits in its own column, as the first line.
   const openingDr = data.openingSide === 'Dr';
   // The running balance after each entry (Dr above zero), as a passbook shows it.
-  let running = openingDr ? data.opening : -data.opening;
-  const openingBalance = running;
-  const balanceAfter = data.rows.map((r) => (running += r.side === 'Dr' ? r.amount : -r.amount));
-  const balanceText = (v) => `${rupees(Math.abs(v))} ${v < -0.005 ? 'Cr' : 'Dr'}`;
+  // A discount let go at settlement gets a line of its own (statementLines).
+  const openingBalance = openingDr ? data.opening : -data.opening;
+  const lines = statementLines(data);
   // An account's opening date can come after its first entries (its opening
   // balance set later): the opening line then takes the first entry's date.
   const openingDate = from ?? Math.min(data.openingAsOf ?? Infinity, ...data.rows.map((r) => r.date));
@@ -158,14 +157,14 @@ function PartyPacket({ ledgerId, from, till }) {
               <td className="num">{data.opening && !openingDr ? rupees(data.opening) : ''}</td>
               <td className="num">{balanceText(openingBalance)}</td>
             </tr>
-            {data.rows.map((r, i) => (
-              <tr key={`${r.voucherId}-${i}`}>
-                <td>{shortDate(r.date)}</td>
-                <td>{r.vchLabel}</td>
-                <td className="details">{statementDetails(r)}</td>
-                <td className="num">{r.side === 'Dr' ? rupees(r.amount) : ''}</td>
-                <td className="num">{r.side === 'Cr' ? rupees(r.amount) : ''}</td>
-                <td className="num">{balanceText(balanceAfter[i])}</td>
+            {lines.map((l) => (
+              <tr key={l.key}>
+                <td>{shortDate(l.date)}</td>
+                <td>{l.no}</td>
+                <td className="details">{l.details}</td>
+                <td className="num">{l.side === 'Dr' ? rupees(l.amount) : ''}</td>
+                <td className="num">{l.side === 'Cr' ? rupees(l.amount) : ''}</td>
+                <td className="num">{balanceText(l.balance)}</td>
               </tr>
             ))}
             {/* One closing line: the Balance column already shows where the

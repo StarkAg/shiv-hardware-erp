@@ -1,4 +1,4 @@
-import { shortDate, longDate, rupees, rupeesInWords, phoneDisplay, statementDetails } from './format';
+import { shortDate, longDate, rupees, rupeesInWords, phoneDisplay, statementLines, balanceText } from './format';
 
 const SHOP = 'Shiv Hardware Store';
 
@@ -261,21 +261,20 @@ export async function statementPdf(data, { onPhoto } = {}) {
 
   const openingDr = data.openingSide === 'Dr';
   // The running balance after each entry (Dr above zero), as a passbook shows it.
-  let running = openingDr ? data.opening : -data.opening;
-  const balanceText = (v) => `${rupees(Math.abs(v))} ${v < -0.005 ? 'Cr' : 'Dr'}`;
+  const running = openingDr ? data.opening : -data.opening;
 
   header();
   row([shortDate(data.openingAsOf), '', 'Opening Balance',
     data.opening && openingDr ? rupees(data.opening) : '', data.opening && !openingDr ? rupees(data.opening) : '', balanceText(running)]);
-  for (const r of data.rows) {
-    running += r.side === 'Dr' ? r.amount : -r.amount;
+  // A discount let go at settlement gets a line of its own (statementLines).
+  for (const l of statementLines(data)) {
     row([
-      shortDate(r.date),
-      r.vchLabel,
-      statementDetails(r),
-      r.side === 'Dr' ? rupees(r.amount) : '',
-      r.side === 'Cr' ? rupees(r.amount) : '',
-      balanceText(running),
+      shortDate(l.date),
+      l.no,
+      l.details,
+      l.side === 'Dr' ? rupees(l.amount) : '',
+      l.side === 'Cr' ? rupees(l.amount) : '',
+      balanceText(l.balance),
     ]);
   }
   // One closing line: the Balance column already shows where the account

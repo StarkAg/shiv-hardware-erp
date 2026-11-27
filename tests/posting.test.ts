@@ -10,6 +10,7 @@ import { convexTest } from './trustedConvex'
 import { describe, expect, it } from 'vitest'
 import schema from '../convex/schema'
 import { api } from '../convex/_generated/api'
+import { statementLines } from '../src/features/ledger/lib/format'
 
 const modules = import.meta.glob('../convex/**/*.ts')
 
@@ -485,6 +486,22 @@ describe('a discount given at settlement', () => {
   it('balances', async () => {
     const { byLedger } = await settled()
     expect([...byLedger.values()].reduce((a, b) => a + b, 0)).toBe(0)
+  })
+
+  it('shows the discount on its own statement line, after the money', async () => {
+    const { t } = await settled()
+    const party = (await t.run(ctx => ctx.db.query('ledgers').collect())).find(l => l.name === FILED)!
+    const report = await t.query(api.reports.ledger, { ledgerId: party._id } as never)
+    // One entry in the books, the whole 30,080, of which 250 was let off.
+    expect(report!.rows).toHaveLength(1)
+    expect(report!.rows[0].amount).toBe(30080)
+    expect(report!.rows[0].discount).toBe(250)
+    // Two lines on the statement: the cash handed over, then the discount.
+    const shown = statementLines(report)
+    expect(shown.map(l => [l.no, l.details, l.side, l.amount, l.balance])).toEqual([
+      ['RCT-0001', 'Receipt - Cash', 'Cr', 29830, -29830],
+      ['', 'Discount', 'Cr', 250, -30080],
+    ])
   })
 
   it('sends the money to the bank when it was paid online, discount unchanged', async () => {
