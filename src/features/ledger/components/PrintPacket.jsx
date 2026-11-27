@@ -1,12 +1,35 @@
 import React from 'react';
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
-import { rupees, rupeesInWords, shortDate, longDate, inputDate, aadhaarMasked, phoneDisplay, statementLines, balanceText } from '../lib/format';
+import { rupees, rupeesInWords, shortDate, longDate, inputDate, aadhaarMasked, phoneDisplay, statementLines, balanceText, typedRef } from '../lib/format';
 
 const SHOP = 'Shiv Hardware Store';
 
-/** Typeset letterhead — the shop on the left, the document on the right. */
-function Head({ title, from, till }) {
+/**
+ * Typeset letterhead — the shop on the left, the document on the right.
+ * `plain`: no shop at all, the document's name in its place. A party's
+ * statement goes out without the shop's name, address or numbers (owner,
+ * 27 Nov 2026).
+ */
+function Head({ title, from, till, plain = false }) {
+  const dates = (
+    <>
+      {(from || till) && (
+        <div className="lh-date">
+          {from && till ? `${longDate(from)} to ${longDate(till)}` : from ? `From ${longDate(from)}` : `Up to ${longDate(till)}`}
+        </div>
+      )}
+      <div className="lh-date">Printed {longDate(Date.now())}</div>
+    </>
+  );
+  if (plain) {
+    return (
+      <header className="letterhead">
+        <div className="lh-shop"><div className="lh-name">{title}</div></div>
+        <div className="lh-doc">{dates}</div>
+      </header>
+    );
+  }
   return (
     <header className="letterhead">
       <div className="lh-shop">
@@ -20,12 +43,7 @@ function Head({ title, from, till }) {
       </div>
       <div className="lh-doc">
         <div className="lh-title">{title}</div>
-        {(from || till) && (
-          <div className="lh-date">
-            {from && till ? `${longDate(from)} to ${longDate(till)}` : from ? `From ${longDate(from)}` : `Up to ${longDate(till)}`}
-          </div>
-        )}
-        <div className="lh-date">Printed {longDate(Date.now())}</div>
+        {dates}
       </div>
     </header>
   );
@@ -42,11 +60,11 @@ function Sign() {
   );
 }
 
-function Foot({ left }) {
+function Foot({ left, shop = true }) {
   return (
     <div className="sheet-foot">
       <span>{left}</span>
-      <span>{SHOP} · Shivaji Road, Ramgarh Cantt</span>
+      {shop && <span>{SHOP} · Shivaji Road, Ramgarh Cantt</span>}
     </div>
   );
 }
@@ -54,6 +72,8 @@ function Foot({ left }) {
 /** Which way a balance points, said plainly rather than in Dr/Cr. */
 const standing = (side) =>
   side === 'Cr' ? `Payable by ${SHOP}` : `Receivable by ${SHOP}`;
+/** The same, to the party reading their own statement, with no shop named. */
+const partyStanding = (side) => (side === 'Cr' ? 'due to you' : 'due from you');
 
 /** Cover sheet, the account itself, then a page for every bill photo. */
 function PartyPacket({ ledgerId, from, till }) {
@@ -90,7 +110,7 @@ function PartyPacket({ ledgerId, from, till }) {
   return (
     <>
       <div className="sheet">
-        <Head title="Statement of Account" from={from} till={till} />
+        <Head title="Statement of Account" from={from} till={till} plain />
 
         <div className="statement-head">
           <div className="to-block">
@@ -124,7 +144,7 @@ function PartyPacket({ ledgerId, from, till }) {
         </div>
 
         <p className="in-words">
-          {rupeesInWords(data.closing)} — {standing(data.closingSide)}
+          {rupeesInWords(data.closing)} — {partyStanding(data.closingSide)}
         </p>
 
         <table className="print statement">
@@ -132,7 +152,6 @@ function PartyPacket({ ledgerId, from, till }) {
               of bunching against the right edge. */}
           <colgroup>
             <col className="c-date" />
-            <col className="c-no" />
             <col />
             <col className="c-amt" />
             <col className="c-amt" />
@@ -141,7 +160,6 @@ function PartyPacket({ ledgerId, from, till }) {
           <thead>
             <tr>
               <th className="w-date">Date</th>
-              <th>No.</th>
               <th>Details</th>
               <th className="num">Debit</th>
               <th className="num">Credit</th>
@@ -151,7 +169,6 @@ function PartyPacket({ ledgerId, from, till }) {
           <tbody>
             <tr className="rule">
               <td>{shortDate(openingDate)}</td>
-              <td />
               <td>Opening Balance</td>
               <td className="num">{data.opening && openingDr ? rupees(data.opening) : ''}</td>
               <td className="num">{data.opening && !openingDr ? rupees(data.opening) : ''}</td>
@@ -160,7 +177,6 @@ function PartyPacket({ ledgerId, from, till }) {
             {lines.map((l) => (
               <tr key={l.key}>
                 <td>{shortDate(l.date)}</td>
-                <td>{l.no}</td>
                 <td className="details">{l.details}</td>
                 <td className="num">{l.side === 'Dr' ? rupees(l.amount) : ''}</td>
                 <td className="num">{l.side === 'Cr' ? rupees(l.amount) : ''}</td>
@@ -170,7 +186,7 @@ function PartyPacket({ ledgerId, from, till }) {
             {/* One closing line: the Balance column already shows where the
                 account stands after every entry. */}
             <tr className="grand">
-              <td colSpan={5}>Closing Balance</td>
+              <td colSpan={4}>Closing Balance</td>
               <td className="num">{rupees(data.closing)} {data.closingSide}</td>
             </tr>
           </tbody>
@@ -183,8 +199,7 @@ function PartyPacket({ ledgerId, from, till }) {
           </p>
         )}
 
-        <Sign />
-        <Foot left={`Statement of Account · ${account.name}`} />
+        <Foot left={`Statement of Account · ${account.name}`} shop={false} />
       </div>
 
       {withShots.map((r) =>
@@ -192,8 +207,8 @@ function PartyPacket({ ledgerId, from, till }) {
           <div className="sheet bill-page" key={`${r.voucherId}-${shot.storageId}`}>
             <div className="bill-head">
               <div className="bill-head-title">
-                <b>{SHOP}</b>
-                <span>Document attached to voucher {r.vchLabel}</span>
+                <b>{account.name}</b>
+                <span>Document of {shortDate(r.date)}</span>
               </div>
               {/* Label over value, each its own block — a table here left an
                   empty Ref collapsing a column and shunting the next label
@@ -211,10 +226,10 @@ function PartyPacket({ ledgerId, from, till }) {
                   <dt>Date</dt>
                   <dd>{shortDate(r.date)}</dd>
                 </div>
-                {r.refNo && (
+                {typedRef(r.refNo) && (
                   <div>
-                    <dt>Ref</dt>
-                    <dd>{r.refNo}</dd>
+                    <dt>Bill no.</dt>
+                    <dd>{typedRef(r.refNo)}</dd>
                   </div>
                 )}
                 {r.amount != null && (
@@ -229,10 +244,11 @@ function PartyPacket({ ledgerId, from, till }) {
               <img src={shot.previewUrl ?? shot.url} alt="" />
             </div>
             <Foot
+              shop={false}
               left={
                 r.attachmentUrls.length > 1
-                  ? `${r.vchLabel} · sheet ${n + 1} of ${r.attachmentUrls.length}`
-                  : r.vchLabel
+                  ? `${shortDate(r.date)} · sheet ${n + 1} of ${r.attachmentUrls.length}`
+                  : shortDate(r.date)
               }
             />
           </div>

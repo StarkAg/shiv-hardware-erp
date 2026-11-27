@@ -1,6 +1,5 @@
-import { shortDate, longDate, rupees, rupeesInWords, phoneDisplay, statementLines, balanceText } from './format';
+import { shortDate, longDate, rupees, rupeesInWords, phoneDisplay, statementLines, balanceText, typedRef } from './format';
 
-const SHOP = 'Shiv Hardware Store';
 
 const A4 = { w: 595.28, h: 841.89 };   // points
 const MARGIN = 36;
@@ -174,21 +173,17 @@ export async function statementPdf(data, { onPhoto } = {}) {
   const line = (y, shade = 180) => { pdf.setDrawColor(shade); pdf.line(MARGIN, y, right, y); };
   const font = (size, bold = false) => { pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(size); };
 
-  // Letterhead: the shop on the left, the document on the right.
+  // Heading: the document on the left, the date on the right. No shop name,
+  // address or numbers — a statement goes out without them (owner, 27 Nov 2026).
   font(15, true);
-  pdf.text(SHOP, MARGIN, MARGIN + 10);
+  pdf.text('Statement of Account', MARGIN, MARGIN + 10);
   font(8.5);
-  pdf.text('Shivaji Road, Near Gandhi Highschool, Ramgarh Cantt - 829122', MARGIN, MARGIN + 24);
-  pdf.text('8092850954, 9835350954', MARGIN, MARGIN + 35);
-  font(12, true);
-  pdf.text('Statement of Account', right, MARGIN + 10, { align: 'right' });
-  font(8.5);
-  pdf.text(`Printed ${longDate(Date.now())}`, right, MARGIN + 24, { align: 'right' });
-  line(MARGIN + 44, 60);
+  pdf.text(`Printed ${longDate(Date.now())}`, right, MARGIN + 10, { align: 'right' });
+  line(MARGIN + 22, 60);
 
   // The account on the left, its figures on the right. Aadhaar shows only its
   // last four digits, as on paper — a sent statement can end up anywhere.
-  let y = MARGIN + 64;
+  let y = MARGIN + 42;
   font(7.5, true);
   pdf.text('ACCOUNT', MARGIN, y);
   font(12, true);
@@ -219,20 +214,19 @@ export async function statementPdf(data, { onPhoto } = {}) {
 
   y += 80;
   font(9);
-  const owing = data.closingSide === 'Cr' ? `Payable by ${SHOP}` : `Receivable by ${SHOP}`;
+  const owing = data.closingSide === 'Cr' ? 'due to you' : 'due from you';
   pdf.text(`${rupeesInWords(data.closing)} - ${owing}`, MARGIN, y, { maxWidth: right - MARGIN });
   y += 20;
 
   // The entries. Details takes what the fixed columns leave, and wraps.
   const cols = [
-    { label: 'Date', w: 54 },
-    { label: 'No.', w: 60 },
+    { label: 'Date', w: 60 },
     { label: 'Details', w: 0 },
     { label: 'Debit', w: 90, num: true },
     { label: 'Credit', w: 90, num: true },
     { label: 'Balance', w: 106, num: true },
   ];
-  cols[2].w = right - MARGIN - cols.reduce((t, c) => t + c.w, 0);
+  cols[1].w = right - MARGIN - cols.reduce((t, c) => t + c.w, 0);
   let x = MARGIN;
   for (const c of cols) { c.x = x; x += c.w; }
   const PAD = 3;
@@ -264,13 +258,12 @@ export async function statementPdf(data, { onPhoto } = {}) {
   const running = openingDr ? data.opening : -data.opening;
 
   header();
-  row([shortDate(data.openingAsOf), '', 'Opening Balance',
+  row([shortDate(data.openingAsOf), 'Opening Balance',
     data.opening && openingDr ? rupees(data.opening) : '', data.opening && !openingDr ? rupees(data.opening) : '', balanceText(running)]);
   // A discount let go at settlement gets a line of its own (statementLines).
   for (const l of statementLines(data)) {
     row([
       shortDate(l.date),
-      l.no,
       l.details,
       l.side === 'Dr' ? rupees(l.amount) : '',
       l.side === 'Cr' ? rupees(l.amount) : '',
@@ -279,7 +272,7 @@ export async function statementPdf(data, { onPhoto } = {}) {
   }
   // One closing line: the Balance column already shows where the account
   // stands after every entry.
-  row(['', '', 'Closing Balance', '', '', `${rupees(data.closing)} ${data.closingSide}`], { bold: true, rule: true });
+  row(['', 'Closing Balance', '', '', `${rupees(data.closing)} ${data.closingSide}`], { bold: true, rule: true });
 
   // Bills with no amount yet: listed by name, so a statement sent for one of
   // them shows it, and its photo follows on its own page.
@@ -291,7 +284,7 @@ export async function statementPdf(data, { onPhoto } = {}) {
     pdf.text('Waiting for an amount (not in the balance above)', MARGIN, y);
     y += 16;
     for (const p of waiting) {
-      row([shortDate(p.date), p.vchLabel, p.vchType, p.refNo || '-', 'Amount to come', '', '']);
+      row([shortDate(p.date), [p.vchType, typedRef(p.refNo) && `Bill no. ${typedRef(p.refNo)}`, 'amount to come'].filter(Boolean).join(' - '), '', '', '']);
     }
   } else if (data.pendingCount > 0) {
     y += 6;
@@ -299,15 +292,6 @@ export async function statementPdf(data, { onPhoto } = {}) {
     const one = data.pendingCount === 1;
     pdf.text(`${data.pendingCount} ${one ? 'bill is' : 'bills are'} filed without an amount and ${one ? 'is' : 'are'} not included above.`, MARGIN, y);
   }
-
-  // Signed for the shop, on whichever page the table ended.
-  if (y + 60 > bottom) { pdf.addPage(); y = MARGIN; }
-  y += 40;
-  font(9);
-  pdf.text(`For ${SHOP}`, right, y, { align: 'right' });
-  pdf.setDrawColor(120);
-  pdf.line(right - 140, y + 26, right, y + 26);
-  pdf.text('Proprietor', right, y + 38, { align: 'right' });
 
   // A page for every bill photo, as Print adds them. A photo is placed as it
   // is; a PDF document by the picture of it the books keep. Read a few at a
@@ -326,13 +310,12 @@ export async function statementPdf(data, { onPhoto } = {}) {
       const picture = pictures[n];
       pdf.addPage();
       font(11, true);
-      pdf.text(SHOP, MARGIN, MARGIN + 4);
+      pdf.text(account.name, MARGIN, MARGIN + 4);
       font(9);
       pdf.text([
-        r.vchLabel,
         shot.label ? shot.label.charAt(0).toUpperCase() + shot.label.slice(1) : null,
         shortDate(r.date),
-        r.refNo ? `Ref ${r.refNo}` : null,
+        typedRef(r.refNo) ? `Bill no. ${typedRef(r.refNo)}` : null,
         r.amount != null ? rupees(r.amount) : null,
       ].filter(Boolean).join('   ·   '), MARGIN, MARGIN + 20);
       line(MARGIN + 28);
@@ -352,7 +335,7 @@ export async function statementPdf(data, { onPhoto } = {}) {
     font(7.5);
     pdf.setTextColor(110);
     pdf.text(`Statement of Account · ${account.name}`, MARGIN, A4.h - MARGIN, { maxWidth: 330 });
-    pdf.text(pages > 1 ? `Page ${p} of ${pages}` : `${SHOP} · Ramgarh Cantt`, right, A4.h - MARGIN, { align: 'right' });
+    if (pages > 1) pdf.text(`Page ${p} of ${pages}`, right, A4.h - MARGIN, { align: 'right' });
     pdf.setTextColor(0);
   }
 

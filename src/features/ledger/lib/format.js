@@ -137,6 +137,11 @@ export const rowType = (row) => {
  * (BILL-370, CASH-12), which only tie a voucher to its bill.
  */
 const AUTO_REF = /^(BILL|CASH)-\d+$/;
+/** A ref someone typed (a supplier's bill no.), not one the books wrote. */
+export const typedRef = (ref) => {
+  const r = String(ref ?? '').trim();
+  return r && !AUTO_REF.test(r) ? r : '';
+};
 const DEFAULT_NARRATION = /^(Sale|Purchase|Receipt|Payment|Goods Return|Refund|Advance) \S+$/;
 export const statementDetails = (row) => {
   const type = rowType(row);
