@@ -112,3 +112,13 @@ and totals left out, and the pink estimate slip as "DDLNT 3D 107 75x39 6/8 -
 misread codes and words (3D107 as 32107, Aldrop as Alchop), so stay on sonnet.
 After a Claude desktop app update the newest `claude.exe` is picked
 automatically; if a new copy ever says "Not logged in", sign in again as above.
+The first live photo got "Invalid API key": the print server's `.env` has an
+`ANTHROPIC_API_KEY` for other features and Claude Code prefers it over the
+sign-in, so `order-read.mjs` (`signedInEnv`) leaves it out for this run.
+
+One file in two chats prints once: an SBI receipt shared to the shop group
+and to the supplier's chat at the same moment was queued by both the Shop and
+the Bills number and printed twice (27 Nov 2026). The print server now skips a
+WhatsApp file whose exact bytes printed from a different chat in the last 5
+minutes (`isSameFileFromAnotherChat`); a second "bw" in the same chat still
+prints again.
