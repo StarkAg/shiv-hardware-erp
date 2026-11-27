@@ -166,6 +166,10 @@ async function startWhatsApp() {
         void groupPrint.handle(s, baileys.downloadMediaMessage, msg, type).catch((err) => log('[print] failed:', err?.message ?? err))
       }
     })
+    // Saved contact names, so a supplier's one-to-one chat is found by its name (group-print.mjs).
+    s.ev.on('contacts.upsert', (list) => groupPrint.noteContacts(list))
+    s.ev.on('contacts.update', (list) => groupPrint.noteContacts(list))
+    s.ev.on('messaging-history.set', ({ contacts }) => groupPrint.noteContacts(contacts))
     s.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
       if (mine !== gen) return
       if (qr) {

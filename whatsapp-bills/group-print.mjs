@@ -201,12 +201,34 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
     names.set(jid, { name, at: Date.now() })
     return name
   }
-  /** The auto-print chat this message's chat is, by id or by name, else null. */
-  async function autoChatFor(sock, jid) {
+  // Saved contact names (the phone's address book), as WhatsApp sends them:
+  // a one-to-one chat such as a supplier's is named only there (27 Nov 2026).
+  const contactNames = new Map()
+  function noteContacts(list) {
+    for (const c of Array.isArray(list) ? list : []) {
+      const name = c?.name || c?.verifiedName || ''
+      if (!name) continue
+      for (const id of [c.id, c.lid, c.phoneNumber, c.jid].filter(Boolean)) contactNames.set(String(id), name)
+    }
+  }
+  const numberOf = (id) => String(id ?? '').split('@')[0].split(':')[0]
+
+  /** The auto-print chat this message's chat is, by id, number or name, else null. */
+  async function autoChatFor(sock, jid, alt = '') {
     if (!autoChats.length || !jid) return null
-    const byId = autoChats.find((a) => a.key === chatKey(jid))
+    const ids = [jid, alt].filter(Boolean)
+    // By id, or a one-to-one chat by its phone number ("919876543210=bw,paper").
+    const byId = autoChats.find((a) => ids.some((id) => a.key === chatKey(id) || (/^\d{10,15}$/.test(a.key) && numberOf(id).endsWith(a.key))))
     if (byId) return byId
-    if (!jid.endsWith('@g.us')) return null
+    if (!jid.endsWith('@g.us')) {
+      const name = ids.map((id) => contactNames.get(id)).find(Boolean)
+      const found = name ? autoChats.find((a) => a.key === chatKey(name)) ?? null : null
+      if (found) {
+        const shown = state.autoChats.find((a) => a.chat === found.chat)
+        if (shown && shown.id !== jid) { shown.id = jid; log(`[print] auto-print chat "${found.chat}" is ${jid}`) }
+      }
+      return found
+    }
     const key = chatKey(await chatName(sock, jid))
     const found = key ? autoChats.find((a) => a.key === key) ?? null : null
     if (found) {
@@ -287,8 +309,13 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
     const media = mediaOf(content)
     // An auto-print chat: only its photos and PDFs matter, so only those look its name up.
     const auto = jid !== groupId && media && PRINTABLE.has(media.mediaType)
-      ? await autoChatFor(sock, jid).catch(() => null)
+      ? await autoChatFor(sock, jid, msg.key?.remoteJidAlt || '').catch(() => null)
       : null
+    // A photo or PDF in a one-to-one chat that is not set to auto-print: say
+    // which chat, so a supplier's can be set by its number (PRINT_AUTO_CHATS).
+    if (!auto && media && PRINTABLE.has(media.mediaType) && autoChats.length && !jid.endsWith('@g.us') && jid !== groupId) {
+      log(`[print] not an auto-print chat: ${jid}${msg.key?.remoteJidAlt ? ` (${msg.key.remoteJidAlt})` : ''}${contactNames.get(jid) ? ` "${contactNames.get(jid)}"` : ''}`)
+    }
     if (jid !== groupId && !auto) return
     // After a reconnect, only what was sent within the bw / cp window counts.
     if (type === 'append' && Date.now() - Number(msg.messageTimestamp ?? 0) * 1000 > ttlMs) return
@@ -369,5 +396,5 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
   }
   else log(`[print] group printing off, missing ${missing.join(', ')}`)
 
-  return { handle, state }
+  return { handle, state, noteContacts }
 }
