@@ -45,7 +45,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { birthdaysOn, indiaDate, sentKey } from './dates.mjs'
 import { createGroupPrinter } from './group-print.mjs'
-import { orderReply, readOrderPhoto } from './order-read.mjs'
+import { orderReplies, readOrderPhoto } from './order-read.mjs'
 import { keepSentMessages, memoryCache, useSqliteAuthState } from './auth-store.mjs'
 import { createLinkWatch } from './link-watch.mjs'
 
@@ -95,7 +95,8 @@ async function typeOutHere(file, replyTo) {
   const lines = await readOrderPhoto(file.buffer, file.mediaType)
   // The lines themselves too, so a wrong read can be checked from the log.
   log(`[order-read] ${file.name}: ${lines.length} line(s) in ${Math.round((Date.now() - started) / 1000)}s: ${lines.join(' | ') || 'none'}`)
-  await sendText({ mobile: 'group', text: orderReply(lines), replyTo })
+  // One message per supplier's group, each a reply to the photo.
+  for (const text of orderReplies(lines)) await sendText({ mobile: 'group', text, replyTo })
   return true
 }
 const groupPrint = createGroupPrinter({ dataDir: DATA_DIR, log, silent, typeOut: typeOutHere })

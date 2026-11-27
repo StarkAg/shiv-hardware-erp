@@ -39,12 +39,13 @@ export const ORDER_PROMPT = (file) => [
   'Sunmica: the lines with a sunmica design number (a 3 or 4 digit number followed by finish letters such as CU, AMG, MLT, FR, SF, SM, HG). That is loose sunmica sheets (written mica, sunmica, laminate or lam) and doors made with a sunmica (a door code such as DDSM or DD SM, then the design number and finish, then the door size).',
   'Sunmica exactly in this form, one line per sunmica:',
   '<design number> <finish> - <total pieces> pc',
-  'Examples: "9165 CU - 9 pc", "8221 FR - 4 pc", "9615 AMG - 7 pc".',
+  'Examples: "9165 CU - 9 pc", "8221 FR - 4 pc", "9615 AMG - 7 pc", "PLK 9161 WA - 6 pc".',
+  'The finish is all the letters after the design number, even when the first one is written joined to the number: "9161W A" or "9161 w A" is design 9161, finish WA.',
   'Drop door codes (DDSM), sizes and the words mica, sunmica or laminate. Add up the pieces of every line with the same design number and finish into one line: nine DDSM 9165 CU doors of different sizes, 1 pc each, are "9165 CU - 9 pc".',
   'Put a brand code in front only when one is written with the sunmica (PLK is Pulkari): "PLK 9615 AMG - 7 pc". Finish letters in capitals.',
   '3D doors (a door code such as DDLNT, then 3D and a number, then the size) are typed too, one line per door with its size: "3D 107 75x39 6/8 - 1 pc", "3D 139 74 6/8x39 6/8 - 1 pc". Drop the door code (DDLNT), write a space between 3D and its number, and write fractions with a slash after a space, as in 39 6/8. Look hard at the small raised digit of each fraction, it is the one most often misread: a 6 is a single stroke with a closed round loop at the bottom (it can look like a b); a 4 has an angle or a crossing line and no round loop. Read each fraction on its own; the doors on one slip have different sizes.',
   'Leave out rates, amounts, totals, the customer name, dates, phone numbers, headings and labour or delivery charges.',
-  'Order of the answer: plywood and flush doors first, then sunmica, then 3D doors, each top to bottom as on the bill.',
+  'Each group goes to a different supplier, so it is sent as its own message: plywood and flush doors first, then sunmica, then 3D doors, each top to bottom as on the bill, with a line holding only --- between two groups (no --- before the first group or after the last; a group with no lines is left out).',
   'If a quantity is missing, write the item alone. If the photo holds none of these, answer exactly: NONE',
   'Answer with the lines only: no other words, no numbering, no markdown.',
 ].join('\n')
@@ -70,21 +71,31 @@ export function findClaude(env = process.env) {
   return found[0]?.exe ?? 'claude'
 }
 
-/** The item lines Claude gave back, cleaned: no bullets, numbering or blank lines. */
+/** The line between two suppliers' groups. */
+export const GROUP_BREAK = '---'
+
+/** The item lines Claude gave back, cleaned: no bullets, numbering or blank lines; GROUP_BREAK kept between groups. */
 export function orderLines(text) {
   const lines = String(text ?? '').split(/\r?\n/)
-    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/[`*]/g, '').trim())
+    .map((l) => (/^\s*-{3,}\s*$/.test(l) ? GROUP_BREAK : l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/[`*]/g, '').trim()))
     .filter(Boolean)
   if (lines.length === 1 && /^none\.?$/i.test(lines[0])) return []
-  return lines.map(raisedFractions)
+  return lines.map((l) => (l === GROUP_BREAK ? l : raisedFractions(l)))
 }
 
 /**
- * The group reply for the lines read. Never the word "order" in it: the group
- * reads its own messages too (group-print.mjs).
+ * The group replies for the lines read: one message per supplier's group
+ * (plywood, sunmica, 3D doors; owner, 27 Nov 2026). Never the word "order" in
+ * them: the group reads its own messages too (group-print.mjs).
  */
-export function orderReply(lines) {
-  return lines.length ? lines.join('\n') : 'Nothing to type out in this photo.'
+export function orderReplies(lines) {
+  const groups = [[]]
+  for (const line of lines) {
+    if (line === GROUP_BREAK) groups.push([])
+    else groups.at(-1).push(line)
+  }
+  const texts = groups.filter((g) => g.length).map((g) => g.join('\n'))
+  return texts.length ? texts : ['Nothing to type out in this photo.']
 }
 
 const SUPERSCRIPT = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']

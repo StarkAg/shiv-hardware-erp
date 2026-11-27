@@ -105,7 +105,11 @@ by design and finish, pieces added up over all lines and door sizes ("DDSM 9165
 CU" on nine doors -> `9165 CU - 9 pc`; a written brand kept: `PLK 9615 AMG - 7
 pc`); and 3D doors one per line with their size and raised fractions (`3D 107
 75x39⁶/⁸ - 1 pc`). WPC, hardware, Fevicol, rates, labour and totals are left
-out. A photo with none gets "Nothing to type out in this photo."
+out. Each supplier's group is its own reply message (owner, 27 Nov 2026):
+plywood and flush doors, then sunmica, then 3D doors (Claude puts a --- line
+between groups, `orderReplies` splits on it). A sunmica finish is all the
+letters after the number ("9161W A" -> `9161 WA`). A photo with none gets
+"Nothing to type out in this photo."
 
 Usage: each read uses the owner's Claude plan (the token's account), about
 $0.06 of usage on Opus (measured; slim run: only the Read tool and a short
