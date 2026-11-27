@@ -73,7 +73,7 @@ export function PrintLikeBrandEditor({ brands, costOf, onChange, onRemove, onAdd
   onRemove: (id: string) => void
   onAdd: () => void
 }) {
-  const box = 'w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 outline-none hover:border-stone-400 focus:border-blue-600 focus:bg-white'
+  const box = 'block h-[30px] w-full min-w-0 border border-transparent bg-transparent px-1 py-0 leading-[30px] outline-none hover:border-stone-400 focus:border-blue-600 focus:bg-white'
   const yearsCell = (b: Brand, coverage: CoverageType) => {
     const here = (b.coverage ?? 'guarantee') === coverage && b.guaranteeYears > 0
     return (
@@ -98,7 +98,7 @@ export function PrintLikeBrandEditor({ brands, costOf, onChange, onRemove, onAdd
   }
   return (
     <div className="overflow-x-auto bg-white text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-      <table className="w-full min-w-[640px] table-fixed text-[20px] leading-tight">
+      <table className="w-full min-w-[640px] table-fixed border-collapse text-[22px] leading-[30px] [&_td]:border-0 [&_th]:border-0">
         <colgroup>
           <col className="w-[11%]" />
           <col className="w-[38%]" />
@@ -122,7 +122,7 @@ export function PrintLikeBrandEditor({ brands, costOf, onChange, onRemove, onAdd
             const cost = costOf(b.name)
             return (
               <tr key={b.id} style={tintedRowStyle(b)}>
-                <td className="px-1">
+                <td className="p-0">
                   <input
                     type="number"
                     aria-label="Rate"
@@ -131,7 +131,7 @@ export function PrintLikeBrandEditor({ brands, costOf, onChange, onRemove, onAdd
                     onChange={(e) => onChange(b.id, { rate: Number(e.target.value) })}
                   />
                 </td>
-                <td className="px-1">
+                <td className="p-0">
                   <input
                     aria-label="Brand"
                     className={box}
@@ -139,12 +139,12 @@ export function PrintLikeBrandEditor({ brands, costOf, onChange, onRemove, onAdd
                     onChange={(e) => onChange(b.id, { name: e.target.value })}
                   />
                 </td>
-                <td className="px-2 tabular-nums">{cost === undefined ? '' : Math.round(cost)}</td>
-                <td className="px-1">{yearsCell(b, 'guarantee')}</td>
-                <td className="px-1">{yearsCell(b, 'warranty')}</td>
-                <td className="px-1 text-center">
+                <td className="px-2 py-0 tabular-nums">{cost === undefined ? '' : Math.round(cost)}</td>
+                <td className="p-0">{yearsCell(b, 'guarantee')}</td>
+                <td className="p-0">{yearsCell(b, 'warranty')}</td>
+                <td className="p-0 text-center">
                   <button
-                    className="rounded p-1 text-red-600 hover:bg-red-50"
+                    className="rounded px-1 align-middle text-red-600 hover:bg-red-50"
                     onClick={() => onRemove(b.id)}
                     title="Remove brand"
                   >
