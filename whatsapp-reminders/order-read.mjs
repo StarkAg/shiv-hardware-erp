@@ -22,17 +22,30 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+/** Claude's whole system prompt for a read: its answer is posted in the group word for word. */
+export const ORDER_SYSTEM = [
+  'You type out handwritten shop bills for a hardware and plywood shop. Open the image with the Read tool.',
+  'Your answer is posted in a WhatsApp group exactly as you write it, so it holds the item lines and nothing else:',
+  'no notes, no doubts, no explanations, no headings, no blank lines between items. When a word is hard to read, give your best reading and say nothing about it.',
+].join('\n')
+
 export const ORDER_PROMPT = (file) => [
   `Read the image file ${file}. It is a photo of a handwritten shop bill, order slip or estimate from a hardware and plywood shop in India.`,
-  'Type out only the sunmica needed: the lines with a sunmica design number (a 3 or 4 digit number followed by finish letters such as CU, AMG, MLT, FR, SF, SM, HG). That is loose sunmica sheets (written mica, sunmica, laminate or lam) and doors made with a sunmica (a door code such as DDSM or DD SM, then the design number and finish, then the door size). Leave out every other item (plywood, Fevicol, screws, hinges, handles, nut bolts, rubber and the rest).',
-  'Exactly in this form, one line per sunmica:',
+  'Type out only what is bought from the suppliers: plywood and flush doors, sunmica, and 3D doors, each as below. Leave out every other item (WPC chowkat and WPC doors, Fevicol, tape, screws, hinges, handles, aldrops, TB, nails, nut bolts, rubber, fitting accessories and the rest).',
+  'Plywood, boards and flush doors (a thickness in mm, a grade, a size): one line per bill line, in this form:',
+  '<thickness> <grade> <size> - <pieces> pc',
+  'Examples: "18mm MS Solid 7x4 - 5 pc", "12mm MS 7x4 - 5 pc", "19mm S 7x4 - 5 pc", "32mm SG 78x32 - 1 pc".',
+  'The grade is rewritten the way the shop types it: SGC on the bill is typed SG; SG on the bill is typed S; S stays S. Other grade words (MS, Solid, BWP, Comm) stay as written. Keep the thickness and the size as written (30mm stays 30mm).',
+  'Sunmica: the lines with a sunmica design number (a 3 or 4 digit number followed by finish letters such as CU, AMG, MLT, FR, SF, SM, HG). That is loose sunmica sheets (written mica, sunmica, laminate or lam) and doors made with a sunmica (a door code such as DDSM or DD SM, then the design number and finish, then the door size).',
+  'Sunmica exactly in this form, one line per sunmica:',
   '<design number> <finish> - <total pieces> pc',
   'Examples: "9165 CU - 9 pc", "8221 FR - 4 pc", "9615 AMG - 7 pc".',
   'Drop door codes (DDSM), sizes and the words mica, sunmica or laminate. Add up the pieces of every line with the same design number and finish into one line: nine DDSM 9165 CU doors of different sizes, 1 pc each, are "9165 CU - 9 pc".',
   'Put a brand code in front only when one is written with the sunmica (PLK is Pulkari): "PLK 9615 AMG - 7 pc". Finish letters in capitals.',
   '3D doors (a door code such as DDLNT, then 3D and a number, then the size) are typed too, one line per door with its size: "3D 107 75x39 6/8 - 1 pc", "3D 139 74 6/8x39 6/8 - 1 pc". Drop the door code (DDLNT), write a space between 3D and its number, and write fractions with a slash after a space, as in 39 6/8. Look hard at the small raised digit of each fraction, it is the one most often misread: a 6 is a single stroke with a closed round loop at the bottom (it can look like a b); a 4 has an angle or a crossing line and no round loop. Read each fraction on its own; the doors on one slip have different sizes.',
   'Leave out rates, amounts, totals, the customer name, dates, phone numbers, headings and labour or delivery charges.',
-  'If a quantity is missing, write the sunmica alone. If the photo holds no sunmica, answer exactly: NONE',
+  'Order of the answer: plywood and flush doors first, then sunmica, then 3D doors, each top to bottom as on the bill.',
+  'If a quantity is missing, write the item alone. If the photo holds none of these, answer exactly: NONE',
   'Answer with the lines only: no other words, no numbering, no markdown.',
 ].join('\n')
 
@@ -71,7 +84,7 @@ export function orderLines(text) {
  * reads its own messages too (group-print.mjs).
  */
 export function orderReply(lines) {
-  return lines.length ? lines.join('\n') : 'No sunmica found in this photo.'
+  return lines.length ? lines.join('\n') : 'Nothing to type out in this photo.'
 }
 
 const SUPERSCRIPT = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']
@@ -105,8 +118,14 @@ export async function readOrderPhoto(buffer, mediaType, { env = process.env, mod
       execFile(findClaude(env), [
         '-p', ORDER_PROMPT(file),
         '--model', model,
+        // Slim: only the Read tool, no MCP servers or settings, and a short
+        // system prompt instead of Claude Code's own. A read costs about a
+        // third as much ($0.06 of usage, not $0.19; measured 27 Nov 2026).
+        '--tools', 'Read',
         '--allowedTools', 'Read',
-        '--disallowedTools', 'Bash,Edit,Write,WebFetch,WebSearch,NotebookEdit',
+        '--strict-mcp-config',
+        '--setting-sources', '',
+        '--system-prompt', ORDER_SYSTEM,
       ], { cwd: dir, env: signedInEnv(env), timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, out, errOut) => {
         if (err) reject(new Error(String(out || errOut || err.message).trim().slice(0, 300)))
         else resolve(out)
