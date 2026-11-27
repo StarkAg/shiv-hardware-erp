@@ -33,6 +33,14 @@ describe('createPendingFiles', () => {
     expect(p.take('a')).toEqual(['new'])
     expect(p.take('a')).toEqual([])
   })
+
+  it('finds a file by any of the sender ids', () => {
+    const p = createPendingFiles(1000, () => 0)
+    p.add(['1@lid', '91@s.whatsapp.net'], 'photo')
+    expect(p.peek(['91@s.whatsapp.net'])).toEqual(['photo'])
+    expect(p.take('1@lid')).toEqual(['photo'])
+    expect(p.size()).toBe(0)
+  })
 })
 
 describe('group printing', () => {

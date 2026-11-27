@@ -125,25 +125,36 @@ export const isOrderText = (text) => /\border\b/i.test(String(text ?? ''))
 
 const textOf = (content) => content?.conversation ?? content?.extendedTextMessage?.text ?? ''
 
-/** Files waiting for their bw / cp, per sender in the group. */
+/**
+ * Files waiting for their bw / cp, per sender in the group. A sender is all the
+ * ids WhatsApp gives the same person (a private @lid id and the phone number):
+ * one message can come with one and the next with the other, and a photo filed
+ * under the first was missed by the "order" sent under the second, which then
+ * typed out an older photo (27 Nov 2026).
+ */
 export function createPendingFiles(ttlMs, now = () => Date.now()) {
-  const pending = new Map()
+  let entries = []
+  const idsOf = (sender) => (Array.isArray(sender) ? sender : [sender]).filter(Boolean)
+  const fresh = () => (entries = entries.filter((e) => now() - e.at <= ttlMs))
+  const mine = (sender) => {
+    const ids = idsOf(sender)
+    return fresh().filter((e) => e.ids.some((id) => ids.includes(id)))
+  }
   return {
     add(sender, file) {
-      const list = (pending.get(sender) ?? []).filter((e) => now() - e.at <= ttlMs)
-      list.push({ file, at: now() })
-      pending.set(sender, list)
+      fresh()
+      entries.push({ ids: idsOf(sender), file, at: now() })
     },
     /** The files waiting, left waiting (a bw / cp may still come for them). */
     peek(sender) {
-      return (pending.get(sender) ?? []).filter((e) => now() - e.at <= ttlMs).map((e) => e.file)
+      return mine(sender).map((e) => e.file)
     },
     take(sender) {
-      const list = pending.get(sender) ?? []
-      pending.delete(sender)
-      return list.filter((e) => now() - e.at <= ttlMs).map((e) => e.file)
+      const list = mine(sender)
+      entries = entries.filter((e) => !list.includes(e))
+      return list.map((e) => e.file)
     },
-    size: () => [...pending.values()].reduce((n, list) => n + list.length, 0),
+    size: () => fresh().length,
   }
 }
 
@@ -325,6 +336,9 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
 
     // The Shop phone's own sends are the group's too (fromMe), so they count.
     const sender = msg.key.participant || msg.key.participantAlt || jid
+    // Every id this person comes under, for the files waiting (createPendingFiles).
+    const senderIds = [msg.key.participant, msg.key.participantAlt].filter(Boolean)
+    if (!senderIds.length) senderIds.push(jid)
 
     try {
       if (auto) {
@@ -348,7 +362,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         const mode = printModeOf(media.caption) ?? autoModeOf(media.fileName)
         if (mode) await queue([file], mode, sender)
         else {
-          pending.add(sender, file)
+          pending.add(senderIds, file)
           log(`[print] ${file.name} waiting for bw / cp`)
         }
         return
@@ -366,8 +380,12 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
           await queueOrder(file, { id: info.stanzaId, participant: info.participant || sender }, sender)
           return
         }
-        const last = pending.peek(sender).filter((f) => f.mediaType.startsWith('image/')).at(-1)
-        if (last) await queueOrder(last, last.replyTo, sender)
+        // A photo already typed out is not typed out again.
+        const last = pending.peek(senderIds).filter((f) => f.mediaType.startsWith('image/') && !f.typedOut).at(-1)
+        if (last) {
+          last.typedOut = true
+          await queueOrder(last, last.replyTo, sender)
+        } else log(`[print] "order" with no photo waiting from ${senderIds.join(' / ')}`)
         return
       }
       const mode = printModeOf(text)
@@ -382,7 +400,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         await queue([file], mode, sender)
         return
       }
-      const files = pending.take(sender)
+      const files = pending.take(senderIds)
       if (files.length) await queue(files, mode, sender)
     } catch (err) {
       state.lastError = { at: new Date().toISOString(), error: String(err?.message ?? err) }
