@@ -98,7 +98,10 @@ In the shop group, a photo of a bill or order slip with "order" in its caption
 printed: it goes to the shop PC's print server, where Claude Code (the desktop
 app's own `claude.exe`, `print-server/order-read.mjs`) reads the handwriting,
 and the Shop number posts the lines back as a reply to the photo:
-`<item as written> - <qty>`, no rates or totals. Add "bw" / "cp" to the caption
+only the sunmica lines, as `PLK 9615 AMG - 7 pc` (brand, design number, finish,
+sheets; PLK = Pulkari, used when no brand is written), nothing else and no
+rates or totals (owner, 27 Nov 2026). A photo with no sunmica gets "No sunmica
+found in this photo." Add "bw" / "cp" to the caption
 to print it as well. Claude on the PC must be signed in once: run that
 `claude.exe` in a terminal and `/login`. If it is not, the group gets "Could not
 read this photo: ...". `ORDER_READ_MODEL` in the print server's `.env.local`

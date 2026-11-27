@@ -1,5 +1,6 @@
 /**
  * Order slips typed out for the shop group (owner's ask, 27 Nov 2026).
+ * Sunmica lines only, as "PLK 9615 AMG - 7 pc" (owner, 27 Nov 2026).
  *
  * A bill or order slip photo posted in the shop group with "order" under it
  * (group-print.mjs, readOrder) comes here, to the shop PC. Claude Code on this
@@ -18,12 +19,13 @@ import { join } from 'node:path'
 
 export const ORDER_PROMPT = (file) => [
   `Read the image file ${file}. It is a photo of a handwritten shop bill, order slip or estimate from a hardware and plywood shop in India.`,
-  'Type out every item line, top to bottom, one per line, exactly in this form:',
-  '<item as written> - <quantity with its unit>',
-  'Examples: "19mm S 7x4 - 1 pc", "Fevicol Marine - 4 kg", "3D 107 75x39 6/8 - 1 pc", "4\'\' Screw SS - 20 pc".',
-  'Keep sizes, codes and brand words as written; write fractions with a slash, like 39 6/8 and 2 1/2\'\' (never a one-character fraction symbol). Spell the item as a shop would (Fevicol, Hinges, Screw).',
+  'Type out only the sunmica lines (also written mica, laminate or lam): sheets with a design number. Leave out every other item (plywood, doors, Fevicol, screws, hinges, handles and the rest).',
+  'One line per sunmica, top to bottom, exactly in this form:',
+  '<brand> <design number> <finish> - <number of sheets> pc',
+  'Examples: "PLK 9615 AMG - 7 pc", "PLK 9520 MLT - 4 pc", "PLK 8221 FR - 4 pc".',
+  'The brand is the short code written (PLK is Pulkari); when no brand is written, use PLK. Drop the word mica, sunmica or laminate itself. Keep the design number and the finish letters (AMG, MLT, FR, SF, HG and so on) as written, in capitals.',
   'Leave out rates, amounts, totals, the customer name, dates, phone numbers, headings and labour or delivery charges.',
-  'If a quantity is missing, write the item alone. If the photo holds no item lines, answer exactly: NONE',
+  'If a quantity is missing, write the sunmica alone. If the photo holds no sunmica, answer exactly: NONE',
   'Answer with the lines only: no other words, no numbering, no markdown.',
 ].join('\n')
 

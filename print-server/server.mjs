@@ -2819,7 +2819,7 @@ async function typeOutOrder(job, files) {
     let text
     try {
       const lines = await readOrderPhoto(file.buffer, file.mediaType)
-      text = lines.length ? lines.join('\n') : 'No items found in this photo.'
+      text = lines.length ? lines.join('\n') : 'No sunmica found in this photo.'
       console.log(`[order-read] ${job._id}: ${lines.length} line(s) in ${Math.round((Date.now() - started) / 1000)}s`)
     } catch (err) {
       console.warn(`[order-read] ${job._id}: could not read:`, err?.message ?? err)
