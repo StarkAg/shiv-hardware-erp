@@ -813,36 +813,29 @@ function RateCardBuilder() {
         </div>
       )}
 
-      {/* Print status overlay */}
+      {/* Print status: a small chip in the corner. Nothing behind it is
+          covered or frozen, so the next quote can be typed while it prints
+          (owner, 27 Nov 2026). */}
       {printState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-xs rounded-2xl border border-white/10 bg-stone-900 p-6 text-center shadow-2xl">
-            {printState === 'printing' && (
-              <>
-                <Loader2 size={36} className="mx-auto mb-3 animate-spin text-shiv-green" />
-                <p className="font-semibold text-stone-100">Sending to printer…</p>
-              </>
-            )}
-            {printState === 'done' && (
-              <>
-                <CheckCircle2 size={36} className="mx-auto mb-3 text-shiv-green" />
-                <p className="font-semibold text-stone-100">Sent!</p>
-              </>
-            )}
-            {typeof printState === 'object' && 'error' in printState && (
-              <>
-                <AlertCircle size={36} className="mx-auto mb-3 text-red-400" />
-                <p className="mb-1 font-semibold text-stone-100">Print failed</p>
-                <p className="mb-4 text-sm text-muted">{printState.error}</p>
-                <button
-                  onClick={() => setPrintState(null)}
-                  className="rounded-lg bg-stone-700 px-4 py-2 text-sm font-medium text-stone-100 hover:bg-stone-600"
-                >
-                  Dismiss
-                </button>
-              </>
-            )}
-          </div>
+        <div
+          role="status"
+          className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 border-2 border-black px-3 py-2 text-sm font-semibold shadow-lg ${
+            printState === 'printing'
+              ? 'bg-yellow-300 text-black'
+              : printState === 'done'
+                ? 'bg-green-600 text-white'
+                : 'bg-red-600 text-white'
+          }`}
+        >
+          {printState === 'printing' && (<><Loader2 size={16} className="animate-spin" /> Printing</>)}
+          {printState === 'done' && (<><CheckCircle2 size={16} /> Sent to printer</>)}
+          {typeof printState === 'object' && 'error' in printState && (
+            <>
+              <AlertCircle size={16} />
+              <span className="max-w-xs truncate" title={printState.error}>Not printed: {printState.error}</span>
+              <button onClick={() => setPrintState(null)} className="ml-1 underline">Close</button>
+            </>
+          )}
         </div>
       )}
     </div>

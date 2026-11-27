@@ -199,8 +199,16 @@ export function createPrinterStatus({ execFileAsync, knownAddresses = new Map(),
   }
 
   return {
-    async list({ fresh = false } = {}) {
+    /**
+     * quick: a look up to staleMs old is used at once (and refreshed behind it),
+     * so a print never waits the 2-4 s Windows takes to list its printers.
+     */
+    async list({ fresh = false, quick = false, staleMs = 60000 } = {}) {
       if (!fresh && cache && Date.now() - cache.at < cacheMs) return cache.printers
+      if (quick && !fresh && cache && Date.now() - cache.at < staleMs) {
+        void this.list({ fresh: true }).catch(() => {})
+        return cache.printers
+      }
       if (!inFlight) {
         inFlight = look().then((printers) => {
           cache = { at: Date.now(), printers }

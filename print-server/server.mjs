@@ -1391,9 +1391,28 @@ function epsonPlainA4PrintTicketXml({ color = true } = {}) {
 </psf:PrintTicket>`
 }
 
+/**
+ * Waits for the Epson's plain-A4 setup only when it has not run in the last
+ * 30 minutes; otherwise it refreshes behind the print (a PowerShell of a
+ * second or two). Nothing else here changes these defaults, and each job also
+ * carries its own paper and tray (27 Nov 2026).
+ */
 async function prepareEpsonPlainA4ColorDefaults(printer, source = 'print') {
+  const since = Date.now() - (preparedPlainA4Printers.get(printer) || 0)
+  if (since < 60000) return
+  const run = setEpsonPlainA4ColorDefaults(printer, source)
+  if (since < 30 * 60000) return
+  await run
+}
+
+let epsonPrepareRun = null
+function setEpsonPlainA4ColorDefaults(printer, source) {
+  epsonPrepareRun ??= setEpsonPlainA4ColorDefaultsNow(printer, source).finally(() => { epsonPrepareRun = null })
+  return epsonPrepareRun
+}
+
+async function setEpsonPlainA4ColorDefaultsNow(printer, source = 'print') {
   if (!EPSON_DEFAULT_RESET_PLAIN_A4_COLOR || process.platform !== 'win32' || printer !== COLOR_PRINTER) return
-  if (Date.now() - (preparedPlainA4Printers.get(printer) || 0) < 60000) return
 
   try {
     const script = [
@@ -1438,6 +1457,9 @@ const printRoutes = createRouteStore(new URL('data/print-routes.json', import.me
   quotation: { printer: COLOR_PRINTER, color: true, fallback: BW_PRINTER },
 }, new URL('data/bank-printer.json', import.meta.url))
 const printerStatus = createPrinterStatus({ execFileAsync, knownAddresses: PRINTER_IPP_URLS })
+// Keep the printer look warm (every 30 s), so routePrintJob never waits for it.
+void printerStatus.list().catch(() => {})
+setInterval(() => { void printerStatus.list({ fresh: true }).catch(() => {}) }, 30000).unref()
 const isBankPrint = (name) => isBankFile(name, BANK_PRINT_NAMES)
 // Each job's own paper settings; colour or black and white is set from its route.
 const ROUTE_BASE_SETTINGS = { bank: WHATSAPP_COLOR_PRINT_SETTINGS, quotation: QUOTATION_PRINT_SETTINGS }
@@ -1445,9 +1467,13 @@ const ROUTE_BASE_SETTINGS = { bank: WHATSAPP_COLOR_PRINT_SETTINGS, quotation: QU
 /** Where a job prints now, with its settings: { printer, printSettings, fallback, online }. */
 async function routePrintJob(job, source = `${job}-print`) {
   const route = await printRoutes.get(job)
-  const picked = await pickRoute(route, (name) => printerStatus.get(name))
+  // The Epson's paper setup runs beside the printer check, not after it, and
+  // the check uses the look kept warm below: quotations took 5 s or more
+  // before printing started (owner, 27 Nov 2026).
+  const epsonReady = route.printer === COLOR_PRINTER ? prepareEpsonPlainA4ColorDefaults(COLOR_PRINTER, source) : null
+  const picked = await pickRoute(route, (name) => printerStatus.get(name, { quick: true }))
   if (picked.fallback) console.warn(`[${source}] "${picked.fallback.from}" offline (${picked.fallback.reason}); printing on fallback "${picked.printer}"`)
-  if (picked.printer === COLOR_PRINTER) await prepareEpsonPlainA4ColorDefaults(picked.printer, source)
+  if (picked.printer === COLOR_PRINTER) await (epsonReady ?? prepareEpsonPlainA4ColorDefaults(picked.printer, source))
   // The HP LaserJets print black only: never ask them for colour.
   const color = route.color && !/laserjet|npi/i.test(picked.printer)
   return { ...picked, printSettings: settingsFor(ROUTE_BASE_SETTINGS[job], picked.printer, color) }
@@ -3844,7 +3870,7 @@ app.get('/printers', async (_req, res) => {
 app.get('/printers/status', async (req, res) => {
   try {
     const [printers, routes] = await Promise.all([
-      printerStatus.list({ fresh: req.query.fresh === '1' }),
+      printerStatus.list({ fresh: req.query.fresh === '1', quick: true }),
       printRoutes.all(),
     ])
     res.json({ ok: true, printers, routes, bankPrinter: routes.bank.printer, colorPrinter: COLOR_PRINTER, bwPrinter: BW_PRINTER })
