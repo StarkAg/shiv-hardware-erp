@@ -8,7 +8,7 @@
 import { convexTest } from './trustedConvex'
 import { describe, expect, test, vi } from 'vitest'
 import schema from '../convex/schema'
-import { api } from '../convex/_generated/api'
+import { api, internal } from '../convex/_generated/api'
 
 const modules = import.meta.glob('../convex/**/*.ts')
 
@@ -110,7 +110,7 @@ test('removing an empty account gives its bookmark back', async () => {
     await ctx.db.insert('filingHolds', { partyLedgerId: id, slot: 298, at: 1 })
     return id
   })
-  await t.mutation(api.masters.removeLedger, { pin: 'test-pin', id } as any)
+  await t.mutation(internal.masters.removeLedger, { id } as any)
   expect(await t.run((ctx) => ctx.db.query('filingHolds').collect())).toEqual([])
   vi.unstubAllEnvs()
 })

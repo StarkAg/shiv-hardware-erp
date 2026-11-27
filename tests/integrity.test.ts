@@ -5,7 +5,7 @@
 import { convexTest } from './trustedConvex'
 import { describe, expect, it, vi } from 'vitest'
 import schema from '../convex/schema'
-import { api } from '../convex/_generated/api'
+import { api, internal } from '../convex/_generated/api'
 
 const modules = import.meta.glob('../convex/**/*.ts')
 
@@ -38,13 +38,13 @@ describe('deleting an account', () => {
 
       // The books are now empty of them — but the trash is not, and restoring
       // it would put lines back against an account that no longer exists.
-      await expect(t.mutation(api.masters.removeLedger, { id: partyId, pin: 'test-pin' }))
+      await expect(t.mutation(internal.masters.removeLedger, { id: partyId }))
         .rejects.toThrow(/trash/i)
 
       // And once the trash is emptied for good, it can go.
       const [row] = await t.run(ctx => ctx.db.query('billsTrash').collect())
       await t.mutation(api.bills.purge, { id: row._id, pin: 'test-pin' })
-      await t.mutation(api.masters.removeLedger, { id: partyId, pin: 'test-pin' })
+      await t.mutation(internal.masters.removeLedger, { id: partyId })
       expect(await t.run(ctx => ctx.db.get(partyId))).toBeNull()
     } finally { vi.unstubAllEnvs() }
   })
@@ -56,7 +56,7 @@ describe('deleting an account', () => {
       await t.mutation(api.billLedger.postBill, { bill: aBill() })
       await t.mutation(api.bills.remove, { id: 'bill-a' })
 
-      await expect(t.mutation(api.masters.removeLedger, { id: partyId, pin: 'test-pin' }))
+      await expect(t.mutation(internal.masters.removeLedger, { id: partyId }))
         .rejects.toMatchObject({ data: { kind: 'trash' } })
     } finally { vi.unstubAllEnvs() }
   })
@@ -68,7 +68,7 @@ describe('deleting an account', () => {
       await t.mutation(api.billLedger.postBill, { bill: aBill() })
       await t.mutation(api.bills.remove, { id: 'bill-a' })
 
-      await t.mutation(api.masters.removeLedger, { id: partyId, pin: 'test-pin', purgeTrash: true })
+      await t.mutation(internal.masters.removeLedger, { id: partyId, purgeTrash: true })
 
       expect(await t.run(ctx => ctx.db.get(partyId))).toBeNull()
       // Nothing is left in either bin pointing at an account that has gone.
@@ -86,7 +86,7 @@ describe('deleting an account', () => {
       await t.mutation(api.billLedger.postBill, { bill: aBill() })
 
       // Live entries are not the bin's to clear: this one must not go.
-      await expect(t.mutation(api.masters.removeLedger, { id: partyId, pin: 'test-pin', purgeTrash: true }))
+      await expect(t.mutation(internal.masters.removeLedger, { id: partyId, purgeTrash: true }))
         .rejects.toThrow(/entries|vouchers/i)
       expect(await t.run(ctx => ctx.db.get(partyId))).not.toBeNull()
     } finally { vi.unstubAllEnvs() }

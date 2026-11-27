@@ -6,7 +6,7 @@
 import { convexTest } from './trustedConvex'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import schema from '../convex/schema'
-import { api } from '../convex/_generated/api'
+import { api, internal } from '../convex/_generated/api'
 
 const modules = import.meta.glob('../convex/**/*.ts')
 const CODE = 'test-pin-only'
@@ -39,7 +39,7 @@ describe('one writer', () => {
       return ctx.db.insert('ledgers', { groupId, name: 'Harsh', openingBalance: 0, openingSide: 'Dr', openingAsOf: 1, active: true, createdAt: 1, updatedAt: 1 })
     })
     await t.run(ctx => ctx.db.insert('billsStore', { bills: [{ id: 'b445', number: '445', kind: 'receipt', ledgerId: lonely, total: 5555, items: [] }], billSeq: 445, savedAt: 1 }))
-    await expect(t.mutation(api.masters.removeLedger, { id: lonely, pin: CODE })).rejects.toThrow(/Bill 445 is for this account/)
+    await expect(t.mutation(internal.masters.removeLedger, { id: lonely })).rejects.toThrow(/Bill 445 is for this account/)
     expect(partyId).toBeTruthy()
   })
 

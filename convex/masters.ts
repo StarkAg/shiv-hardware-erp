@@ -1,10 +1,11 @@
 import { mutation, query } from "./lib/guarded";
+import { internalMutation, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { readBills, writeBills } from "./lib/billRows";
 import { properText } from "./lib/text";
 import { v, ConvexError } from "convex/values";
 import { record, money } from "./lib/history";
 import { round2 } from "./lib/money";
-import { requirePin } from "./lib/pin";
 import { fold } from "./lib/parties";
 import { carryRename } from "./lib/rename";
 import { holdFor } from "./filing";
@@ -214,20 +215,30 @@ export const usage = query({
   },
 });
 
-/** Removes a ledger, refusing while anything is posted to it. */
-export const removeLedger = mutation({
+/**
+ * Removes a ledger, refusing while anything is posted to it.
+ *
+ * Backend only, by the owner's decision of 27 Nov 2026: internal, so no screen
+ * or device can call it, only the deployment's admin login
+ * (`npx convex run masters:removeLedger '{"id":"..."}'`). No code is asked:
+ * having that login is the permission.
+ */
+export const removeLedger = internalMutation({
   args: {
-    pin: v.string(),
     id: v.id("ledgers"),
     /**
      * Destroy what the bin still holds against this account, and then delete
-     * it. Asked for a second time in the UI, because this is the one way the
-     * account can go and what goes with it does not come back.
+     * it. What goes with it does not come back.
      */
     purgeTrash: v.optional(v.boolean()),
   },
-  handler: async (ctx, { pin, id, purgeTrash }) => {
-    requirePin(pin);
+  handler: async (ctx, { id, purgeTrash }) => {
+    await deleteLedger(ctx, id, purgeTrash);
+  },
+});
+
+async function deleteLedger(ctx: MutationCtx, id: Id<"ledgers">, purgeTrash?: boolean) {
+  {
     const lines = await ctx.db
       .query("voucherEntries")
       .withIndex("by_ledger", (q) => q.eq("ledgerId", id))
@@ -314,8 +325,8 @@ export const removeLedger = mutation({
         : `Removed empty ledger ${ledger?.name ?? ""}`,
       { entity: "ledger", entityId: id },
     );
-  },
-});
+  }
+}
 
 /**
  * Opens the accounts the shop's own spending needs.

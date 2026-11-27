@@ -1,20 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { ExternalLink, Pencil, X } from 'lucide-react'
-import { useMutation } from 'convex/react';
+import { ExternalLink, Pencil } from 'lucide-react'
 import { api } from '../../../../convex/_generated/api';
 import { useLive } from '../lib/cache';
 import { rupees, shortDate, phoneDisplay } from '../lib/format';
 import { TableSkeleton } from './Skeleton';
 import LedgerForm from './LedgerForm';
-import Confirm from './Confirm';
 
 /**
  * Every account in the books, as a list to be worked on.
  *
  * The Customers and Suppliers screens answer "who owes what" — they are
  * reports, and their rows open a statement. This is the other question: what
- * accounts exist, is this one spelled right, and can that empty duplicate go.
- * So the same names appear here with an edit and a delete against them, and
+ * accounts exist and is this one spelled right. So the same names appear here
+ * with an edit against them (deleting is backend-only), and
  * nothing else: no balances to read, no statement to open.
  */
 
@@ -28,16 +26,10 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
   const masters = useLive(api.masters.all, {}, 'masters');
   // What is posted to each account, so a row can say whether it can go.
   const usage = useLive(api.masters.usage, {}, 'ledger-usage') ?? {};
-  const remove = useMutation(api.masters.removeLedger);
 
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [deleting, setDeleting] = useState(null);
-  // An account the bin still holds something against: it can go, but only by
-  // destroying what the bin holds, so that is asked for separately.
-  const [purging, setPurging] = useState(null);
-  const [error, setError] = useState('');
 
   const here = TABS.find(([id]) => id === tab) ?? TABS[0];
   const group = here[2];
@@ -79,30 +71,6 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
     window.open(`${origin}${pathname}#${statementPath(l)}`, '_blank', 'noopener');
   };
 
-  const drop = async (ledger, pin, purgeTrash = false) => {
-    setError('');
-    try {
-      await remove({ id: ledger._id, pin, purgeTrash });
-      setDeleting(null);
-      setPurging(null);
-    } catch (err) {
-      // The refusals are the useful part: an account with vouchers against it
-      // cannot go, and saying so is better than a silent failure. A thrown
-      // ConvexError arrives in `data`; anything else only has a message.
-      const data = err?.data;
-      setDeleting(null);
-      // The bin is the one refusal with a way through, so it is offered rather
-      // than reported.
-      if (data?.kind === 'trash') return setPurging({ ledger, ...data });
-      setError(String(data ?? err?.message ?? err));
-    }
-  };
-
-  /** "2 deleted vouchers and 1 deleted bill" — what goes with the account. */
-  const binnedSummary = (n) => [
-    n.vouchers && `${n.vouchers} deleted voucher${n.vouchers === 1 ? '' : 's'}`,
-    n.bills && `${n.bills} deleted bill${n.bills === 1 ? '' : 's'}`,
-  ].filter(Boolean).join(' and ');
 
   return (
     <>
@@ -152,7 +120,6 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
         )}
       </div>
 
-      {error && <p className="error">{error}</p>}
 
       {masters === undefined ? (
         <TableSkeleton cols={5} rows={8} wide={1} />
@@ -207,33 +174,9 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
                         <ExternalLink size={14} aria-hidden="true" />
                       </button>
                       <button className="xbtn" aria-label="Edit" onClick={() => setEditing(l)}><Pencil size={14} aria-hidden="true" /></button>
-                      {/* An account with anything posted to it can never be
-                          deleted — the books would lose the other side of
-                          those entries.
-
-                          It still has to answer the tap. This was a <span>
-                          wearing the delete button's own X, so pressing it did
-                          nothing and said nothing, and the only explanation was
-                          a title tooltip — which a phone never shows and a
-                          finger never triggers. A control that looks live and
-                          ignores you reads as broken, and on these books most
-                          accounts are in exactly that state. */}
-                      {usage[l._id] ? (
-                        <button
-                          className="xbtn muted"
-                          aria-label={`${l.name} cannot be deleted`}
-                          title={`${usage[l._id]} vouchers are posted to this account — it cannot be deleted`}
-                          onClick={() =>
-                            setError(
-                              `${l.name} has ${usage[l._id]} ${usage[l._id] === 1 ? 'voucher' : 'vouchers'} posted to it, so it cannot be deleted — the books would lose the other side of those entries. If it is a second spelling of an account you already have, merge it instead.`,
-                            )
-                          }
-                        >
-                          <X size={14} aria-hidden="true" />
-                        </button>
-                      ) : (
-                        <button className="xbtn del" aria-label="Delete" onClick={() => setDeleting(l)}><X size={14} aria-hidden="true" /></button>
-                      )}
+                      {/* No delete on this screen: an account is removed only
+                          from the backend (masters:removeLedger), by the
+                          owner's decision of 27 Nov 2026. */}
                     </td>
                   </tr>
                 ))}
@@ -251,29 +194,6 @@ export default function Ledgers({ tab = 'customers', onTab, onOpenLedger }) {
         />
       )}
 
-      {deleting && (
-        <Confirm
-          title={`Delete ${deleting.name}?`}
-          body="An account with any voucher against it cannot be deleted — only an empty one."
-          confirmLabel="Delete"
-          danger
-          ask={{ label: 'Code', secret: true }}
-          onConfirm={(pin) => drop(deleting, pin)}
-          onClose={() => setDeleting(null)}
-        />
-      )}
-
-      {purging && (
-        <Confirm
-          title={`Delete ${purging.ledger.name} and ${binnedSummary(purging)}?`}
-          body={`Nothing is posted to this account in the books, but the bin still holds ${binnedSummary(purging)} against it. They go for good — photographs included — and cannot be restored afterwards.`}
-          confirmLabel="Delete for good"
-          danger
-          ask={{ label: 'Code', secret: true }}
-          onConfirm={(pin) => drop(purging.ledger, pin, true)}
-          onClose={() => setPurging(null)}
-        />
-      )}
     </>
   );
 }
