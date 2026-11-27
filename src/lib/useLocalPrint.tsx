@@ -18,6 +18,7 @@ export function canLocalPrint(): boolean {
 type PrintRequest = {
   node: ReactNode
   copies: number
+  deviceName?: string
   resolve: () => void
   reject: (err: unknown) => void
 }
@@ -27,13 +28,13 @@ export function useLocalPrint() {
   const reqRef = useRef<PrintRequest | null>(null)
   reqRef.current = req
 
-  const printNode = useCallback((node: ReactNode, copies = 1) => {
+  const printNode = useCallback((node: ReactNode, copies = 1, deviceName?: string) => {
     return new Promise<void>((resolve, reject) => {
       if (!window.shivDesktop?.printCurrentPage) {
         reject(new Error('Local printing unavailable'))
         return
       }
-      setReq({ node, copies: Math.max(1, copies), resolve, reject })
+      setReq({ node, copies: Math.max(1, copies), deviceName, resolve, reject })
     })
   }, [])
 
@@ -43,7 +44,7 @@ export function useLocalPrint() {
     // Let the hidden document lay out (and cached images paint) before printing.
     const t = window.setTimeout(async () => {
       try {
-        await window.shivDesktop!.printCurrentPage({ copies: req.copies })
+        await window.shivDesktop!.printCurrentPage({ copies: req.copies, ...(req.deviceName ? { deviceName: req.deviceName } : {}) })
         if (!cancelled) req.resolve()
       } catch (err) {
         if (!cancelled) req.reject(err)

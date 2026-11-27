@@ -32,6 +32,7 @@ import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
 import { sendWhatsAppDocument } from '../../lib/printServer'
 import { defaultRatesUnlocked, lockDefaultRates, unlockDefaultRates } from '../../lib/defaultRates'
 import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
+import { quotationPrinter } from '../../lib/quotePrinter'
 import { toast } from '../../components/Toast'
 import Confirm from '../ledger/components/Confirm'
 import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/GuaranteeBuilder'
@@ -234,12 +235,24 @@ function RateCardBuilder() {
     save({ silent: true })
     const printDoc = enrichQuotation(buildQuote())
 
-    // The shop PC's print server (the printer set on the Printers screen),
-    // else the desktop app's own print, else the online queue.
+    // In the desktop app: drawn here as the preview shows it, straight to the
+    // printer set on the Printers screen (lib/quotePrinter.ts).
+    if (canLocalPrint()) {
+      try {
+        await printNode(<QuotationPrint quote={printDoc} />, copies, await quotationPrinter())
+        setCopies(1)
+        setPrintState('done')
+        setTimeout(() => setPrintState(null), 2500)
+        return
+      } catch {
+        // fall through to the shop PC below
+      }
+    }
+
+    // The shop PC: directly on its Wi-Fi, or through the online queue from anywhere.
     try {
       const sent = await printViaShop({ kind: 'quotation', quote: printDoc }, {
         copies,
-        local: canLocalPrint() ? () => printNode(<QuotationPrint quote={printDoc} />, copies) : undefined,
         onDone: (r) => toast(r.ok ? `${printDoc.number} printed at the shop` : `Not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
       })
       if (sent.via === 'queue') toast(`${printDoc.number} sent to the shop PC`, 'info')

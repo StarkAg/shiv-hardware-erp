@@ -7,6 +7,7 @@ import { enrichQuotation } from '../lib/pricing'
 import { photoIsColour } from '../lib/photoColour'
 import { LOCAL_PRINT_SERVER_URL } from '../lib/printServer'
 import { canLocalPrint } from '../lib/useLocalPrint'
+import { quotationPrinter } from '../lib/quotePrinter'
 import { deviceId } from '../lib/device'
 import type { Quotation } from '../lib/types'
 
@@ -86,28 +87,6 @@ async function loadPhotos(job: PhotoJob, urls: string[]) {
     mode,
     printer: ready.printer,
     photos: images.map<Photo>(({ url, img }) => ({ url, landscape: img.naturalWidth > img.naturalHeight })),
-  }
-}
-
-/**
- * The printer quotations go to on the Printers screen (its fallback when that
- * one is offline). Without it the app printed on Windows' default printer, the
- * HP, whatever the screen said (27 Nov 2026). Undefined: the default, as before.
- */
-async function quotationPrinter(): Promise<string | undefined> {
-  try {
-    const res = await fetch(`${LOCAL_PRINT_SERVER_URL}/printers/status`, { signal: AbortSignal.timeout(5000) })
-    const status = await res.json() as {
-      printers?: { name: string; online: boolean }[]
-      routes?: { quotation?: { printer?: string | null; fallback?: string | null } }
-    }
-    const route = status.routes?.quotation
-    const online = (name?: string | null) => Boolean(name && status.printers?.some((p) => p.name === name && p.online))
-    if (online(route?.printer)) return route!.printer!
-    if (online(route?.fallback)) return route!.fallback!
-    return route?.printer ?? undefined
-  } catch {
-    return undefined
   }
 }
 

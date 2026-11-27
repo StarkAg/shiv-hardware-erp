@@ -12,6 +12,7 @@ import { printViaShop } from '../../lib/printViaShop'
 import { elementToJpeg, shareJpeg } from '../../lib/shareImage'
 import { sendWhatsAppDocument } from '../../lib/printServer'
 import { canLocalPrint, useLocalPrint } from '../../lib/useLocalPrint'
+import { quotationPrinter } from '../../lib/quotePrinter'
 import { QuotationPrint } from '../print/QuotationPrint'
 import { ComboBox, CustomerAccounts, type CustomerAccount } from '../guarantee/GuaranteeBuilder'
 import { CopiesBox } from './CopiesBox'
@@ -105,9 +106,17 @@ export function BedPlyBuilder({ Preview }: { Preview: ComponentType<{ quote: Quo
     setPrinting(true)
     const quote = save()
     try {
+      if (canLocalPrint()) {
+        try {
+          await printNode(<QuotationPrint quote={quote} />, copies, await quotationPrinter())
+          setCopies(1)
+          return
+        } catch {
+          // On to the shop PC below.
+        }
+      }
       const sent = await printViaShop({ kind: 'quotation', quote }, {
         copies,
-        local: canLocalPrint() ? () => printNode(<QuotationPrint quote={quote} />, copies) : undefined,
         onDone: (r) => toast(r.ok ? `${quote.number} printed at the shop` : `Not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
       })
       if (sent.via === 'queue') toast(`${quote.number} sent to the shop PC`, 'info')
