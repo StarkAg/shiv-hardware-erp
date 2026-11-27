@@ -216,6 +216,8 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
   /** The auto-print chat this message's chat is, by id, number or name, else null. */
   async function autoChatFor(sock, jid, alt = '') {
     if (!autoChats.length || !jid) return null
+    // A private-id (@lid) chat with no number sent along: ask WhatsApp's own lid -> number map.
+    if (!alt && jid.endsWith('@lid')) alt = (await sock.signalRepository?.lidMapping?.getPNForLID?.(jid).catch(() => null)) || ''
     const ids = [jid, alt].filter(Boolean)
     // By id, or a one-to-one chat by its phone number ("919876543210=bw,paper").
     const byId = autoChats.find((a) => ids.some((id) => a.key === chatKey(id) || (/^\d{10,15}$/.test(a.key) && numberOf(id).endsWith(a.key))))
