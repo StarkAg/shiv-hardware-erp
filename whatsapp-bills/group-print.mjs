@@ -259,6 +259,8 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
     return found
   }
   const pending = createPendingFiles(ttlMs)
+  // An "order" that came before its photo had downloaded, per sender (2 minutes).
+  const orderAsked = createPendingFiles(2 * 60_000)
 
   // Message ids already handled, so a catch-up after a reconnect never prints twice.
   let seen = null
@@ -370,7 +372,12 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         // A bw / cp in the caption wins; else a file named for printing (an SBI PDF) prints as it is.
         const mode = printModeOf(media.caption) ?? autoModeOf(media.fileName)
         if (mode) await queue([file], mode, sender)
-        else {
+        else if (media.mediaType.startsWith('image/') && orderAsked.take(senderIds).length) {
+          // "order" got here before this photo had downloaded: it was for this photo.
+          file.typedOut = true
+          pending.add(senderIds, file)
+          await queueOrder(file, file.replyTo, sender)
+        } else {
           pending.add(senderIds, file)
           log(`[print] ${file.name} waiting for bw / cp`)
         }
@@ -394,7 +401,12 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
         if (last) {
           last.typedOut = true
           await queueOrder(last, last.replyTo, sender)
-        } else log(`[print] "order" with no photo waiting from ${senderIds.join(' / ')}`)
+        } else {
+          // A photo and "order" sent together can come in the other way round:
+          // the next photo from this person within 2 minutes is the one.
+          orderAsked.add(senderIds, true)
+          log(`[print] "order" with no photo yet from ${senderIds.join(' / ')}, waiting for it`)
+        }
         return
       }
       const mode = printModeOf(text)

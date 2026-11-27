@@ -93,6 +93,18 @@ describe('group printing', () => {
     expect(upload?.body).toEqual(Buffer.from('photo-bytes'))
   })
 
+  it('types out the photo that comes just after its "order"', async () => {
+    const { send, msg } = setup()
+    await send(msg({ conversation: 'Order' }))
+    expect(jobs).toHaveLength(0)
+    await send(msg({ imageMessage: { mimetype: 'image/jpeg' } }))
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0].payload).toMatchObject({ readOrder: true, replyTo: { id: 'm2' } })
+    // The next plain photo just waits, as before.
+    await send(msg({ imageMessage: { mimetype: 'image/jpeg' } }))
+    expect(jobs).toHaveLength(1)
+  })
+
   it('keeps uncaptioned files until the same sender says bw, then prints them as one job', async () => {
     const { send, msg } = setup()
     await send(msg({ imageMessage: { mimetype: 'image/jpeg' } }))
