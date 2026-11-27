@@ -234,24 +234,12 @@ function RateCardBuilder() {
     save({ silent: true })
     const printDoc = enrichQuotation(buildQuote())
 
-    // Offline-first: in the desktop app, print straight to the local printer —
-    // instant, and works with no internet (no print-server / no cloud queue).
-    if (canLocalPrint()) {
-      try {
-        await printNode(<QuotationPrint quote={printDoc} />, copies)
-        setCopies(1)
-        setPrintState('done')
-        setTimeout(() => setPrintState(null), 2500)
-        return
-      } catch {
-        // fall through to the shop PC below
-      }
-    }
-
-    // The shop PC: directly on its Wi-Fi, or through the online queue from anywhere.
+    // The shop PC's print server (the printer set on the Printers screen),
+    // else the desktop app's own print, else the online queue.
     try {
       const sent = await printViaShop({ kind: 'quotation', quote: printDoc }, {
         copies,
+        local: canLocalPrint() ? () => printNode(<QuotationPrint quote={printDoc} />, copies) : undefined,
         onDone: (r) => toast(r.ok ? `${printDoc.number} printed at the shop` : `Not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
       })
       if (sent.via === 'queue') toast(`${printDoc.number} sent to the shop PC`, 'info')

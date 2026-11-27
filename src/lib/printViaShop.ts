@@ -14,17 +14,36 @@ import { printCardBacksOnServer, printOnServer, type ServerPrintPayload } from '
 
 export type PrintOutcome =
   | { via: 'shop'; printer: string }
+  | { via: 'local' }
   | { via: 'queue'; jobId: string }
 
+/**
+ * `local`: the desktop app's own silent print, tried only when the print
+ * server cannot print it. It goes to Windows' default printer (the HP), not
+ * the one picked on the Printers screen, so the server comes first: quotations
+ * printed on the HP from the Counter app while set to the Epson (27 Nov 2026).
+ */
 export async function printViaShop(
   payload: Exclude<ServerPrintPayload, { kind: 'bill' }>,
-  { copies = 1, onDone }: { copies?: number; onDone?: (result: { ok: true } | { ok: false; error: string }) => void } = {},
+  { copies = 1, onDone, local }: {
+    copies?: number
+    onDone?: (result: { ok: true } | { ok: false; error: string }) => void
+    local?: () => Promise<void>
+  } = {},
 ): Promise<PrintOutcome> {
   try {
     const result = await printOnServer(payload, copies)
     return { via: 'shop', printer: result.printer }
   } catch {
-    // Not reachable from here — go through the online queue.
+    // Not reachable from here — the app's own print, else the online queue.
+  }
+  if (local) {
+    try {
+      await local()
+      return { via: 'local' }
+    } catch {
+      // On to the online queue.
+    }
   }
 
   const { id } = payload.kind === 'quotation'

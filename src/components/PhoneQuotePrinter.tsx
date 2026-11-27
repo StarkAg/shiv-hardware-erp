@@ -89,6 +89,28 @@ async function loadPhotos(job: PhotoJob, urls: string[]) {
   }
 }
 
+/**
+ * The printer quotations go to on the Printers screen (its fallback when that
+ * one is offline). Without it the app printed on Windows' default printer, the
+ * HP, whatever the screen said (27 Nov 2026). Undefined: the default, as before.
+ */
+async function quotationPrinter(): Promise<string | undefined> {
+  try {
+    const res = await fetch(`${LOCAL_PRINT_SERVER_URL}/printers/status`, { signal: AbortSignal.timeout(5000) })
+    const status = await res.json() as {
+      printers?: { name: string; online: boolean }[]
+      routes?: { quotation?: { printer?: string | null; fallback?: string | null } }
+    }
+    const route = status.routes?.quotation
+    const online = (name?: string | null) => Boolean(name && status.printers?.some((p) => p.name === name && p.online))
+    if (online(route?.printer)) return route!.printer!
+    if (online(route?.fallback)) return route!.fallback!
+    return route?.printer ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
 function Relay() {
   const pending = useQuery(api.printJobs.listPending, { limit: 20 })
   const here = useMutation(api.printJobs.counterAppHere)
@@ -136,6 +158,7 @@ function Relay() {
     void (async () => {
       try {
         const sheet = job.kind === 'photos' ? await withinTime(loadPhotos(job, urls), 30_000) : null
+        const deviceName = sheet ? sheet.printer : await quotationPrinter()
         if (!current) return
         if (sheet) setPhotos(sheet.photos)
         await new Promise((done) => window.setTimeout(done, 150))
@@ -143,7 +166,7 @@ function Relay() {
         if (sheet) await withinTime(Promise.all([...(root.current?.querySelectorAll('img') ?? [])].map(loaded)), 10_000)
         await withinTime(window.shivDesktop!.printCurrentPage({
           copies: Math.max(1, job.copies || 1),
-          ...(sheet ? { deviceName: sheet.printer } : {}),
+          ...(deviceName ? { deviceName } : {}),
         }), 60_000)
         await complete({ id: job._id, printerId: id }).catch(() => undefined)
         if (sheet && job.kind === 'photos' && job.notify) {

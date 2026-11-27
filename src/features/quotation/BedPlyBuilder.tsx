@@ -105,17 +105,9 @@ export function BedPlyBuilder({ Preview }: { Preview: ComponentType<{ quote: Quo
     setPrinting(true)
     const quote = save()
     try {
-      if (canLocalPrint()) {
-        try {
-          await printNode(<QuotationPrint quote={quote} />, copies)
-          setCopies(1)
-          return
-        } catch {
-          // On to the shop PC below.
-        }
-      }
       const sent = await printViaShop({ kind: 'quotation', quote }, {
         copies,
+        local: canLocalPrint() ? () => printNode(<QuotationPrint quote={quote} />, copies) : undefined,
         onDone: (r) => toast(r.ok ? `${quote.number} printed at the shop` : `Not printed: ${r.error}`, r.ok ? 'ok' : 'error'),
       })
       if (sent.via === 'queue') toast(`${quote.number} sent to the shop PC`, 'info')
