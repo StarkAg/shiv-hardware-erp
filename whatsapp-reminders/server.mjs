@@ -45,6 +45,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { birthdaysOn, indiaDate, sentKey } from './dates.mjs'
 import { createGroupPrinter } from './group-print.mjs'
+import { orderReply, readOrderPhoto } from './order-read.mjs'
 import { keepSentMessages, memoryCache, useSqliteAuthState } from './auth-store.mjs'
 import { createLinkWatch } from './link-watch.mjs'
 
@@ -84,7 +85,19 @@ let busy = false
 const log = (...a) => console.log(new Date().toISOString(), ...a)
 const silent = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return silent } }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-const groupPrint = createGroupPrinter({ dataDir: DATA_DIR, log, silent })
+// "order" photos read here with Claude Code (installed in the Dockerfile), so
+// they are answered with the shop PC off. CLAUDE_CODE_OAUTH_TOKEN (from
+// `claude setup-token`, set in Railway by the owner) signs it in; without it,
+// or if a read fails, the photo goes to the shop PC as before.
+async function typeOutHere(file, replyTo) {
+  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) return false
+  const started = Date.now()
+  const lines = await readOrderPhoto(file.buffer, file.mediaType)
+  log(`[order-read] ${file.name}: ${lines.length} line(s) in ${Math.round((Date.now() - started) / 1000)}s`)
+  await sendText({ mobile: 'group', text: orderReply(lines), replyTo })
+  return true
+}
+const groupPrint = createGroupPrinter({ dataDir: DATA_DIR, log, silent, typeOut: typeOutHere })
 
 /* ── what was sent ───────────────────────────────────────────────────────── */
 async function loadSent() {

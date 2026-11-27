@@ -10,6 +10,11 @@
  * staff type orders ("PLK 9615 AMG - 7 pc"). No rates, amounts or totals.
  *
  * Not the Anthropic API: the owner asked for a Claude session on this PC.
+ *
+ * The same file is in whatsapp-reminders/: on Railway the Shop number reads the
+ * photo itself (Claude Code installed in its Dockerfile, signed in by
+ * CLAUDE_CODE_OAUTH_TOKEN), so it works with the PC off; this PC is the
+ * fallback. Change one, copy it to the other.
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -59,6 +64,14 @@ export function orderLines(text) {
     .filter(Boolean)
   if (lines.length === 1 && /^none\.?$/i.test(lines[0])) return []
   return lines.map(raisedFractions)
+}
+
+/**
+ * The group reply for the lines read. Never the word "order" in it: the group
+ * reads its own messages too (group-print.mjs).
+ */
+export function orderReply(lines) {
+  return lines.length ? lines.join('\n') : 'No sunmica found in this photo.'
 }
 
 const SUPERSCRIPT = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹']

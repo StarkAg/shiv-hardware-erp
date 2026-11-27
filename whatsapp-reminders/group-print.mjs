@@ -175,8 +175,13 @@ async function convexCall(convexUrl, token, kind, path, args) {
 /**
  * `shopGroup: false` reads no bw / cp group, only the auto-print chats
  * (whatsapp-bills: Tony is in the shop group too, which the Shop number prints).
+ *
+ * `typeOut(file, replyTo)`: reads an "order" photo here, on Railway, and posts
+ * the lines (whatsapp-reminders, order-read.mjs), so it works with the shop PC
+ * off. It resolves false when it cannot (no Claude token): the photo then goes
+ * to the shop PC as before.
  */
-export function createGroupPrinter({ env = process.env, dataDir, log, silent, shopGroup = true }) {
+export function createGroupPrinter({ env = process.env, dataDir, log, silent, shopGroup = true, typeOut = null }) {
   const convexUrl = String(env.CONVEX_URL || '').replace(/\/+$/, '')
   const token = env.SHIV_DEVICE_TOKEN || ''
   const groupId = shopGroup ? env.PRINT_GROUP_ID || env.SHOP_GROUP_ID || '' : ''
@@ -306,8 +311,12 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
     return id
   }
 
-  /** Queues a photo to be typed out on the shop PC and posted back as a reply to it. */
+  /** Types out a photo here when it can, else queues it for the shop PC; either way the lines come back as a reply to it. */
   async function queueOrder(file, replyTo, sender) {
+    if (typeOut && (await typeOut(file, replyTo).catch((err) => {
+      log(`[print] ${file.name} could not be typed out here, to the shop PC: ${err?.message ?? err}`)
+      return false
+    }))) return
     await queue([file], 'bw', sender, 'WhatsApp group order', { readOrder: true, replyTo })
     log(`[print] ${file.name} queued to be typed out (order)`)
   }

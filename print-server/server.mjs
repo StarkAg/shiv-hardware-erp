@@ -34,7 +34,7 @@ import { detectColourMode, registerColourCheck } from './colour-check.mjs'
 import { directPrintable, parseIppPrinters, printDirect, printerInfo } from './direct-print.mjs'
 import { createFolderWatcher, parseWatchList } from './watch-print.mjs'
 import { looksLikePaper } from './paper-check.mjs'
-import { readOrderPhoto } from './order-read.mjs'
+import { orderReply, readOrderPhoto } from './order-read.mjs'
 import { JOBS, createPrinterStatus, createRouteStore, isBankFile, parseBankNames, pickRoute, settingsFor } from './bank-print.mjs'
 
 const PORT = Number(process.env.PORT) || 3333
@@ -2819,7 +2819,7 @@ async function typeOutOrder(job, files) {
     let text
     try {
       const lines = await readOrderPhoto(file.buffer, file.mediaType)
-      text = lines.length ? lines.join('\n') : 'No sunmica found in this photo.'
+      text = orderReply(lines)
       console.log(`[order-read] ${job._id}: ${lines.length} line(s) in ${Math.round((Date.now() - started) / 1000)}s`)
     } catch (err) {
       console.warn(`[order-read] ${job._id}: could not read:`, err?.message ?? err)
