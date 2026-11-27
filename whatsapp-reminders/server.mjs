@@ -93,7 +93,8 @@ async function typeOutHere(file, replyTo) {
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) return false
   const started = Date.now()
   const lines = await readOrderPhoto(file.buffer, file.mediaType)
-  log(`[order-read] ${file.name}: ${lines.length} line(s) in ${Math.round((Date.now() - started) / 1000)}s`)
+  // The lines themselves too, so a wrong read can be checked from the log.
+  log(`[order-read] ${file.name}: ${lines.length} line(s) in ${Math.round((Date.now() - started) / 1000)}s: ${lines.join(' | ') || 'none'}`)
   await sendText({ mobile: 'group', text: orderReply(lines), replyTo })
   return true
 }
