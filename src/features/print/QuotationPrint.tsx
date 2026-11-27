@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type { BrandQuoteRow, ProductCategory, Quotation } from '../../lib/types'
 import { CATEGORY_LABELS } from '../../lib/types'
 import { isAluminium } from '../../lib/aluminium'
@@ -34,10 +34,6 @@ export const legacyCategoryLabel = (category: Quotation['category']) => ({
   'size-rates': CATEGORY_LABELS['size-rates'],
   'hinge': '', 'screw': '', 'aldrop': '', 'handle': '', 'tb': '', 'fevicol': '', 'mica': '', 'tape': '',
 }[category])
-
-/** Categories where Excel shows separate Guarantee and Warranty columns. */
-const hasTwoGtyCols = (cat: ProductCategory) =>
-  cat === 'flush-door' || cat === 'block-board-12' || cat === 'block-board-19'
 
 export const legacyThickness = (category: Quotation['category']) => ({
   'readymade-door': '30 mm',
@@ -94,46 +90,121 @@ export function firstSectionRows<T extends { brandName: string }>(category: Prod
  */
 export const yearsColor = (years: number) => (years === 7 ? '#000000' : '#dc2626')
 
-const ROW_H = 6.39
-const BRAND_START = 126.75
-const SECTION_GAP = 3 // mm gap before 2nd/3rd section headers
-const HEAD_TOP = 113.5 // the "Rate  Brand  Cost  Guarantee" line
 /**
- * Where the "Rate  Brand ..." line prints. On a sheet with sections the first
- * section title takes its place and the line moves down under the title.
+ * Each sheet as the shop's workbook prints it (Desktop\Epson\Plywood and Door
+ * color.xlsm, one tab per kind). Every figure was measured off Excel's own PDF
+ * of that tab: mm from the page's top-left, text placed by its baseline (y) as
+ * Excel does. docs/quotation-sheet-layout.md says how to measure them again.
+ * print-server/template.mjs SHEETS holds the same table; keep the two equal.
  */
-const HEAD_GAP = 1.5 // mm of air after the first section title and after the "Rate  Brand ..." line
-const SECTION_HEAD_TOP = HEAD_TOP + ROW_H + HEAD_GAP
-const SECTION_BRAND_START = SECTION_HEAD_TOP + ROW_H + HEAD_GAP
-const headTop = (category: ProductCategory) => (SECTION_CONFIG[category] ? SECTION_HEAD_TOP : HEAD_TOP)
+export type SheetLayout = {
+  /** Font size in pt. The 19 MM tab is 13 pt, its section titles 15. */
+  fs: number
+  /** Header box (image with its border). */
+  img: [left: number, top: number, width: number, height: number]
+  /** Baseline of the green product title; null when the tab has none. */
+  title: number | null
+  /** Left edge of Thickness, Rate, the size row and section titles. */
+  left: number
+  /** Left and right ends of the yellow size band, the rule and brand tints. */
+  band: [number, number]
+  /** Whether the size row is on a yellow band (the 6 MM tab has the rule only). */
+  yellow: boolean
+  /** Baselines of the Thickness/Height/Width/Quantity line and the size row under it. */
+  head: number
+  size: number
+  heightX: number
+  /** Right edge of the height figure; "X" and the width follow. */
+  heightR: number
+  crossX: number
+  widthX: number
+  qtyX: number
+  /** Baseline of the first section title (sheets with sections). */
+  section1?: number
+  /** Baseline of the "Rate  Brand  Cost ..." line, then of the first brand. */
+  rateHead: number
+  first: number
+  /** Brand row pitch. */
+  pitch: number
+  /** The tab's own uneven row heights from the first brand on; `pitch` after them. */
+  pitches?: number[]
+  /** Section titles 2 and 3: baseline distance from the row above, and to the row below. */
+  secBefore?: [number, number]
+  secAfter?: [number, number]
+  /** Right edge of the rate; left of brand and cost; centres of the guarantee and warranty columns. */
+  rateR: number
+  brandX: number
+  costX: number
+  gtyC: number
+  /** Present on sheets with a separate Warranty column. */
+  warC?: number
+}
+
+const READYMADE: SheetLayout = {
+  fs: 15, img: [28.2, 23.6, 87.5, 52.8], title: 86.1, left: 29.1, band: [28.2, 181.8], yellow: true,
+  head: 99.1, size: 105.7, heightX: 99.9, heightR: 115.1, crossX: 119.4, widthX: 126.8, qtyX: 154.5,
+  rateHead: 118.5, first: 131.3, pitch: 6.39, rateR: 39.7, brandX: 56.2, costX: 126.8, gtyC: 167.85,
+}
+/** Plain (flush door): the columns the 12 MM tab shares. */
+const PLAIN: SheetLayout = {
+  fs: 15, img: [17.6, 21.7, 88.4, 52.8], title: 83.9, left: 17.3, band: [16.4, 193.7], yellow: true,
+  head: 96.8, size: 103.2, heightX: 83.5, heightR: 98.7, crossX: 103, widthX: 110.5, qtyX: 138.1,
+  rateHead: 116.2, first: 129, pitch: 6.39, rateR: 27.9, brandX: 44.4, costX: 110.5, gtyC: 151.5, warC: 179.75,
+}
+export const SHEET_LAYOUTS: Partial<Record<ProductCategory, SheetLayout>> = {
+  'readymade-door': READYMADE,
+  'flush-door': PLAIN,
+  'block-board-12': {
+    ...PLAIN, img: [18.8, 20.6, 118.7, 64.8], title: null,
+    section1: 116, rateHead: 128.8, first: 141.5, secBefore: [12.6, 12.6], secAfter: [12.9, 11.7],
+  },
+  'block-board-19': {
+    fs: 13, img: [17.6, 10.9, 120.3, 64.8], title: null, left: 17.2, band: [16.4, 193.7], yellow: true,
+    head: 86.6, size: 92.9, heightX: 85.6, heightR: 98.9, crossX: 103.2, widthX: 110.3, qtyX: 138,
+    section1: 106, rateHead: 118.5, first: 131.3, pitch: 5.6, secBefore: [12.8, 11.8], secAfter: [11.5, 11.5],
+    pitches: [6.4, 6, 5.8, 6.2, 5.8, 5.6, 5.7, 5.6, 5.6, 5.6, 5.6, 5.6, 5.6, 5.6, 5.6, 5.7, 6],
+    rateR: 28, brandX: 44.3, costX: 110.3, gtyC: 151.5, warC: 179.75,
+  },
+  'plywood-6': {
+    fs: 15, img: [19.3, 20.5, 89.2, 52.8], title: 84, left: 18.8, band: [17.9, 170.4], yellow: false,
+    head: 95.7, size: 102, heightX: 89.8, heightR: 105.1, crossX: 109.8, widthX: 117.6, qtyX: 141.4,
+    rateHead: 113.5, first: 125, pitch: 6.39, rateR: 28.6, brandX: 45.1, costX: 117.6, gtyC: 155.6,
+  },
+}
+/** The header picture as the workbook holds it (its xl/media/image1.png). */
+export const SHEET_HEADER = 'assets/aluminium/header-sheet.png'
+export const sheetLayout = (category: ProductCategory) => SHEET_LAYOUTS[category] ?? READYMADE
+
+/** Section titles print at 15 pt on every tab. */
+const SECTION_FS = 15
+/** mm from a line's baseline up to the top of its box, for Arial at line-height 1. */
+export const baselineDrop = (pt: number) => 0.8465 * pt * 0.3528
 
 type PrintItem =
-  | { kind: 'section'; label: string; top: number }
-  | { kind: 'brand'; row: BrandQuoteRow; top: number }
+  | { kind: 'section'; label: string; y: number }
+  | { kind: 'brand'; row: BrandQuoteRow; y: number; h: number }
 
-function buildPrintItems(category: ProductCategory, rows: BrandQuoteRow[]): PrintItem[] {
+/** Every brand row (baseline y, row height h) and section title (baseline y). */
+function buildPrintItems(category: ProductCategory, rows: BrandQuoteRow[], L: SheetLayout): PrintItem[] {
   const cfg = SECTION_CONFIG[category]
-  if (!cfg) {
-    return rows.map((row, i) => ({ kind: 'brand', row, top: BRAND_START + i * ROW_H }))
-  }
-
   const items: PrintItem[] = []
-  // The first section title sits where the "Rate  Brand ..." line usually is;
-  // that line goes under it, one row above the first brand.
-  items.push({ kind: 'section', label: cfg.first, top: HEAD_TOP })
-  let top = SECTION_BRAND_START
-
-  for (const row of rows) {
-    const secLabel = cfg.breaks[row.brandName]
-    if (secLabel) {
-      top += SECTION_GAP
-      items.push({ kind: 'section', label: secLabel, top })
-      top += ROW_H
+  if (cfg) items.push({ kind: 'section', label: cfg.first, y: L.section1 ?? L.rateHead })
+  let y = L.first
+  let prev: number | null = null
+  let sec = 0
+  rows.forEach((row, i) => {
+    const secLabel = cfg?.breaks[row.brandName]
+    if (secLabel && prev !== null) {
+      const title = prev + (L.secBefore?.[sec] ?? 2 * L.pitch)
+      items.push({ kind: 'section', label: secLabel, y: title })
+      y = title + (L.secAfter?.[sec] ?? 2 * L.pitch)
+      sec++
     }
-    items.push({ kind: 'brand', row, top })
-    top += ROW_H
-  }
-
+    const h = L.pitches?.[i] ?? L.pitch
+    items.push({ kind: 'brand', row, y, h })
+    prev = y
+    y += h
+  })
   return items
 }
 
@@ -199,91 +270,85 @@ export function QuotationPrint({ quote }: { quote: Quotation }) {
   if (isUpvc(quote.category)) return <UpvcPrint quote={quote} />
   if (isFixedCard(quote.category)) return <FixedCardPrint quote={quote} />
   const enrichedQuote = enrichQuotation(quote)
-  const twoCol = hasTwoGtyCols(quote.category)
-  const tintRight = twoCol ? '2mm' : '32mm'
-  const printItems = buildPrintItems(quote.category, enrichedQuote.rows ?? [])
-  const lastTop = printItems.length ? printItems[printItems.length - 1].top : BRAND_START - ROW_H
+  const L = sheetLayout(quote.category)
+  const printItems = buildPrintItems(quote.category, enrichedQuote.rows ?? [], L)
+  const lastY = printItems.length ? printItems[printItems.length - 1].y : L.first - L.pitch
+  const [bandL, bandR] = L.band
+  // Text sits on baseline y, as in Excel: left-aligned from x, or right-aligned
+  // to x ('right'), or centred on x ('center').
+  const T = ({ x, y, align = 'left', color, pt = L.fs, children }: {
+    x: number; y: number; align?: 'left' | 'right' | 'center'; color?: string; pt?: number; children: ReactNode
+  }) => (
+    <div
+      className="absolute whitespace-nowrap leading-none"
+      style={{
+        top: `${y - baselineDrop(pt)}mm`, fontSize: `${pt}pt`, color,
+        ...(align === 'left' ? { left: `${x}mm` } : align === 'right' ? { right: `${210 - x}mm` } : { left: `${x - 30}mm`, width: '60mm', textAlign: 'center' }),
+      }}
+    >{children}</div>
+  )
+  const years = (row: BrandQuoteRow, show: boolean) => (row.guaranteeYears && show ? `${row.guaranteeYears} Years` : '')
 
   return (
     <A4Page>
       <div className="relative h-[297mm] w-[210mm] font-[Arial] text-black">
-        <div className="absolute inset-0" style={twoCol ? { transform: 'translateX(-13mm)' } : undefined}>
-        <img
-          src={assetPath('assets/aluminium/header-door.jpeg')}
-          alt=""
-          className="absolute left-[27.94mm] top-[22.47mm] block h-[53.53mm] w-[88.06mm]"
-        />
-        <div className="absolute left-[29mm] top-[81.3mm] text-[15pt] text-[#00b050]">{legacyCategoryLabel(quote.category)}</div>
-        <div className="absolute left-[29mm] top-[94.6mm] text-[15pt] leading-[1.1]">Thickness</div>
-        <div className="absolute left-[96mm] top-[94.6mm] text-[15pt] leading-[1.1]">Height</div>
-        <div className="absolute left-[120mm] top-[94.6mm] text-[15pt] leading-[1.1]">Width</div>
-        <div className="absolute left-[148mm] w-[30mm] text-center top-[94.6mm] text-[15pt] leading-[1.1]">Quantity</div>
-        {/* Yellow background row for dimensions — matches brand tint right boundary */}
-        <div className="absolute left-[29mm]" style={{ top: '100mm', height: '7mm', backgroundColor: '#FFFF00', right: twoCol ? '2mm' : '34mm' }} />
-        <div className="absolute left-[29mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyThickness(quote.category)}</div>
-        <div className="absolute left-[88mm] top-[101.3mm] w-[21mm] text-right text-[15pt] leading-[1.1]">{legacyDimension(quote.height)}</div>
-        <div className="absolute left-[114mm] top-[101.3mm] w-[5mm] text-center text-[15pt] leading-[1.1]">X</div>
-        <div className="absolute left-[122mm] top-[101.3mm] text-[15pt] leading-[1.1]">{legacyDimension(quote.width)}</div>
-        <div className="absolute left-[148mm] top-[101.3mm] w-[30mm] text-center text-[15pt] leading-[1.1]">{quote.qty ?? 1}</div>
-        <div className="absolute left-[29mm] top-[107mm] border-t-[1.5px] border-black" style={{ right: twoCol ? '2mm' : '34mm' }} />
-        <div className="absolute left-[29mm] w-[22mm] text-right text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Rate</div>
-        <div className="absolute left-[56.4mm] text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Brand</div>
-        <div className="absolute left-[127mm] text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Cost</div>
-        <div className="absolute left-[148mm] w-[30mm] text-center text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Guarantee</div>
-        {twoCol && (
-          <div className="absolute left-[178mm] w-[30mm] text-center text-[15pt] leading-[1.1]" style={{ top: `${headTop(quote.category)}mm` }}>Warranty</div>
+        {/* The workbook's own picture, inside its thin black border. */}
+        <div
+          className="absolute box-border border-[0.26mm] border-solid border-black"
+          style={{ left: `${L.img[0]}mm`, top: `${L.img[1]}mm`, width: `${L.img[2]}mm`, height: `${L.img[3]}mm` }}
+        >
+          <img src={assetPath(SHEET_HEADER)} alt="" className="block h-full w-full" />
+        </div>
+        {L.title !== null && <T x={L.left} y={L.title} color="#00b050">{legacyCategoryLabel(quote.category)}</T>}
+        <T x={L.left} y={L.head}>Thickness</T>
+        <T x={L.heightX} y={L.head}>Height</T>
+        <T x={L.widthX} y={L.head}>Width</T>
+        <T x={L.qtyX} y={L.head}>Quantity</T>
+        {L.yellow && (
+          <div className="absolute" style={{ left: `${bandL}mm`, width: `${bandR - bandL}mm`, top: `${L.size - 5}mm`, height: '6.4mm', backgroundColor: '#FFFF00' }} />
         )}
+        <div className="absolute bg-black" style={{ left: `${bandL}mm`, width: `${bandR - bandL}mm`, top: `${L.size + 1.2}mm`, height: '0.35mm' }} />
+        <T x={L.left} y={L.size}>{legacyThickness(quote.category)}</T>
+        <T x={L.heightR} y={L.size} align="right">{legacyDimension(quote.height)}</T>
+        <T x={L.crossX} y={L.size}>X</T>
+        <T x={L.widthX} y={L.size}>{legacyDimension(quote.width)}</T>
+        <T x={L.qtyX} y={L.size}>{quote.qty ?? 1}</T>
+        <T x={L.left} y={L.rateHead}>Rate</T>
+        <T x={L.brandX} y={L.rateHead}>Brand</T>
+        <T x={L.costX} y={L.rateHead}>Cost</T>
+        <T x={L.gtyC} y={L.rateHead} align="center">Guarantee</T>
+        {L.warC !== undefined && <T x={L.warC} y={L.rateHead} align="center">Warranty</T>}
 
-        <div className="absolute inset-0 text-[15pt] leading-[1.05]">
-          {printItems.map((item, i) => {
-            if (item.kind === 'section') {
-              return (
+        {printItems.map((item, i) => {
+          if (item.kind === 'section') {
+            return <T key={`s-${i}`} x={L.left} y={item.y} pt={SECTION_FS} color="#00B0F0">{item.label}</T>
+          }
+          const { row, y, h } = item
+          const tone = yearsColor(row.guaranteeYears)
+          return (
+            <div key={`${row.brandName}-${i}`}>
+              {row.accentColor && (
                 <div
-                  key={`s-${i}`}
-                  className="absolute left-[29mm] text-[15pt] leading-[1.1]"
-                  style={{ top: `${item.top}mm`, color: '#00B0F0' }}
-                >
-                  {item.label}
-                </div>
-              )
-            }
-
-            const { row, top } = item
-            return (
-              <div
-                key={`${row.brandName}-${i}`}
-                className="absolute left-0 right-0 h-[6.45mm] whitespace-nowrap"
-                style={{ top: `${top}mm` }}
-              >
-                {row.accentColor && (
-                  <div
-                    className="absolute inset-y-0 left-[29mm]"
-                    style={{ backgroundColor: row.accentColor, right: tintRight }}
-                  />
-                )}
-                <span className="absolute left-[29mm] w-[22mm] text-right">{row.rate}</span>
-                <span className="absolute left-[56.4mm]">{row.brandName}</span>
-                <span className="absolute left-[127mm]">{Math.round(row.cost || 0)}</span>
-                {twoCol ? (
-                  <>
-                    <span className="absolute left-[148mm] w-[30mm] text-center" style={{ color: yearsColor(row.guaranteeYears) }}>
-                      {row.guaranteeYears && row.coverage !== 'warranty' ? `${row.guaranteeYears} Years` : ''}
-                    </span>
-                    <span className="absolute left-[178mm] w-[30mm] text-center" style={{ color: yearsColor(row.guaranteeYears) }}>
-                      {row.guaranteeYears && row.coverage === 'warranty' ? `${row.guaranteeYears} Years` : ''}
-                    </span>
-                  </>
-                ) : (
-                  <span className="absolute left-[148mm] w-[30mm] text-center" style={{ color: yearsColor(row.guaranteeYears) }}>
-                    {row.guaranteeYears ? `${row.guaranteeYears} Years` : ''}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-        {quote.category === 'readymade-door' && quote.fitting && <DoorFittingBox top={lastTop + ROW_H + FIT_GAP} />}
-        </div>
+                  className="absolute"
+                  style={{ left: `${bandL}mm`, width: `${bandR - bandL}mm`, top: `${y - 0.8 * h}mm`, height: `${h}mm`, backgroundColor: row.accentColor }}
+                />
+              )}
+              <T x={L.rateR} y={y} align="right">{row.rate}</T>
+              <T x={L.brandX} y={y}>{row.brandName}</T>
+              <T x={L.costX} y={y}>{Math.round(row.cost || 0)}</T>
+              {L.warC !== undefined ? (
+                <>
+                  <T x={L.gtyC} y={y} align="center" color={tone}>{years(row, row.coverage !== 'warranty')}</T>
+                  <T x={L.warC} y={y} align="center" color={tone}>{years(row, row.coverage === 'warranty')}</T>
+                </>
+              ) : (
+                <T x={L.gtyC} y={y} align="center" color={tone}>{years(row, true)}</T>
+              )}
+            </div>
+          )
+        })}
+        {/* The fitting box keeps its old place: 6 mm under the last row's box. */}
+        {quote.category === 'readymade-door' && quote.fitting && <DoorFittingBox top={lastY - 4.45 + L.pitch + FIT_GAP} />}
       </div>
     </A4Page>
   )

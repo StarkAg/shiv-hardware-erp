@@ -135,8 +135,6 @@ const legacyCategoryLabel = category => ({
   'block-board-19': 'Water Proof Block Board',
 })[category] ?? CATEGORY_LABELS[category] ?? category
 
-const hasTwoGtyCols = cat => cat === 'flush-door' || cat === 'block-board-12' || cat === 'block-board-19'
-
 const SECTION_CONFIG = {
   'block-board-12': {
     first: '1. Water Proof Ply',
@@ -148,36 +146,64 @@ const SECTION_CONFIG = {
   },
 }
 
-const ROW_H = 6.39
-const BRAND_START = 126.75
-const SECTION_GAP = 3
-const HEAD_TOP = 113.5 // the "Rate  Brand  Cost  Guarantee" line
-// On a sheet with sections the first section title takes that line's place
-// and the line moves down under the title (same as QuotationPrint.tsx).
-const HEAD_GAP = 1.5 // mm of air after the first section title and after the "Rate  Brand ..." line
-const SECTION_HEAD_TOP = HEAD_TOP + ROW_H + HEAD_GAP
-const SECTION_BRAND_START = SECTION_HEAD_TOP + ROW_H + HEAD_GAP
-const headTop = category => (SECTION_CONFIG[category] ? SECTION_HEAD_TOP : HEAD_TOP)
+// Each sheet as the shop's workbook prints it, measured off Excel's own PDF:
+// mm from the page's top-left, text by its baseline. The same table, with what
+// each field means, is SHEET_LAYOUTS in src/features/print/QuotationPrint.tsx;
+// keep the two equal (docs/quotation-sheet-layout.md).
+const READYMADE = {
+  fs: 15, img: [28.2, 23.6, 87.5, 52.8], title: 86.1, left: 29.1, band: [28.2, 181.8], yellow: true,
+  head: 99.1, size: 105.7, heightX: 99.9, heightR: 115.1, crossX: 119.4, widthX: 126.8, qtyX: 154.5,
+  rateHead: 118.5, first: 131.3, pitch: 6.39, rateR: 39.7, brandX: 56.2, costX: 126.8, gtyC: 167.85,
+}
+const PLAIN = {
+  fs: 15, img: [17.6, 21.7, 88.4, 52.8], title: 83.9, left: 17.3, band: [16.4, 193.7], yellow: true,
+  head: 96.8, size: 103.2, heightX: 83.5, heightR: 98.7, crossX: 103, widthX: 110.5, qtyX: 138.1,
+  rateHead: 116.2, first: 129, pitch: 6.39, rateR: 27.9, brandX: 44.4, costX: 110.5, gtyC: 151.5, warC: 179.75,
+}
+const SHEETS = {
+  'readymade-door': READYMADE,
+  'flush-door': PLAIN,
+  'block-board-12': {
+    ...PLAIN, img: [18.8, 20.6, 118.7, 64.8], title: null,
+    section1: 116, rateHead: 128.8, first: 141.5, secBefore: [12.6, 12.6], secAfter: [12.9, 11.7],
+  },
+  'block-board-19': {
+    fs: 13, img: [17.6, 10.9, 120.3, 64.8], title: null, left: 17.2, band: [16.4, 193.7], yellow: true,
+    head: 86.6, size: 92.9, heightX: 85.6, heightR: 98.9, crossX: 103.2, widthX: 110.3, qtyX: 138,
+    section1: 106, rateHead: 118.5, first: 131.3, pitch: 5.6, secBefore: [12.8, 11.8], secAfter: [11.5, 11.5],
+    pitches: [6.4, 6, 5.8, 6.2, 5.8, 5.6, 5.7, 5.6, 5.6, 5.6, 5.6, 5.6, 5.6, 5.6, 5.6, 5.7, 6],
+    rateR: 28, brandX: 44.3, costX: 110.3, gtyC: 151.5, warC: 179.75,
+  },
+  'plywood-6': {
+    fs: 15, img: [19.3, 20.5, 89.2, 52.8], title: 84, left: 18.8, band: [17.9, 170.4], yellow: false,
+    head: 95.7, size: 102, heightX: 89.8, heightR: 105.1, crossX: 109.8, widthX: 117.6, qtyX: 141.4,
+    rateHead: 113.5, first: 125, pitch: 6.39, rateR: 28.6, brandX: 45.1, costX: 117.6, gtyC: 155.6,
+  },
+}
+const SECTION_FS = 15
+// mm from a line's baseline up to the top of its box, for Arial at line-height 1.
+const baselineDrop = pt => 0.8465 * pt * 0.3528
 
-function buildPrintItems(category, rows) {
+function buildPrintItems(category, rows, L) {
   const cfg = SECTION_CONFIG[category]
-  if (!cfg) return (rows ?? []).map((row, i) => ({ kind: 'brand', row, top: BRAND_START + i * ROW_H }))
-
   const items = []
-  items.push({ kind: 'section', label: cfg.first, top: HEAD_TOP })
-  let top = SECTION_BRAND_START
-
-  for (const row of (rows ?? [])) {
-    const secLabel = cfg.breaks[row.brandName]
-    if (secLabel) {
-      top += SECTION_GAP
-      items.push({ kind: 'section', label: secLabel, top })
-      top += ROW_H
+  if (cfg) items.push({ kind: 'section', label: cfg.first, y: L.section1 ?? L.rateHead })
+  let y = L.first
+  let prev = null
+  let sec = 0
+  ;(rows ?? []).forEach((row, i) => {
+    const secLabel = cfg?.breaks[row.brandName]
+    if (secLabel && prev !== null) {
+      const title = prev + (L.secBefore?.[sec] ?? 2 * L.pitch)
+      items.push({ kind: 'section', label: secLabel, y: title })
+      y = title + (L.secAfter?.[sec] ?? 2 * L.pitch)
+      sec++
     }
-    items.push({ kind: 'brand', row, top })
-    top += ROW_H
-  }
-
+    const h = L.pitches?.[i] ?? L.pitch
+    items.push({ kind: 'brand', row, y, h })
+    prev = y
+    y += h
+  })
   return items
 }
 
@@ -344,73 +370,48 @@ export async function buildQuotationHtml(quote) {
   if (quote.sizeRates) return buildSizeRatesHtml(quote)
   if (quote.alu) return buildAluminiumHtml(quote)
 
-  const header = await b64('aluminium/header-door.jpeg')
+  // The workbook's own header picture (SHEET_HEADER in QuotationPrint.tsx).
+  const header = await b64('aluminium/header-sheet.png')
   const { category, height, width, rows } = quote
-  const twoCol = hasTwoGtyCols(category)
-  const tintRight = twoCol ? '2mm' : '32mm'
-  const printItems = buildPrintItems(category, rows)
-  const lastTop = printItems.length ? printItems[printItems.length - 1].top : BRAND_START - ROW_H
-  const fittingHtml = category === 'readymade-door' && quote.fitting ? doorFittingHtml(lastTop + ROW_H + 6) : ''
+  const L = SHEETS[category] ?? READYMADE
+  const [bandL, bandR] = L.band
+  const printItems = buildPrintItems(category, rows, L)
+  const lastY = printItems.length ? printItems[printItems.length - 1].y : L.first - L.pitch
+  // The fitting box keeps its old place: 6 mm under the last row's box.
+  const fittingHtml = category === 'readymade-door' && quote.fitting ? doorFittingHtml(lastY - 4.45 + L.pitch + 6) : ''
+  // Text on baseline y, as in Excel: left from x, right-aligned to x, or centred on x.
+  const t = (x, y, text, { align = 'left', color = '', pt = L.fs } = {}) => {
+    const pos = align === 'left' ? `left:${x}mm` : align === 'right' ? `right:${210 - x}mm` : `left:${x - 30}mm;width:60mm;text-align:center`
+    return `<div style="position:absolute;${pos};top:${y - baselineDrop(pt)}mm;font-size:${pt}pt;line-height:1;white-space:nowrap;${color ? `color:${color};` : ''}">${esc(text)}</div>`
+  }
+  const band = (top, h, bg) => `<div style="position:absolute;left:${bandL}mm;width:${bandR - bandL}mm;top:${top}mm;height:${h}mm;background:${bg}"></div>`
   const rowsHtml = printItems.map(item => {
-    if (item.kind === 'section') {
-      return `<div style="position:absolute;left:29mm;top:${item.top}mm;font-size:15pt;line-height:1.1;color:#00B0F0">${esc(item.label)}</div>`
-    }
-    const r = item.row
+    if (item.kind === 'section') return t(L.left, item.y, item.label, { pt: SECTION_FS, color: '#00B0F0' })
+    const { row: r, y, h } = item
     const gty = Number(r.guaranteeYears)
     const isWarranty = r.coverage === 'warranty'
     // As on the shop's own sheet: 7 years in black, the rest in red
     // (src/features/print/QuotationPrint.tsx yearsColor follows the same rule).
-    const tone = `style="color:${gty === 7 ? '#000000' : 'red'}"`
-    const gtySpan = twoCol
-      ? `<span class="guarantee" ${tone}>${gty && !isWarranty ? `${gty} Years` : ''}</span><span class="warranty" ${tone}>${gty && isWarranty ? `${gty} Years` : ''}</span>`
-      : `<span class="guarantee" ${tone}>${gty ? `${gty} Years` : ''}</span>`
-    const bgDiv = r.accentColor
-      ? `<div style="position:absolute;top:0;bottom:0;left:29mm;right:${tintRight};background:${esc(r.accentColor)}"></div>`
-      : ''
-    return `
-    <div class="legacy-row" style="top:${item.top}mm">
-      ${bgDiv}
-      <span class="rate">${esc(r.rate)}</span>
-      <span class="brand">${esc(r.brandName)}</span>
-      <span class="cost">${esc(Math.round(Number(r.cost) || 0))}</span>
-      ${gtySpan}
-    </div>`
+    const color = gty === 7 ? '#000000' : 'red'
+    const years = show => (gty && show ? `${gty} Years` : '')
+    return (r.accentColor ? band(y - 0.8 * h, h, esc(r.accentColor)) : '') +
+      t(L.rateR, y, r.rate, { align: 'right' }) + t(L.brandX, y, r.brandName) + t(L.costX, y, Math.round(Number(r.cost) || 0)) +
+      (L.warC !== undefined
+        ? t(L.gtyC, y, years(!isWarranty), { align: 'center', color }) + t(L.warC, y, years(isWarranty), { align: 'center', color })
+        : t(L.gtyC, y, years(true), { align: 'center', color }))
   }).join('')
 
   return page(`
-    <style>
-      .page { position: relative; font-family: Arial, Helvetica, sans-serif; }
-      .legacy-head { position:absolute; left:27.94mm; top:22.47mm; width:88.06mm; height:53.53mm; display:block; }
-      .legacy-title { position:absolute; left:29mm; top:81.3mm; font-size:15pt; color:#00b050; }
-      .legacy-info { position:absolute; font-size:15pt; line-height:1.1; }
-      .legacy-line { position:absolute; left:29mm; top:107mm; border-top:1.5px solid #000; }
-      .legacy-row { position:absolute; left:0; right:0; height:6.45mm; font-size:15pt; line-height:1.05; }
-      .legacy-row span { position:absolute; white-space:nowrap; }
-      .rate { left:31mm; }
-      .brand { left:56.4mm; }
-      .cost { left:127mm; }
-      .guarantee { left:148mm; width:30mm; text-align:center; color:red; }
-      .warranty { left:178mm; width:30mm; text-align:center; color:red; }
-    </style>
-    <div style="position:absolute;inset:0;${twoCol ? 'transform:translateX(-13mm)' : ''}">
-    <img class="legacy-head" src="${header}" />
-    <div class="legacy-title">${esc(legacyCategoryLabel(category))}</div>
-    <div class="legacy-info" style="left:29mm;top:94.6mm">Thickness</div>
-    <div class="legacy-info" style="left:96mm;top:94.6mm">Height</div>
-    <div class="legacy-info" style="left:120mm;top:94.6mm">Width</div>
-    <div class="legacy-info" style="left:148mm;top:94.6mm;width:30mm;text-align:center">Quantity</div>
-    <div style="position:absolute;left:29mm;top:100mm;height:7mm;right:${twoCol ? '2mm' : '34mm'};background:#FFFF00"></div>
-    <div class="legacy-info" style="left:29mm;top:101.3mm">${esc(legacyThickness(category))}</div>
-    <div class="legacy-info" style="left:88mm;top:101.3mm;width:21mm;text-align:right">${esc(legacyDimension(height))}</div>
-    <div class="legacy-info" style="left:114mm;top:101.3mm;width:5mm;text-align:center">X</div>
-    <div class="legacy-info" style="left:122mm;top:101.3mm">${esc(legacyDimension(width))}</div>
-    <div class="legacy-info" style="left:148mm;top:101.3mm;width:30mm;text-align:center">${esc(quote.qty ?? 1)}</div>
-    <div class="legacy-line" style="right:${twoCol ? '2mm' : '34mm'}"></div>
-    <div class="legacy-info" style="left:29mm;top:${headTop(category)}mm">Rate</div>
-    <div class="legacy-info" style="left:56.4mm;top:${headTop(category)}mm">Brand</div>
-    <div class="legacy-info" style="left:127mm;top:${headTop(category)}mm">Cost</div>
-    <div class="legacy-info" style="left:148mm;top:${headTop(category)}mm;width:30mm;text-align:center">Guarantee</div>
-    ${twoCol ? `<div class="legacy-info" style="left:178mm;top:${headTop(category)}mm;width:30mm;text-align:center">Warranty</div>` : ''}
+    <div style="position:relative;width:210mm;height:297mm;font-family:Arial,Helvetica,sans-serif;color:#000">
+    <div style="position:absolute;box-sizing:border-box;border:0.26mm solid #000;left:${L.img[0]}mm;top:${L.img[1]}mm;width:${L.img[2]}mm;height:${L.img[3]}mm"><img src="${header}" style="display:block;width:100%;height:100%" /></div>
+    ${L.title !== null ? t(L.left, L.title, legacyCategoryLabel(category), { color: '#00b050' }) : ''}
+    ${t(L.left, L.head, 'Thickness')}${t(L.heightX, L.head, 'Height')}${t(L.widthX, L.head, 'Width')}${t(L.qtyX, L.head, 'Quantity')}
+    ${L.yellow ? band(L.size - 5, 6.4, '#FFFF00') : ''}
+    ${band(L.size + 1.2, 0.35, '#000')}
+    ${t(L.left, L.size, legacyThickness(category))}${t(L.heightR, L.size, legacyDimension(height), { align: 'right' })}
+    ${t(L.crossX, L.size, 'X')}${t(L.widthX, L.size, legacyDimension(width))}${t(L.qtyX, L.size, quote.qty ?? 1)}
+    ${t(L.left, L.rateHead, 'Rate')}${t(L.brandX, L.rateHead, 'Brand')}${t(L.costX, L.rateHead, 'Cost')}
+    ${t(L.gtyC, L.rateHead, 'Guarantee', { align: 'center' })}${L.warC !== undefined ? t(L.warC, L.rateHead, 'Warranty', { align: 'center' }) : ''}
     ${rowsHtml}
     ${fittingHtml}
     </div>`)
