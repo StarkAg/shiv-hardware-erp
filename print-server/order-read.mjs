@@ -42,10 +42,12 @@ export const ORDER_PROMPT = (file) => [
   'Examples: "9165 CU - 9 pc", "8221 FR - 4 pc", "9615 AMG - 7 pc", "PLK 9161 WA - 6 pc".',
   'The finish is all the letters after the design number, even when the first one is written joined to the number: "9161W A" or "9161 w A" is design 9161, finish WA.',
   'Drop door codes (DDSM), sizes and the words mica, sunmica or laminate. Add up the pieces of every line with the same design number and finish into one line: nine DDSM 9165 CU doors of different sizes, 1 pc each, are "9165 CU - 9 pc".',
+  'Every door made with a sunmica (a door code such as DDSM) is also a flush door board to buy. For each such bill line write one more line in the plywood and flush doors group, in this form: DOOR <door size as written> - <pieces> pc, for example "DOOR 80 4/8x37 3/8 - 1 pc". Height first, then width, exactly as written, fractions with a slash after a space; never round or change the size (the board size is worked out from it later). One DOOR line per bill line, top to bottom.',
   'Put a brand code in front only when one is written with the sunmica (PLK is Pulkari): "PLK 9615 AMG - 7 pc". Finish letters in capitals.',
-  '3D doors (a door code such as DDLNT, then 3D and a number, then the size) are typed too, one line per door with its size: "3D 107 75x39 6/8 - 1 pc", "3D 139 74 6/8x39 6/8 - 1 pc". Drop the door code (DDLNT), write a space between 3D and its number, and write fractions with a slash after a space, as in 39 6/8. Look hard at the small raised digit of each fraction, it is the one most often misread: a 6 is a single stroke with a closed round loop at the bottom (it can look like a b); a 4 has an angle or a crossing line and no round loop. Read each fraction on its own; the doors on one slip have different sizes.',
+  '3D doors (a door code such as DDLNT, then 3D and a number, then the size) are typed too, one line per door with its size: "3D 107 75x39 6/8 - 1 pc", "3D 139 74 6/8x39 6/8 - 1 pc". Drop the door code (DDLNT), write a space between 3D and its number, and write fractions with a slash after a space, as in 39 6/8.',
+  'Door sizes (DOOR lines and 3D doors) often carry small raised fractions in eighths; look hard at each raised digit, it is the one most often misread: a 6 is a single stroke with a closed round loop at the bottom (it can look like a b); a 4 has an angle or a crossing line and no round loop; a 2 has a curved top and a flat stroke along the bottom, and no loop. Read each fraction on its own; the doors on one slip have different sizes.',
   'Leave out rates, amounts, totals, the customer name, dates, phone numbers, headings and labour or delivery charges.',
-  'Each group goes to a different supplier, so it is sent as its own message: plywood and flush doors first, then sunmica, then 3D doors, each top to bottom as on the bill, with a line holding only --- between two groups (no --- before the first group or after the last; a group with no lines is left out).',
+  'Each group goes to a different supplier, so it is sent as its own message: plywood and flush doors first (the DOOR lines among them), then sunmica, then 3D doors, each top to bottom as on the bill, with a line holding only --- between two groups (no --- before the first group or after the last; a group with no lines is left out).',
   'If a quantity is missing, write the item alone. If the photo holds none of these, answer exactly: NONE',
   'Answer with the lines only: no other words, no numbering, no markdown.',
 ].join('\n')
@@ -71,6 +73,63 @@ export function findClaude(env = process.env) {
   return found[0]?.exe ?? 'claude'
 }
 
+/**
+ * The flush door board a sunmica door is made on (owner, 27 Nov 2026). The
+ * door's edges get beading, so the board may be a little smaller than the
+ * door: up to BEAD_ALLOWANCE inch on each side. The board is the smallest
+ * stock size not more than that under the door: heights 72, 75, 78, 81, 84,
+ * widths in even inches. From the owner's own typing of a slip of nine DDSM
+ * doors: 77x37 5/8 -> 78x38, 79 1/8x48 -> 81x48, 80 1/8x38 2/8 -> 81x38,
+ * 80 4/8x32 3/8 -> 81x32, 80x31 6/8 -> 81x32.
+ */
+export const DOOR_BOARD = '30mm JS'
+export const BEAD_ALLOWANCE = 0.5
+const BOARD_HEIGHTS = [72, 75, 78, 81, 84]
+
+/** "80 4/8" / "80" / "80.5" -> 80.5, else NaN. */
+function inches(text) {
+  const m = String(text).trim().match(/^(\d+(?:\.\d+)?)(?:\s*(\d+)\/(\d+))?$/)
+  if (!m) return NaN
+  return Number(m[1]) + (m[2] ? Number(m[2]) / Number(m[3]) : 0)
+}
+
+/** The board for a door "<height>x<width>" as written, as "81x38", or null when the size cannot be read. */
+export function doorBoardSize(size) {
+  const parts = String(size).split(/\s*[x×*]\s*/i)
+  if (parts.length !== 2) return null
+  const [h, w] = parts.map(inches)
+  if (!(h > 0 && w > 0)) return null
+  const minH = h - BEAD_ALLOWANCE
+  const minW = w - BEAD_ALLOWANCE
+  const height = BOARD_HEIGHTS.find((x) => x >= minH) ?? Math.ceil(minH)
+  const width = Math.ceil(minW / 2) * 2
+  return `${height}x${width}`
+}
+
+/**
+ * Claude's "DOOR <size> - <n> pc" lines turned into the boards to buy, as
+ * "30mm JS 81x38 - 5 pc": doors that come to the same board are added up,
+ * at the first one's place, within their group.
+ */
+export function doorBoards(lines) {
+  const out = []
+  let boards = new Map()
+  for (const line of lines) {
+    if (line === GROUP_BREAK) { boards = new Map(); out.push(line); continue }
+    const m = line.match(/^DOOR\s+(.+?)(?:\s+-\s*(\d+)\s*(?:pc|pcs)?)?\s*$/i)
+    if (!m) { out.push(line); continue }
+    const size = doorBoardSize(m[1])
+    const pieces = Number(m[2] || 1)
+    // A size not read as one is passed on as written, for the staff to see.
+    if (!size) { out.push(`${DOOR_BOARD} ${m[1]} - ${pieces} pc`); continue }
+    const hit = boards.get(size)
+    if (hit) { hit.pieces += pieces; out[hit.at] = `${DOOR_BOARD} ${size} - ${hit.pieces} pc`; continue }
+    boards.set(size, { at: out.length, pieces })
+    out.push(`${DOOR_BOARD} ${size} - ${pieces} pc`)
+  }
+  return out
+}
+
 /** The line between two suppliers' groups. */
 export const GROUP_BREAK = '---'
 
@@ -80,7 +139,7 @@ export function orderLines(text) {
     .map((l) => (/^\s*-{3,}\s*$/.test(l) ? GROUP_BREAK : l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/[`*]/g, '').trim()))
     .filter(Boolean)
   if (lines.length === 1 && /^none\.?$/i.test(lines[0])) return []
-  return lines.map((l) => (l === GROUP_BREAK ? l : raisedFractions(l)))
+  return doorBoards(lines).map((l) => (l === GROUP_BREAK ? l : raisedFractions(l)))
 }
 
 /**

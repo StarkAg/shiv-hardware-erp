@@ -105,7 +105,17 @@ by design and finish, pieces added up over all lines and door sizes ("DDSM 9165
 CU" on nine doors -> `9165 CU - 9 pc`; a written brand kept: `PLK 9615 AMG - 7
 pc`); and 3D doors one per line with their size and raised fractions (`3D 107
 75x39⁶/⁸ - 1 pc`). WPC, hardware, Fevicol, rates, labour and totals are left
-out. Each supplier's group is its own reply message (owner, 27 Nov 2026):
+out. Every sunmica door (DDSM) is also a flush door board to buy, in the
+plywood group (owner, 27 Nov 2026): `30mm JS <height>x<width>`, doors that come
+to the same board added up. The doors get beading, so the board may be up to
+half an inch under the door on each side: the board is the smallest stock size
+not more than 1/2" under it, heights 72 / 75 / 78 / 81 / 84 and widths in even
+inches (77x37 5/8 -> 78x38, 79 1/8x48 -> 81x48, 80 1/8x38 2/8 -> 81x38,
+80 4/8x32 3/8 -> 81x32, 80x31 6/8 -> 81x32). Claude only copies each door's
+size as a `DOOR <size> - <n> pc` line; the rounding is code (`doorBoards` in
+order-read.mjs), so it is always the same. To change the board, the
+allowance or the stock sizes: `DOOR_BOARD`, `BEAD_ALLOWANCE`, `BOARD_HEIGHTS`
+there. Each supplier's group is its own reply message (owner, 27 Nov 2026):
 plywood and flush doors, then sunmica, then 3D doors (Claude puts a --- line
 between groups, `orderReplies` splits on it). A sunmica finish is all the
 letters after the number ("9161W A" -> `9161 WA`). A photo with none gets

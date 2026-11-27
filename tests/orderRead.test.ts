@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 // @ts-expect-error plain .mjs module
 import { createGroupPrinter, isOrderText } from '../whatsapp-reminders/group-print.mjs'
 // @ts-expect-error plain .mjs module
-import { orderLines, readFailure } from '../print-server/order-read.mjs'
+import { doorBoardSize, orderLines, readFailure } from '../print-server/order-read.mjs'
 
 describe('isOrderText', () => {
   it('finds the word order in a caption or message', () => {
@@ -118,5 +118,32 @@ describe('order photos in the shop group', () => {
     const p = photo('b@s')
     await send(p)
     expect(read).toEqual([p.key.id])
+  })
+})
+
+describe('sunmica doors to flush door boards', () => {
+  it('types the owner\'s nine-door slip as he did (27 Nov 2026)', () => {
+    const read = [
+      'DOOR 77x37 5/8 - 1 pc', 'DOOR 79 1/8x48 - 1 pc', 'DOOR 80 4/8x37 3/8 - 1 pc',
+      'DOOR 80 1/8x38 2/8 - 1 pc', 'DOOR 80 3/8x37 - 1 pc', 'DOOR 80 3/8x37 4/8 - 1 pc',
+      'DOOR 80x37 6/8 - 1 pc', 'DOOR 80 4/8x32 3/8 - 1 pc', 'DOOR 80x31 6/8 - 1 pc',
+      '---', '9165 CU - 9 pc',
+    ].join('\n')
+    expect(orderLines(read)).toEqual([
+      '30mm JS 78x38 - 1 pc', '30mm JS 81x48 - 1 pc', '30mm JS 81x38 - 5 pc', '30mm JS 81x32 - 2 pc',
+      '---', '9165 CU - 9 pc',
+    ])
+  })
+  it('allows half an inch under the door for the beading', () => {
+    expect(doorBoardSize('78 4/8x36 4/8')).toBe('78x36')
+    expect(doorBoardSize('78 5/8x36 5/8')).toBe('81x38')
+    expect(doorBoardSize('84x30')).toBe('84x30')
+    expect(doorBoardSize('80.5 x 32.375')).toBe('81x32')
+    expect(doorBoardSize('eighty')).toBe(null)
+  })
+  it('keeps other lines and their place', () => {
+    expect(orderLines('19mm S 7x4 - 2 pc\nDOOR 80x37 - 1 pc\n12mm MS 7x4 - 1 pc\nDOOR 80x38 - 2 pc')).toEqual([
+      '19mm S 7x4 - 2 pc', '30mm JS 81x38 - 3 pc', '12mm MS 7x4 - 1 pc',
+    ])
   })
 })
