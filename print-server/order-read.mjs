@@ -21,7 +21,7 @@ export const ORDER_PROMPT = (file) => [
   'Type out every item line, top to bottom, one per line, exactly in this form:',
   '<item as written> - <quantity with its unit>',
   'Examples: "19mm S 7x4 - 1 pc", "Fevicol Marine - 4 kg", "3D 107 75x39 6/8 - 1 pc", "4\'\' Screw SS - 20 pc".',
-  'Keep sizes, codes and brand words as written; write fractions like 39 6/8. Spell the item as a shop would (Fevicol, Hinges, Screw).',
+  'Keep sizes, codes and brand words as written; write fractions with a slash, like 39 6/8 and 2 1/2\'\' (never a one-character fraction symbol). Spell the item as a shop would (Fevicol, Hinges, Screw).',
   'Leave out rates, amounts, totals, the customer name, dates, phone numbers, headings and labour or delivery charges.',
   'If a quantity is missing, write the item alone. If the photo holds no item lines, answer exactly: NONE',
   'Answer with the lines only: no other words, no numbering, no markdown.',

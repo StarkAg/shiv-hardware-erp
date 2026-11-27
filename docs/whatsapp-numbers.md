@@ -103,3 +103,12 @@ to print it as well. Claude on the PC must be signed in once: run that
 `claude.exe` in a terminal and `/login`. If it is not, the group gets "Could not
 read this photo: ...". `ORDER_READ_MODEL` in the print server's `.env.local`
 picks the model (default sonnet).
+
+Signed in on the shop PC on 27 Nov 2026 (the sign-in is kept in
+`%USERPROFILE%\.claude`, so the print server's headless runs use it). Tested on
+real slips: a two-page hardware bill came back as all 21 item lines, labour
+and totals left out, and the pink estimate slip as "DDLNT 3D 107 75x39 6/8 -
+1 pc". Sonnet takes 16-23 s a photo. Haiku was tried and was no faster but
+misread codes and words (3D107 as 32107, Aldrop as Alchop), so stay on sonnet.
+After a Claude desktop app update the newest `claude.exe` is picked
+automatically; if a new copy ever says "Not logged in", sign in again as above.
