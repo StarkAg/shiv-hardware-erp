@@ -60,10 +60,10 @@ const CARDS_FILE = join(DATA_DIR, 'guarantees-notified.json')
 const SEND_KEY = process.env.SEND_KEY || ''
 const SHOP_GROUP_ID = process.env.SHOP_GROUP_ID || ''
 const GUARANTEE_MESSAGE = (process.env.GUARANTEE_MESSAGE
-  || 'Hi {name},\n\nThank you for purchasing with us. Your guarantee card is processed, please collect it from the shop.').replace(/\\n/g, '\n')
+  || 'Hello {name},\n\nYour *guarantee card* is ready. Please collect it from *Shiv Hardware Store*.').replace(/\\n/g, '\n')
 /** The shop's Google review page, put under the card-ready text (REVIEW_URL to change it, "off" for none). */
 const REVIEW_URL = (process.env.REVIEW_URL ?? 'https://search.google.com/local/writereview?placeid=ChIJzc6OLIvz9DkRx0lBBZ214Gg').trim()
-const REVIEW_LINE = 'If you are happy with us, please rate Shiv Hardware Store on Google:'
+const REVIEW_LINE = 'Happy with us? Please rate us on Google:'
 const AUTOREPLY_MESSAGE = (process.env.AUTOREPLY_MESSAGE
   || 'For any enquiries contact 8092850954 on WhatsApp.').replace(/\\n/g, '\n')
 const AUTOREPLY_EVERY_MS = 60 * 60_000

@@ -397,7 +397,7 @@ const WHATSAPP_CUSTOMER_COUNTRY_CODE = String(process.env.WHATSAPP_CUSTOMER_COUN
 // value is turned into a real line break (.env files can't hold raw newlines).
 const WHATSAPP_GUARANTEE_MESSAGE = (
   process.env.WHATSAPP_GUARANTEE_MESSAGE
-  || 'Hi {name},\n\nThank you for purchasing with us. Your guarantee card is processed — please collect it from the shop.'
+  || 'Hello {name},\n\nYour *guarantee card* is ready. Please collect it from *Shiv Hardware Store*.'
 ).replace(/\\n/g, '\n')
 
 // First name only, proper-cased ("HARSH KUMAR" / "harsh kumar" -> "Harsh") for the greeting.
