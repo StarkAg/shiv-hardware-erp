@@ -47,7 +47,6 @@ const uid = () => Math.random().toString(36).slice(2, 10)
 const A4_W = 794
 const A4_H = 1123
 const GUARANTEE_OPTIONS: GuaranteeYears[] = [0, 1, 3, 5, 7, 8, 10, 15, 20, 21, 25, 30]
-const COVERAGE_OPTIONS: CoverageType[] = ['guarantee', 'warranty']
 const isCategory = (c?: string): c is ProductCategory =>
   !!c && CATEGORY_ORDER.includes(c as ProductCategory)
 
@@ -164,6 +163,59 @@ export function PrintLikeBrandEditor({ brands, costOf, onChange, onRemove, onAdd
           <Plus size={16} /> Add brand
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The brands of a price set when not editing: the same sheet as
+ * PrintLikeBrandEditor (same columns, widths, Arial, green rows, red years),
+ * with plain text where the editor has boxes and nothing to remove or add, so
+ * turning "Edit set" on or off keeps every column in place (owner's ask, 28 Nov 2026).
+ */
+function PrintLikeBrandTable({ rows, hasSize }: { rows: BrandQuoteRow[]; hasSize: boolean }) {
+  const years = (r: BrandQuoteRow, coverage: CoverageType) =>
+    (r.coverage ?? 'guarantee') === coverage && r.guaranteeYears > 0 ? (
+      <span style={{ color: yearsColor(r.guaranteeYears) }}>{r.guaranteeYears} Years</span>
+    ) : null
+  return (
+    <div className="hidden overflow-x-auto bg-white text-black md:block" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <table className="w-full min-w-[640px] table-fixed border-collapse text-[22px] leading-[30px] [&_td]:border-0 [&_th]:border-0">
+        <colgroup>
+          <col className="w-[11%]" />
+          <col className="w-[38%]" />
+          <col className="w-[13%]" />
+          <col className="w-[16%]" />
+          <col className="w-[16%]" />
+          <col className="w-[6%]" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th className="px-2 pb-3 pt-2 text-right font-normal">Rate</th>
+            <th className="px-2 pb-3 pt-2 text-left font-normal">Brand</th>
+            <th className="px-2 pb-3 pt-2 text-left font-normal">Cost</th>
+            <th className="px-2 pb-3 pt-2 text-center font-normal">Guarantee</th>
+            <th className="px-2 pb-3 pt-2 text-center font-normal">Warranty</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} style={tintedRowStyle(r)}>
+              {/* px-[5px]: the editor box padding (px-1) plus its 1px border */}
+              <td className="whitespace-nowrap px-[5px] py-0 text-right tabular-nums">{r.rate}</td>
+              <td className="truncate px-[5px] py-0">{r.brandName}</td>
+              <td className="px-2 py-0 tabular-nums">{hasSize ? Math.round(r.cost) : ''}</td>
+              <td className="px-[5px] py-0 text-center">{years(r, 'guarantee')}</td>
+              <td className="px-[5px] py-0 text-center">{years(r, 'warranty')}</td>
+              <td />
+            </tr>
+          ))}
+          {!rows.length && (
+            <tr><td colSpan={6} className="px-4 py-6 text-center text-[15px] text-muted">No brands — turn on Edit set to add brands.</td></tr>
+          )}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -632,113 +684,7 @@ function RateCardBuilder() {
                 onAdd={() => editRates((t) => addBrand(t, cat))}
               />
             ) : (
-            <table className={`w-full table-fixed text-[11px] leading-tight md:text-sm ${editMode ? '' : 'hidden md:table'}`}>
-              <thead className="bg-stone-50 text-left text-[11px] uppercase text-muted dark:bg-white/5 dark:text-muted md:text-xs">
-                <tr>
-                  <th className={`${editMode ? 'w-[52%]' : 'w-[44%]'} px-2 py-1.5 md:px-4 md:py-2`}>Brand</th>
-                  <th className={`${editMode ? 'w-[20%]' : 'w-[17%]'} px-1.5 py-1.5 text-right md:px-4 md:py-2`}>Rate</th>
-                  {!editMode && <th className="w-[21%] px-1.5 py-1.5 text-right md:px-4 md:py-2">Cost</th>}
-                  <th className={`${editMode ? 'w-[18%]' : 'w-[18%]'} px-1.5 py-1.5 text-center md:px-4 md:py-2`}>Gty/Wty</th>
-                  {editMode && <th className="w-10 px-2 py-1.5 md:px-4 md:py-2"></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {!editMode &&
-                  rows.map((r, i) => (
-                    <tr key={i} className="border-t border-stone-100 dark:border-white/10" style={tintedRowStyle(r)}>
-                      <td className="break-words px-2 py-1.5 font-medium md:px-4 md:py-2">{r.brandName}</td>
-                      <td className="px-1.5 py-1.5 text-right text-muted md:px-4 md:py-2">{r.rate}</td>
-                      <td className="px-1.5 py-1.5 text-right font-semibold md:px-4 md:py-2">{hasSize ? formatINR(r.cost) : '—'}</td>
-                      <td className="px-1.5 py-1.5 text-center md:px-4 md:py-2">
-                        {r.guaranteeYears
-                          ? <span className="text-shiv-red font-medium">{coverageLabel(r.coverage)} {r.guaranteeYears}y</span>
-                          : <span className="text-stone-300 dark:text-stone-600">—</span>}
-                      </td>
-                    </tr>
-                  ))}
-                {editMode &&
-                  brands.map((b) => (
-                    <tr key={b.id} className="border-t border-stone-100 dark:border-white/10" style={tintedRowStyle(b)}>
-                      <td className="px-1.5 py-1.5 md:px-3">
-                        <input
-                          className="h-8 w-full min-w-0 rounded border border-line px-1.5 text-[11px] dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-1 md:text-sm"
-                          value={b.name}
-                          onChange={(e) => editRates((t) => updateBrand(t, b.id, { name: e.target.value }))}
-                        />
-                      </td>
-                      <td className="px-1 py-1.5 md:px-3">
-                        <input
-                          type="number"
-                          className="h-8 w-full min-w-0 rounded border border-line px-1 text-right text-[11px] dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:w-24 md:px-2 md:py-1 md:text-sm"
-                          value={b.rate}
-                          onChange={(e) => editRates((t) => updateBrand(t, b.id, { rate: Number(e.target.value) }))}
-                        />
-                      </td>
-                      <td className="px-1 py-1.5 text-center md:px-3">
-                        <div className="grid grid-cols-2 gap-1">
-                          <div className="relative">
-                            <div className="flex h-8 w-full min-w-0 items-center justify-center rounded-lg border border-stone-300 bg-stone-50 px-1 text-[10px] font-medium text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
-                              {coverageLabel(b.coverage)}
-                            </div>
-                            <select
-                              aria-label="Coverage"
-                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                              value={b.coverage ?? 'guarantee'}
-                              onChange={(e) => editRates((t) => updateBrand(t, b.id, { coverage: e.target.value as CoverageType }))}
-                            >
-                              {COVERAGE_OPTIONS.map((coverage) => (
-                                <option key={coverage} value={coverage}>
-                                  {coverageLabel(coverage)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="relative">
-                            <div className="flex h-8 w-full min-w-0 items-center justify-center rounded-lg border border-stone-300 bg-stone-50 px-1 text-[10px] font-medium text-stone-800 dark:border-white/15 dark:bg-stone-950 dark:text-stone-100 md:h-auto md:px-2 md:py-2 md:text-xs">
-                              {b.guaranteeYears === 0 ? '-' : `${b.guaranteeYears}y`}
-                            </div>
-                            <select
-                              aria-label="Guarantee"
-                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                              value={b.guaranteeYears}
-                              onChange={(e) =>
-                                editRates((t) => updateBrand(t, b.id, { guaranteeYears: Number(e.target.value) as GuaranteeYears }))
-                              }
-                            >
-                              {GUARANTEE_OPTIONS.map((g) => (
-                                <option key={g} value={g}>{g === 0 ? '-' : `${g}y`}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-1 py-1.5 text-right md:px-3">
-                        <button
-                          className="rounded p-1 text-danger hover:bg-red-50 dark:hover:bg-red-950/30"
-                          onClick={() => editRates((t) => removeBrand(t, b.id))}
-                          title="Remove brand"
-                        >
-                          <Minus size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                {!brands.length && (
-                  <tr><td colSpan={4} className="px-4 py-6 text-center text-muted">No brands — {editMode ? 'add one below.' : 'turn on Edit set to add brands.'}</td></tr>
-                )}
-              </tbody>
-              {editMode && (
-                <tfoot>
-                  <tr className="border-t border-stone-100 dark:border-white/10">
-                    <td colSpan={4} className="px-4 py-2">
-                      <Button variant="outline" className="flex items-center gap-1.5" onClick={() => editRates((t) => addBrand(t, cat))}>
-                        <Plus size={16} /> Add brand
-                      </Button>
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+              <PrintLikeBrandTable rows={rows} hasSize={hasSize} />
             )}
             </>
             ) : (
