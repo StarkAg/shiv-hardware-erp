@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // @ts-expect-error plain ESM module without types
 import { createGroupPrinter, createPendingFiles, parseAutoChats, printModeOf } from '../whatsapp-reminders/group-print.mjs'
+// @ts-expect-error plain ESM module without types
+import { slipAnswer } from '../whatsapp-bills/slip-check.mjs'
 
 const GROUP = '120363396348781660@g.us'
 const SENDER = '919999999999@s.whatsapp.net'
@@ -198,10 +200,10 @@ describe('auto-print chats (a supplier chat of paper bills)', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  function setup(env: Record<string, string> = {}) {
+  function setup(env: Record<string, string> = {}, checkSlip: ((file: unknown) => Promise<boolean | null>) | null = null) {
     const printer = createGroupPrinter({
       env: { CONVEX_URL: 'https://convex.test', SHIV_DEVICE_TOKEN: 'tok', SHOP_GROUP_ID: GROUP, PRINT_AUTO_CHATS: 'Simran Ply Rajan Rnc Pulkari Sunmica=bw', ...env },
-      dataDir: mkdtempSync(join(tmpdir(), 'auto-print-')), log: () => {}, silent, shopGroup: false,
+      dataDir: mkdtempSync(join(tmpdir(), 'auto-print-')), log: () => {}, silent, shopGroup: false, checkSlip,
     })
     const subjects: Record<string, string> = { [SUPPLIER]: 'Simran Ply  Rajan Rnc Pulkari Sunmica', [OTHER]: 'Family', [GROUP]: 'Shiv Hardware' }
     const sock = { updateMediaMessage: vi.fn(), groupMetadata: vi.fn(async (jid: string) => ({ subject: subjects[jid] })) }
@@ -241,6 +243,42 @@ describe('auto-print chats (a supplier chat of paper bills)', () => {
     expect(jobs[0].payload).toMatchObject({ mode: 'bw', onlyPaper: true })
   })
 
+  describe('Claude decides what is a bill slip (owner, 28 Nov 2026)', () => {
+    const PAPER = { PRINT_AUTO_CHATS: 'Simran Ply Rajan Rnc Pulkari Sunmica=bw,paper' }
+    const photo = { imageMessage: { mimetype: 'image/jpeg' } }
+
+    it('prints a slip without the colour check', async () => {
+      const { send, msg } = setup(PAPER, async () => true)
+      await send(msg(SUPPLIER, photo))
+      expect(jobs).toHaveLength(1)
+      expect(jobs[0].payload).toMatchObject({ mode: 'bw', slipChecked: true })
+      expect(jobs[0].payload.onlyPaper).toBeUndefined()
+    })
+
+    it('leaves anything else unprinted, PDFs too', async () => {
+      const { send, msg } = setup(PAPER, async () => false)
+      await send(msg(SUPPLIER, photo))
+      await send(msg(SUPPLIER, { documentMessage: { mimetype: 'application/pdf', fileName: 'rates.pdf' } }))
+      expect(jobs).toHaveLength(0)
+    })
+
+    it('falls back to the colour check when Claude cannot say', async () => {
+      const { send, msg } = setup(PAPER, async () => { throw new Error('no token') })
+      await send(msg(SUPPLIER, photo))
+      const unsure = setup(PAPER, async () => null)
+      await unsure.send(unsure.msg(SUPPLIER, photo))
+      expect(jobs.map((j) => j.payload.onlyPaper)).toEqual([true, true])
+    })
+
+    it('prints what is captioned bw / cp without asking', async () => {
+      const check = vi.fn(async () => false)
+      const { send, msg } = setup(PAPER, check)
+      await send(msg(SUPPLIER, { imageMessage: { mimetype: 'image/jpeg', caption: 'cp' } }))
+      expect(check).not.toHaveBeenCalled()
+      expect(jobs[0].payload).toMatchObject({ mode: 'color' })
+    })
+  })
+
   it('leaves other chats, text, and the shop group alone', async () => {
     const { send, msg } = setup()
     await send(msg(OTHER, { imageMessage: { mimetype: 'image/jpeg', caption: 'bw' } }))
@@ -255,5 +293,15 @@ describe('auto-print chats (a supplier chat of paper bills)', () => {
     await send(m)
     await send(m)
     expect(jobs).toHaveLength(1)
+  })
+})
+
+describe('slipAnswer', () => {
+  it('reads SLIP or OTHER, and nothing else', () => {
+    expect(slipAnswer('SLIP')).toBe(true)
+    expect(slipAnswer('  other.\n')).toBe(false)
+    expect(slipAnswer('Looking at it...\nSLIP')).toBe(true)
+    expect(slipAnswer('I cannot tell')).toBe(null)
+    expect(slipAnswer('')).toBe(null)
   })
 })

@@ -58,7 +58,27 @@ chat **"Simran Ply Rajan Rnc Pulkari Sunmica"** print at the shop by
 themselves, black and white on the HP (falling back to the Epson), with no
 `bw` needed (owner's ask). A `bw` / `cp` caption still decides the colour.
 
-Only the slips: the owner wants "only this typo paper", and "no ai". So the
+**Claude decides since 28 Nov 2026** (owner: "use ai token in railway for
+simran chat to only print these types"). The colour check below let four
+non-bill photos print on the morning of 28 Nov and held back one that may have
+been a bill. Now `whatsapp-bills` asks Claude about each photo **and PDF** from
+the chat before anything is queued (`whatsapp-bills/slip-check.mjs`, sonnet,
+about 11 s): SLIP prints, OTHER is left and logged (`[print] ... not printed:
+not a bill slip (Claude, 11s)`). A bill, slip, estimate or delivery note
+listing goods prints, whether a photo or a PDF. Goods, doors, people, catalogues and
+swatches, rate cards, visiting cards, screenshots, bank or UPI receipts (an
+SBI PDF in the chat included) do not. A `bw` / `cp` caption prints without
+asking. Tried before going live on the owner's slip (photo and PDF) and an
+estimate (SLIP), and on the QR, visiting card, product photos and a card back
+(OTHER): 8 of 8 right. The token is the Railway variable
+`CLAUDE_CODE_OAUTH_TOKEN` on `whatsapp-bills`, set as a reference to
+`whatsapp-reminders`' own (`${{whatsapp-reminders.CLAUDE_CODE_OAUTH_TOKEN}}`),
+so `node scripts/set-claude-token.mjs` changes both. `SLIP_CHECK_MODEL` picks
+another model. Without the token, or when Claude gives no clear answer, the
+job goes to the colour check below, as before.
+
+The colour check (the only check before 28 Nov, now the fallback): the owner
+wanted "only this typo paper", and "no ai" at first. So the
 print server looks at each photo's colours (`print-server/paper-check.mjs`):
 it prints when the photo is mostly pale, colourless paper and not a made
 image on pure white; a vehicle, goods or person photo is skipped and logged

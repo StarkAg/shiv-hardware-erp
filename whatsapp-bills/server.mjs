@@ -54,6 +54,7 @@ import { fileURLToPath } from 'node:url'
 import { keepSentMessages, memoryCache, useSqliteAuthState } from './auth-store.mjs'
 import { createLinkWatch } from './link-watch.mjs'
 import { createGroupPrinter } from './group-print.mjs'
+import { isBillSlip } from './slip-check.mjs'
 
 const PORT = Number(process.env.PORT || 8080)
 const AUTH_DIR = process.env.AUTH_DIR || '/data/auth'
@@ -114,6 +115,8 @@ const groupPrint = createGroupPrinter({
   log,
   silent: { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return this } },
   shopGroup: false,
+  // Only the supplier's bill slips print: Claude looks at each first (slip-check.mjs, owner, 28 Nov 2026).
+  checkSlip: isBillSlip,
 })
 
 /* ── the WhatsApp link ───────────────────────────────────────────────────── */

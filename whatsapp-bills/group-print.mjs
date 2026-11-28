@@ -200,12 +200,17 @@ async function convexCall(convexUrl, token, kind, path, args) {
  * `shopGroup: false` reads no bw / cp group, only the auto-print chats
  * (whatsapp-bills: Tony is in the shop group too, which the Shop number prints).
  *
+ * `checkSlip(file)`: asks Claude whether a file from a paper-only auto-print
+ * chat is a supplier's bill slip (whatsapp-bills, slip-check.mjs; owner, 28 Nov
+ * 2026). true prints it, false leaves it, null (no token, no clear answer)
+ * sends it to the print server's colour check as before.
+ *
  * `typeOut(file, replyTo)`: reads an "order" photo here, on Railway, and posts
  * the lines (whatsapp-reminders, order-read.mjs), so it works with the shop PC
  * off. It resolves false when it cannot (no Claude token): the photo then goes
  * to the shop PC as before.
  */
-export function createGroupPrinter({ env = process.env, dataDir, log, silent, shopGroup = true, typeOut = null }) {
+export function createGroupPrinter({ env = process.env, dataDir, log, silent, shopGroup = true, typeOut = null, checkSlip = null }) {
   const convexUrl = String(env.CONVEX_URL || '').replace(/\/+$/, '')
   const token = env.SHIV_DEVICE_TOKEN || ''
   const groupId = shopGroup ? env.PRINT_GROUP_ID || env.SHOP_GROUP_ID || '' : ''
@@ -380,7 +385,28 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
       if (auto) {
         // Every photo and PDF prints at once, in the chat's mode (a bw / cp caption still wins).
         const file = await download(sock, downloadMediaMessage, msg.key, content, media)
-        await queue([file], printModeOf(media.caption) ?? auto.mode, sender, `WhatsApp ${auto.chat}`, auto.onlyPaper ? { onlyPaper: true } : {})
+        const asked = printModeOf(media.caption)
+        const from = `WhatsApp ${auto.chat}`
+        // Bills only: Claude looks first (checkSlip). A bw / cp caption prints it anyway.
+        if (auto.onlyPaper && checkSlip && !asked) {
+          const started = Date.now()
+          const slip = await checkSlip(file).catch((err) => {
+            log(`[print] ${file.name}: Claude could not check it, to the colour check: ${err?.message ?? err}`)
+            return null
+          })
+          const took = `${Math.round((Date.now() - started) / 1000)}s`
+          if (slip === false) {
+            log(`[print] ${file.name} from "${auto.chat}" not printed: not a bill slip (Claude, ${took})`)
+            state.lastSkipped = { at: new Date().toISOString(), file: file.name, chat: auto.chat }
+            return
+          }
+          if (slip === true) {
+            log(`[print] ${file.name} from "${auto.chat}" is a bill slip (Claude, ${took})`)
+            await queue([file], auto.mode, sender, from, { slipChecked: true })
+            return
+          }
+        }
+        await queue([file], asked ?? auto.mode, sender, from, auto.onlyPaper && !asked ? { onlyPaper: true } : {})
         return
       }
       if (media) {
@@ -463,7 +489,7 @@ export function createGroupPrinter({ env = process.env, dataDir, log, silent, sh
 
   if (state.enabled) {
     if (groupId) log(`[print] group printing on: ${groupId} -> ${printerId}`)
-    for (const a of autoChats) log(`[print] auto-print chat: "${a.chat}" ${a.mode}${a.onlyPaper ? " (paper slips only)" : ""} -> ${printerId}`)
+    for (const a of autoChats) log(`[print] auto-print chat: "${a.chat}" ${a.mode}${a.onlyPaper ? ` (bill slips only, checked by ${checkSlip ? 'Claude' : "the print server's colours"})` : ''} -> ${printerId}`)
   }
   else log(`[print] group printing off, missing ${missing.join(', ')}`)
 
