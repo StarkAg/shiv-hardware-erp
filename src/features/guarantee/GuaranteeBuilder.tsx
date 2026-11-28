@@ -26,7 +26,24 @@ import { printViaShop } from '../../lib/printViaShop'
 import { WhatsAppLoginModal } from '../../components/WhatsAppLoginModal'
 import { toast } from '../../components/Toast'
 import { indiaYear } from '../../lib/businessDate'
-import { rateFromAmount } from '../../lib/guaranteeRate'
+import {
+  applyRowEdit,
+  brandKey,
+  duplicateLastRow,
+  isRowFilled,
+  priceListRate,
+  quoteRate,
+  rateFromAmount,
+  repriceForBrand,
+  rowQty,
+  rowRate,
+  rowSqft,
+  savedCardRates,
+  thicknessMm,
+  type RateLookup,
+  type Rates,
+  type SizeRow,
+} from '../../lib/guaranteeRate'
 import { BillDock, readDockSize, type DockSize } from '../../components/BillDock'
 import BillViewerUntyped from '../ledger/components/BillViewer'
 
@@ -48,28 +65,6 @@ const DEFAULT_CATEGORY: ProductCategory = 'readymade-door'
 const DEFAULT_YEARS: GuaranteeYears = 10
 const DEFAULT_BRAND_LABEL = CATEGORY_LABELS[DEFAULT_CATEGORY]
 
-// One spreadsheet row — Thickness / Type / Length / Height / Pcs / Rate /
-// Amount — the same shape the shop is used to from Excel. Length/Height are a
-// whole number plus an explicit soot (1/8") box: inches for doors (82 4/8),
-// feet for boards (7 × 4), as the bill writes them. Each row maps 1:1 onto a GuaranteeCardItem, so the PVC card can
-// print several different sizes/brands on one card instead of sharing a
-// single document-level size.
-type SizeRow = {
-  id: string
-  thickness: string
-  type: string
-  length: number | ''
-  lengthSoot: number | ''
-  height: number | ''
-  heightSoot: number | ''
-  qty: number | ''
-  /** ₹ per sq ft; while set, the amount is worked out from it. */
-  sqftRate: number | ''
-  amount: number | ''
-  /** A hand-entered amount keeps its total while still showing its derived rate. */
-  amountManual?: boolean
-}
-
 // The periods offered for a card: every period the shop's PVC
 // cards carry (Milton Super 5, Signature 7, Signature Gold 10, Gold Club 20…).
 // Wax-seal images (assets/seals, used on the A4 sheet) exist for 1/3/7/10/25.
@@ -87,75 +82,17 @@ const blankRow = (): SizeRow => ({
   sqftRate: '',
   amount: '',
 })
-const isRowFilled = (r: SizeRow) =>
-  r.type.trim() !== '' ||
-  r.thickness.trim() !== '' ||
-  r.length !== '' ||
-  r.lengthSoot !== '' ||
-  r.height !== '' ||
-  r.heightSoot !== '' ||
-  r.qty !== '' ||
-  r.sqftRate !== '' ||
-  r.amount !== ''
-
 const rowDim = (inches: number | '', soot: number | ''): Dimension | null =>
   inches !== '' || soot !== '' ? { inches: inches === '' ? 0 : Number(inches), soot: soot === '' ? 0 : Number(soot) } : null
 
-/**
- * Sq ft of one piece. Both sides 12 or under are feet (a 7 × 4 board = 28),
- * anything bigger is inches (an 82 4/8 × 35 4/8 door, ÷ 144) — the same rule
- * the bill uses (lib/boardSize.ts).
- */
-function rowSqft(r: SizeRow): number {
-  const l = Number(r.length || 0) + Number(r.lengthSoot || 0) / 8
-  const h = Number(r.height || 0) + Number(r.heightSoot || 0) / 8
-  if (!(l > 0) || !(h > 0)) return 0
-  return l <= 12 && h <= 12 ? l * h : (l * h) / 144
-}
-
-const rowQty = (r: SizeRow) => (r.qty === '' ? 1 : Number(r.qty))
 const fmtSqft = (n: number) => String(Math.round(n * 100) / 100)
 
-/** ₹/sq ft for a brand at a thickness, or '' when nothing says. */
-type RateLookup = (type: string, thickness: string) => number | ''
-
-const brandKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ')
-/** "19MM", "19 mm", "18mm" → 19 (18mm is sold and written as 19MM); 0 when there is none. */
-const thicknessMm = (t: string | number | null | undefined) => {
-  const mm = Number(String(t ?? '').match(/\d+(\.\d+)?/)?.[0] ?? 0)
-  return mm === 18 ? 19 : mm
-}
-const rateKey = (type: string, thickness: string) => `${brandKey(type)}|${thicknessMm(thickness)}`
-
-/** The price list's (Rates / quotation) ₹/sq ft for a brand at a thickness, when it names one rate. */
-function priceListRate(brands: Brand[], type: string, thickness: string): number | '' {
-  const name = brandKey(type)
-  if (!name) return ''
-  const named = brands.filter((b) => b.rate > 0 && brandKey(b.name) === name)
-  const mm = thicknessMm(thickness)
-  const fits = mm ? named.filter((b) => thicknessMm(b.thicknessMm) === mm) : named
-  const rates = new Set(fits.map((b) => b.rate))
-  return rates.size === 1 ? [...rates][0] : ''
-}
-
-/**
- * The rate a row starts with: the one last used on a saved card for that brand
- * and thickness (what the shop actually charges, and it travels with the cards
- * to every counter), else the price list's.
- */
-function useRateLookup(guarantees: GuaranteeDocument[], brands: Brand[]): RateLookup {
-  return useMemo(() => {
-    const saved = new Map<string, number>()
-    const when = (g: GuaranteeDocument) => g.updatedAt ?? (Date.parse(g.date) || 0)
-    for (const g of [...guarantees].sort((a, b) => when(b) - when(a))) {
-      for (const it of g.items ?? []) {
-        const rate = Number(it.sqftRate)
-        const key = rateKey(String(it.brandName ?? ''), String(it.thickness ?? ''))
-        if (rate > 0 && !saved.has(key)) saved.set(key, rate)
-      }
-    }
-    return (type, thickness) => saved.get(rateKey(type, thickness)) ?? priceListRate(brands, type, thickness)
-  }, [guarantees, brands])
+/** The default price set's (C1, the quotation) rates, and the whole-rupee rates saved cards used. */
+function useRates(guarantees: GuaranteeDocument[], brands: Brand[]): Rates {
+  return useMemo(() => ({
+    list: (type, thickness) => priceListRate(brands, type, thickness),
+    saved: savedCardRates(guarantees),
+  }), [guarantees, brands])
 }
 
 /** What the Type and Thickness boxes offer, each value once, most used first. */
@@ -212,32 +149,6 @@ function useComboOptions(guarantees: GuaranteeDocument[], brands: Brand[]): Comb
     }
   }, [guarantees, brands])
 }
-
-/**
- * A row after an edit. A new brand or thickness brings its rate (saved, else price list)
- * (unless a rate of the counter's own is in); with a rate, the amount is
- * sq ft × rate × pcs. An amount typed by hand clears the rate, so it stays.
- */
-function applyRowEdit(row: SizeRow, patch: Partial<SizeRow>, rateFor: RateLookup): SizeRow {
-  const next = { ...row, ...patch }
-  const sqft = rowSqft(next)
-  const totalSqft = sqft * rowQty(next)
-  // An amount may be typed first (or come from an older bill). Derive the
-  // price per square foot so staff can see and reuse it, without changing the
-  // hand-entered total when size or quantity is edited afterwards.
-  if ('amount' in patch) {
-    if (next.amount === '') return { ...next, sqftRate: '', amountManual: false }
-    return { ...next, sqftRate: rateFromAmount(next.amount, totalSqft), amountManual: true }
-  }
-  if ('sqftRate' in patch) next.amountManual = false
-  if (('type' in patch || 'thickness' in patch) && !('sqftRate' in patch)) {
-    const was = rateFor(row.type, row.thickness)
-    if (!row.amountManual && (row.sqftRate === '' || row.sqftRate === was)) next.sqftRate = rateFor(next.type, next.thickness)
-  }
-  if (!next.amountManual && next.sqftRate !== '' && sqft > 0) next.amount = Math.round(totalSqft * Number(next.sqftRate))
-  return next
-}
-
 // Editing the last row auto-appends a fresh blank one, so the table always
 // has a trailing entry point (like continuing to type in Excel). It stays
 // truly blank: anything typed into it would make it a line on the card.
@@ -268,12 +179,6 @@ function cardYears(rows: SizeRow[], yearsOf: YearsLookup, selected: GuaranteeYea
   if (selected !== '') return selected
   const first = rows.find((r) => r.type.trim())
   return (brand.trim() ? yearsOf(brand) : undefined) ?? (first ? yearsOf(first.type) : undefined) ?? DEFAULT_YEARS
-}
-
-/** A row's rate: its own Type's (a model already priced), else the card brand's. */
-const withBrandRate = (rateFor: RateLookup, brand: string): RateLookup => (type, thickness) => {
-  const own = rateFor(type, thickness)
-  return own !== '' || !brand.trim() ? own : rateFor(brand, thickness)
 }
 
 function rowsToItems(rows: SizeRow[], fallbackBrand: string, years: GuaranteeYears): GuaranteeCardItem[] {
@@ -411,7 +316,7 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
   // brand regardless of category, since there's no Product picker anymore.
   const brandOptions = sets[0]?.brands ?? []
   const picks = usePicks(guarantees, brandOptions)
-  const rateFor = useRateLookup(guarantees, brandOptions)
+  const rates = useRates(guarantees, brandOptions)
   const comboOptions = useComboOptions(guarantees, brandOptions)
   // The card's brand is picked from the Rates (quotation) list only, each name once.
   const listedBrands = useMemo(
@@ -1026,8 +931,8 @@ export function GuaranteeBuilder({ layout }: { layout: GuaranteeLayout }) {
                 </div>
               </div>
               {onCard2
-                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brand={brand2} setBrand={setBrand2} brands={listedBrands} options={comboOptions} rateFor={rateFor} picks={picks} />
-                : <SizeTable key="t1" rows={rows} setRows={setRows} brand={brand1} setBrand={setBrand1} brands={listedBrands} options={comboOptions} rateFor={rateFor} picks={picks} />}
+                ? <SizeTable key="t2" rows={rows2} setRows={setRows2} brand={brand2} setBrand={setBrand2} brands={listedBrands} options={comboOptions} rates={rates} picks={picks} />
+                : <SizeTable key="t1" rows={rows} setRows={setRows} brand={brand1} setBrand={setBrand1} brands={listedBrands} options={comboOptions} rates={rates} picks={picks} />}
             </Card>
           </div>
 
@@ -1580,7 +1485,7 @@ function SizeTable({
   rows,
   setRows,
   options,
-  rateFor: priceRate,
+  rates,
   picks,
   brand,
   setBrand,
@@ -1589,13 +1494,14 @@ function SizeTable({
   rows: SizeRow[]
   setRows: (updater: (prev: SizeRow[]) => SizeRow[]) => void
   options: ComboOptions
-  rateFor: RateLookup
+  rates: Rates
   picks: Picks
   brand: string
   setBrand: (brand: string) => void
   brands: string[]
 }) {
-  const rateFor = withBrandRate(priceRate, brand)
+  // A row's rate: the quotation's for its Type, else for the card brand; a saved card's only when the quotation has none.
+  const rateFor: RateLookup = rowRate(rates, brand)
   // The row the tap buttons fill: the one last touched, else the first still empty.
   const [activeId, setActiveId] = useState<string | null>(null)
   const active = rows.find((r) => r.id === activeId)?.id
@@ -1621,35 +1527,23 @@ function SizeTable({
   const typeNames = useMemo(() => options.types.map((t) => t.name), [options.types])
   const typeYears = useMemo(() => new Map(options.types.map((t) => [t.name, t.years])), [options.types])
   const firstThickness = rows.find(isRowFilled)?.thickness ?? ''
-  // One card is one brand: it is picked once here and prices every row whose
-  // model number has no rate of its own. A rate or amount the counter typed
-  // stays; rows are never added or removed by it.
+  // One card is one brand: it is picked once here and its quotation rate fills
+  // every row (a model number the quotation prices on its own keeps that one);
+  // rows are never added or removed by it.
   function pickBrand(next: string) {
-    const now = withBrandRate(priceRate, next)
     setBrand(next)
-    setRows((prev) => prev.map((r) => {
-      if (!isRowFilled(r) || r.amountManual) return r
-      if (r.sqftRate !== '' && r.sqftRate !== rateFor(r.type, r.thickness)) return r
-      const rate = now(r.type, r.thickness)
-      if (rate === r.sqftRate) return r
-      return applyRowEdit(r, rate === '' ? { amount: '' } : { sqftRate: rate }, now)
-    }))
+    setRows((prev) => repriceForBrand(prev, rates, brand, next))
   }
   const cellClass =
     'w-full min-w-0 rounded border border-stone-200 bg-transparent px-2 py-1.5 text-sm text-stone-800 outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:text-stone-100 dark:focus:bg-stone-950 md:dark:border-transparent'
   const sootClass =
     'w-9 shrink-0 rounded border border-stone-200 bg-transparent px-1 py-1.5 text-sm text-muted outline-none transition focus:border-shiv-green focus:bg-white md:border-transparent dark:border-white/10 dark:focus:bg-stone-950 md:dark:border-transparent'
 
-  // Copy the last filled row into a new row (same size/brand for the next door),
-  // keeping a trailing blank so the table still grows as you type. When nothing
-  // is filled yet there's nothing to copy, so just ensure a blank row exists.
+  // Copy the last filled row into a new row (same size/brand for the next door)
+  // at the quotation's default rate, keeping a trailing blank so the table still
+  // grows as you type (lib/guaranteeRate duplicateLastRow).
   function duplicateRow() {
-    setRows((prev) => {
-      const filled = prev.filter(isRowFilled)
-      if (filled.length === 0) return [blankRow()]
-      const source = filled[filled.length - 1]
-      return [...filled, { ...source, id: uid() }, blankRow()]
-    })
+    setRows((prev) => duplicateLastRow(prev, quoteRate(rates, brand), uid, blankRow))
   }
 
   const rowActionClass =
@@ -1713,7 +1607,7 @@ function SizeTable({
             placeholder="Pick a brand — its rate fills every row"
             options={brands}
             note={(name) => {
-              const rate = priceRate(name, firstThickness)
+              const rate = rates.list(name, firstThickness)
               const years = typeYears.get(name) ?? 0
               return [rate !== '' ? `₹${rate}` : '', years ? `${years}y` : ''].filter(Boolean).join(' · ')
             }}
