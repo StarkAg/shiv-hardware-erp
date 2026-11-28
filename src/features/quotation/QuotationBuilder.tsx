@@ -442,7 +442,7 @@ function RateCardBuilder() {
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col xl:h-full">
       {localPrintMount}
       <div className="no-print border-b border-stone-200/80 bg-stone-50/95 px-2 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-stone-950/90 md:px-4">
         <div className="flex items-center justify-center pb-2">
@@ -470,7 +470,13 @@ function RateCardBuilder() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 p-2 md:gap-3 md:p-4">
+      <div className="flex flex-col gap-2 p-2 md:gap-3 md:p-4 xl:min-h-0 xl:flex-1 xl:flex-row">
+        {/* On a wide screen the screen fits the window: the page as it prints
+            stands whole on the right, and the size and prices scroll on their own
+            on the left (owner, 28 Nov 2026). Narrower, this box is no box
+            (contents) and the order classes place the preview: last on a phone,
+            above the prices on a tablet. */}
+        <div className="contents xl:flex xl:min-w-0 xl:flex-1 xl:flex-col xl:gap-3 xl:overflow-y-auto">
         {/* Optional customer details — hidden for fixed rate cards (no inputs) */}
         {!fixed && (
         <div className="shrink-0">
@@ -604,26 +610,9 @@ function RateCardBuilder() {
 
         {/* On a phone the prices come first, straight under the size; the
             page as it prints follows below them. */}
-        <div className="order-last md:order-none">
-          {/* What goes on the page is decided right above the page itself. */}
-          {hasSections(cat) && (
-              <button
-                type="button"
-                onClick={toggleWaterProofOnly}
-                aria-pressed={waterProofOnly}
-                className="mb-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-stone-200/90 bg-stone-50 px-3 py-2 text-left text-sm font-semibold shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 md:mb-3"
-              >
-                <span>Water proof only</span>
-                <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition ${waterProofOnly ? 'bg-shiv-green' : 'bg-stone-300 dark:bg-stone-700'}`}>
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${waterProofOnly ? 'left-[18px]' : 'left-0.5'}`} />
-                </span>
-              </button>
-            )}
-          <InlineQuotationPreview quote={doc} />
-        </div>
 
         {/* Live preview: all-brands rate card OR aluminium breakdown */}
-        <div className="flex flex-col rounded-xl border border-stone-200/90 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
+        <div className="flex flex-col md:order-1 rounded-xl border border-stone-200/90 bg-stone-50 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
           {aluLike && (
             <div className="shrink-0 border-b border-stone-100 bg-stone-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-muted dark:border-white/10 dark:bg-white/5 md:px-4 md:py-2 md:text-xs">
               {upvc ? 'UPVC' : 'Aluminium'} Cost
@@ -793,7 +782,7 @@ function RateCardBuilder() {
 
         {/* Edit-set toolbar (rename / delete the active set) */}
         {!alu && editMode && (
-          <div className="flex shrink-0 items-center justify-between rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
+          <div className="flex shrink-0 md:order-1 items-center justify-between rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
             <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
               Active set: <span className="text-shiv-green">{activeSet?.name ?? 'C1'}</span>
             </div>
@@ -843,6 +832,24 @@ function RateCardBuilder() {
             )}
           </div>
         )}
+        </div>
+        <div className="order-last md:order-none xl:flex xl:w-[min(50%,calc((100dvh-280px)*0.707+30px))] xl:shrink-0 xl:flex-col">
+          {/* What goes on the page is decided right above the page itself. */}
+          {hasSections(cat) && (
+              <button
+                type="button"
+                onClick={toggleWaterProofOnly}
+                aria-pressed={waterProofOnly}
+                className="mb-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-stone-200/90 bg-stone-50 px-3 py-2 text-left text-sm font-semibold shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 md:mb-3"
+              >
+                <span>Water proof only</span>
+                <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition ${waterProofOnly ? 'bg-shiv-green' : 'bg-stone-300 dark:bg-stone-700'}`}>
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${waterProofOnly ? 'left-[18px]' : 'left-0.5'}`} />
+                </span>
+              </button>
+            )}
+          <InlineQuotationPreview quote={doc} side />
+        </div>
       </div>
 
       {!alu && (
@@ -920,29 +927,39 @@ function RateCardBuilder() {
   )
 }
 
-function InlineQuotationPreview({ quote }: { quote: Quotation }) {
+/**
+ * The page as it prints, scaled to the width it has. Beside the controls
+ * (`side`, a wide screen) it is also kept to the height of the window, so the
+ * whole page shows at once.
+ */
+function InlineQuotationPreview({ quote, side = false }: { quote: Quotation; side?: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
 
   useLayoutEffect(() => {
     const el = wrapRef.current
     if (!el) return
+    const wide = side ? window.matchMedia('(min-width: 1280px)') : null
     const update = () => {
-      const available = Math.max(0, el.clientWidth - 2)
-      setScale(Math.min(1, available / A4_W))
+      const byWidth = Math.max(0, el.clientWidth - 2) / A4_W
+      const byHeight = wide?.matches ? Math.max(0, el.clientHeight - 2) / A4_H : Infinity
+      setScale(Math.min(1, byWidth, byHeight))
     }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    wide?.addEventListener('change', update)
+    return () => { ro.disconnect(); wide?.removeEventListener('change', update) }
+  }, [side])
 
   return (
-    <div className="no-print rounded-xl border border-stone-200/90 bg-stone-50 p-2 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100 md:p-3">
-      <div className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Print Preview</div>
-      <div ref={wrapRef} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-200 dark:border-white/10 dark:bg-stone-950">
+    <div className={`no-print rounded-xl border border-stone-200/90 bg-stone-50 p-2 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100 md:p-3 ${side ? 'xl:flex xl:min-h-0 xl:flex-1 xl:flex-col' : ''}`}>
+      <div className="mb-2 shrink-0 text-xs font-bold uppercase tracking-wide text-muted">Print Preview</div>
+      <div ref={wrapRef} className={`overflow-hidden rounded-lg border border-stone-200 bg-stone-200 dark:border-white/10 dark:bg-stone-950 ${side ? 'xl:relative xl:min-h-0 xl:flex-1' : ''}`}>
         <div
-          className="mx-auto overflow-hidden bg-white"
+          // Beside the controls the page is laid over its box, so the box's height
+          // comes from the window and never from the page it is scaled to.
+          className={`mx-auto overflow-hidden bg-white ${side ? 'xl:absolute xl:inset-x-0 xl:top-0' : ''}`}
           style={{
             width: Math.round(A4_W * scale),
             height: Math.round(A4_H * scale),
