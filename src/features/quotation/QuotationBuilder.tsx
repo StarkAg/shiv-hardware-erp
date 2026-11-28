@@ -20,8 +20,10 @@ import {
   defaultAddons,
   isAluminium,
 } from '../../lib/aluminium'
-import { calcAluminiumQuote, productOf } from '../../lib/aluCosting'
-import { useAluCosting } from '../../lib/aluCostingStore'
+import { calcAluminiumQuote, chargedHeight, productOf, sheetOfSet, withSetSheet } from '../../lib/aluCosting'
+import { saveAluCosting, useAluCosting } from '../../lib/aluCostingStore'
+import { sheetSize } from '../../lib/aluSheet'
+import { AluSheetCostTable } from './AluSheetCostTable'
 import { calcAllUpvcBrands, isUpvc } from '../../lib/upvc'
 import { FIXED_CARDS, FIXED_CARD_META, isFixedCard } from '../../lib/data/fixedCards'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -301,8 +303,12 @@ function RateCardBuilder() {
   // Aluminium is priced from its sections, materials and margin, or straight off
   // the selling sheet: the Aluminium rates screen sets which, per product.
   const aluCosting = useAluCosting()
+  // Priced by the sheet, aluminium has price sets like the other products: each
+  // set its own sheet rates, shown and edited in the cost table below.
+  const bySheet = alu && aluCosting.priceBy[productOf(cat)] === 'sheet'
+  const setSheet = sheetOfSet(aluCosting, activeSet?.id, sets[0]?.id)
   const aluThicknesses = alu
-    ? calcAluminiumQuote(cat, h, w, addons, aluCosting)
+    ? calcAluminiumQuote(cat, h, w, addons, { ...aluCosting, sheet: setSheet })
     : upvc
       ? calcAllUpvcBrands(cat, h, w, addons)
       : []
@@ -589,15 +595,13 @@ function RateCardBuilder() {
               </div>
             )}
 
-            {alu && (
+            {alu && !bySheet && (
               <Link
                 to={`/aluminium-rates/${productOf(cat)}`}
                 className="mt-2 flex min-h-10 items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 hover:border-shiv-green dark:border-white/15 dark:bg-transparent dark:text-stone-100 md:mt-3"
               >
                 <Calculator size={16} />
-                {aluCosting.priceBy[productOf(cat)] === 'sheet'
-                  ? 'Priced by the sheet: rates by area'
-                  : <>Section kg, aluminium rate, materials &amp; margin</>}
+                Section kg, aluminium rate, materials &amp; margin
               </Link>
             )}
 
@@ -676,6 +680,18 @@ function RateCardBuilder() {
               <PrintLikeBrandTable rows={rows} hasSize={hasSize} />
             )}
             </>
+            ) : (
+            bySheet ? (
+              <AluSheetCostTable
+                cat={cat}
+                addons={addons}
+                rows={aluThicknesses}
+                sheet={setSheet}
+                area={sheetSize(chargedHeight(cat, h, aluCosting.doorMinHeight), w).area}
+                hasSize={hasSize}
+                editMode={editMode}
+                onChange={(next) => editRates((t) => saveAluCosting(withSetSheet(aluCosting, t, sets[0]?.id, next)))}
+              />
             ) : (
             // Aluminium — all 3 thicknesses side by side
             <table className="w-full table-fixed text-[11px] leading-tight md:text-sm">
@@ -776,12 +792,13 @@ function RateCardBuilder() {
                 )}
               </tbody>
             </table>
+            )
             )}
           </div>
         </div>
 
         {/* Edit-set toolbar (rename / delete the active set) */}
-        {!alu && editMode && (
+        {(!alu || bySheet) && editMode && (
           <div className="flex shrink-0 md:order-1 items-center justify-between rounded-xl border border-stone-200/90 bg-stone-50 p-3 text-stone-800 shadow-sm shadow-stone-900/5 dark:border-white/10 dark:bg-stone-900/90 dark:text-stone-100">
             <div className="text-sm font-semibold text-stone-700 dark:text-stone-200">
               Active set: <span className="text-shiv-green">{activeSet?.name ?? 'C1'}</span>
@@ -852,7 +869,7 @@ function RateCardBuilder() {
         </div>
       </div>
 
-      {!alu && (
+      {(!alu || bySheet) && (
         <div className="no-print mt-auto border-t border-stone-200/80 bg-stone-50/95 px-2 py-2 shadow-[0_-6px_16px_rgba(0,0,0,0.04)] backdrop-blur dark:border-white/10 dark:bg-stone-950/90 md:px-4">
           <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">

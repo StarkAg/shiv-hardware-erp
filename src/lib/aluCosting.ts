@@ -82,6 +82,11 @@ export interface AluCosting {
   priceBy: Record<AluProduct, PriceMode>
   /** The selling sheet's own rates, used when a product is priced by the sheet. */
   sheet: AluSheet
+  /**
+   * The sheet rates of the other price sets (C2, C3 ...), by set id, once one
+   * is edited on the quotation screen. C1 is `sheet` (see sheetOfSet).
+   */
+  sheetBySet: Record<string, AluSheet>
   /** Inches: a door lower than this is priced as this high (see DOOR_MIN_HEIGHT). 0 = none. */
   doorMinHeight: number
   /** Rs per kg, per thickness. One rate for the door and both windows. */
@@ -175,6 +180,7 @@ export function defaultCosting(): AluCosting {
   return {
     priceBy: { door: 'costing', win2: 'costing', win3: 'costing' },
     sheet: defaultSheet(),
+    sheetBySet: {},
     doorMinHeight: DOOR_MIN_HEIGHT,
     alu: [470, 470, 470],
     door: {
@@ -412,6 +418,22 @@ export function calcAluminiumQuote(
 }
 
 /**
+ * The sheet rates a price set quotes by. The first set (C1) is `sheet`, the
+ * one the Aluminium rates screen edits; another set has its own once its rates
+ * are changed on the quotation screen, and C1's until then.
+ */
+export function sheetOfSet(c: AluCosting, setId: string | undefined, firstSetId: string | undefined): AluSheet {
+  if (!setId || setId === firstSetId) return c.sheet
+  return c.sheetBySet[setId] ?? c.sheet
+}
+
+/** The costing with one price set's sheet rates replaced. */
+export function withSetSheet(c: AluCosting, setId: string | undefined, firstSetId: string | undefined, sheet: AluSheet): AluCosting {
+  if (!setId || setId === firstSetId) return { ...c, sheet }
+  return { ...c, sheetBySet: { ...c.sheetBySet, [setId]: sheet } }
+}
+
+/**
  * A saved copy read back. Anything missing or mistyped falls back to the
  * starting value, so an older copy (or a hand-edited one) can never leave a
  * quotation without a number.
@@ -450,6 +472,10 @@ export function normaliseCosting(raw: unknown): AluCosting {
   return {
     priceBy: { door: mode(by.door), win2: mode(by.win2), win3: mode(by.win3) },
     sheet: normaliseSheet(r.sheet),
+    sheetBySet: Object.fromEntries(
+      Object.entries(r.sheetBySet && typeof r.sheetBySet === 'object' ? r.sheetBySet : {})
+        .map(([id, sh]) => [id, normaliseSheet(sh)]),
+    ),
     doorMinHeight: Number.isFinite(Number(r.doorMinHeight)) && r.doorMinHeight !== undefined ? Number(r.doorMinHeight) : DOOR_MIN_HEIGHT,
     alu: t3(r.alu, d.alu),
     door: {
