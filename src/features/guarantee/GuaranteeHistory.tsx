@@ -190,7 +190,7 @@ function CloudGuaranteeSync() {
   const pull = useCallback(async (code: string, quiet = false) => {
     setBusy(true)
     try {
-      const rows = (await convex.query(api.documents.recentGuarantees, { pin: code, limit: 100 })) as CloudGuaranteeRow[]
+      const rows = (await convex.query(api.documents.recentGuarantees, { pin: code })) as CloudGuaranteeRow[]
       const docs = rows
         .filter((r) => r?.document && r.number)
         .map((r) => ({ ...r.document, id: r.localId, number: r.number, token: r.token ?? r.document.token, updatedAt: r.updatedAt ?? r.document.updatedAt }))

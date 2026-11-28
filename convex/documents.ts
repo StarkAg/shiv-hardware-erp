@@ -84,7 +84,11 @@ export const recentGuarantees = query({
   },
   handler: async (ctx, args) => {
     requirePin(args.pin)
-    const limit = Math.min(100, Math.max(1, Math.trunc(args.limit ?? 50)))
+    // Every card unless a limit is asked for. History once asked for 100 with a
+    // cap of 100 here, which would have hidden the oldest cards from every new
+    // device once the shop passed 100 (92 on 28 Nov 2026). A card is about
+    // 1.3 KB, so even 5,000 is a few MB, inside a query's limits.
+    const limit = Math.min(5000, Math.max(1, Math.trunc(args.limit ?? 5000)))
     return await ctx.db
       .query('guaranteeDocuments')
       .withIndex('by_created_at')
